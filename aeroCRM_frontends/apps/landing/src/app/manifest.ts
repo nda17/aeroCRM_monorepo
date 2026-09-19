@@ -4,7 +4,7 @@ const manifest = (): MetadataRoute.Manifest => {
 	return {
 		name: 'aeroCRM — CRM для продаж',
 		short_name: 'aeroCRM',
-		description: 'Продающие виджеты для повышения конверсии сайта',
+		description: 'CRM для управления обращениями, клиентами, сделками и задачами команды',
 		start_url: '/',
 		display: 'standalone',
 		background_color: '#f8f5ff',

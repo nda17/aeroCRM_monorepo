@@ -26,10 +26,9 @@ type CardStyle = CSSProperties & {
 
 const slides: Slide[] = [
 	{
-		title: 'Email',
-		tag: 'Уведомления',
-		description:
-			'Мгновенное письмо с именем, призом и страницей при каждой заявке',
+		title: 'CSV',
+		tag: 'Импорт',
+		description: 'Импорт обращений из файла CSV',
 		accent: '#4f9cf9',
 		icon: (
 			<>
@@ -53,10 +52,9 @@ const slides: Slide[] = [
 		)
 	},
 	{
-		title: 'Telegram',
-		tag: 'Мессенджер',
-		description:
-			'Уведомления прямо в чат — быстрее почты, всегда под рукой',
+		title: 'API',
+		tag: 'Источник',
+		description: 'Приём обращений из своей системы',
 		accent: '#29b6f6',
 		icon: (
 			<>
@@ -78,10 +76,9 @@ const slides: Slide[] = [
 		)
 	},
 	{
-		title: 'Webhook',
-		tag: 'Интеграция',
-		description:
-			'POST-запрос с данными лида — подключите Make, Zapier или n8n',
+		title: 'Tilda',
+		tag: 'Формы сайта',
+		description: 'Заявки из форм сайта во входящих CRM',
 		accent: '#8f5fe8',
 		icon: (
 			<>
@@ -107,148 +104,6 @@ const slides: Slide[] = [
 			</>
 		)
 	},
-	{
-		title: 'Битрикс24',
-		tag: 'CRM',
-		description:
-			'Лид с именем, телефоном и страницей создаётся автоматически',
-		accent: '#f47a3c',
-		icon: (
-			<>
-				<rect
-					x="10"
-					y="20"
-					width="10"
-					height="16"
-					rx="2.5"
-					stroke="currentColor"
-					strokeWidth="1.8"
-					fill="none"
-				/>
-				<rect
-					x="24"
-					y="12"
-					width="10"
-					height="24"
-					rx="2.5"
-					stroke="currentColor"
-					strokeWidth="1.8"
-					fill="none"
-				/>
-				<path
-					d="M15 20v-4"
-					stroke="currentColor"
-					strokeWidth="1.8"
-					strokeLinecap="round"
-				/>
-				<circle cx="15" cy="13.5" r="2.5" fill="currentColor" />
-			</>
-		)
-	},
-	{
-		title: 'amoCRM',
-		tag: 'CRM',
-		description:
-			'Новая сделка и контакт без ручного ввода при каждой заявке',
-		accent: '#5bc8ff',
-		icon: (
-			<>
-				<path
-					d="M13 28a11 11 0 1 1 21.4-4.8"
-					stroke="currentColor"
-					strokeWidth="1.8"
-					strokeLinecap="round"
-					fill="none"
-				/>
-				<path
-					d="M30 13l5 4.5-5 4.5"
-					stroke="currentColor"
-					strokeWidth="1.8"
-					strokeLinecap="round"
-					strokeLinejoin="round"
-				/>
-				<circle cx="24" cy="24" r="3.5" fill="currentColor" />
-			</>
-		)
-	},
-	{
-		title: 'Яндекс Метрика',
-		tag: 'Аналитика',
-		description:
-			'Цели ip3_open и ip3_send — воронка от клика до заявки у вас в счётчике',
-		accent: '#ff5252',
-		icon: (
-			<>
-				<polyline
-					points="10,34 17,22 22,28 28,16 36,34"
-					stroke="currentColor"
-					strokeWidth="1.8"
-					strokeLinecap="round"
-					strokeLinejoin="round"
-					fill="none"
-				/>
-				<circle cx="36" cy="34" r="2.5" fill="currentColor" />
-				<circle cx="10" cy="34" r="2.5" fill="currentColor" />
-			</>
-		)
-	},
-	{
-		title: 'VK Ретаргетинг',
-		tag: 'Реклама',
-		description:
-			'Аудитория для ретаргетинга ВКонтакте — показывайте рекламу тем, кто крутил',
-		accent: '#6e9ef5',
-		icon: (
-			<>
-				<path
-					d="M10 24c0-7.7 6.3-14 14-14s14 6.3 14 14c0 3.2-1.1 6.2-3 8.5C33 35 29 37 24 37s-9-2-11-4.5a14 14 0 0 1-3-8.5Z"
-					stroke="currentColor"
-					strokeWidth="1.8"
-					fill="none"
-				/>
-				<circle
-					cx="24"
-					cy="22"
-					r="4"
-					stroke="currentColor"
-					strokeWidth="1.8"
-					fill="none"
-				/>
-				<path
-					d="M14.5 33.5a10 10 0 0 1 19 0"
-					stroke="currentColor"
-					strokeWidth="1.8"
-					strokeLinecap="round"
-					fill="none"
-					opacity="0.55"
-				/>
-			</>
-		)
-	},
-	{
-		title: 'Roistat',
-		tag: 'Аналитика',
-		description:
-			'Видите ROI каждого канала — события передаются без дополнительных настроек',
-		accent: '#4caf7d',
-		icon: (
-			<>
-				<path
-					d="M12 34V26M18 34V20M24 34V24M30 34V16M36 34V20"
-					stroke="currentColor"
-					strokeWidth="1.8"
-					strokeLinecap="round"
-				/>
-				<path
-					d="M12 26l6-6 6 4 6-8 6 4"
-					stroke="currentColor"
-					strokeWidth="1.8"
-					strokeLinecap="round"
-					strokeLinejoin="round"
-				/>
-			</>
-		)
-	}
 ]
 
 const withAlpha = (hex: string, alpha: string) => `${hex}${alpha}`
@@ -297,7 +152,7 @@ const renderCards = (
 				<div className={styles.cardFooter}>
 					<span className={styles.status}>
 						<span className={styles.statusDot} />
-						<span>Готово к подключению</span>
+						<span>Источник обращений</span>
 					</span>
 				</div>
 			</article>
