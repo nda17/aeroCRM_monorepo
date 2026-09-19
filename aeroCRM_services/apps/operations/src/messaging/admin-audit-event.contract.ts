@@ -105,12 +105,10 @@ const IDENTITY_USER_UPDATE_FIELDS = [
 	'password'
 ] as const;
 const IDENTITY_AUTH_SETTING_FIELDS = [
-	'recaptchaEnabled',
+	'turnstileEnabled',
 	'googleAuthEnabled',
 	'yandexAuthEnabled',
-	'githubAuthEnabled',
 	'vkAuthEnabled',
-	'telegramAuthEnabled'
 ] as const;
 const IDENTITY_REQUEST_METADATA_FIELDS = [
 	'requestId',

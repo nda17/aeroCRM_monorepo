@@ -118,8 +118,8 @@ export class OperationsHealthService {
 						message: 'Identity provider health недоступен'
 					},
 					{
-						id: 'recaptcha',
-						title: 'reCAPTCHA',
+						id: 'turnstile',
+						title: 'Cloudflare Turnstile',
 						status: 'down' as const,
 						message: 'Identity provider health недоступен'
 					}

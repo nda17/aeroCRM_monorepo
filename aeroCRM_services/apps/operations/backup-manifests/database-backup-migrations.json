@@ -65,11 +65,15 @@
 			]
 		},
 		"operations": {
-			"manifestSha256": "352605012364f50006f842516c80692bfb6880360fbdbdf33abd9ceccd082305",
+			"manifestSha256": "38020c5f64f96daf5b14a560686f4369b8eac222e8bfbf07aeb17467b4f09c1f",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
 					"checksum": "a0479e73250ee4526daa3ef9af95652991758a60e7fa76c9c044233ff500720b"
+				},
+				{
+					"name": "20260920010000_seed_operations_service_identity",
+					"checksum": "3bde7a3c10cee2687eea7868943bd53efe3e7be02c9a930a879fe12b84675f63"
 				}
 			]
 		},
