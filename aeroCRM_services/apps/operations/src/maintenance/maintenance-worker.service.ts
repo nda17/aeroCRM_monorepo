@@ -181,7 +181,7 @@ export class MaintenanceWorkerService implements OnModuleInit {
 			const consoleUrl = this.config.get<string>('CRM_BACKUP_BUCKET_CONSOLE_URL')?.trim();
 			if (!consoleUrl || new URL(consoleUrl).protocol !== 'https:') throw new Error('Private S3 console URL is not configured');
 			const text = ['<b>aeroCRM: резервное копирование баз</b>',
-				`Период: ${periodStart.toISOString().slice(0, 10)}`,
+				`Период: ${new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow' }).format(periodStart)}`,
 				`Успешно: ${succeeded.length}/${DATABASE_BACKUP_TARGETS.length}`,
 				`Объём: ${(totalBytes / 1024 / 1024).toFixed(1)} МиБ`,
 				...DATABASE_BACKUP_TARGETS.map(target => {
