@@ -64,7 +64,7 @@ const topologyChannel = (
 	};
 	return { ...channel, raw: channel as unknown as ConfirmChannel };
 };
-async function topologyFixture(worker = true) {
+async function topologyFixture(worker = true, assertTopology = worker) {
 	const setups: TopologySetup[] = [];
 	const listeners = new Map<string, (context: { err: Error }) => void>();
 	const wrapper = {
@@ -95,7 +95,7 @@ async function topologyFixture(worker = true) {
 		new ConfigService({
 			RABBITMQ_URL: 'amqp://ci:ci@127.0.0.1/isolated_test',
 			RABBITMQ_CONNECTION_NAME: `aerocrm-identity-${role}`,
-			RABBITMQ_ASSERT_TOPOLOGY: String(worker)
+			RABBITMQ_ASSERT_TOPOLOGY: String(assertTopology)
 		}),
 		{
 			rabbitEnabled: true,
@@ -114,6 +114,21 @@ async function topologyFixture(worker = true) {
 }
 
 describe('Identity channel topology barrier', () => {
+	it('consumes a provisioned worker queue without configure operations', async () => {
+		const { service, setups } = await topologyFixture(true, false);
+		const channel = topologyChannel();
+		channel.consume.mockResolvedValue({ consumerTag: 'existing-queue' });
+		for (const setup of setups) await setup(channel.raw);
+		expect(channel.assertExchange).not.toHaveBeenCalled();
+		expect(channel.assertQueue).not.toHaveBeenCalled();
+		expect(channel.bindQueue).not.toHaveBeenCalled();
+		expect(channel.consume).toHaveBeenCalledWith(
+			DESTINATION_QUEUE,
+			expect.any(Function),
+			expect.objectContaining({ noAck: false })
+		);
+		expect(service.isConsumerReady()).toBe(true);
+	});
 	it.each([false, true])(
 		'waits for declarations and bindings when consumer-first=%s',
 		async consumerFirst => {

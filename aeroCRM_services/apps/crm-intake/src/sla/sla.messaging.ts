@@ -101,6 +101,14 @@ export class SlaRabbit implements OnModuleInit, OnApplicationShutdown {
 						this.returns.set(token, true);
 				});
 				if (assertTopology) await this.ensureTopology(channel);
+				else if (process.env.CRM_INTAKE_PROCESS_ROLE === 'sla-publisher') {
+					for (const exchange of [
+						SLA_EXCHANGE,
+						SLA_DEAD_EXCHANGE,
+						'aerocrm.events'
+					])
+						await channel.checkExchange(exchange);
+				}
 				this.channelReady = true;
 			}
 		});
@@ -239,6 +247,7 @@ export class SlaRabbit implements OnModuleInit, OnApplicationShutdown {
 				this.interruptRequeues(channel);
 			});
 			if (this.assertTopologyEnabled) await this.ensureTopology(channel);
+			else await channel.checkQueue(SLA_QUEUE);
 			await channel.prefetch(5, false);
 			const registration = await channel.consume(
 				SLA_QUEUE,

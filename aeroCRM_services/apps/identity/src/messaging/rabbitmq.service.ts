@@ -49,6 +49,7 @@ export class IdentityRabbitMqService
 		Promise<void>
 	>();
 	private topologyReady = false;
+	private assertTopologyEnabled = false;
 	private maxBytes = 256 * 1024;
 
 	constructor(
@@ -81,14 +82,10 @@ export class IdentityRabbitMqService
 		this.maxBytes = maxBytes;
 		const assertTopology = strictBoolean(
 			this.config.get<string>('RABBITMQ_ASSERT_TOPOLOGY'),
-			this.runtime.workerEnabled,
+			false,
 			'RABBITMQ_ASSERT_TOPOLOGY'
 		);
-		if (assertTopology !== this.runtime.workerEnabled) {
-			throw new Error(
-				`RABBITMQ_ASSERT_TOPOLOGY must be ${this.runtime.workerEnabled} for ${this.runtime.role}`
-			);
-		}
+		this.assertTopologyEnabled = assertTopology;
 		this.connection = connect([rabbitUrl], {
 			heartbeatIntervalInSeconds: 10,
 			reconnectTimeInSeconds: 5,
@@ -168,7 +165,7 @@ export class IdentityRabbitMqService
 	): Promise<void> {
 		if (!this.channel) throw new Error('RabbitMQ consumer is disabled');
 		await this.channel.addSetup(async (channel: ConfirmChannel) => {
-			if (this.runtime.workerEnabled) await this.ensureTopology(channel);
+			if (this.assertTopologyEnabled) await this.ensureTopology(channel);
 			this.consumerChannel = channel;
 			await channel.prefetch(this.runtime.prefetch, false);
 			const consumer = await channel.consume(

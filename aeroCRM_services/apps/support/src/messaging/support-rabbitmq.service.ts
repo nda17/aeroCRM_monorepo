@@ -82,14 +82,9 @@ export class SupportRabbitMqService
 		}
 		const assertTopology = strictBoolean(
 			this.config.get<string>('RABBITMQ_ASSERT_TOPOLOGY'),
-			this.runtime.workerEnabled,
+			false,
 			'RABBITMQ_ASSERT_TOPOLOGY'
 		);
-		if (assertTopology !== this.runtime.workerEnabled) {
-			throw new Error(
-				`RABBITMQ_ASSERT_TOPOLOGY must be ${this.runtime.workerEnabled} for ${this.runtime.role}`
-			);
-		}
 		this.connection = connect([rabbitUrl], {
 			heartbeatIntervalInSeconds: 10,
 			reconnectTimeInSeconds: 5,

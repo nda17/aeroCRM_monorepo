@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 		template: '%s — aeroCRM'
 	},
 	robots: { index: false, follow: false, nocache: true },
-	icons: { icon: '/favicon.ico', apple: '/apple-icon.png' }
+	icons: { icon: [{ url: '/icon.svg', type: 'image/svg+xml' }, { url: '/favicon.ico' }], apple: '/apple-icon.png' }
 }
 
 export default function AdminRootLayout({ children }: PropsWithChildren) {

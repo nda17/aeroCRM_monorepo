@@ -1,7 +1,6 @@
 .logo {
 	@apply inline-flex items-center transition-all;
-	color: #101010;
-	--logo-secondary: #3f3f46;
+	color: #4c165e;
 
 	&:hover {
 		@apply -translate-y-px scale-[0.98];
@@ -10,7 +9,6 @@
 
 .logoLight {
 	color: #ffffff;
-	--logo-secondary: rgba(255, 255, 255, 0.9);
 	filter: drop-shadow(0 2px 12px rgba(18, 8, 33, 0.42))
 		drop-shadow(0 0 8px rgba(18, 8, 33, 0.18));
 }
@@ -21,18 +19,18 @@
 
 @media (min-width: 768px) {
 	.logoSvg {
-		width: 184px;
+		@apply w-[184px];
 	}
 }
 
 @media (min-width: 1024px) {
 	.logoSvg {
-		width: 228px;
+		@apply w-[228px];
 	}
 }
 
 @media (min-width: 1440px) {
 	.logoSvg {
-		width: 244px;
+		@apply w-[244px];
 	}
 }

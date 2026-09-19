@@ -331,18 +331,13 @@ export class OperationsRabbitMqService
 				`RABBITMQ_CONNECTION_NAME must be ${expectedConnectionName}`
 			);
 		}
-		const consumerEnabled =
-			this.runtime.workerEnabled || this.runtime.restoreWorkerEnabled;
 		const assertTopology = parseOperationsStrictBoolean(
 			this.config.get<string>('RABBITMQ_ASSERT_TOPOLOGY'),
-			consumerEnabled,
+			false,
 			'RABBITMQ_ASSERT_TOPOLOGY'
 		);
-		if (assertTopology !== consumerEnabled) {
-			throw new Error(
-				`RABBITMQ_ASSERT_TOPOLOGY must be ${consumerEnabled}`
-			);
-		}
+		if (assertTopology)
+			throw new Error('RABBITMQ_ASSERT_TOPOLOGY must be false');
 		this.maxMessageBytes = parseOperationsBoundedInteger(
 			this.config.get<string>('RABBITMQ_MAX_MESSAGE_BYTES'),
 			256 * 1024,

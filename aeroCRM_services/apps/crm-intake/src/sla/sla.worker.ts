@@ -10,7 +10,6 @@ import { CrmIntakePrismaService } from '../prisma/crm-intake-prisma.service';
 import { SlaRabbit, SLA_EVENT_TYPE } from './sla.messaging';
 import { parseSlaEvent, type SlaEvent } from './sla.contract';
 import { SlaProcessor } from './sla.processor';
-import { SlaReadinessService } from './sla-readiness.service';
 
 @Injectable()
 export class SlaWorker
@@ -20,12 +19,9 @@ export class SlaWorker
 	constructor(
 		private readonly processor: SlaProcessor,
 		private readonly rabbit: SlaRabbit,
-		private readonly prisma: CrmIntakePrismaService,
-		private readonly readiness: SlaReadinessService
+		private readonly prisma: CrmIntakePrismaService
 	) {}
 	async onApplicationBootstrap() {
-		if (!(await this.readiness.ready()))
-			throw new Error('SLA_DELIVERY_NOT_READY');
 		await this.rabbit.consume(message => {
 			const task = this.handle(message);
 			this.running.add(task);

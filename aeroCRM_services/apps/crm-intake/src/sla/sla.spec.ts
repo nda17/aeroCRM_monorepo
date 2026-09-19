@@ -494,7 +494,6 @@ describe('Intake SLA durable producer and consumer', () => {
 		await new SlaWorker(
 			processor as never,
 			rabbit as never,
-			{} as never,
 			{} as never
 		).handle({
 			content: Buffer.from(JSON.stringify(value)),
@@ -539,8 +538,7 @@ describe('Intake SLA durable producer and consumer', () => {
 			rabbit as never,
 			{
 				schedule: jest.fn().mockRejectedValue(new Error('locked'))
-			} as never,
-			{} as never
+			} as never
 		).tick();
 		expect(rabbit.publish).toHaveBeenCalled();
 		expect(prisma.slaOutbox.updateMany).toHaveBeenLastCalledWith(

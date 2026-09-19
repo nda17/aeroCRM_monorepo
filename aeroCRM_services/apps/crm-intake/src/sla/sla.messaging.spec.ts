@@ -15,7 +15,9 @@ const mockChannel = {
 	}),
 	once: jest.fn(),
 	assertExchange: jest.fn(),
+	checkExchange: jest.fn(),
 	assertQueue: jest.fn(),
+	checkQueue: jest.fn(),
 	bindQueue: jest.fn(),
 	prefetch: jest.fn(),
 	consume: jest.fn().mockResolvedValue({ consumerTag: 'sla-only' }),
@@ -85,6 +87,29 @@ describe('Intake SLA isolated confirmed messaging', () => {
 		);
 		expect(rabbit.ready(true)).toBe(true);
 		await rabbit.onApplicationShutdown();
+	});
+	it('uses only passive topology checks with pre-provisioned RabbitMQ roles', async () => {
+		process.env.CRM_INTAKE_SLA_RABBITMQ_ASSERT_TOPOLOGY = 'false';
+		process.env.CRM_INTAKE_PROCESS_ROLE = 'sla-worker';
+		const worker = new SlaRabbit();
+		await worker.onModuleInit();
+		await worker.consume(async () => undefined);
+		expect(mockChannel.checkQueue).toHaveBeenCalledWith(SLA_QUEUE);
+		expect(mockChannel.assertQueue).not.toHaveBeenCalled();
+		expect(mockChannel.bindQueue).not.toHaveBeenCalled();
+		await worker.onApplicationShutdown();
+
+		jest.clearAllMocks();
+		process.env.CRM_INTAKE_PROCESS_ROLE = 'sla-publisher';
+		const publisher = new SlaRabbit();
+		await publisher.onModuleInit();
+		expect(mockChannel.checkExchange.mock.calls.map(([name]) => name)).toEqual([
+			SLA_EXCHANGE,
+			SLA_DEAD_EXCHANGE,
+			'aerocrm.events'
+		]);
+		expect(mockChannel.assertExchange).not.toHaveBeenCalled();
+		await publisher.onApplicationShutdown();
 	});
 	it('uses confirm + mandatory-return before marking a Buffer publication successful', async () => {
 		const rabbit = new SlaRabbit();

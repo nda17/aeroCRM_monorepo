@@ -9,7 +9,6 @@ import { SlaService } from './sla.service';
 import { CrmIntakePrismaService } from '../prisma/crm-intake-prisma.service';
 import { parseSlaEvent, parseSlaNotificationEvent } from './sla.contract';
 import { SlaRabbit } from './sla.messaging';
-import { SlaReadinessService } from './sla-readiness.service';
 
 @Injectable()
 export class SlaPublisher
@@ -21,12 +20,9 @@ export class SlaPublisher
 	constructor(
 		private readonly prisma: CrmIntakePrismaService,
 		private readonly rabbit: SlaRabbit,
-		private readonly service: SlaService,
-		private readonly readiness: SlaReadinessService
+		private readonly service: SlaService
 	) {}
 	async onApplicationBootstrap() {
-		if (!(await this.readiness.ready()))
-			throw new Error('SLA_DELIVERY_NOT_READY');
 		this.schedule();
 	}
 	private schedule() {

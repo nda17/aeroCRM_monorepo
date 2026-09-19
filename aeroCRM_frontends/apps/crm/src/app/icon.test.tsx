@@ -16,7 +16,7 @@ import AppleIcon, {
 	contentType as appleContentType,
 	size as appleSize
 } from './apple-icon'
-import { BrandLogo } from '@/shared/ui/brand-logo/BrandLogo'
+import brand from '../../../../brand/aerocrm-wing.json'
 
 describe('WinCRM browser icons', () => {
 	it.each([
@@ -39,14 +39,12 @@ describe('WinCRM browser icons', () => {
 			expect(response.options).toEqual(dimensions)
 			const html = renderToStaticMarkup(response.element)
 			expect(html).toContain(`width="${pixels}" height="${pixels}"`)
-			expect(html).toContain('fill="#7b3fa0"')
+			expect(html).toContain('fill="#4c165e"')
+			expect(html).toContain('fill="#efc85b"')
 			expect(html).toContain('fill="#ffffff"')
 			expect(html).not.toMatch(/<text|<image|<foreignObject/)
-			const iconPath = html.match(/\bd="([^"]+)"/)![1]
-			const wordmarkPath = renderToStaticMarkup(<BrandLogo />).match(
-				/\bd="([^"]+)"/
-			)![1]
-			expect(wordmarkPath.startsWith(iconPath)).toBe(true)
+			expect(html).toContain(`d="${brand.iconWing}"`)
+			expect(html).toContain(`d="${brand.iconLetter}"`)
 		}
 	)
 })
