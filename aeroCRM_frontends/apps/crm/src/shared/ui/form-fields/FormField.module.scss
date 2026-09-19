@@ -1,0 +1,55 @@
+.field {
+	@apply flex min-w-0 w-full flex-col gap-1.5;
+}
+
+.label {
+	@apply text-sm font-semibold text-crm-text;
+}
+
+.labelHidden {
+	@apply sr-only;
+}
+
+.requiredMark {
+	@apply ml-1 text-crm-danger;
+}
+
+.control {
+	@apply min-w-0 w-full rounded-xl border border-crm-border bg-crm-surface px-3.5 py-2.5 text-base text-crm-text outline-none transition-colors placeholder:text-crm-muted hover:border-crm-border-strong focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-crm-surface-muted disabled:text-crm-muted lg:text-sm;
+}
+
+.control[aria-invalid='true'] {
+	@apply border-crm-danger focus:border-crm-danger focus:ring-crm-danger/15;
+}
+
+.input {
+	@apply min-h-11 lg:min-h-10;
+}
+
+.selectWrapper {
+	@apply relative;
+}
+
+.select {
+	@apply min-h-11 appearance-none pr-10 lg:min-h-10;
+}
+
+.selectIcon {
+	@apply pointer-events-none absolute right-3 top-1/2 inline-flex -translate-y-1/2 text-crm-muted;
+}
+
+.select:disabled + .selectIcon {
+	@apply opacity-50;
+}
+
+.textarea {
+	@apply min-h-28 resize-y;
+}
+
+.hint {
+	@apply text-xs leading-5 text-crm-muted;
+}
+
+.error {
+	@apply text-xs font-medium leading-5 text-crm-danger;
+}

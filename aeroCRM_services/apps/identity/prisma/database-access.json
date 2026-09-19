@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "service": "identity",
+  "tables": {
+    "users": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "user_sessions": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "workspaces": [
+      "SELECT",
+      "INSERT"
+    ],
+    "workspace_members": [
+      "SELECT",
+      "INSERT"
+    ],
+    "workspace_invitations": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "auth_identities": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "telegram_notification_channels": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "verification_challenges": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "verification_email_attempts": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "email_password_recoveries": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "login_otp_challenges": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "login_otp_rate_limits": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "auth_settings": [
+      "SELECT",
+      "UPDATE"
+    ],
+    "oauth_authorizations": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "service_identity": [
+      "SELECT"
+    ],
+    "aggregate_versions": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "source_sequences": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "outbox_events": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "avatar_media_objects": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "consumer_receipts": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "consumer_failures": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "internal_command_receipts": [
+      "SELECT",
+      "INSERT"
+    ],
+    "telegram_update_receipts": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "heartbeats": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "_prisma_migrations": []
+  },
+  "sequences": {},
+  "types": [
+    "Role",
+    "UserStatus",
+    "WorkspaceType",
+    "WorkspaceStatus",
+    "WorkspaceMemberRole",
+    "WorkspaceMemberStatus",
+    "AuthIdentityType",
+    "VerificationChallengeType",
+    "VerificationChallengePurpose",
+    "OAuthProvider",
+    "OutboxExchange",
+    "OutboxStatus",
+    "AvatarMediaObjectStatus",
+    "ConsumerReceiptStatus",
+    "ConsumerFailureStatus",
+    "TelegramBotKind",
+    "WebhookReceiptStatus"
+  ],
+  "routines": [
+    "enforce_service_identity_integrity"
+  ]
+}

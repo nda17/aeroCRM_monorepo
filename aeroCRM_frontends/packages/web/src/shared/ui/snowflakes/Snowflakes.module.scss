@@ -1,0 +1,35 @@
+.container {
+	@apply fixed top-0 left-0 w-full h-full pointer-events-none z-[9999] overflow-hidden;
+}
+
+.flake {
+	@apply absolute top-[-40px] text-[#a8d8f0] select-none;
+	text-shadow:
+		0 0 6px rgba(168, 216, 240, 0.8),
+		0 0 12px rgba(168, 216, 240, 0.4);
+	animation: snowfall linear infinite;
+	will-change: transform;
+}
+
+@media (max-width: 767px) {
+	.flake:nth-child(n + 31) {
+		display: none;
+	}
+}
+
+@keyframes snowfall {
+	0% {
+		transform: translateY(-40px) translateX(0) rotate(0deg);
+		opacity: 0;
+	}
+	5% {
+		opacity: 1;
+	}
+	85% {
+		opacity: 1;
+	}
+	100% {
+		transform: translateY(110vh) translateX(var(--drift)) rotate(360deg);
+		opacity: 0;
+	}
+}

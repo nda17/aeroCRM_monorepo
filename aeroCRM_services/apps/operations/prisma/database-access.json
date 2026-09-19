@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "service": "operations",
+  "tables": {
+    "service_identity": ["SELECT"],
+    "admin_event_logs": ["SELECT", "INSERT", "UPDATE", "DELETE"],
+    "audit_event_receipts": ["SELECT", "INSERT", "UPDATE", "DELETE"],
+    "outbox_events": ["SELECT", "INSERT", "UPDATE", "DELETE"],
+    "telegram_bot_settings": ["SELECT", "INSERT", "UPDATE"],
+    "scheduled_job_runs": ["SELECT", "INSERT", "UPDATE"],
+    "scheduled_job_idempotency_keys": ["SELECT", "INSERT", "UPDATE"],
+    "messaging_heartbeats": ["SELECT", "INSERT", "UPDATE"],
+    "integration_delivery_failures": ["SELECT", "INSERT", "UPDATE"],
+    "integration_delivery_receipts": ["SELECT", "INSERT", "UPDATE"],
+    "operational_alerts": ["SELECT", "INSERT", "UPDATE"],
+    "reporting_schedule_policy": ["SELECT", "INSERT", "UPDATE"],
+    "database_restore_jobs": ["SELECT"],
+    "database_restore_permits": ["SELECT"],
+    "database_restore_terminal_receipts": ["SELECT"],
+    "database_restore_recovery_actions": ["SELECT"],
+    "database_restore_execution_lease": ["SELECT"],
+    "database_restore_release_authorizations": ["SELECT"],
+    "database_restore_recovery_receipts": ["SELECT"],
+    "_prisma_migrations": []
+  },
+  "sequences": {},
+  "types": [
+    "AuditReceiptStatus", "OutboxStatus", "ScheduledJobRunStatus",
+    "ScheduledJobRunTrigger", "IntegrationDeliveryReceiptStatus",
+    "IntegrationErrorCategory", "IntegrationFailureResolution",
+    "OperationalAlertSeverity", "DatabaseRestoreJobStatus",
+    "DatabaseRestoreJobPhase", "DatabaseRestorePermitStatus",
+    "DatabaseRestoreRecoveryActionType", "DatabaseRestoreRecoveryActionStatus",
+    "DatabaseRestoreRecoveryActionPhase", "DatabaseRestoreExecutionOperationType"
+  ],
+  "routines": [
+    "prevent_database_restore_release_authorization_mutation",
+    "prevent_database_restore_terminal_receipt_mutation",
+    "protect_database_restore_job_provenance",
+    "protect_database_restore_permit_binding",
+    "protect_database_restore_recovery_action_binding",
+    "protect_database_restore_recovery_resolution",
+    "validate_database_restore_recovery_action_roles"
+  ]
+}

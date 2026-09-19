@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "service": "crm-intake",
+  "tables": {
+    "service_identity": [
+      "SELECT"
+    ],
+    "sla_rules": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "sla_commands": [
+      "SELECT",
+      "INSERT"
+    ],
+    "sla_jobs": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "sla_notifications": [
+      "SELECT",
+      "INSERT"
+    ],
+    "sla_receipts": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "sla_outbox": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "_prisma_migrations": [],
+    "inbox_entries": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "intake_sources": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "intake_commands": [
+      "SELECT",
+      "INSERT"
+    ],
+    "intake_activities": [
+      "SELECT",
+      "INSERT"
+    ],
+    "inbound_receipts": [
+      "SELECT",
+      "INSERT"
+    ],
+    "ingestion_rate_buckets": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "acceptances": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "acceptance_outbox": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "acceptance_receipts": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "csv_imports": [
+      "SELECT",
+      "INSERT"
+    ],
+    "csv_import_rows": [
+      "SELECT",
+      "INSERT"
+    ],
+    "export_audit": [
+      "SELECT",
+      "INSERT"
+    ],
+    "inbox_notifications": [
+      "SELECT",
+      "INSERT"
+    ],
+    "inbox_notification_reads": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ]
+  },
+  "sequences": {},
+  "types": [],
+  "routines": [
+    "cancel_entry_sla",
+    "sla_immutable",
+    "check_csv_import_integrity",
+    "notify_live_change",
+    "record_inbox_notification"
+  ]
+}

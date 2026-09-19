@@ -1,0 +1,27 @@
+.wrapper {
+	@apply mt-5 border-t pt-4 text-center text-[0.9rem] border-[#e0d6f0];
+
+	.toggle-link-block {
+		@apply mb-2 text-[#888];
+
+		.sign-in-button {
+			@apply font-medium transition-colors text-[#7b3fa0];
+		}
+
+		.sign-up-button {
+			@apply font-medium transition-colors text-[#7b3fa0];
+		}
+
+		.restore-password-button {
+			@apply text-[0.86rem] transition-colors text-[#aaa];
+		}
+
+		.sign-in-button,
+		.sign-up-button,
+		.restore-password-button {
+			&:hover {
+				@apply text-[#470b58];
+			}
+		}
+	}
+}

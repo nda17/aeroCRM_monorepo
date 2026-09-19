@@ -1,0 +1,272 @@
+.editor {
+	@apply min-w-0 mx-auto w-full flex flex-col gap-4 mb-8;
+}
+
+.loading {
+	@apply text-[#bbb] text-[0.9rem] text-center py-10;
+}
+
+.saveBar {
+	@apply sticky top-2 z-10 flex items-center justify-between gap-4 bg-white border border-[#e0d6f0] rounded-xl px-5 py-4 shadow-[0_12px_28px_rgba(71,11,88,0.08)];
+
+	@media (max-width: 640px) {
+		@apply static flex-col items-stretch;
+	}
+}
+
+.saveTitle {
+	@apply text-[1rem] font-semibold text-[#1a1a1a];
+}
+
+.titleWithHelp {
+	@apply flex items-center gap-2 min-w-0;
+}
+
+.help {
+	@apply relative inline-flex shrink-0;
+}
+
+.helpBtn {
+	@apply flex h-5 w-5 items-center justify-center rounded-full border border-[#c4a8e8] bg-white text-[12px] font-bold leading-none text-[#7b3fa0] transition-colors duration-150;
+
+	&:hover,
+	&:focus-visible {
+		@apply border-[#c21b84] text-[#c21b84] outline-none;
+	}
+}
+
+.tooltip {
+	@apply absolute left-1/2 top-[calc(100%+8px)] z-30 flex w-[320px] -translate-x-1/2 flex-col gap-2 rounded-lg border border-[#e0d6f0] bg-white p-4 text-left shadow-[0_16px_36px_rgba(71,11,88,0.16)];
+
+	&::before {
+		@apply absolute left-1/2 top-[-6px] h-3 w-3 -translate-x-1/2 rotate-45 border-l border-t border-[#e0d6f0] bg-white content-[''];
+	}
+
+	@media (max-width: 640px) {
+		@apply left-auto right-0 w-[min(78vw,320px)] translate-x-0;
+
+		&::before {
+			@apply left-auto right-3 translate-x-0;
+		}
+	}
+}
+
+.tooltipTitle {
+	@apply text-sm font-semibold text-[#1a1a1a];
+}
+
+.tooltipText,
+.tooltipRisk {
+	@apply text-xs leading-[1.45] text-[#5f5268];
+}
+
+.riskBadge {
+	@apply inline-flex w-fit rounded-full px-2 py-[3px] text-[11px] font-semibold;
+}
+
+.risk-low {
+	@apply bg-[#ecfdf5] text-[#047857] border border-[#a7f3d0];
+}
+
+.risk-medium {
+	@apply bg-[#fffbeb] text-[#b45309] border border-[#fde68a];
+}
+
+.risk-high {
+	@apply bg-[#fef2f2] text-[#b91c1c] border border-[#fecaca];
+}
+
+.saveActions {
+	@apply flex items-center justify-end gap-2 flex-wrap;
+}
+
+.dangerZone {
+	@apply flex items-center justify-between gap-4 bg-[#fff7f7] border border-[#fecaca] rounded-xl px-5 py-4;
+
+	@media (max-width: 640px) {
+		@apply flex-col items-stretch;
+	}
+}
+
+.dangerTitle {
+	@apply text-[1rem] font-semibold text-[#991b1b];
+}
+
+.dangerText {
+	@apply mt-1 text-sm leading-[1.45] text-[#7f1d1d];
+}
+
+.panel {
+	@apply bg-white border border-[#e0d6f0] rounded-xl p-5 flex flex-col gap-4;
+
+	@media (max-width: 480px) {
+		@apply p-3 rounded-[10px];
+	}
+}
+
+.panelHeader {
+	@apply flex items-start justify-between gap-4;
+
+	@media (max-width: 640px) {
+		@apply flex-col;
+	}
+}
+
+.panelTitle {
+	@apply text-[1rem] font-semibold text-[#1a1a1a];
+}
+
+.gridTwo {
+	@apply grid grid-cols-1 md:grid-cols-2 gap-4;
+}
+
+.gridThree {
+	@apply grid grid-cols-1 md:grid-cols-3 gap-4;
+}
+
+.field {
+	@apply flex flex-col gap-2;
+}
+
+.fieldLabel {
+	@apply text-[0.88rem] font-semibold text-[#1a1a1a];
+}
+
+.fieldHint {
+	@apply text-xs leading-[1.45] text-[#8b7c95];
+}
+
+.input,
+.textarea,
+.select {
+	@apply w-full rounded-lg border border-[#e0d6f0] bg-white px-3 py-2 text-sm text-[#1a1a1a] outline-none transition-colors duration-150;
+
+	&:focus {
+		@apply border-[#c21b84];
+	}
+}
+
+.textarea {
+	@apply resize-y min-h-[82px];
+}
+
+.select {
+	@apply appearance-none bg-no-repeat pr-11;
+	background-image: url("data:image/svg+xml,%3Csvg width='16' height='16' viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 6L8 10L12 6' stroke='%231A1A1A' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+	background-position: right 1rem center;
+	background-size: 16px 16px;
+}
+
+.toggleField {
+	@apply flex items-center gap-3 cursor-pointer;
+
+	input {
+		@apply sr-only;
+	}
+
+	input:checked + .toggleVisual {
+		@apply bg-[#c21b84];
+	}
+
+	input:checked + .toggleVisual::after {
+		@apply translate-x-[20px];
+	}
+}
+
+.toggleFieldDisabled {
+	@apply cursor-not-allowed opacity-60;
+}
+
+.devLockedContent {
+	@apply pointer-events-none select-none opacity-60 blur-[1px];
+}
+
+.devLockHint {
+	@apply flex items-center justify-end gap-2 text-xs font-semibold text-[#7b3fa0];
+}
+
+.toggleVisual {
+	@apply shrink-0 w-[44px] h-[24px] rounded-full bg-[#d8cce3] transition-colors duration-150 relative;
+
+	&::after {
+		@apply content-[''] absolute top-[3px] left-[3px] w-[18px] h-[18px] rounded-full bg-white transition-transform duration-150 shadow-sm;
+	}
+}
+
+.toggleText {
+	@apply flex flex-col gap-1;
+}
+
+.list {
+	@apply flex flex-col gap-3;
+}
+
+.itemCard {
+	@apply flex flex-col gap-4 border border-[#eadff2] rounded-xl bg-[#fbf8ff] p-4;
+}
+
+.itemHeader {
+	@apply flex items-start justify-between gap-3;
+
+	@media (max-width: 640px) {
+		@apply flex-col;
+	}
+}
+
+.itemTitle {
+	@apply text-sm font-semibold text-[#470b58];
+}
+
+.itemActions {
+	@apply flex items-center gap-2 flex-wrap;
+}
+
+.smallBtn,
+.dangerBtn,
+.factoryResetBtn,
+.addBtn,
+.saveBtn,
+.resetBtn {
+	@apply rounded-lg text-sm font-semibold cursor-pointer transition-colors duration-150 px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.smallBtn,
+.resetBtn {
+	@apply border border-[#c4a8e8] bg-white text-[#7b3fa0];
+
+	&:hover {
+		@apply bg-[#f3eeff];
+	}
+}
+
+.dangerBtn {
+	@apply border border-[#fecaca] bg-white text-[#dc2626];
+
+	&:hover {
+		@apply bg-[#fff1f2];
+	}
+}
+
+.factoryResetBtn {
+	@apply border border-[#dc2626] bg-[#dc2626] text-white;
+
+	&:hover {
+		@apply bg-[#b91c1c];
+	}
+}
+
+.addBtn {
+	@apply self-start border border-[#c4a8e8] bg-[#f7f2ff] text-[#7b3fa0];
+
+	&:hover {
+		@apply bg-[#f0e6ff];
+	}
+}
+
+.saveBtn {
+	@apply border border-[#c21b84] bg-[#c21b84] text-white;
+
+	&:hover {
+		@apply bg-[#a91570];
+	}
+}

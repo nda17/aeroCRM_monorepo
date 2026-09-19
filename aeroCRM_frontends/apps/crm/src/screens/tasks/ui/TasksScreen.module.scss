@@ -1,0 +1,18 @@
+.screen {
+	@apply flex min-w-0 flex-col gap-6;
+}
+.filters {
+	@apply flex flex-wrap items-end gap-3 rounded-2xl border border-crm-border bg-crm-surface p-4;
+}
+.title {
+	@apply font-semibold text-crm-text;
+}
+.copy {
+	@apply flex flex-col items-start gap-2 text-sm;
+}
+.pagination {
+	@apply flex flex-wrap items-center justify-between gap-3 text-sm text-crm-muted;
+}
+.actions {
+	@apply flex items-center gap-2;
+}

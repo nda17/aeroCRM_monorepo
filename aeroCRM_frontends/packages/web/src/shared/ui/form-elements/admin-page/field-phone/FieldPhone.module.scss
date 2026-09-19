@@ -1,0 +1,15 @@
+.wrapper-input {
+	@apply mb-3 relative;
+
+	.label-input {
+		@apply text-gray-600;
+
+		.input-field {
+			@apply w-full outline-none p-1 border-b border-b-black border-solid transition-colors mb-[1.1rem];
+		}
+	}
+
+	.error-message {
+		@apply text-firebrick text-[11px] absolute bottom-[0] leading-[1.25];
+	}
+}

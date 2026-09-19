@@ -1,0 +1,197 @@
+.wrapper {
+	@apply relative flex w-full min-w-0 flex-col;
+}
+.filters {
+	@apply mb-5 flex flex-wrap items-end gap-3 rounded-xl border border-[#e0d6f0] bg-white p-4;
+}
+.filters > label:first-child {
+	@apply min-w-0 basis-48 flex-1;
+}
+.filters[data-thread-open='true'] {
+	@apply hidden lg:flex;
+}
+.wrapper label:not(.checkbox):not(.fileButton) {
+	@apply flex flex-col gap-1 text-sm font-medium text-[#51405f];
+}
+.wrapper input:not([type='checkbox']):not([type='file']),
+.wrapper textarea,
+.wrapper select {
+	@apply min-h-10 w-full rounded-lg border border-[#e0d6f0] bg-white px-3 py-2 text-sm text-[#24172e] outline-none focus:border-[#7b3fa0] focus:ring-2 focus:ring-[#7b3fa0]/20 disabled:bg-[#f8f5fb];
+}
+.wrapper textarea {
+	@apply resize-y;
+}
+.wrapper select {
+	@apply pr-8;
+}
+.checkbox {
+	@apply flex min-h-10 items-center gap-2 text-sm text-[#51405f];
+}
+.checkbox input {
+	@apply h-4 w-4 accent-[#7b3fa0];
+}
+.primary {
+	@apply inline-flex min-h-10 items-center justify-center rounded-lg border-0 bg-[#7b3fa0] px-4 py-2 text-sm font-semibold text-white hover:bg-[#63317f] disabled:cursor-not-allowed disabled:opacity-50;
+}
+.workspace {
+	@apply mb-5 grid min-w-0 gap-4 lg:min-h-[32rem] lg:grid-cols-[minmax(17rem,0.8fr)_minmax(0,1.5fr)];
+}
+.list {
+	@apply flex min-w-0 flex-col gap-2 rounded-xl border border-[#e0d6f0] bg-white p-3 lg:max-h-[52rem] lg:overflow-y-auto;
+}
+.workspace[data-thread-open='true'] .list,
+.workspace[data-thread-open='false'] .conversation {
+	@apply hidden lg:flex;
+}
+.ticket,
+.selectedTicket {
+	@apply flex w-full flex-col gap-1 rounded-lg border border-[#e8e0ee] p-3 text-left text-sm text-[#51405f] hover:bg-[#f8f4fc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7b3fa0];
+}
+.ticket {
+	@apply bg-white;
+}
+.selectedTicket {
+	@apply border-[#7b3fa0] bg-[#f5effa];
+}
+.ticket strong,
+.selectedTicket strong {
+	@apply break-words text-[#24172e];
+}
+.ticket time,
+.selectedTicket time {
+	@apply text-xs text-[#756780];
+}
+.ticketMeta {
+	@apply flex w-full flex-wrap justify-between gap-2 text-xs;
+}
+.ticketMeta b {
+	@apply text-[#7b3fa0];
+}
+.conversation {
+	@apply flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-[#e0d6f0] bg-white lg:h-[min(52rem,90dvh)] lg:min-h-[28rem];
+}
+.empty {
+	@apply flex flex-1 items-center justify-center p-8 text-center text-sm leading-6 text-[#756780];
+}
+.threadHeader {
+	@apply flex shrink-0 flex-col gap-2 border-b border-[#e8e0ee] bg-[#fcfaff] p-3 lg:p-4;
+}
+.threadHeader > button {
+	@apply self-start text-sm text-[#7b3fa0];
+}
+.threadHeader h3 {
+	@apply break-words font-bold text-[#24172e];
+}
+.threadHeader p {
+	@apply break-words text-sm text-[#51405f];
+}
+.threadHeader label {
+	@apply max-w-52;
+}
+.history {
+	@apply max-h-[60dvh] min-h-[18rem] flex-auto overflow-y-auto overscroll-contain p-3 lg:max-h-none lg:min-h-0 lg:flex-1 lg:p-4;
+}
+.message {
+	@apply mb-3 mr-8 rounded-xl rounded-tl-none border border-[#e8e0ee] bg-[#faf8fc] p-3 text-sm;
+}
+.ownMessage {
+	@apply mb-3 ml-8 rounded-xl rounded-tr-none border border-[#e0d6f0] bg-[#f3eaf9] p-3 text-sm;
+}
+.message p,
+.ownMessage p {
+	@apply whitespace-pre-wrap break-words leading-6 text-[#24172e];
+}
+.messageMeta {
+	@apply mb-1 flex flex-wrap justify-between gap-2 text-xs text-[#756780];
+}
+.attachment {
+	@apply mt-2 block max-w-full break-all text-left text-xs text-[#7b3fa0] underline disabled:opacity-50;
+}
+.older {
+	@apply mb-4 min-h-10 w-full rounded-lg border border-[#e0d6f0] px-3 py-2 text-sm text-[#7b3fa0] disabled:opacity-50;
+}
+.composer {
+	@apply flex shrink-0 flex-col gap-2 border-t border-[#e8e0ee] p-3 lg:max-h-[60%] lg:overflow-y-auto lg:p-4;
+}
+.actions {
+	@apply mt-2 flex flex-wrap items-center justify-between gap-2 lg:gap-3;
+}
+.actions > .primary {
+	@apply max-w-full;
+}
+.actions > button:not(.primary) {
+	@apply min-h-10 text-sm text-[#7b3fa0] underline;
+}
+.fileButton {
+	@apply relative flex min-h-10 cursor-pointer items-center text-sm text-[#7b3fa0];
+}
+.fileButton input {
+	@apply absolute inset-0 w-full cursor-pointer opacity-0;
+}
+.hint {
+	@apply my-2 text-xs leading-[1.25rem] text-[#756780];
+}
+.error {
+	@apply my-2 text-sm leading-6 text-red-700;
+}
+.error button {
+	@apply underline;
+}
+.files {
+	@apply flex flex-col gap-1;
+}
+.files li {
+	@apply flex items-center gap-2 text-xs;
+}
+.files img {
+	@apply h-10 w-10 rounded object-cover;
+}
+.files span {
+	@apply min-w-0 flex-1 break-words;
+}
+.files button {
+	@apply min-h-9 px-2 text-[#7b3fa0] disabled:opacity-50;
+}
+.settings {
+	@apply mb-5 rounded-xl border border-[#e0d6f0] bg-white p-5;
+}
+.settings summary {
+	@apply cursor-pointer text-base font-semibold text-[#24172e];
+}
+.settingsFields,
+.lockedEditor {
+	@apply grid gap-3 border-0 p-0 sm:grid-cols-2;
+}
+.lockedEditor {
+	@apply pointer-events-none select-none opacity-60 blur-[1px];
+}
+.lockedNotice {
+	@apply my-3 flex items-center gap-2 text-sm font-semibold text-[#756780];
+}
+.summary {
+	@apply my-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-2 rounded-lg bg-[#faf8fc] p-3 text-sm;
+}
+.summary dt {
+	@apply text-[#756780];
+}
+.summary dd {
+	@apply break-words text-[#24172e];
+}
+.preview {
+	@apply fixed inset-0 z-[100] m-0 flex h-dvh max-h-none w-screen max-w-none flex-col items-center justify-center gap-4 border-0 bg-black/80 p-5;
+}
+.pagination {
+	@apply flex items-center justify-between gap-2 py-3 text-sm text-[#7b3fa0];
+}
+.pagination button {
+	@apply min-h-10 px-2 disabled:opacity-40;
+}
+.preview > button {
+	@apply absolute right-5 top-5 flex h-11 w-11 items-center justify-center rounded-full bg-white text-xl text-black;
+}
+.preview img {
+	@apply max-h-[80dvh] max-w-full object-contain;
+}
+.preview a {
+	@apply text-sm text-white underline;
+}

@@ -1,0 +1,19 @@
+.viewport {
+	@apply min-h-dvh bg-crm-bg px-4 py-6 sm:px-6 sm:py-10;
+}
+.container {
+	@apply mx-auto w-full min-w-0 max-w-6xl;
+}
+.header {
+	@apply mb-8 min-w-0 space-y-3;
+
+	h1 {
+		@apply break-words text-2xl font-semibold tracking-tight text-crm-text sm:text-3xl;
+	}
+	> p:last-child {
+		@apply max-w-3xl text-sm leading-6 text-crm-muted sm:text-base;
+	}
+}
+.brand {
+	@apply text-sm font-bold uppercase tracking-widest text-primary;
+}

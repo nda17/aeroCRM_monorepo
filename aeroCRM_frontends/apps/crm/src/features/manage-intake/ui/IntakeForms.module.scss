@@ -1,0 +1,75 @@
+.form {
+	@apply flex flex-col gap-5;
+}
+.row {
+	@apply grid grid-cols-1 gap-4 sm:grid-cols-2;
+}
+.actions {
+	@apply flex flex-wrap items-center justify-end gap-3;
+}
+.notice {
+	@apply rounded-xl border border-crm-border bg-crm-surface-muted p-4 text-sm leading-relaxed text-crm-muted;
+}
+.error {
+	@apply rounded-xl border border-crm-danger/20 bg-crm-danger/10 p-4 text-sm text-crm-danger;
+}
+.details {
+	@apply grid gap-4 text-sm;
+}
+.details > div {
+	@apply grid gap-1;
+}
+.details dt {
+	@apply font-medium text-crm-muted;
+}
+.details dd {
+	@apply whitespace-pre-wrap break-words text-crm-text;
+}
+.secret {
+	@apply block overflow-x-auto rounded-lg border border-crm-border bg-crm-surface-muted p-3 font-mono text-sm text-crm-text;
+}
+.history {
+	@apply flex flex-col gap-3 border-t border-crm-border pt-5;
+}
+.history h3 {
+	@apply font-bold text-crm-text;
+}
+.history ol {
+	@apply flex flex-col gap-3;
+}
+.history li {
+	@apply rounded-lg border border-crm-border p-3 text-sm text-crm-muted;
+}
+.history strong {
+	@apply block font-semibold text-crm-text;
+}
+.credential {
+	@apply flex flex-col gap-4;
+}
+.setupSteps {
+	@apply list-decimal space-y-3 pl-5 text-sm leading-relaxed text-crm-muted;
+}
+.acceptance {
+	@apply flex min-w-0 flex-col gap-4 border-t border-crm-border pt-5;
+}
+.acceptance h3 {
+	@apply font-bold text-crm-text;
+}
+.acceptance .notice {
+	@apply flex flex-col gap-3;
+}
+.fields {
+	@apply flex min-w-0 flex-col gap-4;
+}
+.reference {
+	@apply block break-all font-mono text-xs;
+}
+.choices {
+	@apply flex max-h-64 flex-col gap-2 overflow-y-auto;
+}
+.choices button {
+	@apply flex w-full flex-col items-start gap-1 whitespace-normal break-words text-left;
+}
+.choices span {
+	@apply text-xs font-normal;
+}

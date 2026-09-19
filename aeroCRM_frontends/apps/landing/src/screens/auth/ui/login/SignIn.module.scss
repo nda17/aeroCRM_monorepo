@@ -1,0 +1,27 @@
+.wrapper {
+	@apply flex items-center justify-center py-14 md:py-20 min-h-[calc(100dvh-8rem)];
+
+	.form {
+		@apply w-full max-w-[30rem] rounded-[1.75rem] border border-[#e0d6f0] p-6 md:p-8 bg-white shadow-[0_24px_64px_rgb(100_60_180/0.08)];
+
+		.title {
+			@apply font-semibold text-[1.85rem] leading-none mb-2 text-[#1a1a1a];
+		}
+
+		.subtitle {
+			@apply text-[0.94rem] leading-6 mb-6 text-[#888];
+		}
+
+		.auth-actions {
+			@apply mt-5 flex flex-wrap gap-2 border-t border-[#e0d6f0] pt-4;
+		}
+
+		.auth-link {
+			@apply rounded-full border border-[#e0d6f0] px-3 py-2 text-[0.82rem] font-medium transition-all text-[#7b3fa0] bg-[#f3eeff];
+
+			&:hover {
+				@apply bg-[#e0d6f0];
+			}
+		}
+	}
+}

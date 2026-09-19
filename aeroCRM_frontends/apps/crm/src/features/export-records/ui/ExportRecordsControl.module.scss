@@ -1,0 +1,15 @@
+.content {
+	@apply flex flex-col gap-5;
+}
+.notice {
+	@apply rounded-xl border border-crm-border bg-crm-surface-muted p-4 text-sm leading-relaxed text-crm-muted;
+}
+.note {
+	@apply text-sm leading-relaxed text-crm-muted;
+}
+.actions {
+	@apply flex flex-wrap items-center justify-end gap-3;
+}
+.error {
+	@apply rounded-xl border border-crm-danger/20 bg-crm-danger/10 p-4 text-sm text-crm-danger;
+}

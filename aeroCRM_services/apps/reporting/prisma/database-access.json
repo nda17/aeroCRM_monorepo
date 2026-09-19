@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "service": "reporting",
+  "tables": {
+    "service_identity": [
+      "SELECT"
+    ],
+    "identity_user_projections": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_order_facts": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_entitlement_projections": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "projection_receipts": [
+      "SELECT",
+      "INSERT"
+    ],
+    "projection_watermarks": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "consumer_receipts": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "consumer_failures": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "reporting_settings": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "report_runs": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "outbox_events": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "heartbeats": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "_prisma_migrations": []
+  },
+  "sequences": {},
+  "types": [
+    "ProjectionReceiptResult",
+    "ReportingConsumerReceiptStatus",
+    "ReportRunStatus",
+    "ReportingOutboxStatus",
+    "ReportingOutboxExchange",
+    "ReportingConsumerFailureStatus"
+  ],
+  "routines": [
+    "reject_report_run_snapshot_mutation",
+    "enforce_service_identity_integrity"
+  ]
+}

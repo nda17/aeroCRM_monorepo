@@ -1,0 +1,48 @@
+.screen {
+	@apply flex flex-col gap-6;
+}
+.panel {
+	@apply overflow-hidden rounded-panel border border-crm-border bg-crm-surface shadow-panel;
+}
+.panelHeader {
+	@apply flex flex-wrap items-start justify-between gap-4 border-b border-crm-border px-5 py-5 lg:px-6;
+}
+.panelTitle {
+	@apply mb-1 text-lg font-bold text-crm-text;
+}
+.muted {
+	@apply text-sm leading-relaxed text-crm-muted;
+}
+.actions {
+	@apply flex flex-wrap items-center gap-2;
+}
+.tabs {
+	@apply flex flex-wrap gap-2;
+}
+.quotaPanel {
+	@apply grid gap-5 rounded-panel border border-crm-border bg-crm-surface p-5 shadow-panel md:grid-cols-2;
+}
+.quotaPanel > div {
+	@apply flex flex-col items-start gap-2;
+}
+.quotaNumber {
+	@apply text-3xl font-bold tracking-tight text-primary;
+}
+.notice {
+	@apply flex flex-wrap items-center justify-between gap-3 rounded-xl border border-crm-border bg-crm-surface-muted p-4 text-sm;
+}
+.record {
+	@apply flex max-w-sm flex-col items-start gap-2 break-words;
+}
+.record > span:not(:first-child) {
+	@apply text-sm;
+}
+.rowActions {
+	@apply flex max-w-sm flex-wrap items-center gap-2;
+}
+.rowActions p {
+	@apply w-full;
+}
+.pagination {
+	@apply flex flex-wrap items-center justify-between gap-3 border-t border-crm-border p-5 text-sm text-crm-muted;
+}

@@ -1,0 +1,112 @@
+.wrapper {
+	@apply w-full overflow-hidden rounded-2xl border border-crm-border bg-crm-surface;
+}
+
+.embedded {
+	@apply rounded-none border-0;
+}
+
+.scrollArea {
+	@apply w-full overflow-x-auto;
+}
+
+.scrollArea:focus-visible,
+.scrollArea:focus-within {
+	@apply outline-none ring-2 ring-inset ring-primary/20;
+}
+
+.table {
+	@apply w-full min-w-[720px] border-collapse text-left text-sm text-crm-text;
+}
+
+.caption {
+	@apply sr-only;
+}
+
+.headerRow {
+	@apply bg-crm-surface-muted;
+}
+
+.headerCell {
+	@apply border-b border-crm-border px-4 py-3 text-xs font-bold uppercase tracking-[0.06em] text-crm-muted;
+}
+
+.bodyRow:last-child .cell {
+	@apply border-b-0;
+}
+
+.cell {
+	@apply border-b border-crm-border px-4 py-3 align-middle text-sm;
+}
+
+.alignLeft {
+	@apply text-left;
+}
+
+.alignCenter {
+	@apply text-center;
+}
+
+.alignRight {
+	@apply text-right;
+}
+
+.emptyCell {
+	@apply px-6 py-12 text-center text-sm text-crm-muted;
+}
+
+.mobileLabel {
+	@apply hidden;
+}
+
+@media (max-width: 767px) {
+	.cards .scrollArea {
+		@apply overflow-x-visible;
+	}
+
+	.cards .table {
+		@apply block min-w-0;
+	}
+
+	.cards thead {
+		@apply sr-only;
+	}
+
+	.cards tbody {
+		@apply grid gap-3 bg-crm-surface-muted p-3;
+	}
+
+	.cards .bodyRow {
+		@apply grid grid-cols-1 gap-4 rounded-xl border border-crm-border bg-crm-surface p-4 min-[360px]:grid-cols-2;
+	}
+
+	.cards .cell {
+		@apply flex min-w-0 flex-col items-start gap-1.5 whitespace-normal border-0 p-0 text-left [overflow-wrap:anywhere];
+	}
+
+	.cards .cell:first-child {
+		@apply col-span-full border-b border-crm-border pb-3;
+	}
+
+	.cards .cellContent {
+		@apply min-w-0 w-full max-w-full whitespace-normal [overflow-wrap:anywhere];
+	}
+
+	.cards .cellContent :where(button, a, div, span, strong) {
+		@apply min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere];
+	}
+
+	.cards .cellContent button,
+	.cards .cellContent a {
+		@apply min-h-11;
+	}
+
+	.cards .mobileLabel {
+		@apply block text-xs font-medium leading-5 text-crm-muted;
+	}
+
+	.cards .emptyRow,
+	.cards .emptyCell {
+		@apply block;
+	}
+}

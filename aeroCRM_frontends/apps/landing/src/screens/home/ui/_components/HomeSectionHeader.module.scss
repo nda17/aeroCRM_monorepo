@@ -1,0 +1,26 @@
+.heading {
+	@apply relative z-[1] mx-auto mb-8 flex max-w-[820px] flex-col items-center gap-4 text-center;
+}
+
+.headingLeft {
+	@apply mx-0 items-start text-left;
+
+	.title,
+	.subtitle {
+		@apply text-left;
+	}
+}
+
+.title {
+	@apply whitespace-pre-line text-center text-[32px] font-semibold leading-[1.15] text-[#22155c];
+	@apply font-display;
+
+	@media (max-width: 640px) {
+		@apply text-2xl;
+	}
+}
+
+.subtitle {
+	@apply whitespace-pre-line text-center text-[1rem] font-semibold leading-[1.45] text-[#7b3fa0] md:text-[1.08rem];
+	@apply font-display;
+}

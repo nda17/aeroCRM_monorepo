@@ -1,0 +1,111 @@
+import { Logger, RequestMethod, ValidationPipe } from '@nestjs/common';
+import type { INestApplication } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { CrmAccessModule } from './crm-access.module';
+import { CrmAccessHttpExceptionFilter } from './common/crm-access-http-exception.filter';
+import { crmAccessRequestContextMiddleware } from './common/crm-access-request-context';
+import {
+	getCrmAccessCorsAllowedOrigins,
+	getCrmAccessListenHost,
+	getCrmAccessTrustProxyConfig
+} from './runtime/crm-access-http.config';
+import { CrmAccessRuntimeService } from './runtime/crm-access-runtime.service';
+import { terminateFailedBootstrap } from './runtime/bootstrap-failure';
+
+let application: INestApplication | undefined;
+
+async function bootstrap(): Promise<void> {
+	const app = await NestFactory.create(CrmAccessModule, {
+		forceCloseConnections: true
+	});
+	application = app;
+	const instance = app.getHttpAdapter().getInstance();
+	if (typeof instance?.set === 'function') {
+		instance.set(
+			'trust proxy',
+			getCrmAccessTrustProxyConfig(process.env.TRUST_PROXY)
+		);
+	}
+	app.setGlobalPrefix('api/v1', {
+		exclude: [
+			{
+				path: 'internal/v1/support/workspace-context',
+				method: RequestMethod.POST
+			},
+			{
+				path: 'internal/v1/crm-access/intake-sla-recipients',
+				method: RequestMethod.POST
+			},
+			{
+				path: 'internal/v1/crm-access/intake-sla-authority',
+				method: RequestMethod.POST
+			},
+			{
+				path: 'internal/v1/crm-access/task-series-authority',
+				method: RequestMethod.POST
+			},
+			{
+				path: 'internal/v1/crm-access/task-reminder-recipients',
+				method: RequestMethod.POST
+			},
+			{ path: 'health/live', method: RequestMethod.GET },
+			{ path: 'health/ready', method: RequestMethod.GET },
+			{
+				path: 'internal/v1/crm-access/billing/authorize-operation',
+				method: RequestMethod.POST
+			},
+			{
+				path: 'internal/v1/crm-access/authorize',
+				method: RequestMethod.POST
+			},
+			{
+				path: 'internal/v1/crm-access/authorize-source',
+				method: RequestMethod.POST
+			},
+			{
+				path: 'internal/v1/crm-access/authorize-workflow',
+				method: RequestMethod.POST
+			},
+			{
+				path: 'internal/v1/crm-access/authorize-assignee',
+				method: RequestMethod.POST
+			}
+		]
+	});
+	app.use(crmAccessRequestContextMiddleware);
+	app.enableCors({
+		origin: getCrmAccessCorsAllowedOrigins(
+			process.env.MODE,
+			process.env.CORS_ALLOWED_ORIGINS
+		),
+		credentials: true,
+		exposedHeaders: 'x-correlation-id, x-aerocrm-service'
+	});
+	app.useGlobalPipes(
+		new ValidationPipe({
+			whitelist: true,
+			forbidNonWhitelisted: true,
+			forbidUnknownValues: true,
+			transform: true
+		})
+	);
+	app.useGlobalFilters(new CrmAccessHttpExceptionFilter());
+	app.enableShutdownHooks();
+	const runtime = app.get(CrmAccessRuntimeService);
+	await app.listen(
+		runtime.port,
+		getCrmAccessListenHost(
+			process.env.MODE,
+			process.env.CRM_ACCESS_LISTEN_HOST
+		)
+	);
+	Logger.log(
+		`CRM Access service started port=${runtime.port}`,
+		'Bootstrap'
+	);
+}
+
+void bootstrap().catch(() => {
+	Logger.error('CRM Access bootstrap failed', undefined, 'Bootstrap');
+	return terminateFailedBootstrap(application);
+});

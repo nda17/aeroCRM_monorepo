@@ -1,0 +1,25 @@
+.section {
+	@apply relative mx-auto mb-[4rem] flex max-w-[960px] items-center justify-between gap-4 rounded-[22px] border border-white/80 bg-white/[0.76] px-4 py-4;
+	box-shadow:
+		0 14px 34px rgb(123 63 160 / 0.1),
+		inset 0 1px 0 rgb(255 255 255 / 0.92);
+	backdrop-filter: blur(14px);
+
+	@media (max-width: 720px) {
+		@apply mx-4 flex-col items-stretch text-center;
+	}
+}
+
+.text {
+	@apply whitespace-pre-line text-[1rem] font-semibold leading-[1.35] text-[#22155c];
+	@apply font-display;
+}
+
+.button {
+	@apply inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-[#c21b84] px-5 py-3 text-sm font-semibold text-white no-underline transition-[transform,background,box-shadow] duration-200;
+	box-shadow: 0 12px 24px rgb(194 27 132 / 0.18);
+
+	&:hover {
+		@apply -translate-y-px bg-[#a91570];
+	}
+}

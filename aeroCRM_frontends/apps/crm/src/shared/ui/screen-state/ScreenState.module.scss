@@ -1,0 +1,59 @@
+.state {
+	@apply flex min-h-64 w-full flex-col items-center justify-center rounded-2xl border border-crm-border bg-crm-surface px-6 py-10 text-center;
+}
+
+.compact {
+	@apply min-h-0 px-5 py-7;
+}
+
+.icon {
+	@apply mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl;
+}
+
+.loadingIcon {
+	@apply animate-spin motion-reduce:animate-none;
+}
+
+.loading .icon {
+	@apply rounded-full bg-crm-info/10 text-crm-info;
+}
+
+.empty .icon {
+	@apply bg-primary/10 text-primary;
+}
+
+.error .icon {
+	@apply bg-crm-danger/10 text-crm-danger;
+}
+
+.permission .icon {
+	@apply bg-crm-warning/10 text-crm-warning;
+}
+
+.copy {
+	@apply max-w-lg;
+}
+
+.title {
+	@apply text-base font-bold text-crm-text;
+}
+
+.description {
+	@apply mt-2 text-sm leading-6 text-crm-muted;
+}
+
+.skeleton {
+	@apply mt-5 flex w-full max-w-sm animate-pulse flex-col gap-2 motion-reduce:animate-none;
+}
+
+.skeleton span {
+	@apply h-2.5 rounded-full bg-crm-border;
+}
+
+.skeleton span:last-child {
+	@apply mx-auto w-2/3;
+}
+
+.action {
+	@apply mt-5 flex flex-wrap items-center justify-center gap-2;
+}

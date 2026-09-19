@@ -1,0 +1,24 @@
+.wrapper-input {
+	@apply mb-4;
+
+	.label-input {
+		@apply block text-[0.82rem] font-medium text-[#666];
+
+		.input-field {
+			@apply mt-2 w-full rounded-2xl border border-[#e0d6f0] px-4 py-3 outline-none transition-all bg-[#f8f5ff] text-[#1a1a1a] tracking-[0.18em];
+
+			&::placeholder {
+				@apply text-[#ccc] tracking-normal;
+			}
+
+			&:focus {
+				@apply bg-white border-[#c4a8e8];
+				box-shadow: 0 0 0 4px rgb(196 168 232 / 0.12);
+			}
+		}
+	}
+
+	.error {
+		@apply mt-2 leading-[12px] text-[0.72rem] tracking-tight text-[#e05a5a];
+	}
+}

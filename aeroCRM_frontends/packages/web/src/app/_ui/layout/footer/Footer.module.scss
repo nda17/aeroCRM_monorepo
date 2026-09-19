@@ -1,0 +1,188 @@
+.footer {
+	@apply p-4 relative z-3 flex justify-center bg-transparent;
+
+	.layout-container {
+		@apply flex flex-col max-w-[88rem] w-full;
+
+		.information-wrapper {
+			@apply flex flex-col gap-[.6rem] mb-4 z-10 sm:flex-row sm:justify-end;
+
+			.socials-wrapper {
+				@apply flex flex-col items-center sm:items-baseline gap-3 sm:gap-[.7rem];
+
+				.link-icon-wrapper {
+					@apply flex flex-wrap gap-2;
+
+					.link-icon {
+						@apply inline-flex items-center justify-center w-9 h-9 rounded-full transition-[transform,box-shadow];
+						background: linear-gradient(
+							135deg,
+							rgb(255 247 239 / 0.96) 0%,
+							rgb(255 238 227 / 0.94) 48%,
+							rgb(246 234 255 / 0.92) 100%
+						);
+						border: 1px solid rgb(255 255 255 / 0.72);
+						box-shadow:
+							inset 0 1px 0 rgb(255 255 255 / 0.85),
+							0 8px 18px rgb(248 189 49 / 0.14),
+							0 4px 12px rgb(194 27 132 / 0.08);
+
+						> svg {
+							@apply w-4 h-4 transition-all;
+						}
+
+						&:hover {
+							@apply -translate-y-px;
+							box-shadow:
+								inset 0 1px 0 rgb(255 255 255 / 0.9),
+								0 12px 22px rgb(248 189 49 / 0.18),
+								0 6px 16px rgb(194 27 132 / 0.1);
+
+							> svg {
+								@apply fill-secondary;
+							}
+						}
+					}
+				}
+			}
+
+			.contacts-wrapper {
+				@apply flex flex-col mr-2 items-center sm:items-baseline gap-3 sm:gap-[.7rem];
+
+				.title-block {
+					@apply text-black font-semibold text-[0.95rem] leading-[1.2rem] select-none;
+				}
+
+				.info-llc {
+					@apply text-black text-[0.8rem] leading-[1.05rem] select-none;
+
+					.info-link {
+						@apply text-black transition-colors;
+
+						&:hover {
+							@apply text-secondary;
+						}
+					}
+				}
+
+				.link-contact {
+					@apply inline-flex min-h-6 items-center text-black text-[0.8rem] leading-[1.05rem] transition-all py-[0.2rem];
+
+					&:hover {
+						@apply text-secondary;
+					}
+				}
+			}
+
+			.legal-wrapper {
+				@apply flex flex-col items-center sm:items-baseline gap-3 sm:gap-[.7rem];
+
+				.title-block {
+					@apply text-black font-semibold text-[0.95rem] leading-[1.2rem] select-none;
+				}
+
+				.link-legal {
+					@apply inline-flex min-h-6 items-center text-black text-[0.8rem] leading-[1.05rem] transition-all py-[0.2rem] text-center sm:text-left;
+
+					&:hover {
+						@apply text-secondary;
+					}
+				}
+
+				.legal-disclaimer {
+					@apply max-w-[20rem] text-black text-[0.7rem] leading-[0.95rem] text-center sm:text-left opacity-80 select-none;
+				}
+			}
+		}
+
+		.inform-wrapper {
+			@apply flex flex-col select-none items-center z-10;
+			.text-inform,
+			.date-inform {
+				@apply text-black text-[0.9rem] leading-[.9rem];
+			}
+			.ybs-inform-wrapper {
+				@apply flex gap-1 mb-3 items-center;
+
+				.ybs-logo-link {
+					@apply inline-flex items-center justify-center rounded-full transition-transform;
+
+					&:hover {
+						@apply -translate-y-px;
+					}
+				}
+
+				.ybs-logo {
+					@apply block origin-center;
+					animation: ybsLogoFloat 4.8s ease-in-out infinite;
+					filter: drop-shadow(0 0.25rem 0.7rem rgb(0 0 0 / 0.1));
+				}
+
+				.ybs-logo-mark {
+					@apply origin-center;
+					animation: ybsLogoMarkPulse 4.8s ease-in-out infinite;
+				}
+
+				.ybs-logo-ring {
+					@apply origin-center;
+					animation: ybsLogoRingPulse 4.8s ease-in-out infinite;
+				}
+			}
+		}
+	}
+}
+
+@keyframes ybsLogoFloat {
+	0%,
+	100% {
+		transform: translateY(0) scale(1);
+	}
+
+	42% {
+		transform: translateY(-0.125rem) scale(1.035);
+	}
+
+	68% {
+		transform: translateY(0.0625rem) scale(0.995);
+	}
+}
+
+@keyframes ybsLogoMarkPulse {
+	0%,
+	100% {
+		opacity: 1;
+		transform: translateY(0);
+	}
+
+	48% {
+		opacity: 0.86;
+		transform: translateY(-0.0625rem);
+	}
+}
+
+@keyframes ybsLogoRingPulse {
+	0%,
+	100% {
+		stroke-width: 10;
+	}
+
+	48% {
+		stroke-width: 11.5;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.footer {
+		.layout-container {
+			.inform-wrapper {
+				.ybs-inform-wrapper {
+					.ybs-logo,
+					.ybs-logo-mark,
+					.ybs-logo-ring {
+						animation: none;
+					}
+				}
+			}
+		}
+	}
+}

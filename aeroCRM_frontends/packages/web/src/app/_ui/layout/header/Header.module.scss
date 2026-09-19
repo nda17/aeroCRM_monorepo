@@ -1,0 +1,19 @@
+.header {
+	@apply w-full relative min-h-[8rem] lg:min-h-32;
+}
+
+.headerAbsolute {
+	@apply absolute top-0 z-50;
+}
+
+.header-shell {
+	@apply w-full relative pt-7 lg:pt-10;
+}
+
+.brand {
+	@apply absolute top-[1.2rem] left-1/2 -translate-x-1/2 z-[35] flex justify-center w-full px-4 pointer-events-none;
+
+	:global(a) {
+		@apply pointer-events-auto;
+	}
+}

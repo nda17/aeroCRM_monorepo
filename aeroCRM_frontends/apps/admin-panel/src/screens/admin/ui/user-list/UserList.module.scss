@@ -1,0 +1,366 @@
+.wrapper {
+	@apply relative flex w-full min-w-0 flex-col;
+
+	.list-section {
+		@apply w-full rounded-layout border border-gray-300 bg-white shadow-sm overflow-hidden;
+	}
+
+	.list-meta {
+		@apply flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-5 py-4 border-b border-gray-300 bg-gray-300 bg-opacity-20;
+	}
+
+	.meta-title {
+		@apply text-[1.1rem] font-semibold text-gray-700;
+	}
+
+	.meta-subtitle {
+		@apply text-sm text-gray-600;
+	}
+
+	.filters {
+		@apply w-full rounded-layout border border-gray-300 bg-white shadow-sm p-4 mb-4 flex flex-col gap-3;
+	}
+
+	.filter-grid {
+		@apply grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3;
+	}
+
+	.filter-field {
+		@apply flex flex-col gap-1;
+	}
+
+	.filter-label {
+		@apply text-xs font-semibold text-gray-600;
+	}
+
+	.filter-input {
+		@apply w-full border border-gray-300 rounded-md bg-white px-3 py-2 text-sm text-gray-700 outline-none transition-colors focus:border-primary;
+	}
+
+	.filter-actions {
+		@apply flex flex-col sm:flex-row gap-2;
+	}
+
+	.filter-apply {
+		@apply rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-80;
+	}
+
+	.filter-reset {
+		@apply rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-300 hover:bg-opacity-20;
+	}
+
+	.loading-meta-block {
+		@apply flex flex-col gap-2;
+	}
+
+	.loading-meta-title {
+		@apply h-5 w-[10rem];
+	}
+
+	.loading-meta-subtitle {
+		@apply h-4 w-[7rem];
+	}
+
+	.loading-meta-side {
+		@apply h-4 w-[10rem];
+	}
+
+	.table-scroll {
+		@apply hidden lg:block w-full overflow-x-auto;
+	}
+
+	.mobile-list {
+		@apply flex flex-col lg:hidden;
+	}
+
+	.loading-card {
+		@apply px-4 py-4 border-b border-gray-300;
+
+		&:last-child {
+			@apply border-b-0;
+		}
+	}
+
+	.loading-card-header {
+		@apply flex items-start justify-between gap-3 mb-4;
+	}
+
+	.loading-card-main {
+		@apply flex-1 min-w-0;
+	}
+
+	.loading-card-title {
+		@apply h-5 w-[9rem];
+	}
+
+	.loading-card-id {
+		@apply h-4 w-[13rem] mt-2;
+	}
+
+	.loading-card-actions {
+		@apply h-8 w-[4.5rem];
+	}
+
+	.loading-card-body {
+		@apply flex flex-col gap-3;
+	}
+
+	.loading-card-line {
+		@apply h-4 w-full;
+	}
+
+	.loading-card-line-short {
+		@apply h-4 w-[65%];
+	}
+
+	.user-card {
+		@apply px-4 py-4 border-b border-gray-300;
+
+		&:last-child {
+			@apply border-b-0;
+		}
+	}
+
+	.deleted-card {
+		@apply bg-red-50;
+	}
+
+	.user-card-header {
+		@apply flex items-start justify-between gap-3 mb-4;
+	}
+
+	.user-card-main {
+		@apply min-w-0;
+	}
+
+	.user-card-title {
+		@apply text-base font-semibold text-gray-700 leading-tight;
+	}
+
+	.user-card-id {
+		@apply mt-1 text-xs text-gray-600 break-all;
+	}
+
+	.deleted-state {
+		@apply mt-2 flex flex-col items-start gap-1;
+	}
+
+	.deleted-badge {
+		@apply inline-flex items-center rounded-full bg-red-100 px-2 py-1 text-[0.75rem] font-semibold text-red-700;
+	}
+
+	.deleted-date {
+		@apply text-xs font-medium text-red-700;
+	}
+
+	.user-card-body {
+		@apply flex flex-col gap-3;
+	}
+
+	.user-card-row {
+		@apply flex flex-col gap-1;
+	}
+
+	.card-label {
+		@apply text-xs uppercase tracking-wide text-gray-500 font-semibold;
+	}
+
+	.card-value {
+		@apply text-sm text-gray-700 leading-snug break-words;
+	}
+
+	.table {
+		@apply w-full min-w-[75rem] border-collapse;
+
+		thead tr {
+			@apply bg-white;
+		}
+
+		th {
+			@apply px-4 py-3 text-left text-sm font-semibold text-red-700 border-b border-gray-300 whitespace-nowrap;
+		}
+
+		td {
+			@apply px-4 py-3 text-sm text-gray-700 border-b border-gray-300 align-top;
+		}
+
+		tbody tr {
+			@apply transition-colors;
+
+			&:hover {
+				@apply bg-gray-300 bg-opacity-20;
+			}
+		}
+
+		tbody tr:last-child td {
+			@apply border-b-0;
+		}
+
+		tbody .deleted-row {
+			@apply bg-red-50;
+
+			&:hover {
+				@apply bg-red-100;
+			}
+		}
+	}
+
+	.loading-table-line {
+		@apply h-4 w-full;
+	}
+
+	.loading-table-line-short {
+		@apply h-4 w-[8rem];
+	}
+
+	.loading-badge {
+		@apply h-7 w-[10rem];
+	}
+
+	.loading-roles {
+		@apply flex flex-wrap gap-2;
+	}
+
+	.loading-role {
+		@apply h-7 w-[4rem];
+	}
+
+	.truncate {
+		@apply block max-w-full overflow-hidden text-ellipsis whitespace-nowrap;
+	}
+
+	.methods-list {
+		@apply flex flex-wrap gap-2;
+	}
+
+	.method-badge {
+		@apply inline-flex items-center rounded-full px-3 py-1 text-[0.75rem] font-semibold whitespace-nowrap bg-gray-300 bg-opacity-40 text-gray-700;
+	}
+
+	.method-badge-empty {
+		@apply bg-red-100 text-red-700;
+	}
+
+	.roles-list {
+		@apply flex flex-wrap gap-2;
+	}
+
+	.role-badge {
+		@apply inline-flex items-center rounded-full bg-gray-300 bg-opacity-40 px-2 py-1 text-[0.75rem] font-semibold text-gray-700;
+	}
+
+	.actions-cell {
+		@apply flex items-center justify-center min-w-[5rem];
+	}
+
+	.deleted-users-section {
+		@apply mt-8 flex w-full flex-col gap-3;
+	}
+
+	.deleted-section-header {
+		@apply flex items-start justify-between gap-3 px-1;
+	}
+
+	.deleted-loading-list {
+		@apply flex flex-col gap-3 p-4;
+	}
+
+	.deleted-loading-row {
+		@apply h-14 w-full;
+	}
+
+	.deleted-user-list {
+		@apply flex flex-col;
+	}
+
+	.deleted-user-row {
+		@apply grid grid-cols-[minmax(13rem,1.2fr)_minmax(11rem,1fr)_auto_minmax(9rem,0.7fr)_auto] items-center gap-4 border-b border-gray-300 bg-red-50 px-5 py-4;
+
+		&:last-child {
+			@apply border-b-0;
+		}
+	}
+
+	.deleted-user-identity {
+		@apply flex min-w-0 flex-col items-start gap-1;
+	}
+
+	.deleted-user-contacts {
+		@apply flex min-w-0 flex-col gap-1 text-sm text-gray-700;
+
+		span {
+			@apply overflow-hidden text-ellipsis whitespace-nowrap;
+		}
+	}
+
+	.locked-deleted-section {
+		@apply relative overflow-visible;
+	}
+
+	.locked-deleted-preview {
+		@apply pointer-events-none select-none opacity-55 blur-[1px];
+	}
+
+	.locked-deleted-rows {
+		@apply flex flex-col;
+	}
+
+	.locked-deleted-row {
+		@apply grid grid-cols-[1.1fr_1fr_0.8fr_auto] items-center gap-4 border-b border-gray-300 px-5 py-4 text-sm text-gray-600;
+
+		&:last-child {
+			@apply border-b-0;
+		}
+
+		button {
+			@apply rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-600;
+		}
+	}
+
+	.locked-deleted-overlay {
+		@apply absolute inset-0 z-20 flex items-center justify-center gap-2 rounded-layout bg-white/30 px-4;
+	}
+
+	.locked-deleted-badge {
+		@apply rounded-full border border-[#d7c4ee] bg-white px-4 py-2 text-center text-sm font-semibold text-[#6b2d8f] shadow-sm;
+	}
+
+	.empty-state {
+		@apply w-full rounded-layout border border-dashed border-gray-300 bg-white px-5 py-10 text-center;
+	}
+
+	@media (max-width: 640px) {
+		.deleted-section-header {
+			@apply items-center;
+		}
+
+		.locked-deleted-row {
+			@apply grid-cols-1 gap-2;
+		}
+
+		.locked-deleted-row span:nth-child(2),
+		.locked-deleted-row span:nth-child(3) {
+			@apply hidden;
+		}
+
+		.locked-deleted-overlay {
+			@apply flex-col;
+		}
+	}
+
+	@media (max-width: 1024px) {
+		.deleted-user-row {
+			@apply grid-cols-[minmax(0,1fr)_auto];
+		}
+
+		.deleted-user-contacts,
+		.deleted-user-row > .roles-list,
+		.deleted-user-row > .deleted-date {
+			@apply col-start-1;
+		}
+
+		.deleted-user-row > :last-child {
+			@apply col-start-2 row-start-1;
+		}
+	}
+}

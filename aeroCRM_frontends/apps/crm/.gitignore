@@ -1,0 +1,36 @@
+# Dependencies
+/node_modules
+
+# Next.js
+/.next
+/out
+/next-env.d.ts
+
+# Build and test output
+/dist
+/coverage
+*.tsbuildinfo
+
+# Local environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production
+.env.production.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local tooling
+.DS_Store
+/.idea
+/.vscode
+/.vercel
+
+# Credentials
+*.pem

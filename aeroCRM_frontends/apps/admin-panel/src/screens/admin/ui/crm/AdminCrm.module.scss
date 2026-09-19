@@ -1,0 +1,288 @@
+.wrapper {
+	@apply relative flex w-full min-w-0 flex-col;
+}
+
+.summaryGrid {
+	@apply mx-auto mb-6 grid w-full min-w-0 grid-cols-3 gap-3;
+
+	@media (max-width: 760px) {
+		@apply grid-cols-1;
+	}
+}
+
+.summaryCard {
+	@apply flex min-h-[132px] flex-col gap-2 rounded-xl border border-[#e8ddf5] bg-gradient-to-br from-white to-[#faf7ff] p-5;
+}
+
+.eyebrow {
+	@apply text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[#997eaf];
+}
+
+.summaryValue {
+	@apply text-[1.45rem] font-bold text-[#57266f];
+}
+
+.summaryHint {
+	@apply mt-auto text-[0.8rem] leading-[1.45] text-[#796987];
+}
+
+.section {
+	@apply mx-auto mb-6 flex w-full min-w-0 flex-col gap-4 rounded-xl border border-[#e0d6f0] bg-white p-5;
+
+	@media (max-width: 480px) {
+		@apply gap-[14px] rounded-[10px] p-3;
+	}
+}
+
+.sectionHeader,
+.lockedHeading {
+	@apply flex items-start justify-between gap-4;
+
+	@media (max-width: 560px) {
+		@apply flex-col;
+	}
+}
+
+.lockedHeading {
+	@apply flex-row;
+}
+
+.sectionTitle {
+	@apply text-[0.95rem] font-semibold text-[#1a1a1a];
+}
+
+.sectionHint {
+	@apply mt-[2px] text-[0.8rem] leading-[1.45] text-[#8f829a];
+}
+
+.providerSelect {
+	@apply w-fit max-w-full appearance-none rounded-lg border border-[#d7c4ee] bg-white px-3 py-2 pr-8 text-sm text-[#57266f];
+}
+
+.providerOperation {
+	@apply flex min-w-0 flex-col gap-1.5 break-all rounded-lg border border-[#efe8fb] bg-[#faf8ff] p-3 text-sm text-[#493854];
+}
+
+.providerPager {
+	@apply flex flex-wrap items-center gap-3;
+}
+
+.providerLocked {
+	@apply w-fit opacity-60 blur-[1px];
+}
+
+.inlineCode {
+	@apply rounded bg-[#f1ebf7] px-1 py-0.5 text-[0.75rem] text-[#6b2d8f];
+}
+
+.serviceGrid {
+	@apply grid grid-cols-2 gap-3;
+
+	@media (max-width: 680px) {
+		@apply grid-cols-1;
+	}
+}
+
+.serviceCard {
+	@apply flex min-h-[92px] flex-col gap-2 rounded-xl border border-[#efe8fb] bg-[#faf8ff] p-4;
+}
+
+.serviceName {
+	@apply w-fit rounded-md bg-[#eee4f8] px-2 py-1 text-[0.78rem] font-semibold text-[#692a87];
+}
+
+.serviceDescription {
+	@apply text-[0.8rem] leading-[1.45] text-[#71637d];
+}
+
+.refreshButton {
+	@apply shrink-0 cursor-pointer rounded-lg border border-[#d7c4ee] bg-white px-[18px] py-[9px] text-sm font-semibold text-[#6b2d8f] transition-[opacity,transform,border-color] duration-200;
+
+	&:hover {
+		@apply -translate-y-px border-[#c21b84] opacity-90;
+	}
+
+	&:disabled {
+		@apply cursor-not-allowed opacity-50;
+	}
+
+	@media (max-width: 560px) {
+		@apply w-full;
+	}
+}
+
+.catalogMeta {
+	@apply flex flex-wrap gap-x-4 gap-y-2 rounded-lg border border-[#efe8fb] bg-[#fcfaff] px-4 py-3 text-[0.8rem] text-[#6f5a87];
+}
+
+.templateGrid {
+	@apply grid grid-cols-2 gap-3;
+
+	@media (max-width: 760px) {
+		@apply grid-cols-1;
+	}
+}
+
+.templateSkeleton {
+	@apply h-[210px];
+}
+
+.templateCard {
+	@apply flex min-h-[210px] flex-col gap-3 rounded-xl border border-[#efe8fb] bg-[#faf8ff] p-4;
+}
+
+.templateHeader {
+	@apply flex items-start justify-between gap-3;
+}
+
+.templateName {
+	@apply text-[0.92rem] font-semibold text-[#27202c];
+}
+
+.templateKey {
+	@apply mt-1 block text-[0.7rem] text-[#9c83ad];
+}
+
+.blankBadge {
+	@apply shrink-0 rounded-full bg-[#eee6f7] px-[10px] py-1 text-[0.68rem] font-semibold text-[#69467d];
+}
+
+.templateDescription {
+	@apply text-[0.8rem] leading-[1.45] text-[#75697c];
+}
+
+.stageList {
+	@apply mt-auto flex flex-wrap gap-1.5;
+
+	span {
+		@apply rounded-full px-[9px] py-1 text-[0.68rem] font-medium;
+	}
+}
+
+.stage_open {
+	@apply bg-[#eee8fa] text-[#674780];
+}
+
+.stage_won {
+	@apply bg-[#e7f8ee] text-[#168044];
+}
+
+.stage_lost {
+	@apply bg-[#ffe9ed] text-[#b72c45];
+}
+
+.errorState {
+	@apply rounded-xl border border-[#f3d6dc] bg-[#fff8f9] p-5 text-center;
+}
+
+.errorTitle {
+	@apply text-sm font-semibold text-[#a52b42];
+}
+
+.errorText {
+	@apply mx-auto mt-2 max-w-[620px] text-[0.8rem] leading-[1.5] text-[#8c6670];
+}
+
+.staleState {
+	@apply rounded-lg border border-[#f1dfb8] bg-[#fffaf0] px-4 py-3 text-[0.78rem] leading-[1.5] text-[#856422];
+}
+
+.pricingSkeleton {
+	@apply h-[260px];
+}
+
+.pricingSummary {
+	@apply grid grid-cols-2 gap-3;
+
+	> div {
+		@apply rounded-lg border border-[#efe8fb] bg-[#faf8ff] p-3;
+	}
+
+	dt {
+		@apply text-[0.76rem] leading-[1.45] text-[#796e80];
+	}
+
+	dd {
+		@apply mt-1 text-base font-semibold text-[#57266f];
+	}
+
+	@media (max-width: 760px) {
+		@apply grid-cols-1;
+	}
+}
+
+.pricingEditor {
+	@apply flex flex-col gap-4 border-t border-[#e8e0ef] pt-4;
+
+	form {
+		@apply flex flex-col gap-4;
+	}
+}
+
+.pricingFields {
+	@apply grid min-w-0 grid-cols-2 gap-3 border-0 p-0;
+
+	@media (max-width: 760px) {
+		@apply grid-cols-1;
+	}
+}
+
+.pricingField {
+	@apply flex flex-col gap-1.5 text-[0.76rem] font-medium text-[#6f6278];
+
+	input {
+		@apply h-[42px] min-w-0 rounded-lg border border-[#ddd2e8] bg-white px-3 text-sm text-[#51405d] outline-none transition-colors;
+
+		&:focus-visible {
+			@apply border-[#8b44b6] ring-2 ring-[#8b44b6]/20;
+		}
+
+		&:disabled {
+			@apply cursor-not-allowed bg-[#f7f4fa] text-[#766a7d];
+		}
+	}
+}
+
+.pricingActions {
+	@apply flex flex-wrap gap-3;
+}
+
+.saveButton {
+	@apply min-h-[42px] cursor-pointer rounded-lg bg-[#6b2d8f] px-5 py-2 text-sm font-semibold text-white transition-opacity;
+
+	&:hover {
+		@apply opacity-90;
+	}
+
+	&:disabled {
+		@apply cursor-not-allowed opacity-50;
+	}
+
+	@media (max-width: 560px) {
+		@apply w-full;
+	}
+}
+
+.srOnly {
+	@apply sr-only;
+}
+
+.accessNote {
+	@apply rounded-lg border border-[#e8e0ef] bg-[#faf9fb] px-4 py-3 text-[0.76rem] leading-[1.5] text-[#796e80];
+}
+
+.releaseNote {
+	@apply mx-auto mb-6 flex w-full min-w-0 flex-col gap-2 rounded-xl border border-[#ddd0ed] bg-[#f5effb] p-4 text-sm leading-relaxed text-[#655171];
+}
+
+.architecture {
+	@apply mx-auto mb-6 w-full min-w-0 rounded-xl border border-[#e0d6f0] bg-white p-4;
+
+	> p {
+		@apply mb-4;
+	}
+}
+
+.architectureSummary {
+	@apply min-h-[44px] cursor-pointer rounded-md py-3 text-sm font-semibold text-[#655171] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b44b6];
+}

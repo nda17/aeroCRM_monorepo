@@ -1,0 +1,113 @@
+name: aeroCRM release
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Green CI run ID for this exact commit
+        required: true
+      sha:
+        description: Full 40-character commit SHA
+        required: true
+      frontend_env_hash:
+        description: SHA-256 of sorted frontend env-file hashes on VPS
+        required: true
+      infra_sha:
+        description: Full commit SHA of reviewed private infra repo
+        required: true
+      backend_env_hash:
+        description: SHA-256 of sorted backend env-file hashes on VPS
+        required: true
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: aerocrm-production-release
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.check.outputs.sha }}
+    steps:
+      - name: Require green exact-SHA CI on production branch
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.ci_run_id }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]]
+          read -r conclusion head_sha branch workflow_path <<< "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '[.conclusion,.head_sha,.head_branch,.path] | join(" ")')"
+          [[ "$conclusion" == success && "$head_sha" == "$SHA" && "$branch" == prod_0.1.0 && "$workflow_path" == .github/workflows/ci.yml ]]
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { role: frontend, apps: 'landing crm admin-panel' }
+          - { role: backend, apps: 'api-gateway notification-delivery campaigns reporting billing identity platform support operations crm-access crm-intake crm-customers crm-sales' }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: nda17/aeroCRM_infra
+          ref: ${{ inputs.infra_sha }}
+          ssh-key: ${{ secrets.INFRA_DEPLOY_KEY }}
+          path: infra
+          persist-credentials: false
+      - name: Download exact CI artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.ci_run_id }}
+          APPS: ${{ matrix.apps }}
+        run: |
+          set -euo pipefail
+          mkdir -p images
+          for app in $APPS; do
+            gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "image-$app" --dir "images/$app"
+            test -s "images/$app/$app.tar.gz"
+          done
+      - name: Load images and release
+        env:
+          ROLE: ${{ matrix.role }}
+          APPS: ${{ matrix.apps }}
+          SHA: ${{ needs.verify.outputs.sha }}
+          FRONT_HOST: ${{ secrets.FRONTEND_SSH_HOST }}
+          FRONT_USER: ${{ secrets.FRONTEND_SSH_USER }}
+          FRONT_PORT: ${{ secrets.FRONTEND_SSH_PORT }}
+          FRONT_KEY: ${{ secrets.FRONTEND_SSH_KEY }}
+          BACK_HOST: ${{ secrets.BACKEND_SSH_HOST }}
+          BACK_USER: ${{ secrets.BACKEND_SSH_USER }}
+          BACK_PORT: ${{ secrets.BACKEND_SSH_PORT }}
+          BACK_KEY: ${{ secrets.BACKEND_SSH_KEY }}
+          FRONT_HASH: ${{ inputs.frontend_env_hash }}
+          BACK_HASH: ${{ inputs.backend_env_hash }}
+          KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          if [ "$ROLE" = frontend ]; then
+            host="$FRONT_HOST"; user="$FRONT_USER"; hash="$FRONT_HASH"; port="$FRONT_PORT"
+            printf '%s\n' "$FRONT_KEY" > ~/.ssh/release_key
+          else
+            host="$BACK_HOST"; user="$BACK_USER"; hash="$BACK_HASH"; port="$BACK_PORT"
+            printf '%s\n' "$BACK_KEY" > ~/.ssh/release_key
+          fi
+          [[ "$hash" =~ ^[a-f0-9]{64}$ && "$port" =~ ^[0-9]{1,5}$ ]]
+          dest="$user@$host"
+          ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'mkdir -p /opt/aerocrm/compose /opt/aerocrm/scripts'
+          scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes "infra/compose/$ROLE.yml" "$dest:/opt/aerocrm/compose/"
+          if [ "$ROLE" = backend ]; then
+            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/compose/rabbitmq.conf "$dest:/opt/aerocrm/compose/"
+          fi
+          scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/release.sh "$dest:/opt/aerocrm/scripts/"
+          for app in $APPS; do
+            gzip -dc "images/$app/$app.tar.gz" | ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'docker load >/dev/null'
+          done
+          ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash'"

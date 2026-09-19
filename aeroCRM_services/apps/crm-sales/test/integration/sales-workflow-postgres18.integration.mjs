@@ -1,0 +1,2089 @@
+import 'reflect-metadata';
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
+import { taskSeriesPostgresCases } from './task-series-postgres18.cases.mjs';
+
+const require = createRequire(import.meta.url);
+const { PrismaClient } = require('@prisma/crm-sales-client');
+const { SalesService } = require('../../dist/src/sales/sales.service.js');
+const {
+	WorkdayService
+} = require('../../dist/src/workday/workday.service.js');
+const { WorkdayQuery } = require('../../dist/src/workday/workday.dto.js');
+const {
+	ReminderRulesService
+} = require('../../dist/src/reminders/reminder-rules.service.js');
+const {
+	ReminderDeliveryService
+} = require('../../dist/src/reminders/reminder-delivery.service.js');
+const {
+	ReminderRuntimeService
+} = require('../../dist/src/reminders/reminder-runtime.service.js');
+const {
+	REMINDER_TICK
+} = require('../../dist/src/reminders/reminder-delivery.contract.js');
+const {
+	ReminderRulesQuery,
+	ReminderPageQuery
+} = require('../../dist/src/reminders/reminder-rules.dto.js');
+const {
+	PipelineTemplateCatalogService
+} = require('../../dist/src/templates/pipeline-template-catalog.service.js');
+const {
+	PipelineTemplateInstallationService
+} = require('../../dist/src/pipelines/pipeline-template-installation.service.js');
+
+assert.equal(process.env.CRM_SALES_INTEGRATION_ALLOW_MUTATION, 'true');
+const databaseUrl = requiredEnv('CRM_SALES_TEST_DATABASE_URL');
+const roleName = requiredEnv('CRM_SALES_TEST_RUNTIME_ROLE');
+const url = new URL(databaseUrl);
+assert.ok(['postgres:', 'postgresql:'].includes(url.protocol));
+assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(url.hostname));
+assert.match(url.pathname, /^\/aerocrm_crm_sales_test(?:_[a-z0-9]+)*$/);
+assert.equal(decodeURIComponent(url.username), roleName);
+assert.equal(url.searchParams.get('schema'), 'crm_sales');
+
+const prisma = new PrismaClient({
+	datasources: { db: { url: databaseUrl } }
+});
+const catalog = new PipelineTemplateCatalogService();
+const installer = new PipelineTemplateInstallationService(prisma, catalog);
+let allowContact = true;
+const service = new SalesService(prisma, {
+	requireContact: async (_authorization, workspaceId, id) => {
+		if (!allowContact) {
+			const error = new Error('contact not visible');
+			error.status = 404;
+			throw error;
+		}
+		assert.equal(workspaceId, access.workspaceId);
+		return { id, name: 'Integration contact' };
+	}
+});
+const access = {
+	schemaVersion: 1,
+	workspaceId: randomUUID(),
+	subject: 'workflow-owner',
+	role: 'OWNER',
+	state: 'ACTIVE',
+	dataScope: 'ALL',
+	teamIds: [],
+	permissions: ['sales:read', 'sales:write', 'sales:analytics']
+};
+const contactId = randomUUID();
+const nextTask = {
+	title: 'Первый звонок',
+	dueAt: new Date(Date.now() + 86400000).toISOString()
+};
+
+try {
+	const [role] = await prisma.$queryRaw`
+		SELECT current_user AS name, current_setting('server_version_num')::integer AS version,
+			NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole AND NOT rolinherit AND NOT rolreplication AND NOT rolbypassrls AND rolcanlogin AS restricted,
+			pg_get_userbyid(nspowner) <> current_user AS not_owner,
+			NOT has_database_privilege(current_user, current_database(), 'CREATE') AS database_create_denied,
+			NOT has_schema_privilege(current_user, 'foreign_service_guard', 'USAGE') AS foreign_schema_denied
+		FROM pg_roles JOIN pg_namespace ON nspname = 'crm_sales' WHERE rolname = current_user
+	`;
+	assert.equal(role.name, roleName);
+	assert.equal(role.restricted, true);
+	assert.equal(role.not_owner, true);
+	assert.equal(role.database_create_denied, true);
+	assert.equal(role.foreign_schema_denied, true);
+	assert.ok(role.version >= 180000 && role.version < 190000);
+	await assert.rejects(
+		prisma.$queryRawUnsafe(
+			'SELECT id FROM foreign_service_guard.sentinel LIMIT 1'
+		),
+		error => error?.meta?.code === '42501'
+	);
+
+	const installed = await installer.install({
+		schemaVersion: 1,
+		commandId: randomUUID(),
+		workspaceId: access.workspaceId,
+		templateKey: 'universal-sales',
+		templateVersion: 1,
+		installedBySubject: access.subject
+	});
+	const pipeline = await prisma.pipeline.findUniqueOrThrow({
+		where: { id: installed.installation.pipelineId },
+		include: { stages: true }
+	});
+	const openStage = pipeline.stages.find(stage => stage.state === 'OPEN');
+	const wonStage = pipeline.stages.find(stage => stage.state === 'WON');
+	assert.ok(openStage);
+	assert.ok(wonStage);
+	const foreignWorkspace = randomUUID();
+	const other = await installer.install({
+		schemaVersion: 1,
+		commandId: randomUUID(),
+		workspaceId: foreignWorkspace,
+		templateKey: 'universal-sales',
+		templateVersion: 1,
+		installedBySubject: 'foreign-owner'
+	});
+	const foreignStage = await prisma.pipelineStage.findFirstOrThrow({
+		where: { pipelineId: other.installation.pipelineId, state: 'OPEN' }
+	});
+	const command = {
+		schemaVersion: 1,
+		commandId: randomUUID(),
+		workspaceId: access.workspaceId,
+		title: 'Проверка workflow',
+		currency: 'RUB',
+		amountMinor: 120000,
+		pipelineId: pipeline.id,
+		stageId: openStage.id,
+		contactId,
+		nextTask
+	};
+
+	allowContact = false;
+	await assert.rejects(
+		service.create(access, command, 'Bearer test'),
+		error => error.status === 404
+	);
+	assert.equal(
+		await prisma.deal.count({
+			where: { workspaceId: access.workspaceId }
+		}),
+		0
+	);
+	allowContact = true;
+	const missingTaskPrisma = {
+		$transaction: (callback, options) =>
+			prisma.$transaction(
+				transaction =>
+					callback(
+						new Proxy(transaction, {
+							get(target, property) {
+								if (property === 'salesTask')
+									return { ...target.salesTask, create: async () => ({}) };
+								const value = Reflect.get(target, property);
+								return typeof value === 'function'
+									? value.bind(target)
+									: value;
+							}
+						})
+					),
+				options
+			)
+	};
+	const unsavedCommandId = randomUUID();
+	await assert.rejects(
+		new SalesService(missingTaskPrisma, {
+			requireContact: async () => ({
+				id: contactId,
+				name: 'Injected contact'
+			})
+		}).create(
+			access,
+			{ ...command, commandId: unsavedCommandId },
+			'Bearer test'
+		),
+		error => error?.meta?.code === '23503'
+	);
+	assert.equal(
+		await prisma.deal.count({
+			where: { workspaceId: access.workspaceId }
+		}),
+		0,
+		'A failed deferred invariant must not acknowledge or persist a deal'
+	);
+	assert.equal(
+		await prisma.salesCommandReceipt.count({
+			where: { commandId: unsavedCommandId }
+		}),
+		0
+	);
+	await assert.rejects(
+		service.create(
+			access,
+			{ ...command, stageId: foreignStage.id },
+			'Bearer test'
+		),
+		error => error.status === 404
+	);
+	const results = await Promise.all([
+		service.create(access, command, 'Bearer test'),
+		service.create(access, command, 'Bearer test')
+	]);
+	assert.deepEqual(results[0], results[1]);
+	let current = results[0].deal;
+	assert.equal(current.version, 1);
+	assert.equal(current.nextTask.status, 'OPEN');
+	assert.equal(
+		await prisma.deal.count({
+			where: { workspaceId: access.workspaceId }
+		}),
+		1
+	);
+	assert.equal(
+		await prisma.salesTask.count({
+			where: { workspaceId: access.workspaceId, status: 'OPEN' }
+		}),
+		1
+	);
+	assert.equal(
+		await prisma.dealTimeline.count({ where: { dealId: current.id } }),
+		1
+	);
+	await assert.rejects(
+		service.create(
+			access,
+			{ ...command, title: 'Changed' },
+			'Bearer test'
+		),
+		error => error.status === 409
+	);
+	await assert.rejects(
+		service.detail(
+			{ ...access, workspaceId: foreignWorkspace },
+			current.id
+		),
+		error => error.status === 404
+	);
+	await assert.rejects(
+		service.detail(
+			{
+				...access,
+				subject: 'other-manager',
+				dataScope: 'OWN',
+				role: 'MANAGER'
+			},
+			current.id
+		),
+		error => error.status === 404
+	);
+	await assert.rejects(
+		service.detail({ ...access, role: 'ANALYST' }, current.id),
+		error => error.status === 403
+	);
+	await assert.rejects(
+		service.create(
+			{ ...access, state: 'READ_ONLY' },
+			command,
+			'Bearer test'
+		),
+		error => error.status === 403
+	);
+	assert.equal(
+		(await service.analytics({ ...access, role: 'ANALYST' })).items.find(
+			item => item.status === 'OPEN'
+		).count,
+		1
+	);
+	assert.equal(
+		(
+			await service.deals(access, {
+				page: 1,
+				pageSize: 1,
+				workspaceId: access.workspaceId,
+				search: 'workflow'
+			})
+		).total,
+		1
+	);
+	assert.equal(
+		(
+			await service.tasks(access, {
+				page: 1,
+				pageSize: 20,
+				workspaceId: access.workspaceId
+			})
+		).total,
+		1
+	);
+
+	await assert.rejects(
+		prisma.$transaction(async transaction => {
+			await transaction.salesTask.updateMany({
+				where: { id: current.nextTask.id },
+				data: { status: 'COMPLETED', completedAt: new Date() }
+			});
+			await transaction.$executeRaw`SET CONSTRAINTS crm_sales.deals_next_task_fkey, crm_sales.deals_next_action_integrity, crm_sales.tasks_next_action_integrity IMMEDIATE`;
+		}),
+		error =>
+			error?.meta?.code === 'P0001' &&
+			String(error?.meta?.message).includes(
+				'Deal next action must match its active tasks'
+			)
+	);
+	assert.equal(
+		(await service.detail(access, current.id)).deal.nextTask.status,
+		'OPEN'
+	);
+	await assert.rejects(
+		prisma.$executeRaw`UPDATE crm_sales.deals SET stage_id = ${foreignStage.id}::uuid WHERE id = ${current.id}::uuid`,
+		error => error?.meta?.code === '23503'
+	);
+
+	const completeCommand = {
+		schemaVersion: 1,
+		commandId: randomUUID(),
+		workspaceId: access.workspaceId,
+		expectedVersion: current.nextTask.version,
+		outcome: 'Обсудили предложение',
+		nextTask: { ...nextTask, title: 'Подготовить предложение' }
+	};
+	const completed = await service.complete(
+		access,
+		current.nextTask.id,
+		completeCommand
+	);
+	assert.equal(completed.deal.version, 2);
+	assert.notEqual(completed.deal.nextTask.id, current.nextTask.id);
+	assert.deepEqual(
+		await service.complete(access, current.nextTask.id, completeCommand),
+		completed
+	);
+	current = completed.deal;
+	const transition = {
+		schemaVersion: 1,
+		commandId: randomUUID(),
+		workspaceId: access.workspaceId,
+		expectedVersion: current.version,
+		targetStageId: wonStage.id,
+		outcome: 'Оплачено'
+	};
+	const competitors = await Promise.allSettled([
+		service.transition(access, current.id, transition),
+		service.transition(access, current.id, {
+			...transition,
+			commandId: randomUUID()
+		})
+	]);
+	assert.equal(
+		competitors.filter(item => item.status === 'fulfilled').length,
+		1
+	);
+	assert.equal(
+		competitors.find(item => item.status === 'rejected').reason.status,
+		409
+	);
+	current = (await service.detail(access, current.id)).deal;
+	assert.equal(current.status, 'WON');
+	assert.equal(current.nextTask, null);
+	assert.equal(current.version, 3);
+	// Resuming a task must not reverse the won deal or touch its commercial result.
+	const closedDealBefore = await prisma.deal.findUnique({
+		where: { id: current.id }
+	});
+	const completedTask = await prisma.salesTask.findFirst({
+		where: { dealId: current.id, status: 'COMPLETED' },
+		orderBy: { id: 'asc' }
+	});
+	assert.ok(completedTask);
+	const reopenedWorkday = new WorkdayService(
+		prisma,
+		{ authorize: async () => access },
+		{}
+	);
+	let taskVersion = completedTask.version;
+	for (const status of [
+		'OPEN',
+		'IN_PROGRESS',
+		'COMPLETED',
+		'OPEN',
+		'COMPLETED'
+	]) {
+		const command = {
+			schemaVersion: 1,
+			workspaceId: access.workspaceId,
+			commandId: randomUUID(),
+			expectedVersion: taskVersion,
+			status
+		};
+		const changed = await reopenedWorkday.status(
+			access,
+			completedTask.id,
+			command,
+			'Bearer fixture'
+		);
+		assert.equal(changed.task.status, status);
+		assert.equal(changed.task.version, ++taskVersion);
+		assert.equal(changed.task.dueAt, completedTask.dueAt.toISOString());
+		assert.equal(
+			changed.task.assignedToSubject,
+			completedTask.assignedToSubject
+		);
+		assert.equal(
+			changed.task.completedAt === null,
+			['OPEN', 'IN_PROGRESS'].includes(status)
+		);
+		assert.deepEqual(
+			await reopenedWorkday.status(
+				access,
+				completedTask.id,
+				command,
+				'Bearer fixture'
+			),
+			changed
+		);
+		assert.deepEqual(
+			await prisma.deal.findUnique({ where: { id: current.id } }),
+			closedDealBefore
+		);
+	}
+	assert.equal(
+		await prisma.salesTask.count({
+			where: { dealId: current.id, status: 'OPEN' }
+		}),
+		0
+	);
+
+	const reopened = await service.transition(access, current.id, {
+		schemaVersion: 1,
+		commandId: randomUUID(),
+		workspaceId: access.workspaceId,
+		expectedVersion: current.version,
+		targetStageId: openStage.id,
+		outcome: 'Повторное обращение',
+		nextTask
+	});
+	assert.equal(reopened.deal.status, 'OPEN');
+	assert.equal(reopened.deal.nextTask.status, 'OPEN');
+	const archiveCommand = {
+		schemaVersion: 1,
+		commandId: randomUUID(),
+		workspaceId: access.workspaceId,
+		expectedVersion: reopened.deal.version
+	};
+	const archived = await service.archive(
+		access,
+		current.id,
+		archiveCommand
+	);
+	assert.ok(archived.deal.archivedAt);
+	assert.equal(archived.deal.nextTask, null);
+	assert.deepEqual(
+		await service.archive(access, current.id, archiveCommand),
+		archived
+	);
+	await assert.rejects(
+		service.detail(access, current.id),
+		error => error.status === 404
+	);
+	assert.equal(
+		await prisma.dealTimeline.count({ where: { dealId: current.id } }),
+		5
+	);
+	assert.equal(
+		(
+			await service.tasks(access, {
+				workspaceId: access.workspaceId,
+				page: 1,
+				pageSize: 20
+			})
+		).total,
+		0
+	);
+
+	// Expanded model: standalone tasks, multiple active actions and IN_PROGRESS
+	// coexist with unchanged v1 commands and their immutable receipts.
+	const standalone = await prisma.salesTask.create({
+		data: {
+			workspaceId: access.workspaceId,
+			dealId: null,
+			title: 'Подготовить отчёт',
+			dueAt: new Date(nextTask.dueAt),
+			assignedToSubject: access.subject
+		}
+	});
+	assert.equal(standalone.status, 'OPEN');
+	const workdayCommand = {
+		...command,
+		commandId: randomUUID(),
+		title: 'Рабочий день'
+	};
+	let workday = (
+		await service.create(access, workdayCommand, 'Bearer test')
+	).deal;
+	const originalReceipt =
+		await prisma.salesCommandReceipt.findUniqueOrThrow({
+			where: { commandId: workdayCommand.commandId }
+		});
+	let parallelTask = await prisma.$transaction(async tx => {
+		const row = await tx.salesTask.create({
+			data: {
+				workspaceId: access.workspaceId,
+				dealId: workday.id,
+				title: 'Параллельная работа',
+				dueAt: new Date(nextTask.dueAt),
+				assignedToSubject: access.subject,
+				status: 'OPEN'
+			}
+		});
+		await tx.$executeRaw`SET CONSTRAINTS crm_sales.deals_next_task_fkey, crm_sales.deals_next_action_integrity, crm_sales.tasks_next_action_integrity IMMEDIATE`;
+		return row;
+	});
+	assert.equal(
+		await prisma.salesTask.count({
+			where: { dealId: workday.id, status: 'OPEN' }
+		}),
+		2
+	);
+	parallelTask = await prisma.$transaction(async tx => {
+		const row = await tx.salesTask.update({
+			where: { id: parallelTask.id },
+			data: { status: 'IN_PROGRESS' }
+		});
+		await tx.$executeRaw`SET CONSTRAINTS crm_sales.deals_next_action_integrity, crm_sales.tasks_next_action_integrity IMMEDIATE`;
+		return row;
+	});
+	assert.equal(parallelTask.completedAt, null);
+	await assert.rejects(
+		service.complete(access, parallelTask.id, {
+			schemaVersion: 1,
+			commandId: randomUUID(),
+			workspaceId: access.workspaceId,
+			expectedVersion: parallelTask.version,
+			outcome: 'Не выбранное действие',
+			nextTask
+		}),
+		error => error.status === 409
+	);
+	await prisma.$transaction(async tx => {
+		await tx.salesTask.update({
+			where: { id: workday.nextTask.id },
+			data: { status: 'IN_PROGRESS' }
+		});
+		await tx.$executeRaw`SET CONSTRAINTS crm_sales.deals_next_action_integrity, crm_sales.tasks_next_action_integrity IMMEDIATE`;
+	});
+	assert.equal(
+		(await service.detail(access, workday.id)).deal.nextTask.status,
+		'IN_PROGRESS'
+	);
+	workday = (
+		await service.complete(access, workday.nextTask.id, {
+			schemaVersion: 1,
+			commandId: randomUUID(),
+			workspaceId: access.workspaceId,
+			expectedVersion: workday.nextTask.version,
+			outcome: 'Первое действие выполнено',
+			nextTask
+		})
+	).deal;
+	assert.deepEqual(
+		await prisma.salesTask.findUniqueOrThrow({
+			where: { id: parallelTask.id }
+		}),
+		parallelTask
+	);
+	assert.deepEqual(
+		await prisma.salesTask.findUniqueOrThrow({
+			where: { id: standalone.id }
+		}),
+		standalone
+	);
+	workday = (
+		await service.transition(access, workday.id, {
+			schemaVersion: 1,
+			commandId: randomUUID(),
+			workspaceId: access.workspaceId,
+			expectedVersion: workday.version,
+			targetStageId: openStage.id,
+			outcome: 'Следующий этап',
+			nextTask
+		})
+	).deal;
+	assert.deepEqual(
+		await prisma.salesTask.findUniqueOrThrow({
+			where: { id: parallelTask.id }
+		}),
+		parallelTask
+	);
+	workday = (
+		await service.transition(access, workday.id, {
+			schemaVersion: 1,
+			commandId: randomUUID(),
+			workspaceId: access.workspaceId,
+			expectedVersion: workday.version,
+			targetStageId: wonStage.id,
+			outcome: 'Сделка завершена'
+		})
+	).deal;
+	assert.equal(
+		(
+			await prisma.salesTask.findUniqueOrThrow({
+				where: { id: parallelTask.id }
+			})
+		).status,
+		'COMPLETED'
+	);
+	assert.deepEqual(
+		await prisma.salesTask.findUniqueOrThrow({
+			where: { id: standalone.id }
+		}),
+		standalone
+	);
+	assert.deepEqual(
+		await prisma.salesCommandReceipt.findUniqueOrThrow({
+			where: { commandId: workdayCommand.commandId }
+		}),
+		originalReceipt
+	);
+	assert.deepEqual(
+		await service.create(access, workdayCommand, 'Bearer test'),
+		originalReceipt.result
+	);
+
+	const flush = async tx => {
+		await tx.$executeRaw`SET CONSTRAINTS crm_sales.deals_next_task_fkey, crm_sales.deals_next_action_integrity, crm_sales.tasks_next_action_integrity IMMEDIATE`;
+	};
+	for (const status of ['OPEN', 'IN_PROGRESS']) {
+		await assert.rejects(
+			prisma.$transaction(async tx => {
+				await tx.salesTask.create({
+					data: {
+						workspaceId: access.workspaceId,
+						dealId: workday.id,
+						title: 'Недопустимая задача',
+						dueAt: new Date(nextTask.dueAt),
+						assignedToSubject: access.subject,
+						status
+					}
+				});
+				await flush(tx);
+			}),
+			error => error?.meta?.code === 'P0001'
+		);
+	}
+	await assert.rejects(
+		prisma.$transaction(async tx => {
+			await tx.salesTask.update({
+				where: { id: standalone.id },
+				data: { dealId: workday.id }
+			});
+			await flush(tx);
+		}),
+		error => error?.meta?.code === 'P0001'
+	);
+	await assert.rejects(
+		prisma.$transaction(async tx => {
+			await tx.salesTask.update({
+				where: { id: standalone.id },
+				data: { workspaceId: foreignWorkspace, dealId: workday.id }
+			});
+			await flush(tx);
+		}),
+		error => error?.code === 'P2003' || error?.meta?.code === '23503'
+	);
+	for (const status of ['COMPLETED', 'CANCELLED']) {
+		await assert.rejects(
+			prisma.salesTask.update({
+				where: { id: standalone.id },
+				data: { status }
+			}),
+			error =>
+				error?.meta?.code === '23514' ||
+				String(error?.message).includes('tasks_completed_at_check')
+		);
+	}
+	await assert.rejects(
+		prisma.salesTask.update({
+			where: { id: standalone.id },
+			data: { status: 'IN_PROGRESS', completedAt: new Date() }
+		}),
+		error =>
+			error?.meta?.code === '23514' ||
+			String(error?.message).includes('tasks_completed_at_check')
+	);
+
+	// Completing the final action without a replacement is a valid future
+	// workday command; the pointer must be cleared atomically, not left stale.
+	const finalAction = (
+		await service.create(
+			access,
+			{ ...command, commandId: randomUUID() },
+			'Bearer test'
+		)
+	).deal;
+	await prisma.$transaction(async tx => {
+		await tx.salesTask.update({
+			where: { id: finalAction.nextTask.id },
+			data: {
+				status: 'COMPLETED',
+				completedAt: new Date(),
+				version: { increment: 1 }
+			}
+		});
+		await tx.deal.update({
+			where: { id: finalAction.id },
+			data: { nextTaskId: null, version: { increment: 1 } }
+		});
+		await flush(tx);
+	});
+	assert.equal(
+		(await service.detail(access, finalAction.id)).deal.nextTask,
+		null
+	);
+	await assert.rejects(
+		prisma.$transaction(async tx => {
+			await tx.salesTask.create({
+				data: {
+					workspaceId: access.workspaceId,
+					dealId: finalAction.id,
+					title: 'Без указателя',
+					dueAt: new Date(nextTask.dueAt),
+					assignedToSubject: access.subject
+				}
+			});
+			await flush(tx);
+		}),
+		error => error?.meta?.code === 'P0001'
+	);
+	await assert.rejects(
+		prisma.$transaction(async tx => {
+			await tx.deal.update({
+				where: { id: finalAction.id },
+				data: { nextTaskId: standalone.id }
+			});
+			await flush(tx);
+		}),
+		error => ['23503', 'P0001'].includes(error?.meta?.code)
+	);
+	assert.deepEqual(
+		await prisma.salesTask.findUniqueOrThrow({
+			where: { id: standalone.id }
+		}),
+		standalone
+	);
+	await assert.rejects(
+		service.complete(access, standalone.id, {
+			schemaVersion: 1,
+			commandId: randomUUID(),
+			workspaceId: access.workspaceId,
+			expectedVersion: 1,
+			outcome: 'Нет сделки',
+			nextTask
+		}),
+		error => error.status === 404
+	);
+	await prisma.salesTask.update({
+		where: { id: standalone.id },
+		data: { status: 'COMPLETED', completedAt: new Date() }
+	});
+	assert.equal(
+		(
+			await prisma.salesTask.findUniqueOrThrow({
+				where: { id: standalone.id }
+			})
+		).status,
+		'COMPLETED'
+	);
+
+	for (const table of ['deal_timeline', 'command_receipts']) {
+		await assert.rejects(
+			prisma.$executeRawUnsafe(
+				`UPDATE crm_sales.${table} SET workspace_id = workspace_id WHERE FALSE`
+			),
+			error => error?.meta?.code === '42501'
+		);
+		await assert.rejects(
+			prisma.$executeRawUnsafe(
+				`DELETE FROM crm_sales.${table} WHERE FALSE`
+			),
+			error => error?.meta?.code === '42501'
+		);
+	}
+	for (const table of ['deals', 'tasks']) {
+		await assert.rejects(
+			prisma.$executeRawUnsafe(
+				`DELETE FROM crm_sales.${table} WHERE FALSE`
+			),
+			error => error?.meta?.code === '42501'
+		);
+		await assert.rejects(
+			prisma.$executeRawUnsafe(`TRUNCATE TABLE crm_sales.${table}`),
+			error => error?.meta?.code === '42501'
+		);
+	}
+	// Real runtime-role SQL for the new commands, separate from legacy receipts.
+	{
+		let workdayActor = access;
+		let allowAssignee = true;
+		const ownerMembership = randomUUID(),
+			managerMembership = randomUUID();
+		const workday = new WorkdayService(
+			prisma,
+			{
+				authorize: async () => workdayActor
+			},
+			{
+				authorize: async (_token, actor, target) => {
+					assert.equal(actor.workspaceId, access.workspaceId);
+					if (!allowAssignee)
+						throw Object.assign(new Error('revoked'), { status: 404 });
+					const owner = target.subject === access.subject;
+					assert.equal(
+						target.membershipId,
+						owner ? ownerMembership : managerMembership
+					);
+					return {
+						...target,
+						role: owner ? 'OWNER' : 'MANAGER',
+						dataScope: owner ? 'ALL' : 'OWN',
+						teamIds: []
+					};
+				}
+			}
+		);
+		const workdayPrefix = `workday-${randomUUID()}`;
+		const taskCommand = {
+			schemaVersion: 1,
+			workspaceId: access.workspaceId,
+			commandId: randomUUID(),
+			title: workdayPrefix,
+			dueAt: '2026-09-07T10:00:00.000Z',
+			assignee: { subject: access.subject, membershipId: ownerMembership }
+		};
+		const dealCountBefore = await prisma.deal.count({
+			where: { workspaceId: access.workspaceId }
+		});
+		const [standalone, duplicate] = await Promise.all([
+			workday.create(access, taskCommand, 'Bearer fixture'),
+			workday.create(access, taskCommand, 'Bearer fixture')
+		]);
+		assert.deepEqual(duplicate, standalone);
+		assert.equal(standalone.task.dealId, null);
+		assert.equal(standalone.task.assignedToMembershipId, ownerMembership);
+		assert.equal(
+			await prisma.deal.count({
+				where: { workspaceId: access.workspaceId }
+			}),
+			dealCountBefore
+		);
+		assert.equal(
+			await prisma.taskTimeline.count({
+				where: { taskId: standalone.task.id }
+			}),
+			1
+		);
+		await assert.rejects(
+			workday.create(
+				access,
+				{ ...taskCommand, title: 'conflicting replay' },
+				'Bearer fixture'
+			),
+			error => error.status === 409
+		);
+		const statusCommand = {
+			schemaVersion: 1,
+			workspaceId: access.workspaceId,
+			commandId: randomUUID(),
+			expectedVersion: 1,
+			status: 'IN_PROGRESS'
+		};
+		const started = await workday.status(
+			access,
+			standalone.task.id,
+			statusCommand,
+			'Bearer fixture'
+		);
+		assert.equal(started.task.status, 'IN_PROGRESS');
+		assert.equal(started.task.dueAt, standalone.task.dueAt);
+		assert.equal(
+			started.task.assignedToSubject,
+			standalone.task.assignedToSubject
+		);
+		assert.deepEqual(
+			await workday.status(
+				access,
+				standalone.task.id,
+				statusCommand,
+				'Bearer fixture'
+			),
+			started
+		);
+		const competing = await Promise.allSettled([
+			workday.edit(
+				access,
+				standalone.task.id,
+				{
+					...statusCommand,
+					commandId: randomUUID(),
+					expectedVersion: 2,
+					title: workdayPrefix,
+					dueAt: '2026-09-08T10:00:00.000Z'
+				},
+				'Bearer fixture'
+			),
+			workday.status(
+				access,
+				standalone.task.id,
+				{
+					...statusCommand,
+					commandId: randomUUID(),
+					expectedVersion: 2,
+					status: 'COMPLETED'
+				},
+				'Bearer fixture'
+			)
+		]);
+		assert.equal(
+			competing.filter(result => result.status === 'fulfilled').length,
+			1
+		);
+		assert.equal(
+			competing.find(result => result.status === 'rejected').reason.status,
+			409
+		);
+		const currentStandalone = (
+			await workday.detail(access, standalone.task.id)
+		).task;
+		const assignment = {
+			schemaVersion: 1,
+			workspaceId: access.workspaceId,
+			commandId: randomUUID(),
+			expectedVersion: currentStandalone.version,
+			assignee: {
+				subject: 'workday-manager',
+				membershipId: managerMembership
+			}
+		};
+		allowAssignee = false;
+		await assert.rejects(
+			workday.assign(
+				access,
+				standalone.task.id,
+				assignment,
+				'Bearer fixture'
+			),
+			error => error.status === 404
+		);
+		assert.equal(
+			(await workday.detail(access, standalone.task.id)).task.version,
+			currentStandalone.version
+		);
+		allowAssignee = true;
+		const assigned = await workday.assign(
+			access,
+			standalone.task.id,
+			assignment,
+			'Bearer fixture'
+		);
+		assert.equal(assigned.task.assignedToSubject, 'workday-manager');
+		assert.equal(assigned.task.assignedToMembershipId, managerMembership);
+		workdayActor = {
+			...access,
+			subject: 'workday-manager',
+			role: 'MANAGER',
+			dataScope: 'OWN'
+		};
+		const managerQuery = Object.assign(new WorkdayQuery(), {
+			workspaceId: access.workspaceId,
+			period: 'ALL',
+			search: workdayPrefix
+		});
+		assert.equal(
+			(await workday.list(workdayActor, managerQuery)).total,
+			1
+		);
+		await assert.rejects(
+			workday.detail(
+				{ ...workdayActor, subject: 'unrelated-manager' },
+				standalone.task.id
+			),
+			error => error.status === 404
+		);
+		await assert.rejects(
+			workday.list(workdayActor, { ...managerQuery, scope: 'ALL' }),
+			error => error.status === 403
+		);
+		await assert.rejects(
+			workday.detail(
+				{ ...access, workspaceId: foreignWorkspace },
+				standalone.task.id
+			),
+			error => error.status === 404
+		);
+		workdayActor = { ...access, state: 'READ_ONLY' };
+		await assert.rejects(
+			workday.status(
+				workdayActor,
+				standalone.task.id,
+				{
+					...statusCommand,
+					commandId: randomUUID(),
+					expectedVersion: assigned.task.version
+				},
+				'Bearer fixture'
+			),
+			error => error.status === 403
+		);
+		workdayActor = access;
+		const linkedDeal = await service.create(
+			access,
+			{
+				...command,
+				commandId: randomUUID(),
+				title: 'Workday linked deal'
+			},
+			'Bearer fixture'
+		);
+		const originalTask = await prisma.salesTask.findUniqueOrThrow({
+			where: { id: linkedDeal.deal.nextTask.id }
+		});
+		assert.equal(
+			originalTask.assignedToMembershipId,
+			null,
+			'Do not invent legacy Identity binding'
+		);
+		const linked = await workday.create(
+			access,
+			{
+				...taskCommand,
+				commandId: randomUUID(),
+				dealId: linkedDeal.deal.id
+			},
+			'Bearer fixture'
+		);
+		assert.equal(
+			(await service.detail(access, linkedDeal.deal.id)).deal.nextTask.id,
+			originalTask.id,
+			'Creating a parallel task preserves the selected action'
+		);
+		await assert.rejects(
+			workday.assign(
+				access,
+				linked.task.id,
+				{
+					...assignment,
+					commandId: randomUUID(),
+					expectedVersion: linked.task.version
+				},
+				'Bearer fixture'
+			),
+			error => error.status === 403,
+			'An assignee must not gain unrelated deal history'
+		);
+		await workday.status(
+			access,
+			originalTask.id,
+			{
+				...statusCommand,
+				commandId: randomUUID(),
+				expectedVersion: originalTask.version,
+				status: 'COMPLETED'
+			},
+			'Bearer fixture'
+		);
+		assert.equal(
+			(await service.detail(access, linkedDeal.deal.id)).deal.nextTask.id,
+			linked.task.id
+		);
+		const withoutNextActionQuery = {
+			workspaceId: access.workspaceId,
+			page: 1,
+			pageSize: 1,
+			search: linkedDeal.deal.title,
+			withoutNextAction: 'true'
+		};
+		assert.equal(
+			(await service.deals(access, withoutNextActionQuery)).total,
+			0,
+			'An OPEN related task excludes a deal from the no-next-action filter'
+		);
+		const completedLinked = await workday.status(
+			access,
+			linked.task.id,
+			{
+				...statusCommand,
+				commandId: randomUUID(),
+				expectedVersion: linked.task.version,
+				status: 'COMPLETED'
+			},
+			'Bearer fixture'
+		);
+		assert.equal(
+			(await service.detail(access, linkedDeal.deal.id)).deal.nextTask,
+			null,
+			'Completing the last task does not force creation of another'
+		);
+		const withoutNextAction = await service.deals(
+			access,
+			withoutNextActionQuery
+		);
+		assert.equal(withoutNextAction.total, 1);
+		assert.deepEqual(
+			withoutNextAction.items.map(item => item.id),
+			[linkedDeal.deal.id]
+		);
+		const secondFilteredPage = await service.deals(access, {
+			...withoutNextActionQuery,
+			page: 2
+		});
+		assert.equal(secondFilteredPage.total, 1);
+		assert.deepEqual(secondFilteredPage.items, []);
+		for (const status of ['WON', 'LOST']) {
+			assert.equal(
+				(
+					await service.deals(access, {
+						...withoutNextActionQuery,
+						status
+					})
+				).total,
+				0,
+				'Contradictory status remains an intersection, not an ignored filter'
+			);
+		}
+		for (const scoped of [
+			{ ...access, workspaceId: randomUUID() },
+			{ ...access, dataScope: 'OWN', subject: randomUUID(), teamIds: [] },
+			{
+				...access,
+				dataScope: 'TEAM',
+				subject: randomUUID(),
+				teamIds: [randomUUID()]
+			}
+		]) {
+			assert.equal(
+				(await service.deals(scoped, withoutNextActionQuery)).total,
+				0,
+				'The next-action predicate never broadens workspace or record scope'
+			);
+		}
+		assert.equal(
+			(
+				await service.deals(
+					{ ...access, state: 'READ_ONLY' },
+					withoutNextActionQuery
+				)
+			).total,
+			1
+		);
+		assert.deepEqual(
+			await service.deals(access, {
+				...withoutNextActionQuery,
+				withoutNextAction: 'false'
+			}),
+			await service.deals(access, {
+				...withoutNextActionQuery,
+				withoutNextAction: undefined
+			})
+		);
+		const reopened = await workday.status(
+			access,
+			linked.task.id,
+			{
+				...statusCommand,
+				commandId: randomUUID(),
+				expectedVersion: completedLinked.task.version,
+				status: 'IN_PROGRESS'
+			},
+			'Bearer fixture'
+		);
+		assert.equal(
+			(await service.detail(access, linkedDeal.deal.id)).deal.nextTask.id,
+			linked.task.id
+		);
+		assert.equal(
+			(await service.deals(access, withoutNextActionQuery)).total,
+			0,
+			'IN_PROGRESS also excludes a deal from the no-next-action filter'
+		);
+		const cancelled = await workday.status(
+			access,
+			linked.task.id,
+			{
+				...statusCommand,
+				commandId: randomUUID(),
+				expectedVersion: reopened.task.version,
+				status: 'CANCELLED'
+			},
+			'Bearer fixture'
+		);
+		assert.equal(cancelled.task.status, 'CANCELLED');
+		assert.equal(
+			(await service.deals(access, withoutNextActionQuery)).total,
+			1,
+			'COMPLETED and CANCELLED tasks are not pending next actions'
+		);
+		const listQuery = Object.assign(new WorkdayQuery(), {
+			workspaceId: access.workspaceId,
+			scope: 'ALL',
+			period: 'DAY',
+			from: '2026-09-07',
+			timeZone: 'Europe/Moscow',
+			search: workdayPrefix,
+			pageSize: 1
+		});
+		const day = await workday.list(access, listQuery);
+		assert.equal(day.items.length, 1);
+		assert.equal(day.counts.CANCELLED, 1);
+		assert.equal(
+			day.total,
+			Object.values(day.counts).reduce((sum, count) => sum + count, 0)
+		);
+		assert.deepEqual(day.range, {
+			from: '2026-09-06T21:00:00.000Z',
+			until: '2026-09-07T21:00:00.000Z'
+		});
+		const history = await workday.timeline(access, linked.task.id, {
+			page: 1,
+			pageSize: 1
+		});
+		assert.equal(history.total, 4);
+		assert.equal(history.items.length, 1);
+		await assert.rejects(
+			prisma.taskCommandReceipt.create({
+				data: {
+					commandId: randomUUID(),
+					workspaceId: foreignWorkspace,
+					actorSubject: 'foreign',
+					commandType: 'CREATED',
+					requestHash: 'a'.repeat(64),
+					taskId: standalone.task.id,
+					result: {}
+				}
+			}),
+			error => error?.code === 'P2003'
+		);
+		for (const table of ['task_command_receipts', 'task_timeline']) {
+			await assert.rejects(
+				prisma.$executeRawUnsafe(
+					`UPDATE crm_sales.${table} SET workspace_id=workspace_id WHERE FALSE`
+				),
+				error => error?.meta?.code === '42501'
+			);
+			await assert.rejects(
+				prisma.$executeRawUnsafe(
+					`DELETE FROM crm_sales.${table} WHERE FALSE`
+				),
+				error => error?.meta?.code === '42501'
+			);
+		}
+	}
+	// Reminder configuration is independent of task state and sends nothing.
+	// Runtime ACL is provisioned by the existing workflow's explicit table lists.
+	{
+		const originalTasks = await prisma.salesTask.findMany({
+			orderBy: { id: 'asc' }
+		});
+		const workspaceId = randomUUID();
+		const owner = {
+			...access,
+			workspaceId,
+			subject: 'reminder-workflow-owner'
+		};
+		let currentActor = owner,
+			membershipAllowed = true,
+			proofCalls = 0,
+			rejectProofCall = 0;
+		const actorClient = {
+			verify: async (_token, current, membershipId) => {
+				proofCalls += 1;
+				if (!membershipAllowed || proofCalls === rejectProofCall) {
+					const error = new Error('CRM membership unavailable');
+					error.status = 403;
+					throw error;
+				}
+				assert.equal(current.subject, currentActor.subject);
+				return { subject: current.subject, membershipId };
+			}
+		};
+		const reminders = new ReminderRulesService(
+			prisma,
+			{ authorize: async () => currentActor },
+			actorClient
+		);
+		const draft = (scope = 'PERSONAL') => ({
+			schemaVersion: 1,
+			id: randomUUID(),
+			scope,
+			ownerBinding: { subject: owner.subject, membershipId: null },
+			title: 'Напомнить о сроке',
+			channels: [],
+			trigger: { kind: 'AT_DUE', offsetMinutes: 0 },
+			repeats: null,
+			timeZone: 'Europe/Moscow',
+			quietHours: null,
+			recipients: { kind: scope === 'PERSONAL' ? 'SELF' : 'ASSIGNEE' }
+		});
+		const command = rule => ({
+			schemaVersion: 1,
+			workspaceId,
+			commandId: randomUUID(),
+			actorMembershipId: null,
+			rule
+		});
+		const dto = command(draft());
+		const created = await Promise.all([
+			reminders.create(owner, dto, 'Bearer test'),
+			reminders.create(owner, dto, 'Bearer test')
+		]);
+		assert.deepEqual(created[0], created[1]);
+		assert.equal(created[0].deliveryReady, false);
+		assert.equal(created[0].item.rule.enabled, false);
+		assert.equal(
+			await prisma.reminderRule.count({ where: { workspaceId } }),
+			1
+		);
+		assert.equal(
+			await prisma.reminderRuleCommand.count({ where: { workspaceId } }),
+			1
+		);
+		const edits = await Promise.allSettled(
+			['Первое изменение', 'Второе изменение'].map(title =>
+				reminders.edit(
+					owner,
+					dto.rule.id,
+					{
+						...command({ ...created[0].item.rule, title }),
+						expectedVersion: 1
+					},
+					'Bearer test'
+				)
+			)
+		);
+		assert.equal(
+			edits.filter(item => item.status === 'fulfilled').length,
+			1
+		);
+		assert.equal(
+			edits.filter(
+				item => item.status === 'rejected' && item.reason.status === 409
+			).length,
+			1
+		);
+		assert.equal(
+			(
+				await prisma.reminderRule.findUniqueOrThrow({
+					where: { id: dto.rule.id }
+				})
+			).version,
+			2
+		);
+		assert.deepEqual(
+			await reminders.create(owner, dto, 'Bearer test'),
+			created[0]
+		);
+		await assert.rejects(
+			reminders.create(
+				owner,
+				{ ...dto, rule: { ...dto.rule, title: 'Другая команда' } },
+				'Bearer test'
+			),
+			error => error.status === 409
+		);
+		await assert.rejects(
+			reminders.create(
+				owner,
+				command({ ...draft(), enabled: true, channels: ['EMAIL'] }),
+				'Bearer test'
+			),
+			error => error.status === 503
+		);
+		const shared = await reminders.create(
+			owner,
+			command(draft('WORKSPACE')),
+			'Bearer test'
+		);
+		currentActor = {
+			...owner,
+			subject: 'reminder-admin',
+			role: 'CRM_ADMIN'
+		};
+		const adminMembership = randomUUID();
+		await reminders.edit(
+			currentActor,
+			shared.item.rule.id,
+			{
+				...command({
+					...shared.item.rule,
+					title: 'Общее правило администратора'
+				}),
+				actorMembershipId: adminMembership,
+				expectedVersion: 1
+			},
+			'Bearer test'
+		);
+		assert.deepEqual(
+			(
+				await prisma.reminderRule.findUniqueOrThrow({
+					where: { id: shared.item.rule.id }
+				})
+			).configuration.ownerBinding,
+			shared.item.rule.ownerBinding
+		);
+		await assert.rejects(
+			reminders.detail(
+				currentActor,
+				dto.rule.id,
+				{ workspaceId, actorMembershipId: adminMembership },
+				'Bearer test'
+			),
+			error => error.status === 404
+		);
+		currentActor = { ...owner, state: 'READ_ONLY' };
+		const query = Object.assign(new ReminderRulesQuery(), {
+			workspaceId,
+			pageSize: 1
+		});
+		assert.equal(
+			(await reminders.list(currentActor, query, 'Bearer test')).total,
+			1
+		);
+		assert.equal(
+			(
+				await reminders.history(
+					currentActor,
+					dto.rule.id,
+					Object.assign(new ReminderPageQuery(), {
+						workspaceId,
+						pageSize: 1
+					}),
+					'Bearer test'
+				)
+			).items.length,
+			1
+		);
+		await assert.rejects(
+			reminders.create(currentActor, command(draft()), 'Bearer test'),
+			error => error.status === 403
+		);
+		currentActor = owner;
+		const archived = {
+			schemaVersion: 1,
+			workspaceId,
+			commandId: randomUUID(),
+			actorMembershipId: null,
+			expectedVersion: 2
+		};
+		const archivedResult = await reminders.archive(
+			owner,
+			dto.rule.id,
+			archived,
+			'Bearer test'
+		);
+		assert.equal(archivedResult.item.version, 3);
+		assert.deepEqual(
+			await reminders.archive(owner, dto.rule.id, archived, 'Bearer test'),
+			archivedResult
+		);
+		assert.equal(
+			(await reminders.list(owner, query, 'Bearer test')).total,
+			0
+		);
+		assert.equal(
+			(
+				await reminders.list(
+					owner,
+					{ ...query, archived: 'true' },
+					'Bearer test'
+				)
+			).total,
+			1
+		);
+		const revoked = command(draft());
+		rejectProofCall = proofCalls + 2;
+		await assert.rejects(
+			reminders.create(owner, revoked, 'Bearer test'),
+			error => error.status === 403
+		);
+		rejectProofCall = 0;
+		assert.equal(
+			await prisma.reminderRule.count({ where: { id: revoked.rule.id } }),
+			0
+		);
+		assert.equal(
+			await prisma.reminderRuleCommand.count({
+				where: { commandId: revoked.commandId }
+			}),
+			0
+		);
+		for (let index = 0; index < 9; index += 1)
+			await reminders.create(owner, command(draft()), 'Bearer test');
+		const quota = await Promise.allSettled([
+			reminders.create(owner, command(draft()), 'Bearer test'),
+			reminders.create(owner, command(draft()), 'Bearer test')
+		]);
+		assert.equal(
+			quota.filter(item => item.status === 'fulfilled').length,
+			1
+		);
+		assert.equal(
+			quota.filter(
+				item => item.status === 'rejected' && item.reason.status === 409
+			).length,
+			1
+		);
+		assert.equal(
+			await prisma.reminderRule.count({
+				where: { workspaceId, scope: 'PERSONAL', archivedAt: null }
+			}),
+			10
+		);
+		membershipAllowed = false;
+		await assert.rejects(
+			reminders.list(owner, query, 'Bearer test'),
+			error => error.status === 403
+		);
+		for (const sql of [
+			'UPDATE crm_sales.reminder_rule_commands SET actor_subject=actor_subject WHERE FALSE',
+			'DELETE FROM crm_sales.reminder_rule_commands WHERE FALSE',
+			'TRUNCATE crm_sales.reminder_rule_commands',
+			'DELETE FROM crm_sales.reminder_rules WHERE FALSE'
+		]) {
+			await assert.rejects(
+				prisma.$executeRawUnsafe(sql),
+				error => error?.meta?.code === '42501'
+			);
+		}
+		const foreignCommand = {
+			commandId: randomUUID(),
+			workspaceId: randomUUID(),
+			actorSubject: owner.subject,
+			actorMembershipId: null,
+			commandType: 'CREATED',
+			requestHash: 'a'.repeat(64),
+			ruleId: dto.rule.id,
+			result: {}
+		};
+		await assert.rejects(
+			prisma.reminderRuleCommand.create({ data: foreignCommand }),
+			error => error.code === 'P2003'
+		);
+		for (const invalidConfiguration of [
+			{ ...draft(), enabled: false },
+			{}
+		]) {
+			await assert.rejects(
+				prisma.$executeRaw`INSERT INTO crm_sales.reminder_rules (id,workspace_id,scope,owner_subject,owner_membership_id,configuration,updated_at)
+				VALUES (${randomUUID()}::uuid,${workspaceId}::uuid,'PERSONAL',${owner.subject},NULL,${JSON.stringify(invalidConfiguration)}::jsonb,CURRENT_TIMESTAMP)`,
+				error => error?.meta?.code === '23514'
+			);
+		}
+		assert.deepEqual(
+			await prisma.salesTask.findMany({ orderBy: { id: 'asc' } }),
+			originalTasks
+		);
+	}
+	// Real owned PostgreSQL triggers, generation/Outbox and push-job lease.
+	// Authority and broker are mocks: this fixture never calls a recipient/provider.
+	{
+		const previousEnabled = process.env.CRM_TASK_REMINDERS_ENABLED;
+		process.env.CRM_TASK_REMINDERS_ENABLED = 'true';
+		try {
+			const workspaceId = randomUUID(),
+				ruleId = randomUUID(),
+				taskId = randomUUID();
+			const rule = {
+				schemaVersion: 1,
+				id: ruleId,
+				scope: 'PERSONAL',
+				ownerBinding: { subject: 'reminder-owner', membershipId: null },
+				title: 'Integration reminder',
+				enabled: true,
+				channels: ['EMAIL', 'TELEGRAM'],
+				trigger: { kind: 'AT_DUE', offsetMinutes: 0 },
+				repeats: null,
+				timeZone: 'Europe/Moscow',
+				quietHours: null,
+				recipients: { kind: 'SELF' }
+			};
+			await prisma.reminderRule.create({
+				data: {
+					id: ruleId,
+					workspaceId,
+					scope: 'PERSONAL',
+					ownerSubject: 'reminder-owner',
+					ownerMembershipId: null,
+					configuration: rule
+				}
+			});
+			await prisma.salesTask.create({
+				data: {
+					id: taskId,
+					workspaceId,
+					title: 'Reminder integration',
+					dueAt: new Date(Date.now() - 1000),
+					assignedToSubject: 'reminder-owner'
+				}
+			});
+			const job = await prisma.reminderJob.findFirstOrThrow({
+				where: { workspaceId, taskId }
+			});
+			const wake = await prisma.reminderOutbox.findFirstOrThrow({
+				where: {
+					eventType: REMINDER_TICK,
+					payload: { path: ['jobId'], equals: job.id }
+				}
+			});
+			assert.equal(wake.payload.eventId, wake.messageId);
+			let acknowledgements = 0,
+				calls = 0;
+			let processingFailure = null;
+			const recipients = {
+				read: async () => ({
+					allowed: true,
+					items: [
+						{
+							binding: { subject: 'reminder-owner', membershipId: null },
+							email: 'reminder@example.test',
+							telegramChatId: '12345'
+						}
+					],
+					nextCursor: null
+				})
+			};
+			const delivery = new ReminderDeliveryService(prisma, recipients);
+			const runtime = new ReminderRuntimeService(
+				prisma,
+				{
+					ack: () => {
+						acknowledgements++;
+					},
+					nack: () => {
+						throw new Error('Unexpected reminder NACK');
+					}
+				},
+				{
+					processPage: async (...args) => {
+						calls++;
+						try {
+							return await delivery.processPage(...args);
+						} catch (error) {
+							processingFailure = error;
+							throw error;
+						}
+					}
+				},
+				{}
+			);
+			const message = {
+				content: Buffer.from(JSON.stringify(wake.payload)),
+				properties: { messageId: wake.messageId, type: REMINDER_TICK },
+				fields: { routingKey: REMINDER_TICK }
+			};
+			await runtime.handle(message);
+			assert.ifError(processingFailure);
+			await runtime.handle(message);
+			assert.equal(calls, 1);
+			assert.equal(acknowledgements, 2);
+			assert.equal(
+				(
+					await prisma.reminderJob.findUniqueOrThrow({
+						where: { id: job.id }
+					})
+				).status,
+				'COMPLETED'
+			);
+			const generated = await prisma.reminderDelivery.findMany({
+				where: { workspaceId, taskId }
+			});
+			assert.equal(generated.length, 2);
+			// PostgreSQL ARE repetitions stop at 255; the SQL boundary must still
+			// accept the public 256-character subject without an invalid regexp.
+			await assert.rejects(
+				prisma.$transaction(async tx => {
+					const boundary = await tx.reminderDelivery.update({
+						where: { id: generated[0].id },
+						data: { recipientSubject: 'x'.repeat(256) }
+					});
+					assert.equal(boundary.recipientSubject.length, 256);
+					throw new Error('ROLLBACK_SUBJECT_BOUNDARY');
+				}),
+				/ROLLBACK_SUBJECT_BOUNDARY/
+			);
+			for (const recipientSubject of [
+				'',
+				'two words',
+				'line\nbreak',
+				'x'.repeat(257)
+			])
+				await assert.rejects(
+					prisma.reminderDelivery.update({
+						where: { id: generated[0].id },
+						data: { recipientSubject }
+					})
+				);
+			const events = await prisma.reminderOutbox.findMany({
+				where: { messageId: { in: generated.map(item => item.id) } }
+			});
+			assert.equal(events.length, 2);
+			for (const event of events) {
+				assert.deepEqual(Object.keys(event.payload).sort(), [
+					'eventId',
+					'eventType',
+					'occurredAt',
+					'reference',
+					'schemaVersion'
+				]);
+				assert.equal(
+					JSON.stringify(event.payload).includes('reminder@example.test'),
+					false
+				);
+			}
+			const email = generated.find(item => item.channel === 'EMAIL');
+			assert.equal(
+				(
+					await delivery.context(email.id, {
+						eventId: email.id,
+						workspaceId,
+						channel: 'EMAIL'
+					})
+				).deliver,
+				true
+			);
+			const beforeJobs = await prisma.reminderJob.count({
+				where: { workspaceId }
+			});
+			await assert.rejects(
+				prisma.$transaction(async tx => {
+					await tx.salesTask.update({
+						where: { id: taskId },
+						data: {
+							version: { increment: 1 },
+							status: 'COMPLETED',
+							completedAt: new Date()
+						}
+					});
+					throw new Error('ROLLBACK_REMINDER_TASK');
+				}),
+				/ROLLBACK_REMINDER_TASK/
+			);
+			assert.equal(
+				await prisma.reminderJob.count({ where: { workspaceId } }),
+				beforeJobs
+			);
+			assert.equal(
+				await prisma.reminderDelivery.count({
+					where: { workspaceId, status: 'PENDING' }
+				}),
+				2
+			);
+			await prisma.salesTask.update({
+				where: { id: taskId },
+				data: {
+					version: { increment: 1 },
+					status: 'COMPLETED',
+					completedAt: new Date()
+				}
+			});
+			assert.equal(
+				await prisma.reminderDelivery.count({
+					where: { workspaceId, status: 'CANCELLED' }
+				}),
+				2
+			);
+			assert.equal(
+				(
+					await delivery.context(email.id, {
+						eventId: email.id,
+						workspaceId,
+						channel: 'EMAIL'
+					})
+				).deliver,
+				false
+			);
+			assert.equal(
+				await prisma.reminderJob.count({ where: { workspaceId } }),
+				beforeJobs + 1
+			);
+			for (const table of [
+				'reminder_jobs',
+				'reminder_deliveries',
+				'reminder_outbox',
+				'reminder_runtime'
+			]) {
+				await assert.rejects(
+					prisma.$executeRawUnsafe(
+						`DELETE FROM crm_sales.${table} WHERE FALSE`
+					),
+					error => error?.meta?.code === '42501'
+				);
+			}
+		} finally {
+			if (previousEnabled === undefined)
+				delete process.env.CRM_TASK_REMINDERS_ENABLED;
+			else process.env.CRM_TASK_REMINDERS_ENABLED = previousEnabled;
+		}
+	}
+	await taskSeriesPostgresCases(prisma);
+	// Assignment clock and transactional wake use the actual restricted runtime role.
+	{
+		const workspaceId = randomUUID(),
+			ruleId = randomUUID();
+		const configuration = {
+			schemaVersion: 1,
+			id: ruleId,
+			scope: 'PERSONAL',
+			ownerBinding: { subject: 'assignment-owner', membershipId: null },
+			title: 'Assignment only',
+			enabled: true,
+			channels: ['EMAIL'],
+			trigger: { kind: 'ASSIGNED', offsetMinutes: 0 },
+			repeats: null,
+			timeZone: 'UTC',
+			quietHours: null,
+			recipients: { kind: 'SELF' }
+		};
+		await prisma.reminderRule.create({
+			data: {
+				id: ruleId,
+				workspaceId,
+				scope: 'PERSONAL',
+				ownerSubject: 'assignment-owner',
+				configuration
+			}
+		});
+		let task = await prisma.salesTask.create({
+			data: {
+				workspaceId,
+				title: 'Assignment fixture',
+				dueAt: new Date('2027-01-01T12:00:00Z'),
+				assignedToSubject: 'assignment-owner'
+			}
+		});
+		assert.equal(task.assignmentVersion, 1);
+		assert.ok(task.assignmentAt instanceof Date);
+		const assignmentAt = task.assignmentAt;
+		const deliveryId = randomUUID();
+		await prisma.reminderDelivery.create({
+			data: {
+				id: deliveryId,
+				deduplicationKey: deliveryId.replaceAll('-', '').repeat(2),
+				workspaceId,
+				taskId: task.id,
+				ruleId,
+				taskVersion: task.version,
+				assignmentVersion: 1,
+				ruleVersion: 1,
+				occurrenceIndex: 0,
+				recipientSubject: 'assignment-owner',
+				channel: 'EMAIL',
+				nominalAt: assignmentAt
+			}
+		});
+		const jobsBefore = await prisma.reminderJob.count({
+			where: { workspaceId }
+		});
+		task = await prisma.salesTask.update({
+			where: { id: task.id },
+			data: {
+				title: 'Edited without reassignment',
+				version: { increment: 1 },
+				assignmentVersion: 99,
+				assignmentAt: new Date(0)
+			}
+		});
+		assert.equal(
+			task.assignmentVersion,
+			1,
+			'clock cannot be forged by task writers'
+		);
+		assert.deepEqual(task.assignmentAt, assignmentAt);
+		assert.equal(
+			(
+				await prisma.reminderDelivery.findUniqueOrThrow({
+					where: { id: deliveryId }
+				})
+			).status,
+			'PENDING'
+		);
+		assert.equal(
+			await prisma.reminderJob.count({ where: { workspaceId } }),
+			jobsBefore + 1
+		);
+		await assert.rejects(
+			prisma.$transaction(async tx => {
+				await tx.salesTask.update({
+					where: { id: task.id },
+					data: {
+						assignedToSubject: 'other',
+						version: { increment: 1 }
+					}
+				});
+				throw new Error('assignment rollback fixture');
+			}),
+			/assignment rollback fixture/
+		);
+		assert.equal(
+			(
+				await prisma.salesTask.findUniqueOrThrow({
+					where: { id: task.id }
+				})
+			).assignmentVersion,
+			1
+		);
+		assert.equal(
+			(
+				await prisma.reminderDelivery.findUniqueOrThrow({
+					where: { id: deliveryId }
+				})
+			).status,
+			'PENDING'
+		);
+		assert.equal(
+			await prisma.reminderJob.count({ where: { workspaceId } }),
+			jobsBefore + 1
+		);
+		task = await prisma.salesTask.update({
+			where: { id: task.id },
+			data: {
+				assignedToMembershipId: randomUUID(),
+				version: { increment: 1 }
+			}
+		});
+		assert.equal(
+			task.assignmentVersion,
+			2,
+			'membership rebinding is a new assignment'
+		);
+		assert.equal(
+			(
+				await prisma.reminderDelivery.findUniqueOrThrow({
+					where: { id: deliveryId }
+				})
+			).status,
+			'CANCELLED'
+		);
+		task = await prisma.salesTask.update({
+			where: { id: task.id },
+			data: {
+				assignedToSubject: 'other',
+				version: { increment: 1 }
+			}
+		});
+		assert.equal(task.assignmentVersion, 3);
+	}
+	{
+		const {
+			TaskNotificationsService
+		} = require('../../dist/src/task-notifications/task-notifications.service.js');
+		const workspaceId = randomUUID();
+		const current = {
+			schemaVersion: 1,
+			workspaceId,
+			subject: 'center-owner',
+			role: 'OWNER',
+			state: 'READ_ONLY',
+			dataScope: 'ALL',
+			teamIds: [],
+			permissions: ['sales:read']
+		};
+		const center = new TaskNotificationsService(
+			prisma,
+			{ authorize: async () => current },
+			{
+				verify: async () => ({
+					subject: current.subject,
+					membershipId: null
+				})
+			}
+		);
+		const query = {
+			workspaceId,
+			page: 1,
+			pageSize: 20,
+			unreadOnly: 'false'
+		};
+		const task = await prisma.salesTask.create({
+			data: {
+				workspaceId,
+				title: 'In-app task',
+				assignedToSubject: current.subject,
+				dueAt: new Date(Date.now() + 86400000)
+			}
+		});
+		let list = await center.list(current, query, 'Bearer fixture');
+		assert.equal(
+			list.total,
+			1,
+			'DUE must remain hidden before its deadline'
+		);
+		assert.equal(list.items[0].kind, 'ASSIGNED');
+		const assignedId = list.items[0].id;
+		const read = { workspaceId, actorMembershipId: null, read: true };
+		const first = await center.setRead(
+			current,
+			assignedId,
+			read,
+			'Bearer fixture'
+		);
+		assert.deepEqual(
+			await center.setRead(current, assignedId, read, 'Bearer fixture'),
+			first
+		);
+		assert.equal(
+			(await center.list(current, query, 'Bearer fixture')).unreadCount,
+			0
+		);
+		await center.setRead(
+			current,
+			assignedId,
+			{ ...read, read: false },
+			'Bearer fixture'
+		);
+		await prisma.salesTask.update({
+			where: { id: task.id },
+			data: {
+				dueAt: new Date(Date.now() - 1000),
+				version: { increment: 1 }
+			}
+		});
+		list = await center.list(current, query, 'Bearer fixture');
+		assert.equal(list.total, 2);
+		const dueId = list.items.find(item => item.kind === 'DUE').id;
+		await center.setRead(current, dueId, read, 'Bearer fixture');
+		await prisma.salesTask.update({
+			where: { id: task.id },
+			data: {
+				status: 'COMPLETED',
+				completedAt: new Date(),
+				version: { increment: 1 }
+			}
+		});
+		assert.equal(
+			(await center.list(current, query, 'Bearer fixture')).total,
+			0
+		);
+		await prisma.salesTask.update({
+			where: { id: task.id },
+			data: {
+				status: 'OPEN',
+				completedAt: null,
+				version: { increment: 1 }
+			}
+		});
+		list = await center.list(current, query, 'Bearer fixture');
+		assert.equal(list.total, 1);
+		assert.equal(list.unreadCount, 1);
+		assert.equal(
+			list.items[0].id,
+			dueId,
+			'reopen restores DUE only, without another ASSIGNED'
+		);
+		await prisma.salesTask.update({
+			where: { id: task.id },
+			data: { assignedToSubject: 'other', version: { increment: 1 } }
+		});
+		assert.equal(
+			(await center.list(current, query, 'Bearer fixture')).total,
+			0
+		);
+		await assert.rejects(
+			center.setRead(current, dueId, read, 'Bearer fixture'),
+			error => error.getStatus?.() === 404
+		);
+		await assert.rejects(
+			prisma.$executeRaw`DELETE FROM crm_sales.task_notifications WHERE FALSE`,
+			error => error?.meta?.code === '42501'
+		);
+	}
+	console.log(
+		'CRM Sales PostgreSQL 18 workflow, tenant scope, replay, CAS and next-action invariants passed'
+	);
+} finally {
+	await prisma.$disconnect();
+}
+
+function requiredEnv(name) {
+	const value = process.env[name]?.trim();
+	assert.ok(value, `${name} is required`);
+	return value;
+}

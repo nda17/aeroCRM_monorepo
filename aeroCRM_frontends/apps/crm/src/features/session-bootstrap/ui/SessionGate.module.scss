@@ -1,0 +1,7 @@
+.viewport {
+	@apply flex min-h-screen items-center justify-center bg-crm-bg p-4;
+}
+
+.state {
+	@apply w-full max-w-2xl shadow-panel;
+}

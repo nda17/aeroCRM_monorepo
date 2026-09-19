@@ -1,0 +1,150 @@
+import { Type } from 'class-transformer';
+import {
+	Equals,
+	IsEmail,
+	IsIn,
+	IsInt,
+	IsOptional,
+	IsString,
+	IsTimeZone,
+	IsUrl,
+	IsUUID,
+	Matches,
+	Max,
+	MaxLength,
+	Min
+} from 'class-validator';
+
+export class CustomerWorkspaceQuery {
+	@IsUUID('4') workspaceId!: string;
+}
+
+export class CustomerListQuery extends CustomerWorkspaceQuery {
+	@Type(() => Number) @IsInt() @Min(1) @Max(1_000_000) page = 1;
+	@Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 25;
+	@IsOptional() @IsString() @MaxLength(200) search?: string;
+}
+
+export class CustomerDuplicateQuery extends CustomerWorkspaceQuery {
+	@IsOptional() @Matches(/^\+[1-9][0-9]{6,14}$/) phone?: string;
+	@IsOptional() @IsEmail() @MaxLength(254) email?: string;
+	@Type(() => Number) @IsInt() @Min(1) @Max(1_000_000) page = 1;
+	@Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 25;
+}
+
+export class CustomerCommandDto {
+	@Equals(1) schemaVersion!: 1;
+	@IsUUID('4') workspaceId!: string;
+	@IsUUID('4') commandId!: string;
+}
+
+export class CreateCustomerDto extends CustomerCommandDto {
+	@IsString() @MaxLength(200) @Matches(/\S/) name!: string;
+	@IsOptional() @IsString() @MaxLength(5000) notes?: string | null;
+	@IsOptional() @IsUUID('4') teamId?: string | null;
+}
+
+export class CreateContactDto extends CreateCustomerDto {
+	@IsOptional() @Matches(/^\+[1-9][0-9]{6,14}$/) phone?: string | null;
+	@IsOptional() @IsEmail() @MaxLength(254) email?: string | null;
+	@IsOptional() @IsUUID('4') companyId?: string | null;
+}
+
+export class UpdateContactDto extends CreateContactDto {
+	@IsInt() @Min(1) @Max(2_147_483_646) expectedVersion!: number;
+}
+
+export class CreateCompanyDto extends CreateCustomerDto {
+	@IsOptional() @Matches(/^(?:[0-9]{10}|[0-9]{12})$/) inn?: string | null;
+	@IsOptional()
+	@MaxLength(2048)
+	@IsUrl({
+		protocols: ['http', 'https'],
+		require_protocol: true,
+		require_valid_protocol: true,
+		disallow_auth: true
+	})
+	website?: string | null;
+}
+
+export class UpdateCompanyDto extends CreateCompanyDto {
+	@IsInt() @Min(1) @Max(2_147_483_646) expectedVersion!: number;
+}
+
+export class ArchiveCustomerDto extends CustomerCommandDto {
+	@IsInt() @Min(1) @Max(2_147_483_646) expectedVersion!: number;
+}
+
+// Separate command ancestry is intentional: class-validator must not inherit
+// the v1 @Equals(1) constraint or widen any existing contact/company endpoint.
+export class CompanyCommandV2Dto {
+	@Equals(2) schemaVersion!: 2;
+	@IsUUID('4') workspaceId!: string;
+	@IsUUID('4') commandId!: string;
+}
+
+export class CreateCompanyV2Dto extends CompanyCommandV2Dto {
+	@IsString() @MaxLength(200) @Matches(/\S/) name!: string;
+	@IsOptional() @IsString() @MaxLength(5000) notes?: string | null;
+	@IsOptional() @IsUUID('4') teamId?: string | null;
+	@IsOptional() @Matches(/^(?:[0-9]{10}|[0-9]{12})$/) inn?: string | null;
+	@IsOptional()
+	@MaxLength(2048)
+	@IsUrl({
+		protocols: ['http', 'https'],
+		require_protocol: true,
+		require_valid_protocol: true,
+		disallow_auth: true
+	})
+	website?: string | null;
+	@IsOptional() @IsString() @MaxLength(2000) legalName?: string | null;
+	@IsOptional() @Matches(/^[0-9]{9}$/) kpp?: string | null;
+	@IsOptional() @Matches(/^(?:[0-9]{13}|[0-9]{15})$/) ogrn?: string | null;
+	@IsOptional() @IsString() @MaxLength(2000) legalAddress?: string | null;
+	@IsOptional() @IsIn(['LEGAL', 'INDIVIDUAL']) entityType?:
+		| 'LEGAL'
+		| 'INDIVIDUAL'
+		| null;
+}
+
+export class UpdateCompanyV2Dto extends CreateCompanyV2Dto {
+	@IsInt() @Min(1) @Max(2_147_483_646) expectedVersion!: number;
+}
+
+export class ArchiveCompanyV2Dto extends CompanyCommandV2Dto {
+	@IsInt() @Min(1) @Max(2_147_483_646) expectedVersion!: number;
+}
+
+export class ContactCommandV2Dto {
+	@Equals(2) schemaVersion!: 2;
+	@IsUUID('4') workspaceId!: string;
+	@IsUUID('4') commandId!: string;
+}
+
+export class CreateContactV2Dto extends ContactCommandV2Dto {
+	@IsString() @MaxLength(200) @Matches(/\S/) name!: string;
+	@IsOptional() @IsString() @MaxLength(5000) notes?: string | null;
+	@IsOptional() @IsUUID('4') teamId?: string | null;
+	@IsOptional() @Matches(/^\+[1-9][0-9]{6,14}$/) phone?: string | null;
+	@IsOptional() @IsEmail() @MaxLength(254) email?: string | null;
+	@IsOptional() @IsUUID('4') companyId?: string | null;
+	@IsOptional()
+	@MaxLength(100)
+	@IsTimeZone()
+	@Matches(/^[A-Za-z][A-Za-z0-9._+\/-]*$/)
+	timeZone?: string | null;
+	@IsOptional()
+	@Matches(/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/)
+	preferredCallStart?: string | null;
+	@IsOptional()
+	@Matches(/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/)
+	preferredCallEnd?: string | null;
+}
+
+export class UpdateContactV2Dto extends CreateContactV2Dto {
+	@IsInt() @Min(1) @Max(2_147_483_646) expectedVersion!: number;
+}
+
+export class ArchiveContactV2Dto extends ContactCommandV2Dto {
+	@IsInt() @Min(1) @Max(2_147_483_646) expectedVersion!: number;
+}

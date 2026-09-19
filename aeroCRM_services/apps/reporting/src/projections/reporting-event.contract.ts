@@ -1,0 +1,605 @@
+import type { ConsumeMessage } from 'amqplib';
+import { createHash } from 'node:crypto';
+
+export const REPORTING_SOURCE_EVENT_TYPES = [
+	'identity.user.changed.v1',
+	'billing.crm-order.succeeded.v1',
+	'billing.crm-entitlement.changed.v1'
+] as const;
+export type ReportingSourceEventType = (typeof REPORTING_SOURCE_EVENT_TYPES)[number];
+export const REPORTING_PROJECTION_STREAMS = [
+	'identityUser', 'crmOrder', 'crmEntitlement'
+] as const;
+export type ReportingProjectionStream = (typeof REPORTING_PROJECTION_STREAMS)[number];
+export const REPORTING_NOTIFICATION_DELIVERY_OUTCOME_EVENT_TYPE =
+	'reporting.notification.delivery.outcome.v1';
+export const OPERATIONS_NOTIFICATION_ROUTING_EVENT_TYPE =
+	'operations.notification-routing.changed.v1';
+
+export interface IdentityUserState {
+	id: string;
+	createdAt: string;
+	updatedAt: string;
+	deletedAt: string | null;
+	status: 'ACTIVE' | 'DEACTIVATED';
+	roles: Array<'USER' | 'ADMIN' | 'DEV'>;
+	hasEmailIdentity: boolean;
+	hasPhoneIdentity: boolean;
+	loginMethodCount: number;
+}
+export interface CrmOrderState {
+	workspaceId: string;
+	ownerSubject: string;
+	amountMinor: string;
+	currency: 'RUB';
+	cycle: 'MONTHLY' | 'YEARLY';
+	paidAt: string;
+}
+export interface CrmEntitlementState {
+	workspaceId: string;
+	productCode: 'AEROCRM';
+	planCode: 'TRIAL' | 'PAID';
+	status: 'ACTIVE' | 'GRACE' | 'READ_ONLY' | 'SUSPENDED' | 'EXPIRED' | 'CANCELLED';
+	seatLimit: number | null;
+	effectiveFrom: string;
+	effectiveUntil: string;
+}
+type SourceStateByType = {
+	'identity.user.changed.v1': IdentityUserState;
+	'billing.crm-order.succeeded.v1': CrmOrderState;
+	'billing.crm-entitlement.changed.v1': CrmEntitlementState;
+};
+export type ReportingSourceEvent<
+	TType extends ReportingSourceEventType = ReportingSourceEventType
+> = TType extends ReportingSourceEventType
+	? {
+			schemaVersion: 1;
+			eventType: TType;
+			eventId: string;
+			aggregateId: string;
+			aggregateVersion: string;
+			sourceSequence: string;
+			occurredAt: string;
+			tombstone: boolean;
+			state: SourceStateByType[TType] | null;
+		}
+	: never;
+
+export interface NotificationDeliveryOutcomeEvent {
+	schemaVersion: 1;
+	eventType: typeof REPORTING_NOTIFICATION_DELIVERY_OUTCOME_EVENT_TYPE;
+	sourceEventId: string;
+	sourceKind: 'daily-summary-delivery-telegram';
+	reference: {
+		type: 'daily-summary-job';
+		id: string;
+	};
+	status: 'DELIVERED' | 'FAILED';
+	failure: {
+		normalizedCode: string;
+		safeReason: string;
+	} | null;
+	occurredAt: string;
+}
+
+export interface OperationsNotificationRoutingChangedEvent {
+	schemaVersion: 1;
+	eventId: string;
+	operationalAlertsThreadId: number | null;
+	changedAt: string;
+}
+
+export class InvalidReportingEventError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'InvalidReportingEventError';
+	}
+}
+
+const UUID_PATTERN =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DECIMAL_PATTERN = /^(0|[1-9][0-9]{0,64})$/;
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/;
+const MAX_AUTOMATIC_RETRY_ATTEMPT = 3;
+const MAX_MANUAL_RETRY_CYCLE = 1_000_000;
+
+export function reportingPayloadHash(value: unknown): string {
+	return createHash('sha256').update(canonicalJson(value)).digest('hex');
+}
+
+export function sourceEventTypeToStream(
+	eventType: ReportingSourceEventType
+): ReportingProjectionStream {
+	const mapping: Record<ReportingSourceEventType, ReportingProjectionStream> = {
+		'identity.user.changed.v1': 'identityUser',
+		'billing.crm-order.succeeded.v1': 'crmOrder',
+		'billing.crm-entitlement.changed.v1': 'crmEntitlement'
+	};
+	return mapping[eventType];
+}
+
+export function parseReportingSourceEvent(
+	value: unknown,
+	expectedType?: ReportingSourceEventType
+): ReportingSourceEvent {
+	const record = exactRecord(value, [
+		'schemaVersion',
+		'eventType',
+		'eventId',
+		'aggregateId',
+		'aggregateVersion',
+		'sourceSequence',
+		'occurredAt',
+		'tombstone',
+		'state'
+	]);
+	assertLiteral(record.schemaVersion, 1, 'schemaVersion');
+	assertOneOf(record.eventType, REPORTING_SOURCE_EVENT_TYPES, 'eventType');
+	if (expectedType && record.eventType !== expectedType) {
+		throw new InvalidReportingEventError(
+			`eventType must equal ${expectedType}`
+		);
+	}
+	assertUuid(record.eventId, 'eventId');
+	assertBoundedString(record.aggregateId, 'aggregateId', 255);
+	if (record.eventType !== 'identity.user.changed.v1') {
+		assertUuid(record.aggregateId, 'aggregateId');
+	}
+	assertDecimal(record.aggregateVersion, 'aggregateVersion');
+	assertDecimal(record.sourceSequence, 'sourceSequence');
+	if (record.aggregateVersion === '0' || record.sourceSequence === '0') {
+		throw new InvalidReportingEventError(
+			'aggregateVersion and sourceSequence must both be positive'
+		);
+	}
+	assertIsoDate(record.occurredAt, 'occurredAt');
+	if (typeof record.tombstone !== 'boolean') {
+		throw new InvalidReportingEventError('tombstone must be a boolean');
+	}
+	if (record.tombstone) {
+		if (record.state !== null) {
+			throw new InvalidReportingEventError(
+				'tombstone event state must be null'
+			);
+		}
+	} else {
+		if (record.state === null) {
+			throw new InvalidReportingEventError(
+				'non-tombstone event state is required'
+			);
+		}
+		parseSourceState(record.eventType, record.state);
+		const state = record.state as Record<string, unknown>;
+		if (record.eventType === 'identity.user.changed.v1' && state.id !== record.aggregateId) {
+			throw new InvalidReportingEventError('state identity must equal aggregateId');
+		}
+	}
+	return record as unknown as ReportingSourceEvent;
+}
+
+export function parseNotificationDeliveryOutcome(
+	value: unknown
+): NotificationDeliveryOutcomeEvent {
+	const record = exactRecord(value, [
+		'schemaVersion',
+		'eventType',
+		'sourceEventId',
+		'sourceKind',
+		'reference',
+		'status',
+		'failure',
+		'occurredAt'
+	]);
+	assertLiteral(record.schemaVersion, 1, 'schemaVersion');
+	assertLiteral(
+		record.eventType,
+		REPORTING_NOTIFICATION_DELIVERY_OUTCOME_EVENT_TYPE,
+		'eventType'
+	);
+	assertUuid(record.sourceEventId, 'sourceEventId');
+	assertLiteral(
+		record.sourceKind,
+		'daily-summary-delivery-telegram',
+		'sourceKind'
+	);
+	const reference = exactRecord(record.reference, ['type', 'id']);
+	assertLiteral(reference.type, 'daily-summary-job', 'reference.type');
+	assertUuid(reference.id, 'reference.id');
+	assertOneOf(record.status, ['DELIVERED', 'FAILED'], 'status');
+	if (record.status === 'DELIVERED') {
+		if (record.failure !== null) {
+			throw new InvalidReportingEventError(
+				'DELIVERED outcome failure must be null'
+			);
+		}
+	} else {
+		const failure = exactRecord(record.failure, [
+			'normalizedCode',
+			'safeReason'
+		]);
+		assertBoundedString(
+			failure.normalizedCode,
+			'failure.normalizedCode',
+			255
+		);
+		assertBoundedString(failure.safeReason, 'failure.safeReason', 2000);
+	}
+	assertIsoDate(record.occurredAt, 'occurredAt');
+	return record as unknown as NotificationDeliveryOutcomeEvent;
+}
+
+export function parseOperationsNotificationRoutingChangedEvent(
+	value: unknown
+): OperationsNotificationRoutingChangedEvent {
+	const record = exactRecord(value, [
+		'schemaVersion',
+		'eventId',
+		'operationalAlertsThreadId',
+		'changedAt'
+	]);
+	assertLiteral(record.schemaVersion, 1, 'schemaVersion');
+	assertUuid(record.eventId, 'eventId');
+	if (record.operationalAlertsThreadId !== null) {
+		assertPositiveInteger(
+			record.operationalAlertsThreadId,
+			'operationalAlertsThreadId'
+		);
+	}
+	assertIsoDate(record.changedAt, 'changedAt');
+	return record as unknown as OperationsNotificationRoutingChangedEvent;
+}
+
+export function parseReportingConsumeMessage(
+	message: ConsumeMessage,
+	expected:
+		| ReportingSourceEventType
+		| readonly ReportingSourceEventType[]
+		| typeof OPERATIONS_NOTIFICATION_ROUTING_EVENT_TYPE
+		| typeof REPORTING_NOTIFICATION_DELIVERY_OUTCOME_EVENT_TYPE
+): {
+	eventId: string;
+	eventType: string;
+	payload:
+		| ReportingSourceEvent
+		| NotificationDeliveryOutcomeEvent
+		| OperationsNotificationRoutingChangedEvent;
+	retryAttempt: number;
+	retryCycle: number;
+} {
+	if (message.content.length > 256 * 1024) {
+		throw new InvalidReportingEventError('Event payload is too large');
+	}
+	let value: unknown;
+	try {
+		value = JSON.parse(message.content.toString('utf8'));
+	} catch {
+		throw new InvalidReportingEventError('Event payload is not JSON');
+	}
+	const isDeliveryOutcome =
+		expected === REPORTING_NOTIFICATION_DELIVERY_OUTCOME_EVENT_TYPE;
+	const isOperationsNotificationRouting =
+		expected === OPERATIONS_NOTIFICATION_ROUTING_EVENT_TYPE;
+	const expectedTypes: readonly ReportingSourceEventType[] = Array.isArray(
+		expected
+	)
+		? expected
+		: isDeliveryOutcome || isOperationsNotificationRouting
+			? []
+			: [expected as ReportingSourceEventType];
+	const payload = isDeliveryOutcome
+		? parseNotificationDeliveryOutcome(value)
+		: isOperationsNotificationRouting
+			? parseOperationsNotificationRoutingChangedEvent(value)
+			: parseReportingSourceEvent(value);
+	const messageId =
+		typeof message.properties.messageId === 'string'
+			? message.properties.messageId
+			: '';
+	const eventType =
+		typeof message.properties.type === 'string'
+			? message.properties.type
+			: '';
+	const payloadEventId =
+		'eventId' in payload ? payload.eventId : messageId;
+	const payloadEventType =
+		'eventType' in payload
+			? payload.eventType
+			: OPERATIONS_NOTIFICATION_ROUTING_EVENT_TYPE;
+	if (!UUID_PATTERN.test(messageId) || payloadEventId !== messageId) {
+		throw new InvalidReportingEventError(
+			'AMQP messageId must be a UUID and equal payload eventId when present'
+		);
+	}
+	if (
+		eventType !== payloadEventType ||
+		(!isDeliveryOutcome &&
+			!isOperationsNotificationRouting &&
+			!expectedTypes.includes(eventType as ReportingSourceEventType)) ||
+		(isDeliveryOutcome &&
+			eventType !== REPORTING_NOTIFICATION_DELIVERY_OUTCOME_EVENT_TYPE) ||
+		(isOperationsNotificationRouting &&
+			eventType !== OPERATIONS_NOTIFICATION_ROUTING_EVENT_TYPE)
+	) {
+		throw new InvalidReportingEventError(
+			'AMQP type must equal the expected payload eventType'
+		);
+	}
+	if (
+		isOperationsNotificationRouting &&
+		message.fields.routingKey ===
+			OPERATIONS_NOTIFICATION_ROUTING_EVENT_TYPE
+	) {
+		if (
+			message.properties.headers?.['x-aggregate-type'] !==
+				'telegram-bot-settings' ||
+			message.properties.headers?.['x-aggregate-id'] !== 'singleton'
+		) {
+			throw new InvalidReportingEventError(
+				'Operations notification routing aggregate headers are invalid'
+			);
+		}
+	}
+	const retryAttempt = parseOptionalIntegerHeader(
+		message.properties.headers?.['x-retry-attempt'],
+		'x-retry-attempt',
+		MAX_AUTOMATIC_RETRY_ATTEMPT
+	);
+	const retryCycle = parseOptionalIntegerHeader(
+		message.properties.headers?.['x-retry-cycle'],
+		'x-retry-cycle',
+		MAX_MANUAL_RETRY_CYCLE
+	);
+	return {
+		eventId: messageId,
+		eventType,
+		payload,
+		retryAttempt,
+		retryCycle
+	};
+}
+
+function parseOptionalIntegerHeader(
+	value: unknown,
+	name: string,
+	maximum: number
+): number {
+	if (value === undefined) return 0;
+	if (
+		typeof value !== 'number' ||
+		!Number.isInteger(value) ||
+		value < 0 ||
+		value > maximum
+	) {
+		throw new InvalidReportingEventError(`${name} header is invalid`);
+	}
+	return value;
+}
+
+function canonicalJson(value: unknown): string {
+	if (value === null) return 'null';
+	if (Array.isArray(value)) {
+		return `[${value.map(item => canonicalJson(item)).join(',')}]`;
+	}
+	if (typeof value === 'object') {
+		const record = value as Record<string, unknown>;
+		return `{${Object.keys(record)
+			.sort()
+			.map(key => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+			.join(',')}}`;
+	}
+	const serialized = JSON.stringify(value);
+	if (serialized === undefined) {
+		throw new InvalidReportingEventError(
+			'Reporting payload contains an unsupported JSON value'
+		);
+	}
+	return serialized;
+}
+
+function parseSourceState(
+	eventType: ReportingSourceEventType,
+	value: unknown
+): void {
+	if (eventType === 'identity.user.changed.v1') {
+		const state = exactRecord(value, [
+			'id',
+			'createdAt',
+			'updatedAt',
+			'deletedAt',
+			'status',
+			'roles',
+			'hasEmailIdentity',
+			'hasPhoneIdentity',
+			'loginMethodCount'
+		]);
+		assertIdAndDates(state, ['createdAt', 'updatedAt']);
+		assertNullableIsoDate(state.deletedAt, 'state.deletedAt');
+		assertOneOf(state.status, ['ACTIVE', 'DEACTIVATED'], 'state.status');
+		if (!Array.isArray(state.roles)) {
+			throw new InvalidReportingEventError('state.roles must be an array');
+		}
+		state.roles.forEach(role =>
+			assertOneOf(role, ['USER', 'ADMIN', 'DEV'], 'state.roles')
+		);
+		if (new Set(state.roles).size !== state.roles.length) {
+			throw new InvalidReportingEventError('state.roles must be unique');
+		}
+		for (const key of [
+			'hasEmailIdentity',
+			'hasPhoneIdentity'
+		] as const) {
+			if (typeof state[key] !== 'boolean') {
+				throw new InvalidReportingEventError(
+					`state.${key} must be a boolean`
+				);
+			}
+		}
+		assertNonNegativeInteger(
+			state.loginMethodCount,
+			'state.loginMethodCount',
+			20
+		);
+		return;
+	}
+	if (eventType === 'billing.crm-order.succeeded.v1') {
+		const state = exactRecord(value, [
+			'workspaceId', 'ownerSubject', 'amountMinor', 'currency', 'cycle', 'paidAt'
+		]);
+		assertUuid(state.workspaceId, 'state.workspaceId');
+		assertBoundedString(state.ownerSubject, 'state.ownerSubject', 256);
+		assertDecimal(state.amountMinor, 'state.amountMinor');
+		assertLiteral(state.currency, 'RUB', 'state.currency');
+		assertOneOf(state.cycle, ['MONTHLY', 'YEARLY'], 'state.cycle');
+		assertIsoDate(state.paidAt, 'state.paidAt');
+		return;
+	}
+	if (eventType === 'billing.crm-entitlement.changed.v1') {
+		const state = exactRecord(value, [
+			'workspaceId', 'productCode', 'planCode', 'status',
+			'seatLimit', 'effectiveFrom', 'effectiveUntil'
+		]);
+		assertUuid(state.workspaceId, 'state.workspaceId');
+		assertLiteral(state.productCode, 'AEROCRM', 'state.productCode');
+		assertOneOf(state.planCode, ['TRIAL', 'PAID'], 'state.planCode');
+		assertOneOf(state.status, ['ACTIVE', 'GRACE', 'READ_ONLY', 'SUSPENDED', 'EXPIRED', 'CANCELLED'], 'state.status');
+		if (state.seatLimit !== null) assertPositiveInteger(state.seatLimit, 'state.seatLimit');
+		assertIsoDate(state.effectiveFrom, 'state.effectiveFrom');
+		assertIsoDate(state.effectiveUntil, 'state.effectiveUntil');
+		return;
+	}
+	throw new InvalidReportingEventError(
+		'Unsupported Reporting source event'
+	);
+}
+
+function assertIdAndDates(
+	state: Record<string, unknown>,
+	dates: readonly string[]
+): void {
+	assertBoundedString(state.id, 'state.id', 255);
+	for (const date of dates) {
+		assertIsoDate(state[date], `state.${date}`);
+	}
+}
+
+function exactRecord(
+	value: unknown,
+	keys: readonly string[]
+): Record<string, unknown> {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		throw new InvalidReportingEventError('Expected an object');
+	}
+	const record = value as Record<string, unknown>;
+	const actual = Object.keys(record).sort();
+	const expected = [...keys].sort();
+	if (
+		actual.length !== expected.length ||
+		actual.some((key, index) => key !== expected[index])
+	) {
+		throw new InvalidReportingEventError('Object contains invalid keys');
+	}
+	return record;
+}
+
+function objectRecord(value: unknown): Record<string, unknown> {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		throw new InvalidReportingEventError('Expected an object');
+	}
+	return value as Record<string, unknown>;
+}
+
+function assertUuid(
+	value: unknown,
+	field: string
+): asserts value is string {
+	if (typeof value !== 'string' || !UUID_PATTERN.test(value)) {
+		throw new InvalidReportingEventError(`${field} must be a UUID`);
+	}
+}
+
+function assertDecimal(
+	value: unknown,
+	field: string
+): asserts value is string {
+	if (typeof value !== 'string' || !DECIMAL_PATTERN.test(value)) {
+		throw new InvalidReportingEventError(
+			`${field} must be a non-negative decimal string`
+		);
+	}
+}
+
+function assertIsoDate(
+	value: unknown,
+	field: string
+): asserts value is string {
+	if (
+		typeof value !== 'string' ||
+		!/^\d{4}-\d{2}-\d{2}T/.test(value) ||
+		!Number.isFinite(Date.parse(value))
+	) {
+		throw new InvalidReportingEventError(
+			`${field} must be an ISO timestamp`
+		);
+	}
+}
+
+function assertNullableIsoDate(value: unknown, field: string): void {
+	if (value !== null) assertIsoDate(value, field);
+}
+
+function assertLiteral<T>(
+	value: unknown,
+	expected: T,
+	field: string
+): asserts value is T {
+	if (value !== expected) {
+		throw new InvalidReportingEventError(`${field} has an invalid value`);
+	}
+}
+
+function assertOneOf<T extends string>(
+	value: unknown,
+	values: readonly T[],
+	field: string
+): asserts value is T {
+	if (typeof value !== 'string' || !values.includes(value as T)) {
+		throw new InvalidReportingEventError(`${field} has an invalid value`);
+	}
+}
+
+function assertBoundedString(
+	value: unknown,
+	field: string,
+	max: number
+): asserts value is string {
+	if (typeof value !== 'string' || !value.trim() || value.length > max) {
+		throw new InvalidReportingEventError(`${field} is invalid`);
+	}
+}
+
+function assertNonNegativeInteger(
+	value: unknown,
+	field: string,
+	max = Number.MAX_SAFE_INTEGER
+): asserts value is number {
+	if (
+		!Number.isInteger(value) ||
+		Number(value) < 0 ||
+		Number(value) > max
+	) {
+		throw new InvalidReportingEventError(
+			`${field} must be a non-negative integer`
+		);
+	}
+}
+
+function assertPositiveInteger(
+	value: unknown,
+	field: string
+): asserts value is number {
+	if (!Number.isInteger(value) || Number(value) < 1) {
+		throw new InvalidReportingEventError(
+			`${field} must be a positive integer`
+		);
+	}
+}

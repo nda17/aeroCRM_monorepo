@@ -1,0 +1,496 @@
+import {
+	BadGatewayException,
+	Injectable,
+	InternalServerErrorException,
+	Logger
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { render } from '@react-email/render';
+import nodemailer, { type Transporter } from 'nodemailer';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport';
+import { join } from 'node:path';
+import { connect, type Socket } from 'node:net';
+import { randomUUID } from 'node:crypto';
+import { passwordEmail, verificationEmail } from './email-templates';
+
+const SMSAERO_ENDPOINT = 'https://gate.smsaero.ru/v2/sms/send';
+const SMSAERO_BALANCE_ENDPOINT = 'https://gate.smsaero.ru/v2/balance';
+const EMAIL_LOGO_CID = 'aerocrm-identity-logo';
+const EMAIL_LOGO_PATH = join(process.cwd(), 'assets', 'email-logo.png');
+export const VERIFICATION_EMAIL_SUBJECT = 'Код подтверждения email';
+export const PASSWORD_EMAIL_SUBJECT = 'Временный пароль';
+export const EMAIL_DELIVERY_TIMEOUT_MS = 20_000;
+
+export class EmailDeliveryException extends BadGatewayException {
+	constructor(
+		readonly outcome: 'FAILED' | 'UNKNOWN',
+		readonly attemptId: string
+	) {
+		super({
+			code:
+				outcome === 'FAILED'
+					? 'email_delivery_failed'
+					: 'email_delivery_unknown',
+			message:
+				outcome === 'FAILED'
+					? 'Не удалось отправить письмо. Попробуйте повторить отправку позже.'
+					: 'Не удалось подтвердить отправку письма. Если письмо придёт, используйте его; иначе повторите запрос позже.',
+			deliveryStatus: outcome,
+			deliveryAttemptId: attemptId
+		});
+	}
+}
+
+type SmsAeroResponse = {
+	success: boolean;
+	message?: string | null;
+};
+
+@Injectable()
+export class VerificationTransportService {
+	private readonly logger = new Logger(VerificationTransportService.name);
+	private readonly mailer: Transporter | null;
+	private readonly smtpConfigured: boolean;
+	private readonly smsEmail: string;
+	private readonly smsApiKey: string;
+	private readonly smsSign: string;
+	private readonly mailFrom: string;
+
+	constructor(private readonly config: ConfigService) {
+		this.mailFrom = config.get<string>('SMTP_FROM')?.trim() || '';
+		if (
+			!/^"[^"\r\n]{1,80}" <[A-Z0-9._%+-]+@aerocrm\.space>$/i.test(
+				this.mailFrom
+			)
+		) {
+			throw new Error('SMTP_FROM must use an aerocrm.space mailbox');
+		}
+		const host = config.get<string>('SMTP_SERVER')?.trim() || '';
+		const user = config.get<string>('SMTP_LOGIN')?.trim() || '';
+		const password = config.get<string>('SMTP_PASSWORD')?.trim() || '';
+		const development =
+			config.get<string>('MODE')?.trim().toLowerCase() === 'development';
+		this.smtpConfigured = Boolean(host && user && password);
+		this.mailer = this.smtpConfigured
+			? nodemailer.createTransport({
+					host,
+					port: development ? 2525 : 465,
+					secure: !development,
+					connectionTimeout: timeout(
+						config,
+						'SMTP_CONNECTION_TIMEOUT_MS',
+						5_000
+					),
+					greetingTimeout: timeout(
+						config,
+						'SMTP_GREETING_TIMEOUT_MS',
+						5_000
+					),
+					socketTimeout: timeout(config, 'SMTP_SOCKET_TIMEOUT_MS', 15_000),
+					auth: { user, pass: password }
+				})
+			: null;
+		this.smsEmail = config.get<string>('SMSAERO_EMAIL')?.trim() || '';
+		this.smsApiKey = config.get<string>('SMSAERO_API_KEY')?.trim() || '';
+		this.smsSign =
+			config.get<string>('SMSAERO_SIGN')?.trim() || 'SMS Aero';
+	}
+
+	isEmailConfigured(): boolean {
+		return this.smtpConfigured;
+	}
+
+	isSmsConfigured(): boolean {
+		return Boolean(this.smsEmail && this.smsApiKey);
+	}
+
+	/** The login fallback retains its independent, caller-owned deadline. */
+	async loginCode(
+		channel: 'EMAIL' | 'SMS',
+		destination: string,
+		code: string,
+		signal: AbortSignal
+	): Promise<void> {
+		signal.throwIfAborted();
+		if (channel === 'SMS') {
+			if (!this.isSmsConfigured())
+				throw new Error('Login delivery unavailable');
+			const payload = {
+				number: Number(destination.replace(/\D/g, '')),
+				text: `Код входа в aeroCRM: ${code}. Никому не сообщайте код.`,
+				sign: this.smsSign
+			};
+			const response = await fetch(SMSAERO_ENDPOINT, {
+				method: 'POST',
+				redirect: 'error',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Basic ${Buffer.from(`${this.smsEmail}:${this.smsApiKey}`).toString('base64')}`
+				},
+				body: JSON.stringify(payload),
+				signal
+			});
+			if (!response.ok) throw new Error('Login delivery unavailable');
+			const body = (await response.json()) as SmsAeroResponse;
+			if (body.success !== true)
+				throw new Error('Login delivery unavailable');
+			return;
+		}
+		if (!this.isEmailConfigured())
+			throw new Error('Login delivery unavailable');
+		const host = this.config.get<string>('SMTP_SERVER')!.trim();
+		const development =
+			this.config.get<string>('MODE')?.trim().toLowerCase() ===
+			'development';
+		const port = development ? 2525 : 465;
+		let socket: Socket | undefined;
+		const options: SMTPTransport.Options = {
+			host,
+			port,
+			secure: !development,
+			auth: {
+				user: this.config.get<string>('SMTP_LOGIN')!.trim(),
+				pass: this.config.get<string>('SMTP_PASSWORD')!.trim()
+			},
+			connectionTimeout: 4_000,
+			greetingTimeout: 4_000,
+			socketTimeout: 4_000,
+			// Own the underlying socket so the same hard response deadline also
+			// aborts DNS/TCP/TLS/SMTP work. Nodemailer performs normal TLS checks.
+			getSocket: (_options, callback) => {
+				if (signal.aborted) {
+					callback(new Error('Login delivery unavailable'), null);
+					return;
+				}
+				socket = connect({ host, port, signal });
+				let handedOff = false;
+				socket.once('connect', () => {
+					handedOff = true;
+					callback(null, { connection: socket });
+				});
+				socket.once('error', () => {
+					if (!handedOff)
+						callback(new Error('Login delivery unavailable'), null);
+				});
+			}
+		};
+		const mailer = nodemailer.createTransport(options);
+		try {
+			await mailer.sendMail({
+				from: this.mailFrom,
+				to: destination,
+				subject: 'Код входа в aeroCRM',
+				text: `Ваш код входа в aeroCRM: ${code}. Код действует 5 минут. Никому не сообщайте код. Если вы не запрашивали вход, проигнорируйте письмо.`
+			});
+		} finally {
+			socket?.destroy();
+			mailer.close();
+		}
+	}
+
+	async verifyEmailTransport(): Promise<void> {
+		if (!this.mailer) {
+			throw new Error('SMTP transport is not configured');
+		}
+		await this.mailer.verify();
+	}
+
+	async verifySmsTransport(): Promise<void> {
+		if (!this.smsEmail || !this.smsApiKey) {
+			throw new Error('SMS Aero transport is not configured');
+		}
+		const response = await fetch(SMSAERO_BALANCE_ENDPOINT, {
+			headers: {
+				Authorization: `Basic ${Buffer.from(
+					`${this.smsEmail}:${this.smsApiKey}`
+				).toString('base64')}`
+			},
+			signal: AbortSignal.timeout(3_000)
+		});
+		if (!response.ok) {
+			throw new Error(
+				`SMS Aero health request failed: HTTP ${response.status}`
+			);
+		}
+	}
+
+	async emailCode(
+		email: string,
+		code: string,
+		attemptId?: string
+	): Promise<void> {
+		await this.sendEmail(
+			email,
+			VERIFICATION_EMAIL_SUBJECT,
+			render(verificationEmail(code)),
+			`Ваш код подтверждения email в aeroCRM: ${code}. Код действует 10 минут. Если вы не запрашивали код, проигнорируйте письмо.`,
+			'verification',
+			attemptId
+		);
+	}
+
+	async newPassword(
+		email: string,
+		password: string,
+		attemptId?: string
+	): Promise<void> {
+		await this.sendEmail(
+			email,
+			PASSWORD_EMAIL_SUBJECT,
+			render(passwordEmail(password)),
+			`Ваш временный пароль в aeroCRM: ${password}. Он действует 10 минут. Прежний пароль заменится после входа с временным паролем. Если вы не запрашивали восстановление, проигнорируйте письмо.`,
+			'password_recovery',
+			attemptId
+		);
+	}
+
+	smsCode(phone: string, code: string): Promise<void> {
+		return this.sendSms(
+			phone,
+			`Ваш код подтверждения в aeroCRM: ${code}`
+		);
+	}
+
+	smsPassword(phone: string, password: string): Promise<void> {
+		return this.sendSms(
+			phone,
+			`Ваш новый пароль в aeroCRM: ${password}`
+		);
+	}
+
+	private async sendEmail(
+		to: string,
+		subject: string,
+		html: string,
+		text: string,
+		operation: 'verification' | 'password_recovery',
+		requestedAttemptId?: string
+	): Promise<void> {
+		const attemptId =
+			requestedAttemptId && /^[0-9a-f-]{36}$/i.test(requestedAttemptId)
+				? requestedAttemptId
+				: randomUUID();
+		const started = Date.now();
+		const metadata = {
+			event: 'identity_email_delivery',
+			operation,
+			attemptId
+		};
+		if (!this.smtpConfigured) {
+			this.logger.warn(
+				JSON.stringify({
+					...metadata,
+					outcome: 'FAILED',
+					category: 'CONFIGURATION'
+				})
+			);
+			throw new EmailDeliveryException('FAILED', attemptId);
+		}
+		const host = this.config.get<string>('SMTP_SERVER')!.trim();
+		const development =
+			this.config.get<string>('MODE')?.trim().toLowerCase() ===
+			'development';
+		const port = development ? 2525 : 465;
+		const signal = AbortSignal.timeout(EMAIL_DELIVERY_TIMEOUT_MS);
+		let socket: Socket | undefined;
+		let abort: (() => void) | undefined;
+		const options: SMTPTransport.Options = {
+			host,
+			port,
+			secure: !development,
+			auth: {
+				user: this.config.get<string>('SMTP_LOGIN')!.trim(),
+				pass: this.config.get<string>('SMTP_PASSWORD')!.trim()
+			},
+			connectionTimeout: timeout(
+				this.config,
+				'SMTP_CONNECTION_TIMEOUT_MS',
+				5_000
+			),
+			greetingTimeout: timeout(
+				this.config,
+				'SMTP_GREETING_TIMEOUT_MS',
+				5_000
+			),
+			socketTimeout: timeout(
+				this.config,
+				'SMTP_SOCKET_TIMEOUT_MS',
+				15_000
+			),
+			// Abort the actual socket as well as the awaiting request: a timeout
+			// must not leave a background SMTP send after the delivery lease ends.
+			getSocket: (_options, callback) => {
+				if (signal.aborted) {
+					callback(new Error('Email delivery deadline exceeded'), null);
+					return;
+				}
+				socket = connect({ host, port, signal });
+				let handedOff = false;
+				socket.once('connect', () => {
+					handedOff = true;
+					callback(null, { connection: socket });
+				});
+				socket.once('error', error => {
+					if (!handedOff) callback(error, null);
+				});
+			}
+		};
+		const mailer = nodemailer.createTransport(options);
+		try {
+			await Promise.race([
+				mailer.sendMail({
+					from: this.mailFrom,
+					to,
+					subject,
+					html,
+					text,
+					messageId: `<${attemptId}@aerocrm.space>`,
+					attachments: [
+						{
+							filename: 'aerocrm-logo.png',
+							path: EMAIL_LOGO_PATH,
+							cid: EMAIL_LOGO_CID,
+							contentDisposition: 'inline'
+						}
+					]
+				}),
+				new Promise<never>((_, reject) => {
+					abort = () =>
+						reject(new Error('Email delivery deadline exceeded'));
+					signal.addEventListener('abort', abort, { once: true });
+					if (signal.aborted) abort();
+				})
+			]);
+			// ACCEPTED means SMTP accepted the message, never inbox delivery.
+			this.logger.log(
+				JSON.stringify({
+					...metadata,
+					outcome: 'ACCEPTED',
+					durationMs: Date.now() - started
+				})
+			);
+		} catch (error) {
+			const failure = emailFailure(error);
+			this.logger.warn(
+				JSON.stringify({
+					...metadata,
+					...failure,
+					durationMs: Date.now() - started
+				})
+			);
+			throw new EmailDeliveryException(failure.outcome, attemptId);
+		} finally {
+			if (abort) signal.removeEventListener('abort', abort);
+			socket?.destroy();
+			mailer.close();
+		}
+	}
+
+	private async sendSms(to: string, text: string): Promise<void> {
+		if (!this.smsEmail || !this.smsApiKey) {
+			throw new InternalServerErrorException(
+				'SMS Aero credentials are not configured'
+			);
+		}
+		const digits = to.replace(/\D/g, '');
+		const number = digits.length === 10 ? `7${digits}` : digits;
+		if (!number)
+			throw new BadGatewayException('SMS provider request failed');
+		const params = new URLSearchParams({
+			number,
+			text,
+			sign: this.smsSign
+		});
+		const authorization = Buffer.from(
+			`${this.smsEmail}:${this.smsApiKey}`
+		).toString('base64');
+		const response = await fetch(
+			`${SMSAERO_ENDPOINT}?${params.toString()}`,
+			{
+				method: 'GET',
+				headers: { Authorization: `Basic ${authorization}` },
+				signal: AbortSignal.timeout(10_000)
+			}
+		);
+		if (!response.ok) {
+			throw new BadGatewayException('SMS provider request failed');
+		}
+		if (
+			!(response.headers.get('content-type') || '').includes(
+				'application/json'
+			)
+		) {
+			return;
+		}
+		const result = (await response.json()) as SmsAeroResponse;
+		if (!result.success) {
+			throw new BadGatewayException(
+				result.message || 'SMS provider returned an error'
+			);
+		}
+	}
+}
+
+function emailFailure(error: unknown): {
+	outcome: 'FAILED' | 'UNKNOWN';
+	category: string;
+	smtpCode?: number;
+} {
+	const details = error as {
+		code?: unknown;
+		responseCode?: unknown;
+	} | null;
+	const knownCodes = [
+		'EDNS',
+		'ENOTFOUND',
+		'ECONNREFUSED',
+		'EAUTH',
+		'EENVELOPE',
+		'EMESSAGE',
+		'ESTREAM',
+		'ENOENT',
+		'EFILE',
+		'ESOCKET',
+		'ECONNECTION',
+		'ETIMEDOUT',
+		'ETLS',
+		'EPROTOCOL',
+		'ABORT_ERR'
+	];
+	const category =
+		typeof details?.code === 'string' && knownCodes.includes(details.code)
+			? details.code
+			: 'UNKNOWN';
+	const smtpCode =
+		typeof details?.responseCode === 'number' &&
+		Number.isInteger(details.responseCode) &&
+		details.responseCode >= 400 &&
+		details.responseCode <= 599
+			? details.responseCode
+			: undefined;
+	// Socket loss/timeout can follow acceptance of DATA. CONN in a Nodemailer
+	// error is not evidence that the failure happened before message submission.
+	const rejected =
+		smtpCode !== undefined ||
+		[
+			'EDNS',
+			'ENOTFOUND',
+			'ECONNREFUSED',
+			'EAUTH',
+			'EENVELOPE',
+			'ENOENT',
+			'EFILE'
+		].includes(category);
+	return { outcome: rejected ? 'FAILED' : 'UNKNOWN', category, smtpCode };
+}
+
+function timeout(
+	config: ConfigService,
+	key: string,
+	fallback: number
+): number {
+	const value = Number(config.get<string>(key));
+	return Number.isInteger(value) && value >= 1_000 && value <= 60_000
+		? value
+		: fallback;
+}

@@ -1,0 +1,701 @@
+.wrapper {
+	@apply relative flex w-full min-w-0 flex-col;
+}
+
+.layout {
+	@apply w-full grid gap-5 items-start mb-6 xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)];
+}
+
+.card {
+	@apply w-full rounded-layout border border-gray-300 bg-white shadow-sm overflow-hidden;
+}
+
+.summaryCard {
+	@apply xl:sticky xl:top-4;
+}
+
+.cardHeader {
+	@apply flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between px-5 py-4 border-b border-gray-300 bg-gray-300 bg-opacity-20;
+}
+
+.cardBody {
+	@apply p-5;
+}
+
+.cardEyebrow {
+	@apply text-[0.7rem] uppercase tracking-[0.08em] font-semibold text-gray-500;
+}
+
+.cardTitle {
+	@apply text-[1.05rem] sm:text-[1.1rem] font-semibold text-gray-700 leading-tight;
+}
+
+.cardSubtitle {
+	@apply mt-1 text-sm text-gray-600;
+}
+
+.backLink {
+	@apply inline-flex items-center justify-center rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors shrink-0 whitespace-nowrap;
+
+	&:hover {
+		@apply bg-gray-300 bg-opacity-20 text-red-700;
+	}
+}
+
+.summaryContact {
+	@apply -mt-2 text-sm text-gray-600 break-words;
+}
+
+.summaryGroup {
+	@apply mt-5 first:mt-4;
+}
+
+.summaryLabel {
+	@apply text-xs uppercase tracking-[0.08em] font-semibold text-gray-500 mb-2;
+}
+
+.badgeRow {
+	@apply flex flex-wrap gap-2;
+}
+
+.badge {
+	@apply inline-flex items-center rounded-full bg-gray-300 bg-opacity-40 px-3 py-1 text-[0.75rem] font-semibold text-gray-700;
+}
+
+.badgeMuted {
+	@apply bg-red-100 text-red-700;
+}
+
+.badgeSuccess {
+	@apply bg-green-100 text-green-700;
+}
+
+.badgeDanger {
+	@apply bg-red-100 text-red-700;
+}
+
+.infoGrid {
+	@apply mt-5 grid gap-3 sm:grid-cols-2;
+}
+
+.infoItem {
+	@apply rounded-xl border border-gray-300 bg-gray-300 bg-opacity-10 px-4 py-3;
+}
+
+.infoItemWide {
+	@apply sm:col-span-2;
+}
+
+.infoLabel {
+	@apply text-xs uppercase tracking-[0.08em] font-semibold text-gray-500;
+}
+
+.infoValue {
+	@apply mt-1 text-sm text-gray-700 leading-snug break-words;
+}
+
+.overview {
+	@apply mt-6 border-t border-gray-300 pt-5;
+}
+
+.overviewHeader {
+	@apply flex flex-col gap-1;
+}
+
+.overviewTitle {
+	@apply text-[0.95rem] font-semibold text-gray-700;
+}
+
+.overviewSubtitle {
+	@apply text-sm text-gray-500 leading-snug;
+}
+
+.overviewLoadingGrid {
+	@apply mt-4 grid gap-3;
+}
+
+.overviewSection {
+	@apply mt-5 border-t border-gray-200 pt-4 first:border-t-0 first:pt-0;
+}
+
+.overviewSectionHeader {
+	@apply mb-3 flex items-center justify-between gap-3;
+}
+
+.overviewSectionTitle {
+	@apply text-xs uppercase tracking-[0.08em] font-semibold text-gray-500 mb-3;
+}
+
+.overviewSectionHeader .overviewSectionTitle {
+	@apply mb-0;
+}
+
+.overviewSectionLink {
+	@apply text-xs font-semibold text-red-600 transition-colors whitespace-nowrap;
+
+	&:hover {
+		@apply text-red-700;
+	}
+}
+
+.overviewMetricGrid {
+	@apply grid grid-cols-2 gap-x-4 gap-y-3;
+}
+
+.overviewMetricLabel {
+	@apply block text-xs text-gray-500;
+}
+
+.overviewMetricValue {
+	@apply mt-1 block text-sm font-semibold text-gray-700 leading-snug break-words;
+}
+
+.overviewPills {
+	@apply flex flex-wrap gap-2;
+}
+
+.overviewPill {
+	@apply inline-flex items-center rounded-full bg-gray-300 bg-opacity-40 px-3 py-1 text-[0.72rem] font-semibold text-gray-700;
+}
+
+.overviewPillSuccess {
+	@apply bg-green-100 text-green-700;
+}
+
+.overviewPillMuted {
+	@apply bg-gray-100 text-gray-500;
+}
+
+.overviewList {
+	@apply mt-3 flex flex-col border-t border-gray-200;
+}
+
+.overviewListItem {
+	@apply flex items-start justify-between gap-3 border-b border-gray-200 py-3 last:border-b-0;
+}
+
+.overviewListTitle {
+	@apply text-sm font-semibold text-gray-700 leading-snug break-words;
+}
+
+.overviewListMeta {
+	@apply mt-1 text-xs text-gray-500 leading-snug break-words;
+}
+
+.overviewNote {
+	@apply mt-3 text-xs text-gray-500 leading-snug;
+}
+
+.overviewEmpty {
+	@apply mt-2 text-sm text-gray-500 leading-snug;
+}
+
+.form {
+	@apply p-5 flex flex-col gap-6;
+}
+
+.formSection {
+	@apply flex flex-col gap-4 pb-6 border-b border-gray-300 last:border-b-0 last:pb-0;
+}
+
+.sectionTitle {
+	@apply text-[0.95rem] font-semibold text-gray-700;
+}
+
+.titleWithHelp {
+	@apply flex items-center gap-2;
+}
+
+.sectionHint {
+	@apply mt-1 text-sm text-gray-500 leading-snug;
+}
+
+.rightsGrid {
+	@apply grid gap-3 lg:grid-cols-2;
+}
+
+.rightCard {
+	@apply flex items-start justify-between gap-4 rounded-xl border border-gray-300 bg-white px-4 py-4 transition-colors;
+
+	&:hover {
+		@apply bg-gray-300 bg-opacity-10;
+	}
+}
+
+.statusCard {
+	@apply lg:col-span-2;
+}
+
+.rightCardActive {
+	@apply border-red-500 bg-red-50;
+}
+
+.rightCardDisabled {
+	@apply opacity-60;
+
+	&:hover {
+		@apply bg-white;
+	}
+}
+
+.rightCardTitle {
+	@apply text-sm font-semibold text-gray-700;
+}
+
+.rightCardDescription {
+	@apply mt-1 text-xs text-gray-500 leading-snug;
+}
+
+.rightCheckbox {
+	@apply mt-1 h-4 w-4 accent-red-500 cursor-pointer;
+
+	&:disabled {
+		@apply cursor-not-allowed opacity-60;
+	}
+}
+
+.renewalLoading {
+	@apply flex flex-col gap-3 rounded-xl border border-gray-300 bg-gray-300 bg-opacity-10 p-4;
+}
+
+.loadingRenewalStatus {
+	@apply h-8 w-56;
+}
+
+.loadingRenewalDetails {
+	@apply h-32 w-full;
+}
+
+.loadingRenewalActions {
+	@apply h-10 w-full;
+}
+
+.renewalError {
+	@apply rounded-xl border border-red-200 bg-red-50 px-4 py-4;
+}
+
+.renewalErrorTitle {
+	@apply text-sm font-semibold text-red-700;
+}
+
+.renewalErrorText {
+	@apply mt-1 text-xs leading-snug text-red-600;
+}
+
+.renewalPanel {
+	@apply flex flex-col gap-4 rounded-xl border border-gray-300 bg-gray-300 bg-opacity-10 p-4;
+}
+
+.renewalHeader {
+	@apply flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between;
+}
+
+.renewalLabel {
+	@apply mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-gray-500;
+}
+
+.renewalStatus {
+	@apply inline-flex rounded-full px-3 py-1 text-xs font-semibold;
+}
+
+.renewalStatusSuccess {
+	@apply bg-green-100 text-green-700;
+}
+
+.renewalStatusWarning {
+	@apply bg-yellow-100 text-yellow-700;
+}
+
+.renewalStatusDanger {
+	@apply bg-red-100 text-red-700;
+}
+
+.renewalStatusMuted {
+	@apply bg-gray-200 text-gray-600;
+}
+
+.renewalStatusDescription {
+	@apply max-w-2xl text-xs leading-snug text-gray-600 lg:text-right;
+}
+
+.renewalDetailsGrid {
+	@apply grid gap-3 md:grid-cols-2;
+}
+
+.renewalDetail {
+	@apply rounded-lg border border-gray-200 bg-white px-3 py-3;
+}
+
+.renewalDetailWide {
+	@apply md:col-span-2;
+}
+
+.renewalDetailLabel {
+	@apply block text-xs text-gray-500;
+}
+
+.renewalDetailValue {
+	@apply mt-1 block break-words text-sm font-semibold leading-snug text-gray-700;
+}
+
+.renewalDetailMeta {
+	@apply mt-1 block text-xs leading-snug text-gray-500;
+}
+
+.renewalValidity {
+	@apply flex flex-wrap gap-2;
+}
+
+.renewalValidityBadge {
+	@apply inline-flex rounded-full px-3 py-1 text-xs font-semibold;
+}
+
+.renewalValiditySuccess {
+	@apply bg-green-100 text-green-700;
+}
+
+.renewalValidityDanger {
+	@apply bg-red-100 text-red-700;
+}
+
+.renewalPriceChange {
+	@apply flex flex-col gap-2 rounded-lg border px-3 py-3 lg:flex-row lg:items-start lg:justify-between;
+}
+
+.renewalPriceChangeRequired {
+	@apply border-yellow-300 bg-yellow-50;
+}
+
+.renewalPriceChangeClear {
+	@apply border-green-200 bg-green-50;
+}
+
+.renewalPriceChangeTitle {
+	@apply text-sm font-semibold text-gray-700;
+}
+
+.renewalPriceChangeText {
+	@apply mt-1 text-xs font-semibold leading-snug text-gray-600;
+}
+
+.renewalPriceChangeMeta {
+	@apply mt-1 text-xs leading-snug text-gray-500;
+}
+
+.renewalPriceChangeNotice {
+	@apply max-w-xl text-xs leading-snug text-yellow-800 lg:text-right;
+}
+
+.renewalDiagnostics {
+	@apply rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-3 text-xs leading-snug text-yellow-800;
+
+	p {
+		@apply break-words;
+	}
+
+	p + p {
+		@apply mt-1;
+	}
+}
+
+.renewalActions {
+	@apply flex flex-col gap-2 sm:flex-row sm:flex-wrap;
+}
+
+.renewalPrimaryButton,
+.renewalSecondaryButton,
+.renewalDangerButton {
+	@apply inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold transition-opacity;
+
+	&:hover:not(:disabled) {
+		@apply opacity-80;
+	}
+
+	&:disabled {
+		@apply cursor-not-allowed opacity-50;
+	}
+}
+
+.renewalPrimaryButton {
+	@apply bg-red-500 text-white;
+}
+
+.renewalSecondaryButton {
+	@apply border border-gray-300 bg-white text-gray-700;
+}
+
+.renewalDangerButton {
+	@apply border border-red-300 bg-red-50 text-red-700;
+}
+
+.renewalTechnicalPanel {
+	@apply relative overflow-hidden rounded-lg border border-gray-300 bg-white;
+}
+
+.renewalTechnicalPanelLocked {
+	@apply min-h-[8.5rem];
+}
+
+.renewalTechnicalContent {
+	@apply flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between;
+}
+
+.renewalTechnicalContentBlurred {
+	@apply pointer-events-none select-none opacity-60 blur-[2px];
+}
+
+.renewalTechnicalTitle {
+	@apply text-sm font-semibold text-gray-700;
+}
+
+.renewalTechnicalText {
+	@apply mt-1 max-w-2xl text-xs leading-snug text-gray-500;
+}
+
+.renewalTechnicalActions {
+	@apply flex flex-col gap-2 sm:flex-row;
+}
+
+.renewalTechnicalOverlay {
+	@apply absolute inset-0 flex items-center justify-center gap-2 bg-white bg-opacity-70 px-4 text-center backdrop-blur-[1px];
+}
+
+.renewalTechnicalBadge {
+	@apply rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 shadow-sm;
+}
+
+.confirmReason {
+	@apply mt-4 flex flex-col gap-2 text-left;
+}
+
+.confirmReasonLabel {
+	@apply text-sm font-semibold text-gray-700;
+}
+
+.confirmReasonInput {
+	@apply min-h-24 w-full resize-y rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 outline-none transition-colors focus:border-red-500 disabled:cursor-not-allowed disabled:opacity-60;
+}
+
+.confirmReasonHint {
+	@apply text-xs leading-snug text-gray-500;
+}
+
+.activationPanel {
+	@apply flex flex-col gap-4 rounded-xl border border-gray-300 bg-gray-300 bg-opacity-10 px-4 py-4 sm:flex-row sm:items-center sm:justify-between;
+}
+
+.activationPanelDanger {
+	@apply border-red-200 bg-red-50;
+}
+
+.activationTitle {
+	@apply text-sm font-semibold text-gray-700;
+}
+
+.activationText {
+	@apply mt-1 text-xs text-gray-500 leading-snug;
+}
+
+.activationButton {
+	@apply inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white transition-opacity shrink-0;
+
+	&:hover:not(:disabled) {
+		@apply opacity-90;
+	}
+
+	&:disabled {
+		@apply opacity-50 cursor-not-allowed;
+	}
+}
+
+.activateButton {
+	@apply bg-green-600;
+}
+
+.deactivateButton {
+	@apply bg-red-500;
+}
+
+.fieldGrid {
+	@apply grid gap-4 md:grid-cols-2;
+}
+
+.fieldBlock {
+	@apply flex flex-col gap-2;
+}
+
+.fieldBlockWide {
+	@apply md:col-span-2;
+}
+
+.fieldLabel {
+	@apply text-sm font-semibold text-gray-700;
+}
+
+.fieldHint {
+	@apply text-xs text-gray-500 leading-snug;
+}
+
+.actions {
+	@apply flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between;
+}
+
+.actionsNote {
+	@apply text-sm text-gray-500;
+}
+
+.saveButton {
+	@apply inline-flex items-center justify-center rounded-md bg-red-500 px-5 py-2 text-sm font-semibold text-white transition-opacity;
+
+	&:hover {
+		@apply opacity-90;
+	}
+
+	&:disabled {
+		@apply opacity-50 cursor-not-allowed;
+	}
+}
+
+.emptyState {
+	@apply w-full rounded-layout border border-dashed border-gray-300 bg-white px-5 py-10 text-center mb-6;
+}
+
+.emptyTitle {
+	@apply text-[1.05rem] font-semibold text-gray-700;
+}
+
+.emptyText {
+	@apply mt-2 text-sm text-gray-600;
+}
+
+.emptyAction {
+	@apply inline-flex items-center justify-center mt-4 rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors;
+
+	&:hover {
+		@apply bg-gray-300 bg-opacity-20 text-red-700;
+	}
+}
+
+.loadingEyebrow {
+	@apply h-3 w-16 mb-2;
+}
+
+.loadingTitle {
+	@apply h-6 w-44;
+}
+
+.loadingSubtitle {
+	@apply h-4 w-60 mt-2;
+}
+
+.loadingBackButton {
+	@apply h-10 w-28;
+}
+
+.loadingUserInfo {
+	@apply flex items-center gap-4;
+}
+
+.loadingAvatar {
+	@apply w-20 h-20;
+}
+
+.loadingUserMeta {
+	@apply flex-1;
+}
+
+.loadingUserName {
+	@apply h-5 w-40;
+}
+
+.loadingUserContact {
+	@apply h-4 w-52 mt-2;
+}
+
+.loadingBadgeRow {
+	@apply flex flex-wrap gap-2 mt-5;
+}
+
+.loadingBadge {
+	@apply h-7 w-24;
+}
+
+.loadingInfoGrid {
+	@apply grid gap-3 sm:grid-cols-2 mt-5;
+}
+
+.loadingInfoWide {
+	@apply h-[4.5rem] sm:col-span-2;
+}
+
+.loadingInfoCard {
+	@apply h-[4.5rem];
+}
+
+.loadingSection {
+	@apply flex flex-col gap-3 pb-6 border-b border-gray-300 last:border-b-0 last:pb-0;
+}
+
+.loadingSectionTitle {
+	@apply h-5 w-36;
+}
+
+.loadingSectionHint {
+	@apply h-4 w-64;
+}
+
+.loadingUpload {
+	@apply h-[4.75rem] w-full;
+}
+
+.loadingRightsGrid {
+	@apply grid gap-3 lg:grid-cols-2;
+}
+
+.loadingRightCard {
+	@apply h-24 w-full;
+}
+
+.loadingFieldGrid {
+	@apply grid gap-4 md:grid-cols-2;
+}
+
+.loadingInput {
+	@apply h-14 w-full;
+}
+
+.loadingActions {
+	@apply flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between;
+}
+
+.loadingActionsNote {
+	@apply h-4 w-72;
+}
+
+.loadingSaveButton {
+	@apply h-10 w-44;
+}
+
+@media (max-width: 640px) {
+	.cardHeader,
+	.cardBody,
+	.form,
+	.emptyState {
+		@apply px-4;
+	}
+
+	.cardHeader {
+		@apply py-4;
+	}
+
+	.cardBody,
+	.form {
+		@apply py-4;
+	}
+
+	.backLink,
+	.saveButton,
+	.emptyAction {
+		@apply w-full;
+	}
+}

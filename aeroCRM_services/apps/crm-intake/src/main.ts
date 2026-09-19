@@ -1,0 +1,70 @@
+import { Logger, RequestMethod, ValidationPipe } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { EXPORT_EXPOSE_HEADERS } from './exports/export-format';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { parseCrmIntakeCorsAllowedOrigins } from './config/crm-intake-cors.config';
+import { CrmIntakeModule } from './crm-intake.module';
+import { intakeProcessRole } from './acceptance/acceptance.messaging';
+import { configureCrmIntakeBodyParser } from './config/crm-intake-body-parser';
+import { terminateFailedBootstrap } from './runtime/bootstrap-failure';
+import {
+	parseCrmIntakeListenHost,
+	parseCrmIntakePort
+} from './runtime/crm-intake-runtime.config';
+
+let application: NestExpressApplication | undefined;
+
+async function bootstrap(): Promise<void> {
+	const host = parseCrmIntakeListenHost(
+		process.env.CRM_INTAKE_LISTEN_HOST,
+		process.env.MODE
+	);
+	const port = parseCrmIntakePort(
+		process.env.CRM_INTAKE_PORT,
+		intakeProcessRole()
+	);
+	const origins = parseCrmIntakeCorsAllowedOrigins(
+		process.env.CORS_ALLOWED_ORIGINS
+	);
+	const app = await NestFactory.create<NestExpressApplication>(
+		CrmIntakeModule,
+		{ forceCloseConnections: true }
+	);
+	application = app;
+	configureCrmIntakeBodyParser(app);
+	app.useGlobalPipes(
+		new ValidationPipe({
+			transform: true,
+			whitelist: true,
+			forbidNonWhitelisted: true,
+			validationError: { target: false, value: false }
+		})
+	);
+
+	app.setGlobalPrefix('api/v1', {
+		exclude: [
+			{
+				path: 'internal/v1/notification-delivery/intake-sla/:id/delivery-context',
+				method: RequestMethod.POST
+			},
+			{ path: 'health/live', method: RequestMethod.GET },
+			{ path: 'health/ready', method: RequestMethod.GET },
+			{ path: 'health/revision', method: RequestMethod.GET }
+		]
+	});
+	app.enableCors({
+		origin: origins,
+		credentials: true,
+		exposedHeaders:
+			'set-cookie, x-request-id, x-correlation-id, ' +
+			EXPORT_EXPOSE_HEADERS
+	});
+	app.enableShutdownHooks();
+	await app.listen(port, host);
+	Logger.log(`CRM Intake started host=${host} port=${port}`, 'Bootstrap');
+}
+
+void bootstrap().catch(() => {
+	Logger.error('CRM Intake bootstrap failed', undefined, 'Bootstrap');
+	return terminateFailedBootstrap(application);
+});

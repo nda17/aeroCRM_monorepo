@@ -1,0 +1,523 @@
+import {
+	isSupportNotificationKind,
+	SUPPORT_NOTIFICATION_SKIP_REASONS
+} from '../messaging/support-notification.contract';
+import {
+	getManualRetryRoutingKey,
+	NotificationDeliveryKind
+} from '../messaging/messaging.constants';
+import { createMessagingHeaders } from '../messaging/messaging-context';
+import { Injectable } from '@nestjs/common';
+import {
+	NotificationDeliveryExchange,
+	NotificationDeliveryFailureResolution,
+	NotificationDeliveryReceiptStatus,
+	Prisma
+} from '@prisma/notification-delivery-client';
+import type { ConsumeMessage } from 'amqplib';
+import { randomUUID } from 'node:crypto';
+import { hostname } from 'node:os';
+import {
+	NotificationDeliveryEventPayload,
+	getScalarMessageHeaders
+} from './notification-delivery-contract';
+import { NotificationDeliveryMessageMetadataService } from './notification-delivery-message-metadata.service';
+import { NotificationDeliveryOutcomeService } from './notification-delivery-outcome.service';
+import { NotificationDeliveryPrismaService } from './prisma/notification-delivery-prisma.service';
+import type { NotificationDeliverySkipReason } from './notification-delivery-adapter.service';
+import { WINCRM_TASK_REMINDER_KINDS } from '../messaging/messaging.constants';
+import { WINCRM_INTAKE_SLA_KINDS } from '../messaging/messaging.constants';
+
+const DELIVERY_RECEIPT_LEASE_MS = 10 * 60 * 1000;
+const DELIVERY_RECOVERY_GRACE_MS = 5_000;
+
+export type NotificationDeliveryClaim =
+	| { state: 'claimed'; lockToken: string }
+	| { state: 'delivered' }
+	| { state: 'closed' }
+	| { state: 'dead-lettered' }
+	| { state: 'deferred' }
+	| {
+			state: 'processing';
+			lockToken: string;
+			leaseExpiresAt: Date;
+	  };
+
+@Injectable()
+export class NotificationDeliveryReceiptService {
+	private readonly workerId = `${hostname()}:${process.pid}:${randomUUID()}`;
+
+	constructor(
+		private readonly prisma: NotificationDeliveryPrismaService,
+		private readonly metadata: NotificationDeliveryMessageMetadataService,
+		private readonly outcomes: NotificationDeliveryOutcomeService
+	) {}
+
+	async claimDelivery(
+		eventId: string,
+		consumer: NotificationDeliveryKind,
+		retryAttempt: number,
+		deliveryToken: string | null
+	): Promise<NotificationDeliveryClaim> {
+		const now = new Date();
+		const lockToken = randomUUID();
+		const leaseExpiresAt = new Date(
+			now.getTime() + DELIVERY_RECEIPT_LEASE_MS
+		);
+
+		try {
+			await this.prisma.notificationDeliveryReceipt.create({
+				data: {
+					eventId,
+					consumer,
+					status: NotificationDeliveryReceiptStatus.PROCESSING,
+					lockedAt: now,
+					lockedBy: this.workerId,
+					lockToken,
+					leaseExpiresAt
+				}
+			});
+			return { state: 'claimed', lockToken };
+		} catch (error) {
+			if (!this.isUniqueConstraintError(error)) throw error;
+		}
+
+		const receipt =
+			await this.prisma.notificationDeliveryReceipt.findUnique({
+				where: {
+					eventId_consumer: { eventId, consumer }
+				}
+			});
+		if (!receipt) {
+			throw new Error(
+				`Notification receipt disappeared eventId=${eventId} kind=${consumer}`
+			);
+		}
+		if (receipt.status === NotificationDeliveryReceiptStatus.DELIVERED) {
+			return { state: 'delivered' };
+		}
+		if (
+			receipt.status === NotificationDeliveryReceiptStatus.CLOSED_NO_RETRY
+		) {
+			return { state: 'closed' };
+		}
+		if (
+			receipt.status === NotificationDeliveryReceiptStatus.DEAD_LETTERED
+		) {
+			return { state: 'dead-lettered' };
+		}
+
+		if (
+			receipt.status === NotificationDeliveryReceiptStatus.RETRY_SCHEDULED
+		) {
+			if (
+				receipt.retryAttempt !== retryAttempt ||
+				!deliveryToken ||
+				receipt.retryToken !== deliveryToken ||
+				!receipt.retryAvailableAt ||
+				receipt.retryAvailableAt > now
+			) {
+				return { state: 'deferred' };
+			}
+
+			const activated =
+				await this.prisma.notificationDeliveryReceipt.updateMany({
+					where: {
+						eventId,
+						consumer,
+						status: NotificationDeliveryReceiptStatus.RETRY_SCHEDULED,
+						retryAttempt,
+						retryAvailableAt: receipt.retryAvailableAt,
+						retryToken: deliveryToken
+					},
+					data: {
+						status: NotificationDeliveryReceiptStatus.PROCESSING,
+						lockedAt: now,
+						lockedBy: this.workerId,
+						lockToken,
+						leaseExpiresAt,
+						deliveredAt: null,
+						retryAttempt: null,
+						retryAvailableAt: null,
+						retryToken: null
+					}
+				});
+			return activated.count === 1
+				? { state: 'claimed', lockToken }
+				: { state: 'deferred' };
+		}
+
+		if (
+			!receipt.lockToken ||
+			!receipt.leaseExpiresAt ||
+			receipt.leaseExpiresAt > now
+		) {
+			if (!receipt.lockToken || !receipt.leaseExpiresAt) {
+				throw new Error(
+					`Notification PROCESSING receipt is missing lease fields eventId=${eventId} kind=${consumer}`
+				);
+			}
+			return {
+				state: 'processing',
+				lockToken: receipt.lockToken,
+				leaseExpiresAt: receipt.leaseExpiresAt
+			};
+		}
+
+		const reclaimed =
+			await this.prisma.notificationDeliveryReceipt.updateMany({
+				where: {
+					eventId,
+					consumer,
+					status: NotificationDeliveryReceiptStatus.PROCESSING,
+					lockToken: receipt.lockToken,
+					leaseExpiresAt: { lte: now }
+				},
+				data: {
+					lockedAt: now,
+					lockedBy: this.workerId,
+					lockToken,
+					leaseExpiresAt,
+					deliveredAt: null,
+					retryAttempt: null,
+					retryAvailableAt: null,
+					retryToken: null
+				}
+			});
+		return reclaimed.count === 1
+			? { state: 'claimed', lockToken }
+			: { state: 'deferred' };
+	}
+
+	async markSkipped(
+		eventId: string,
+		consumer: NotificationDeliveryKind,
+		lockToken: string,
+		reason: NotificationDeliverySkipReason,
+		payload?: NotificationDeliveryEventPayload
+	): Promise<void> {
+		if (
+			!(
+				(isSupportNotificationKind(consumer) &&
+					payload &&
+					SUPPORT_NOTIFICATION_SKIP_REASONS.some(
+						item => item === reason
+					)) ||
+				(consumer === 'wincrm-invitation-email' &&
+					['INVITATION_EXPIRED', 'INVITATION_UNAVAILABLE'].includes(
+						reason
+					)) ||
+				(WINCRM_TASK_REMINDER_KINDS.some(kind => kind === consumer) &&
+					reason === 'TASK_REMINDER_UNAVAILABLE') ||
+				(WINCRM_INTAKE_SLA_KINDS.some(kind => kind === consumer) &&
+					reason === 'INTAKE_SLA_UNAVAILABLE')
+			)
+		)
+			throw new Error('Unsupported notification skip');
+		await this.prisma.$transaction(async transaction => {
+			const now = new Date();
+			const closed =
+				await transaction.notificationDeliveryReceipt.updateMany({
+					where: {
+						eventId,
+						consumer,
+						status: NotificationDeliveryReceiptStatus.PROCESSING,
+						lockedBy: this.workerId,
+						lockToken
+					},
+					data: {
+						status: NotificationDeliveryReceiptStatus.CLOSED_NO_RETRY,
+						checkpoint: {
+							schemaVersion: 1,
+							outcome: 'SKIPPED',
+							reason,
+							skippedAt: now.toISOString()
+						},
+						lockedAt: null,
+						lockedBy: null,
+						lockToken: null,
+						leaseExpiresAt: null,
+						deliveredAt: null,
+						retryAttempt: null,
+						retryAvailableAt: null,
+						retryToken: null
+					}
+				});
+			if (closed.count !== 1)
+				throw new Error('Notification skip claim was lost');
+			if (isSupportNotificationKind(consumer) && payload)
+				await this.outcomes.createDeliveryOutcome(transaction, {
+					kind: consumer,
+					eventId,
+					payload,
+					status: 'SKIPPED',
+					failure: null,
+					skipReason:
+						reason as (typeof SUPPORT_NOTIFICATION_SKIP_REASONS)[number]
+				});
+			await transaction.notificationDeliveryFailure.updateMany({
+				where: { eventId, consumer, resolvedAt: null },
+				data: {
+					resolvedAt: now,
+					resolution:
+						NotificationDeliveryFailureResolution.CLOSED_NO_RETRY,
+					resolutionComment: `SKIPPED: ${reason}`,
+					resolvedById: 'service:notification-delivery',
+					retryingAt: null,
+					activeRetryToken: null
+				}
+			});
+		});
+	}
+
+	async markDelivered(
+		eventId: string,
+		consumer: NotificationDeliveryKind,
+		lockToken: string,
+		payload: NotificationDeliveryEventPayload
+	): Promise<void> {
+		await this.prisma.$transaction(async transaction => {
+			const now = new Date();
+			const delivered =
+				await transaction.notificationDeliveryReceipt.updateMany({
+					where: {
+						eventId,
+						consumer,
+						status: NotificationDeliveryReceiptStatus.PROCESSING,
+						lockedBy: this.workerId,
+						lockToken
+					},
+					data: {
+						status: NotificationDeliveryReceiptStatus.DELIVERED,
+						lockedAt: null,
+						lockedBy: null,
+						lockToken: null,
+						leaseExpiresAt: null,
+						deliveredAt: now,
+						retryAttempt: null,
+						retryAvailableAt: null,
+						retryToken: null
+					}
+				});
+			if (delivered.count !== 1) {
+				throw new Error(
+					`Notification delivery claim was lost eventId=${eventId} kind=${consumer}`
+				);
+			}
+			await transaction.notificationDeliveryFailure.updateMany({
+				where: { eventId, consumer, resolvedAt: null },
+				data: {
+					resolvedAt: now,
+					resolution: NotificationDeliveryFailureResolution.DELIVERED,
+					resolutionComment: null,
+					resolvedById: null,
+					retryingAt: null,
+					activeRetryToken: null
+				}
+			});
+			await this.outcomes.createDeliveryOutcome(transaction, {
+				kind: consumer,
+				eventId,
+				payload,
+				status: 'DELIVERED',
+				failure: null
+			});
+		});
+	}
+
+	async deferReminderDelivery(input: {
+		kind: NotificationDeliveryKind;
+		eventId: string;
+		eventType: string;
+		payload: NotificationDeliveryEventPayload;
+		lockToken: string;
+		retryAttempt: number;
+		firstFailedAt: Date;
+		retryAt: string;
+		message: ConsumeMessage;
+	}): Promise<void> {
+		const now = Date.now();
+		const requested = Date.parse(input.retryAt);
+		if (
+			!WINCRM_TASK_REMINDER_KINDS.some(kind => kind === input.kind) ||
+			!Number.isFinite(requested) ||
+			requested > now + 72 * 60 * 60 * 1000
+		)
+			throw new Error('Invalid task reminder deferral');
+		const availableAt = new Date(Math.max(now + 1000, requested));
+		const retryToken = randomUUID();
+		// Quiet time is not an error: preserve attempt count and exclude this wait from its retry window.
+		const headers = createMessagingHeaders({
+			messageId: input.eventId,
+			causationId: input.eventId,
+			headers: {
+				...this.metadata.filterSafeHeaders(
+					getScalarMessageHeaders(input.message)
+				),
+				'x-retry-attempt': input.retryAttempt,
+				'x-first-failed-at': new Date(
+					input.firstFailedAt.getTime() + availableAt.getTime() - now
+				).toISOString(),
+				'x-delivery-token': retryToken
+			}
+		}) as Prisma.InputJsonObject;
+		await this.prisma.$transaction(async transaction => {
+			await this.markRetryScheduled(transaction, {
+				eventId: input.eventId,
+				kind: input.kind,
+				lockToken: input.lockToken,
+				attempt: input.retryAttempt,
+				availableAt,
+				retryToken
+			});
+			await transaction.notificationDeliveryOutboxEvent.create({
+				data: {
+					messageId: input.eventId,
+					deduplicationKey: `notification:${input.eventId}:${input.kind}:quiet:${retryToken}`,
+					exchange: NotificationDeliveryExchange.EVENTS,
+					eventType: input.eventType,
+					routingKey: getManualRetryRoutingKey(input.kind),
+					payload: input.payload as unknown as Prisma.InputJsonValue,
+					headers,
+					availableAt
+				}
+			});
+		});
+	}
+
+	async markRetryScheduled(
+		transaction: Prisma.TransactionClient,
+		input: {
+			eventId: string;
+			kind: NotificationDeliveryKind;
+			lockToken: string;
+			attempt: number;
+			availableAt: Date;
+			retryToken: string;
+		}
+	): Promise<void> {
+		const scheduled =
+			await transaction.notificationDeliveryReceipt.updateMany({
+				where: {
+					eventId: input.eventId,
+					consumer: input.kind,
+					status: NotificationDeliveryReceiptStatus.PROCESSING,
+					lockedBy: this.workerId,
+					lockToken: input.lockToken
+				},
+				data: {
+					status: NotificationDeliveryReceiptStatus.RETRY_SCHEDULED,
+					lockedAt: null,
+					lockedBy: null,
+					lockToken: null,
+					leaseExpiresAt: null,
+					deliveredAt: null,
+					retryAttempt: input.attempt,
+					retryAvailableAt: input.availableAt,
+					retryToken: input.retryToken
+				}
+			});
+		if (scheduled.count !== 1) {
+			throw new Error(
+				`Notification claim was lost before retry eventId=${input.eventId} kind=${input.kind}`
+			);
+		}
+	}
+
+	async markDeadLettered(
+		transaction: Prisma.TransactionClient,
+		input: {
+			eventId: string;
+			kind: NotificationDeliveryKind;
+			lockToken: string;
+		}
+	): Promise<void> {
+		const marked =
+			await transaction.notificationDeliveryReceipt.updateMany({
+				where: {
+					eventId: input.eventId,
+					consumer: input.kind,
+					status: NotificationDeliveryReceiptStatus.PROCESSING,
+					lockedBy: this.workerId,
+					lockToken: input.lockToken
+				},
+				data: {
+					status: NotificationDeliveryReceiptStatus.DEAD_LETTERED,
+					lockedAt: null,
+					lockedBy: null,
+					lockToken: null,
+					leaseExpiresAt: null,
+					deliveredAt: null,
+					retryAttempt: null,
+					retryAvailableAt: null,
+					retryToken: null
+				}
+			});
+		if (marked.count !== 1) {
+			throw new Error(
+				`Notification claim was lost before dead-letter eventId=${input.eventId} kind=${input.kind}`
+			);
+		}
+	}
+
+	async scheduleClaimRecovery(
+		kind: NotificationDeliveryKind,
+		payload: NotificationDeliveryEventPayload,
+		eventId: string,
+		eventType: string,
+		claim: Extract<NotificationDeliveryClaim, { state: 'processing' }>,
+		message: ConsumeMessage
+	): Promise<void> {
+		const availableAt = new Date(
+			Math.max(
+				Date.now() + 1000,
+				claim.leaseExpiresAt.getTime() + DELIVERY_RECOVERY_GRACE_MS
+			)
+		);
+		const incoming = getScalarMessageHeaders(message);
+		const headers = createMessagingHeaders({
+			messageId: eventId,
+			causationId: eventId,
+			headers: this.metadata.filterSafeHeaders(incoming)
+		}) as Prisma.InputJsonObject;
+
+		await this.prisma.notificationDeliveryOutboxEvent.createMany({
+			data: [
+				{
+					messageId: eventId,
+					deduplicationKey: `notification:${eventId}:${kind}:claim:${claim.lockToken}`,
+					exchange: NotificationDeliveryExchange.EVENTS,
+					eventType,
+					routingKey: getManualRetryRoutingKey(kind),
+					payload: payload as unknown as Prisma.InputJsonValue,
+					headers,
+					availableAt
+				}
+			],
+			skipDuplicates: true
+		});
+	}
+
+	async releaseClaim(
+		eventId: string,
+		consumer: NotificationDeliveryKind,
+		lockToken: string
+	): Promise<void> {
+		await this.prisma.notificationDeliveryReceipt.deleteMany({
+			where: {
+				eventId,
+				consumer,
+				status: NotificationDeliveryReceiptStatus.PROCESSING,
+				lockedBy: this.workerId,
+				lockToken
+			}
+		});
+	}
+
+	private isUniqueConstraintError(error: unknown): boolean {
+		return (
+			error instanceof Prisma.PrismaClientKnownRequestError &&
+			error.code === 'P2002'
+		);
+	}
+}

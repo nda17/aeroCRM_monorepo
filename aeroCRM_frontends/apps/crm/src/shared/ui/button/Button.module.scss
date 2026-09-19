@@ -1,0 +1,47 @@
+.button {
+	@apply inline-flex min-w-0 max-w-full shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.primary {
+	@apply border-crm-action bg-crm-action text-white hover:bg-crm-action/90;
+}
+
+.accent {
+	@apply border-accent bg-accent text-secondary hover:bg-accent/85;
+}
+
+.secondary {
+	@apply border-crm-border bg-crm-surface text-crm-text hover:border-crm-border-strong hover:bg-crm-surface-muted;
+}
+
+.ghost {
+	@apply border-transparent bg-transparent text-crm-muted hover:bg-primary/10 hover:text-primary;
+}
+
+.danger {
+	@apply border-crm-action-danger bg-crm-action-danger text-white hover:bg-crm-action-danger/90;
+}
+
+.sm {
+	@apply min-h-11 px-3 py-2 text-sm lg:min-h-9 lg:py-1.5 lg:text-xs;
+}
+
+.md {
+	@apply min-h-11 px-4 py-2 text-sm lg:min-h-10;
+}
+
+.lg {
+	@apply min-h-12 px-5 py-2.5 text-base;
+}
+
+.fullWidth {
+	@apply w-full;
+}
+
+.label {
+	@apply min-w-0 break-words;
+}
+
+.spinner {
+	@apply h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none;
+}

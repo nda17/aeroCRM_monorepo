@@ -1,0 +1,120 @@
+.screen {
+	@apply flex min-w-0 flex-col gap-4;
+}
+.filters {
+	@apply min-w-0 rounded-xl border border-crm-border bg-crm-surface p-3 sm:p-4;
+}
+.toolbar {
+	@apply mb-3 flex flex-wrap items-center justify-between gap-2;
+}
+.viewSwitch {
+	@apply flex flex-wrap items-center gap-2;
+}
+.filterGrid {
+	@apply grid min-w-0 grid-cols-1 items-end gap-3 min-[360px]:grid-cols-2 xl:grid-cols-4;
+}
+.advanced {
+	@apply col-span-full min-w-0 rounded-xl border border-crm-border bg-crm-surface-muted;
+}
+.advanced > summary {
+	@apply min-h-11 cursor-pointer rounded-xl px-3 py-3 text-sm font-medium text-crm-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary;
+}
+.advancedGrid {
+	@apply grid min-w-0 grid-cols-1 gap-3 px-3 pb-3 sm:grid-cols-2 xl:grid-cols-3;
+}
+.hint {
+	@apply text-sm leading-5 text-crm-muted;
+}
+.filters > .hint {
+	@apply mt-3;
+}
+.summary {
+	@apply grid grid-cols-2 gap-3 lg:grid-cols-4;
+}
+.summaryItem {
+	@apply flex min-w-0 flex-col items-start gap-1 rounded-xl border border-crm-border bg-crm-surface p-3 text-left transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed;
+}
+.summaryValue {
+	@apply text-2xl font-semibold text-crm-text;
+}
+.overdue {
+	@apply border-crm-danger/30 text-crm-danger;
+}
+.pagination {
+	@apply flex flex-wrap items-center justify-between gap-3 text-sm text-crm-muted;
+}
+.copy {
+	@apply flex min-w-0 flex-col items-start gap-2;
+}
+.taskTitle {
+	@apply min-h-11 max-w-full break-words text-left font-semibold text-crm-text underline-offset-4 hover:underline focus-visible:rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary;
+}
+.board {
+	@apply grid min-w-0 grid-cols-1 items-start gap-4 xl:grid-cols-3;
+}
+.column {
+	@apply flex min-w-0 flex-col gap-4 rounded-panel border border-crm-border bg-crm-surface-muted p-3 transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none sm:p-4;
+}
+.columnActive {
+	@apply border-primary ring-2 ring-primary/20;
+}
+.columnHeading {
+	@apply flex items-center justify-between gap-3 font-semibold text-crm-text;
+}
+.cards {
+	@apply flex min-w-0 flex-col gap-3;
+}
+.card {
+	@apply flex min-w-0 flex-col gap-3 rounded-2xl border border-crm-border bg-crm-surface p-4;
+}
+.cardTop {
+	@apply flex min-w-0 items-start gap-2;
+}
+.cardTop > .taskTitle {
+	@apply flex-1;
+}
+.dragHandle {
+	@apply flex h-11 w-11 shrink-0 touch-none items-center justify-center rounded-xl text-crm-muted transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-default disabled:opacity-40;
+}
+.dragHandle:not(:disabled) {
+	@apply cursor-grab active:cursor-grabbing;
+}
+.cardDragging {
+	@apply border-dashed border-primary/40 bg-primary/5 opacity-30;
+}
+.dragOverlay {
+	@apply pointer-events-none rotate-2 scale-[1.025] border-primary/50 shadow-floating motion-reduce:rotate-0 motion-reduce:scale-100;
+}
+.overlayTitle {
+	@apply break-words text-base font-semibold text-crm-text;
+}
+.dropHint {
+	@apply flex min-h-20 items-center justify-center rounded-2xl border-2 border-dashed border-primary/20 bg-primary/5 p-4 text-center text-sm text-crm-muted transition-colors duration-200 motion-reduce:transition-none;
+}
+.dropHintActive {
+	@apply border-primary/70 bg-primary/10 text-primary;
+}
+.cardFooter {
+	@apply flex flex-wrap items-center justify-between gap-2 text-sm text-crm-muted;
+}
+.assigneeName {
+	@apply min-w-0 break-words [overflow-wrap:anywhere];
+}
+.error {
+	@apply flex flex-col items-start gap-3 rounded-2xl border border-crm-danger/30 bg-crm-danger/5 p-4 text-sm text-crm-danger;
+}
+.mobileWide {
+	@apply max-md:col-span-full;
+}
+.inboxSummary {
+	@apply flex min-w-0 flex-wrap items-center justify-between gap-4 rounded-panel border border-crm-border bg-crm-surface p-4;
+}
+.inboxLink {
+	@apply flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-1 rounded-md text-crm-text outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-primary;
+}
+.empty {
+	@apply py-6 text-center text-sm text-crm-muted;
+}
+.overviewLink {
+	@apply inline-flex min-h-11 items-center justify-center rounded-xl border border-crm-border bg-crm-surface px-3 py-2 text-sm font-medium text-crm-text hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+}

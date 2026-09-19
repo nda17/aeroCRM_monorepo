@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "service": "billing",
+  "tables": {
+    "service_identity": [
+      "SELECT"
+    ],
+    "source_sequences": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "identity_contact_projections": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "notification_routing_projections": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "offer_projections": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "command_receipts": [
+      "SELECT",
+      "INSERT"
+    ],
+    "crm_commercial_policies": [
+      "SELECT",
+      "INSERT"
+    ],
+    "crm_admin_day_grants": [
+      "SELECT",
+      "INSERT"
+    ],
+    "crm_entitlements": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_commerce_accounts": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_commerce_commands": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_orders": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_paid_periods": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_auto_renewals": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_auto_renewal_consents": [
+      "SELECT",
+      "INSERT"
+    ],
+    "crm_provider_operations": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_provider_deliveries": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_payment_receipts": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "outbox_events": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "integration_delivery_receipts": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "integration_delivery_failures": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "_prisma_migrations": []
+  },
+  "sequences": {},
+  "types": [
+    "OutboxStatus",
+    "CrmEntitlementStatus",
+    "DeliveryReceiptStatus",
+    "IntegrationErrorCategory",
+    "IntegrationFailureResolution",
+    "DeliveryFailureStatus"
+  ],
+  "routines": [
+    "reject_crm_commercial_policy_mutation",
+    "protect_aerocrm_commerce_evidence",
+    "protect_crm_admin_day_grants",
+    "protect_crm_admin_command_receipts",
+    "enforce_service_identity_integrity"
+  ]
+}

@@ -1,0 +1,43 @@
+.navigation {
+	@apply mb-7 w-full min-w-0 overflow-hidden rounded-2xl border border-[#e8ddf5] bg-white shadow-sm;
+}
+
+.caption {
+	@apply px-4 pt-4 text-xs font-semibold uppercase tracking-wide text-[#796987];
+}
+
+.groups {
+	@apply grid grid-cols-3 gap-2 p-3 xl:grid-cols-6;
+
+	@media (max-width: 540px) {
+		@apply grid-cols-2 gap-1.5 p-2;
+	}
+}
+
+.groupLink {
+	@apply flex h-full min-h-[44px] items-center justify-center rounded-xl px-3 py-2 text-center text-sm font-semibold leading-snug text-[#655171] transition-colors hover:bg-[#f5eefb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b44b6] focus-visible:ring-inset;
+}
+
+.groupActive {
+	@apply bg-[#f0e5fa] text-[#57266f] hover:bg-[#f0e5fa];
+}
+
+.currentGroup {
+	@apply border-t border-[#efe8f6] bg-[#fdfbff] px-4 py-3;
+}
+
+.description {
+	@apply mb-2 text-xs leading-relaxed text-[#796987];
+}
+
+.nav-list {
+	@apply flex min-w-0 flex-wrap gap-2;
+}
+
+.itemLink {
+	@apply inline-flex min-h-[44px] items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold leading-snug text-[#6b527c] transition-colors hover:bg-[#eee5f7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b44b6] focus-visible:ring-offset-2;
+}
+
+.active {
+	@apply bg-[#6b2d8f] text-white shadow-sm hover:bg-[#6b2d8f];
+}

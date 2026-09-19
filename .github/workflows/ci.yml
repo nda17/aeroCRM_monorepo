@@ -1,0 +1,73 @@
+name: aeroCRM CI
+on:
+  push:
+    branches: [dev_0.1.0/feature/standalone-crm, prod_0.1.0]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  frontends:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: aeroCRM_frontends/pnpm-lock.yaml
+      - name: Install and verify
+        working-directory: aeroCRM_frontends
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm typecheck:frontends
+          pnpm build:frontends
+  image:
+    needs: frontends
+    if: github.ref == 'refs/heads/prod_0.1.0' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { app: landing, family: frontend }
+          - { app: crm, family: frontend }
+          - { app: admin-panel, family: frontend }
+          - { app: api-gateway, family: backend }
+          - { app: notification-delivery, family: backend }
+          - { app: campaigns, family: backend }
+          - { app: reporting, family: backend }
+          - { app: billing, family: backend }
+          - { app: identity, family: backend }
+          - { app: platform, family: backend }
+          - { app: support, family: backend }
+          - { app: operations, family: backend }
+          - { app: crm-access, family: backend }
+          - { app: crm-intake, family: backend }
+          - { app: crm-customers, family: backend }
+          - { app: crm-sales, family: backend }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build exact-SHA image
+        env:
+          APP: ${{ matrix.app }}
+          FAMILY: ${{ matrix.family }}
+          SHA: ${{ github.sha }}
+          TURNSTILE_SITE_KEY: ${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ "$FAMILY" = frontend ]; then
+            docker build --file aeroCRM_frontends/Dockerfile --build-arg FRONTEND_APP="$APP" --build-arg APP_REVISION="$SHA" --build-arg NEXT_PUBLIC_TURNSTILE_SITE_KEY="$TURNSTILE_SITE_KEY" --tag "aerocrm/$APP:$SHA" aeroCRM_frontends
+          else
+            docker build --file "aeroCRM_services/apps/$APP/Dockerfile" --build-arg APP_REVISION="$SHA" --tag "aerocrm/$APP:$SHA" "aeroCRM_services/apps/$APP"
+          fi
+          docker save "aerocrm/$APP:$SHA" | gzip -1 > "$APP.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.app }}
+          path: ${{ matrix.app }}.tar.gz
+          retention-days: 7
+          if-no-files-found: error

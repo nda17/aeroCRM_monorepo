@@ -1,0 +1,78 @@
+.wrap {
+	@apply border border-[#e0d6f0] rounded-[10px] overflow-hidden bg-white;
+}
+
+.toolbar {
+	@apply flex flex-wrap items-center gap-[2px] px-[10px] py-2 bg-[#f8f5ff] border-b border-[#e0d6f0];
+}
+
+.toolBtn {
+	@apply px-[9px] py-[5px] rounded-[6px] border-none bg-transparent text-[#555] text-[0.85rem] cursor-pointer leading-none transition-[background,color] duration-150;
+
+	&:hover {
+		@apply bg-[#ede8fc] text-[#7b3fa0];
+	}
+}
+
+.toolBtnActive {
+	@apply bg-[#7b3fa0] text-white;
+
+	&:hover {
+		@apply bg-[#6a34a0] text-white;
+	}
+}
+
+.sep {
+	@apply w-px h-5 bg-[#e0d6f0] mx-1 shrink-0;
+}
+
+.editor {
+	@apply min-h-[320px] p-4 text-[#1a1a1a] text-[0.95rem] leading-[1.7];
+
+	:global(.tiptap) {
+		@apply outline-none min-h-[300px];
+
+		h1 {
+			@apply text-2xl font-bold my-[0.5rem] mt-4;
+		}
+		h2 {
+			@apply text-xl font-bold mt-[0.9rem] mb-[0.4rem];
+		}
+		h3 {
+			@apply text-[1.1rem] font-semibold mt-[0.8rem] mb-[0.35rem];
+		}
+
+		p {
+			@apply my-[0.4rem];
+		}
+
+		ul {
+			@apply list-disc pl-[1.4rem] my-[0.4rem];
+		}
+		ol {
+			@apply list-decimal pl-[1.4rem] my-[0.4rem];
+		}
+		li {
+			@apply my-[0.2rem];
+		}
+
+		a {
+			@apply text-[#7b3fa0] underline;
+		}
+
+		strong {
+			@apply font-bold;
+		}
+		em {
+			@apply italic;
+		}
+		u {
+			@apply underline;
+		}
+
+		p.is-editor-empty:first-child::before {
+			content: attr(data-placeholder);
+			@apply text-[#ccc] pointer-events-none float-left h-0;
+		}
+	}
+}

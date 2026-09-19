@@ -1,0 +1,16 @@
+.link-auth-button {
+	@apply flex items-center gap-[10px] w-full px-[14px] py-[11px] rounded-[12px] text-[15px] font-medium text-[#c53030] bg-transparent border border-transparent cursor-pointer transition-[background,border-color] duration-200;
+	@apply font-sans;
+
+	> svg {
+		@apply w-[22px] h-[22px] shrink-0;
+	}
+
+	&:hover {
+		@apply bg-[#fff5f5] border-[#c53030]/20;
+	}
+
+	&:disabled {
+		@apply opacity-50 cursor-not-allowed;
+	}
+}

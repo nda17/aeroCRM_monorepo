@@ -1,0 +1,8 @@
+.modalViewport {
+	@apply absolute top-20 #{!important};
+}
+
+.toast {
+	@apply border border-crm-border text-sm shadow-floating;
+	@apply bg-crm-surface text-crm-text #{!important};
+}

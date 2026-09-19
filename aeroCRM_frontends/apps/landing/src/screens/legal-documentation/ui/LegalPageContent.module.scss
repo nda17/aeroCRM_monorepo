@@ -1,0 +1,48 @@
+.wrapper {
+	@apply max-w-[900px] mx-auto px-6 pt-12 pb-20;
+}
+
+.content {
+	@apply text-[#1a1a1a] text-[0.95rem] leading-[1.75];
+
+	h1 {
+		@apply text-[1.6rem] font-bold mt-6 mb-3;
+	}
+	h2 {
+		@apply text-[1.3rem] font-bold mt-5 mb-2;
+	}
+	h3 {
+		@apply text-[1.1rem] font-semibold mt-4 mb-[0.4rem];
+	}
+
+	p {
+		@apply my-2;
+	}
+
+	ul {
+		@apply list-disc pl-6 my-2;
+	}
+	ol {
+		@apply list-decimal pl-6 my-2;
+	}
+	li {
+		@apply my-1;
+	}
+
+	a {
+		@apply text-[#7b3fa0] underline;
+	}
+	a:hover {
+		@apply opacity-80;
+	}
+
+	strong {
+		@apply font-bold;
+	}
+	em {
+		@apply italic;
+	}
+	u {
+		@apply underline;
+	}
+}

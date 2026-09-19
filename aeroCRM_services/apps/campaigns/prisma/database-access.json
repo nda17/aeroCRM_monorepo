@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "service": "campaigns",
+  "tables": {
+    "service_identity": [
+      "SELECT"
+    ],
+    "campaigns": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "audience_snapshots": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "deliveries": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "control_actions": [
+      "SELECT",
+      "INSERT"
+    ],
+    "outbox_events": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "consumer_receipts": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "idempotency_records": [
+      "SELECT",
+      "INSERT"
+    ],
+    "rate_limits": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "heartbeats": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "_prisma_migrations": []
+  },
+  "sequences": {},
+  "types": [
+    "CampaignStatus",
+    "CampaignAudience",
+    "CampaignRequestedChannel",
+    "CampaignDeliveryChannel",
+    "CampaignDeliveryStatus",
+    "AudienceSnapshotStatus",
+    "CampaignControlActionKind",
+    "CampaignOutboxStatus",
+    "CampaignOutboxExchange",
+    "CampaignConsumerReceiptStatus"
+  ],
+  "routines": [
+    "protect_service_identity"
+  ]
+}

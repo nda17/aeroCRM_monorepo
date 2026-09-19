@@ -1,0 +1,54 @@
+.panel {
+	@apply min-w-0 rounded-2xl border border-crm-border bg-crm-surface p-4 sm:p-6;
+}
+
+.heading {
+	@apply mb-5 flex flex-col gap-2;
+
+	h2 {
+		@apply text-lg font-semibold text-crm-text;
+	}
+	p {
+		@apply text-sm leading-6 text-crm-muted;
+	}
+}
+
+.form {
+	@apply grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_17rem];
+}
+
+.fields {
+	@apply flex min-w-0 flex-col gap-4;
+}
+
+.hint {
+	@apply flex flex-wrap justify-between gap-2;
+}
+
+.notice {
+	@apply text-sm leading-6 text-crm-muted;
+}
+
+.refreshNotice {
+	@apply flex flex-col gap-3 rounded-xl border border-crm-border bg-crm-surface-muted p-3 text-sm text-crm-muted;
+}
+
+.error {
+	@apply text-sm leading-6 text-crm-danger;
+}
+
+.actions {
+	@apply flex flex-wrap gap-3;
+
+	button {
+		@apply max-sm:w-full;
+	}
+}
+
+.preview {
+	@apply flex min-w-0 flex-col items-start justify-center gap-2 rounded-xl border border-crm-border bg-crm-surface-muted p-5;
+}
+
+.previewName {
+	@apply block w-full truncate text-sm font-medium text-crm-muted;
+}

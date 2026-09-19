@@ -1,0 +1,129 @@
+import { axiosInterceptorsRequest } from '@/shared/api'
+
+export type AdminEventLogSection =
+	| 'PAYMENTS'
+	| 'CAMPAIGNS'
+	| 'TASKS'
+	| 'SUBSCRIPTIONS'
+	| 'USERS'
+	| 'WIDGETS'
+	| 'SITE_SETTINGS'
+	| 'TELEGRAM_BOT'
+	| 'AFFILIATE'
+	| 'DEV_TOOLS'
+	| 'MESSAGING'
+	| 'REPORTING'
+	| 'SUPPORT'
+	| 'PLATFORM_CONTENT'
+
+export type AdminEventLogAction =
+	| 'PAYMENT_MANUAL_CHECK'
+	| 'PAYMENT_UNKNOWN_PROVIDER_RESOLVED'
+	| 'PAYMENT_CLEANUP_RUN'
+	| 'AUTO_RENEWAL_ADMIN_PAUSE'
+	| 'AUTO_RENEWAL_ADMIN_RESUME'
+	| 'AUTO_RENEWAL_REVOKE'
+	| 'AUTO_RENEWAL_RECONCILE'
+	| 'AUTO_RENEWAL_TECHNICAL_RESUME'
+	| 'TARIFF_PRICES_UPDATE'
+	| 'LEGAL_PAGE_UPDATE'
+	| 'CAMPAIGN_CREATE'
+	| 'CAMPAIGN_CANCEL'
+	| 'CAMPAIGN_DELIVERY_RETRY'
+	| 'SUBSCRIPTION_ACTIVATE'
+	| 'SUBSCRIPTION_EXTEND_DAYS'
+	| 'SUBSCRIPTION_CANCEL'
+	| 'SUBSCRIPTION_EXPIRY_CHECK_RUN'
+	| 'VERIFICATION_CHALLENGE_CLEANUP_RUN'
+	| 'USER_UPDATE'
+	| 'USER_TOGGLE_ACTIVATION'
+	| 'USER_DELETE'
+	| 'USER_SOFT_DELETE'
+	| 'USER_RESTORE'
+	| 'WIDGET_UPDATE'
+	| 'WIDGET_PUBLISH'
+	| 'WIDGET_DRAFT_DISCARD'
+	| 'WIDGET_VERSION_RESTORE'
+	| 'WIDGET_CLONE'
+	| 'WIDGET_DELETE'
+	| 'WIDGET_BUTTON_IMAGE_UPDATE'
+	| 'WIDGET_DELIVERY_RETRY'
+	| 'WIDGET_DELIVERY_CLOSE'
+	| 'SITE_SETTINGS_UPDATE'
+	| 'AFFILIATE_SETTINGS_UPDATE'
+	| 'TELEGRAM_BOT_SETTINGS_UPDATE'
+	| 'TELEGRAM_SCHEDULE_SETTINGS_REJECTED'
+	| 'TELEGRAM_BOT_WEBHOOK_REINSTALL'
+	| 'TELEGRAM_DATABASE_BACKUP_CREATE'
+	| 'TELEGRAM_DATABASE_RESTORE'
+	| 'DEV_DATABASE_RESTORE'
+	| 'MESSAGING_FAILURE_RETRY'
+	| 'MESSAGING_FAILURE_CLOSE_WITHOUT_RETRY'
+	| 'REPORTING_DAILY_SUMMARY_SETTINGS_UPDATE'
+	| 'REPORTING_DAILY_SUMMARY_SCHEDULE_UPDATE'
+	| 'REPORTING_DAILY_SUMMARY_SCHEDULE_REJECTED'
+	| 'REPORTING_DELIVERY_RETRY'
+	| 'SUPPORT_ROUTING_SETTINGS_UPDATE'
+	| 'SUPPORT_WEBHOOK_REINSTALL'
+	| 'SUPPORT_CONVERSATION_REPLY'
+	| 'SUPPORT_CONVERSATION_STATUS_UPDATE'
+	| 'SUPPORT_NOTIFICATION_SETTINGS_UPDATE'
+	| 'PLATFORM_SITE_SETTINGS_UPDATE'
+	| 'PLATFORM_LEGAL_PAGE_UPDATE'
+	| 'PLATFORM_HOME_PAGE_CONTENT_UPDATE'
+	| 'PLATFORM_HOME_PAGE_RAW_CODE_UPDATE'
+
+export interface IAdminEventLogItem {
+	id: string
+	adminId: string | null
+	adminName: string | null
+	adminEmail: string | null
+	section: AdminEventLogSection
+	action: AdminEventLogAction
+	description: string
+	entityType: string | null
+	entityId: string | null
+	entityLabel: string | null
+	targetUserId: string | null
+	targetUserName: string | null
+	targetUserEmail: string | null
+	metadata: Record<string, unknown> | null
+	ip: string | null
+	userAgent: string | null
+	createdAt: string
+}
+
+export interface IAdminEventLogResponse {
+	items: IAdminEventLogItem[]
+	total: number
+	page: number
+	limit: number
+	totalPages: number
+}
+
+export interface IAdminEventLogFilters {
+	userId?: string
+	adminId?: string
+	section?: AdminEventLogSection
+	action?: AdminEventLogAction
+	createdFrom?: string
+	createdTo?: string
+}
+
+const adminEventLogService = {
+	async getAll(
+		page: number,
+		limit: number,
+		filters?: IAdminEventLogFilters
+	): Promise<IAdminEventLogResponse> {
+		const { data } = await axiosInterceptorsRequest.get(
+			'/admin-event-log',
+			{
+				params: { page, limit, ...filters }
+			}
+		)
+		return data
+	}
+}
+
+export default adminEventLogService

@@ -1,0 +1,177 @@
+.shell {
+	@apply min-h-screen bg-crm-bg text-crm-text lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:transition-[grid-template-columns] lg:duration-300 lg:ease-in-out motion-reduce:transition-none;
+}
+
+.shellCollapsed {
+	@apply lg:grid-cols-[0rem_minmax(0,1fr)];
+}
+
+.skipLink {
+	@apply fixed left-4 top-0 z-[100] -translate-y-full rounded-lg bg-crm-action px-4 py-3 text-sm font-semibold text-white shadow-lg transition-transform focus:top-4 focus:translate-y-0 focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 motion-reduce:transition-none;
+}
+
+.sidebar {
+	@apply hidden min-h-screen min-w-0 overflow-hidden lg:sticky lg:top-0 lg:block lg:h-screen;
+}
+
+.sidebarContent {
+	@apply flex h-full w-[15rem] flex-col border-r border-crm-border bg-crm-surface transition-transform duration-300 ease-in-out motion-reduce:transition-none;
+}
+
+.sidebarContentCollapsed {
+	@apply -translate-x-full;
+}
+
+.sidebarBrand {
+	@apply flex min-h-16 min-w-0 shrink-0 flex-col items-start justify-center gap-1 border-b border-crm-border px-4 py-3;
+}
+
+.sidebarBrand > a {
+	@apply w-44;
+}
+
+.companyName {
+	@apply block w-full truncate text-sm font-medium text-crm-muted;
+}
+
+.mobileCompanyName {
+	@apply block w-full truncate text-xs font-medium text-crm-muted lg:hidden;
+}
+
+.sidebarNavigation {
+	@apply min-h-0 flex-1 overflow-y-auto px-3 py-5;
+}
+
+.navigationList {
+	@apply flex flex-col gap-1;
+}
+
+.navigationLink {
+	@apply flex min-h-11 items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-sm font-medium text-crm-muted transition-colors hover:border-crm-border hover:bg-crm-surface-muted hover:text-crm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-crm-surface;
+}
+
+.navigationLinkActive {
+	@apply border-primary/20 bg-primary/10 font-semibold text-primary;
+}
+
+.navigationIcon {
+	@apply flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-crm-surface-muted text-primary transition-colors;
+}
+
+.navigationLinkActive .navigationIcon {
+	@apply bg-primary/20 text-primary;
+}
+
+.sidebarCaption {
+	@apply m-3 rounded-xl border border-crm-border bg-crm-surface-muted px-3 py-3 text-xs leading-5 text-crm-muted;
+}
+
+.workspace {
+	@apply min-w-0;
+}
+
+.topbar {
+	@apply sticky top-0 z-30 flex min-h-16 flex-wrap items-center gap-3 border-b border-crm-border bg-crm-surface/95 px-4 py-3 backdrop-blur sm:px-6;
+}
+
+.mobileMenuButton {
+	@apply flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-crm-border bg-crm-surface text-primary transition-colors hover:border-crm-border-strong hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 lg:hidden;
+}
+
+.sidebarToggle {
+	@apply hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-crm-border bg-crm-surface text-primary transition-colors hover:border-crm-border-strong hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 lg:flex;
+}
+
+.sidebarToggleIcon {
+	@apply rotate-90 transition-transform duration-300 ease-in-out motion-reduce:transition-none;
+}
+
+.sidebarToggleIconCollapsed {
+	@apply -rotate-90;
+}
+
+.sectionContext {
+	@apply flex min-w-[7rem] flex-1 flex-col gap-0.5;
+}
+
+.productName {
+	@apply hidden text-xs font-medium text-crm-muted lg:block;
+}
+
+.sectionContext .mobileBrand {
+	@apply inline-flex py-0.5 lg:hidden;
+}
+
+.sectionName {
+	@apply break-words text-sm font-semibold text-crm-text;
+}
+
+.productSwitch {
+	@apply relative shrink-0 text-crm-text;
+}
+
+.productSwitchTrigger {
+	@apply flex min-h-11 w-11 cursor-pointer list-none items-center justify-center gap-2 rounded-xl border border-crm-border bg-crm-surface px-3 py-2 text-sm font-semibold transition-colors hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:w-auto;
+
+	&::-webkit-details-marker {
+		@apply hidden;
+	}
+
+	svg {
+		@apply text-primary;
+	}
+}
+
+.productSwitchName,
+.membershipFull {
+	@apply sr-only sm:not-sr-only;
+}
+
+.mobileProductIcon,
+.membershipShort {
+	@apply sm:hidden;
+}
+
+.productSwitchChevron {
+	@apply hidden sm:block;
+}
+
+.productSwitchPanel {
+	@apply absolute right-0 top-full z-40 mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-2xl border border-crm-border bg-crm-surface p-2 shadow-xl;
+
+	p {
+		@apply px-2 py-2 text-xs leading-5 text-crm-muted;
+	}
+
+	a {
+		@apply flex flex-col gap-0.5 rounded-xl px-3 py-2.5 text-sm text-crm-text transition-colors hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+
+		span {
+			@apply text-xs text-crm-muted;
+		}
+
+		&[aria-current] {
+			@apply bg-primary/10 text-primary;
+		}
+	}
+}
+
+.accessContext {
+	@apply flex max-w-full basis-full flex-wrap items-center gap-2 border-t border-crm-border pt-3 xl:ml-auto xl:basis-auto xl:border-0 xl:pt-0;
+}
+
+.content {
+	@apply flex min-w-0 flex-col gap-4 p-4 outline-none sm:p-5 xl:p-6;
+}
+
+.content:focus-visible {
+	@apply ring-2 ring-inset ring-primary;
+}
+
+.mobileNavigation {
+	@apply flex min-h-full flex-col gap-6;
+}
+
+.mobileCaption {
+	@apply mt-auto rounded-xl border border-crm-border bg-crm-surface-muted px-3 py-3 text-xs leading-5 text-crm-muted;
+}

@@ -1,0 +1,31 @@
+.badge {
+	@apply inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold;
+}
+
+.dot {
+	@apply h-1.5 w-1.5 rounded-full bg-current;
+}
+
+.neutral {
+	@apply border-crm-border bg-crm-surface-muted text-crm-muted;
+}
+
+.success {
+	@apply border-crm-success/20 bg-crm-success/10 text-crm-success;
+}
+
+.warning {
+	@apply border-crm-warning/20 bg-crm-warning/10 text-crm-warning;
+}
+
+.danger {
+	@apply border-crm-danger/20 bg-crm-danger/10 text-crm-danger;
+}
+
+.info {
+	@apply border-crm-info/20 bg-crm-info/10 text-crm-info;
+}
+
+.accent {
+	@apply border-accent/30 bg-accent/15 text-crm-warning;
+}

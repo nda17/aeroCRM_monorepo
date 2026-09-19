@@ -1,0 +1,113 @@
+{
+	"schemaVersion": 1,
+	"targets": {
+		"notification-delivery": {
+			"manifestSha256": "6515080965fec8fc1575af21dd69a93d93ab9e591424a3dd5a0c23e89d4042e0",
+			"migrations": [
+				{
+					"name": "20260920000000_init_aerocrm",
+					"checksum": "33976a4478f5ba7f960f1afdcfba7d76caf80f9e3998ad6fd175ec4a4ce4bceb"
+				}
+			]
+		},
+		"campaigns": {
+			"manifestSha256": "d2ac3cf3ccc689e10f29bd767021e5cf23050dc3e92480282307dd951fe3f20d",
+			"migrations": [
+				{
+					"name": "20260920000000_init_aerocrm",
+					"checksum": "9e8c89ec0777ff2cbfb89bfd94e88cdd58292ac1fd99056fc044953803526f9e"
+				}
+			]
+		},
+		"reporting": {
+			"manifestSha256": "1d84929950d8735031ea700d89ded48f3fb10636c0ffa3d08284ff65bbdb3fbf",
+			"migrations": [
+				{
+					"name": "20260920000000_init_aerocrm",
+					"checksum": "644ca671297a606d8fd1e892cc03d2b780524636c1b8ec11224c7976cd397028"
+				}
+			]
+		},
+		"billing": {
+			"manifestSha256": "5f3d29f2d92b83b2635e008bf6545d54583d8f8e98b11d5a137f31b02c6c7ed0",
+			"migrations": [
+				{
+					"name": "20260920000000_init_aerocrm",
+					"checksum": "b6a6babe34607ec210b864289d5f17b285c4924234e3570a9acf190253d85266"
+				}
+			]
+		},
+		"identity": {
+			"manifestSha256": "0537b457fdbb5ba1e65278f4602871f30bd77fd062034718e715a0a25205ead3",
+			"migrations": [
+				{
+					"name": "20260920000000_init_aerocrm",
+					"checksum": "45bef30c1974a8abdb0928fe82eb1e6f446c6420f35bbea2c44cf32177b134d2"
+				}
+			]
+		},
+		"platform": {
+			"manifestSha256": "e1aa262c734ed2c86c622f30df7df7ff859ab92682b14ba408625edcf272e905",
+			"migrations": [
+				{
+					"name": "20260920000000_init_aerocrm",
+					"checksum": "9a34861bea91bd51ea1bc8934f6328e5852cca1fb0be0df56fb756d4667c17d2"
+				}
+			]
+		},
+		"support": {
+			"manifestSha256": "eb2fb807bc3905cd0938093de5ac9d526779393c18a8915f9503020925cdd4d2",
+			"migrations": [
+				{
+					"name": "20260920000000_init_aerocrm",
+					"checksum": "8dfa276f66af3c92ca86ad512cda075449759282094835449a9c47eab7ec8aa5"
+				}
+			]
+		},
+		"operations": {
+			"manifestSha256": "352605012364f50006f842516c80692bfb6880360fbdbdf33abd9ceccd082305",
+			"migrations": [
+				{
+					"name": "20260920000000_init_aerocrm",
+					"checksum": "a0479e73250ee4526daa3ef9af95652991758a60e7fa76c9c044233ff500720b"
+				}
+			]
+		},
+		"crm-access": {
+			"manifestSha256": "4557a68182dc258dd02d4167664d99a096dede14c70d0dc7cc27a0e6106b11e3",
+			"migrations": [
+				{
+					"name": "20260920000000_init_aerocrm",
+					"checksum": "5d808f9caf72a4aba765564b148e32cac62b5fc59e6efa09430c4f7faa4fbd14"
+				}
+			]
+		},
+		"crm-intake": {
+			"manifestSha256": "9881db46414742452af7c3fadff453f28e047760a3ca36baf414b0cda0e74acf",
+			"migrations": [
+				{
+					"name": "20260920000000_init_aerocrm",
+					"checksum": "0fdf108713220e0f25a8ef0561ea8f4fe79e6e50c9f1090890447d4fbdf6c10d"
+				}
+			]
+		},
+		"crm-customers": {
+			"manifestSha256": "54aa28a715723df1a8b483361b9a02d94cc5103182282b02418b66a52c7c7c3a",
+			"migrations": [
+				{
+					"name": "20260920000000_init_aerocrm",
+					"checksum": "670a7d55cb2611a32e0653864c727fa20fe3179676c5019dde07d96daf04006b"
+				}
+			]
+		},
+		"crm-sales": {
+			"manifestSha256": "fdac8c3f0cb4023f329a8e66330c8f7458aa2502800c1ffc5cf4b47bbed34933",
+			"migrations": [
+				{
+					"name": "20260920000000_init_aerocrm",
+					"checksum": "e9cf8e4a39ea31ea0663edea98e8fe97ebb50ee68be9bc1e8b3f8d8d3a6c2c9a"
+				}
+			]
+		}
+	}
+}

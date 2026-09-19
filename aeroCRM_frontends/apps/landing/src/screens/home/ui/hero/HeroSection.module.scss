@@ -1,0 +1,161 @@
+.heroWrapper {
+	@apply relative min-h-[1173px] py-32 lg:h-[1173px] lg:py-0 overflow-hidden flex items-center justify-center;
+
+	.heroBackground {
+		@apply absolute z-1 top-[6rem] sm:top-[1%] md:top-[1rem] lg:top-[-2rem] left-[-2rem] lg:left-[-7rem] w-[115vw] max-w-[1615px] opacity-[0.7] lg:opacity-[0.3] m-0;
+		transform: rotate(548deg);
+		will-change: transform;
+
+		@media (min-width: 1440px) {
+			@apply left-[-8vw] w-[120vw] max-w-none;
+		}
+
+		@media (min-width: 992px) {
+			transform: rotate(553deg);
+		}
+
+		.heroBackgroundPicture {
+			@apply block w-full h-full;
+		}
+
+		.heroBackgroundImage {
+			@apply block w-full h-full;
+			object-fit: cover;
+			object-position: center;
+		}
+	}
+
+	.heroFirstCircle,
+	.heroSecondCircle,
+	.heroThirdCircle {
+		@apply pointer-events-none;
+		filter: blur(150px);
+		mix-blend-mode: multiply;
+
+		@media (max-width: 767px) {
+			filter: blur(110px);
+		}
+	}
+
+	.heroFirstCircle {
+		@apply absolute left-[-8rem] sm:left-[-19rem] md:left-[-15rem] z-2 top-[-1rem] w-[240px] sm:w-[512px] h-[775px] rounded-full bg-[#470b58];
+	}
+
+	.heroSecondCircle {
+		@apply absolute left-[20rem] sm:left-[24rem] md:left-[30rem] z-2 top-[-1rem] w-[240px] sm:w-[600px] h-[750px] rounded-full bg-[#fa595e];
+	}
+
+	.heroThirdCircle {
+		@apply absolute right-[-1rem] sm:right-[5rem] md:right-[8rem] lg:right-[2rem] z-2 top-[-8rem] sm:top-[-21rem] lg:top-[25rem] w-[450px] h-[240px] sm:h-[462px] rounded-full bg-[#f8bd31];
+	}
+
+	.heroContent {
+		@apply w-[95%] max-w-[886px] flex gap-4 relative z-5 flex-col items-center;
+
+		.title {
+			@apply leading-[1.45] text-[1.8rem] md:text-[2.5rem] lg:text-[48px] text-center text-[#fdfdfd] relative font-semibold;
+			@apply font-display;
+			text-shadow:
+				0 2px 24px rgb(0 0 0 / 0.35),
+				0 1px 4px rgb(0 0 0 / 0.2);
+		}
+
+		.percentWrapper {
+			@apply relative;
+		}
+
+		.titleSide {
+			@apply w-[98px] md:w-[8.5rem] lg:w-[10.3rem] h-[42px] md:h-[3.2rem] lg:h-[3.7rem] rounded-[20px] absolute top-[-4px] md:top-[-1px] lg:top-0 right-[-5px] md:right-[-8px] lg:right-[-9px] z-[-1];
+			transform: rotate(-5deg);
+			background: linear-gradient(
+				87.12deg,
+				#470b58 1.98%,
+				#c21b84 50.27%,
+				#fa595e 74.42%,
+				#f8bd31 98.56%
+			);
+		}
+
+		.subtitle {
+			@apply text-[1rem] md:text-[18px] lg:text-[22px] text-[#fdfdfd] py-[1.8rem] text-center;
+			text-shadow: 0 1px 12px rgb(0 0 0 / 0.28);
+		}
+
+		.buttons {
+			@apply flex flex-col items-center;
+
+			.buttonLink {
+				@apply max-w-[440px] h-[80px] bg-white flex justify-between items-center pl-[1.5rem] text-[#2F2F2F] rounded-[3rem] cursor-pointer;
+				box-shadow:
+					0 8px 32px rgb(0 0 0 / 0.18),
+					0 2px 8px rgb(0 0 0 / 0.1);
+				transition:
+					transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+					box-shadow 0.22s ease;
+
+				&:hover {
+					transform: translateY(-3px) scale(1.02);
+					box-shadow:
+						0 16px 48px rgb(0 0 0 / 0.22),
+						0 4px 16px rgb(71 5 251 / 0.18);
+				}
+
+				&:active {
+					transform: translateY(0) scale(0.98);
+					box-shadow: 0 4px 16px rgb(0 0 0 / 0.14);
+				}
+
+				.arrowBtn {
+					@apply w-[80px] h-[80px] bg-no-repeat rounded-full bg-center shrink-0;
+					background-image: url('/arrow-1.svg');
+					transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+				}
+
+				&:hover .arrowBtn {
+					transform: scale(1.12);
+				}
+			}
+
+			.buttonArrow {
+				@apply mt-16 w-[60px] h-[60px] lg:w-[80px] lg:h-[80px] bg-no-repeat rounded-full bg-center cursor-pointer;
+				background-image: url('/arrow-2.svg');
+				box-shadow: 0 4px 20px rgb(0 0 0 / 0.25);
+				transition:
+					transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+					box-shadow 0.22s ease;
+
+				&:hover {
+					transform: translateY(-3px) scale(1.1);
+					box-shadow: 0 10px 32px rgb(0 0 0 / 0.3);
+				}
+
+				&:active {
+					transform: translateY(0) scale(0.95);
+					box-shadow: 0 2px 8px rgb(0 0 0 / 0.18);
+				}
+			}
+		}
+
+		.heroBenefits {
+			@apply mt-10 flex w-[calc(100vw-2rem)] max-w-[960px] flex-wrap items-center justify-center gap-x-10 gap-y-4 text-left;
+
+			li {
+				@apply flex items-center gap-3 whitespace-nowrap text-[18px] font-semibold leading-[1.4] text-white/70;
+				@apply font-sans;
+				text-shadow: 0 1px 10px rgb(0 0 0 / 0.24);
+			}
+
+			span {
+				@apply text-[24px] font-bold leading-none text-[#ffd166];
+			}
+
+			@media (max-width: 767px) {
+				@apply mx-auto w-fit max-w-[calc(100vw-2rem)] flex-col items-start gap-3 self-center;
+
+				li {
+					@apply text-[16px];
+				}
+			}
+		}
+	}
+}

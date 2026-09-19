@@ -1,0 +1,492 @@
+.section {
+	@apply relative z-10 mt-[-16rem] overflow-hidden bg-transparent px-4 py-[4rem] lg:mt-[-2rem];
+
+	&::before {
+		content: '';
+		@apply absolute inset-x-0 top-[1rem] mx-auto h-px max-w-[960px] opacity-70;
+		background: linear-gradient(
+			90deg,
+			transparent,
+			rgb(123 92 229 / 0.24),
+			rgb(224 90 138 / 0.2),
+			transparent
+		);
+	}
+}
+
+.heading {
+	@apply flex mx-auto mb-6 w-[92%] max-w-[900px] flex-col items-center text-center md:mb-8;
+}
+
+.headingTitle {
+	@apply text-[2xl] font-semibold text-center mb-[1.8rem] text-[#22155c];
+	@apply font-display;
+
+	@media (min-width: 641px) {
+		@apply text-[32px] mb-[2.5rem];
+	}
+}
+
+.title {
+	@apply text-[32px] font-semibold text-center mb-[2.5rem] text-[#22155c];
+	@apply font-display;
+
+	@media (max-width: 640px) {
+		@apply text-2xl mb-[1.8rem];
+	}
+}
+
+.viewport {
+	--carousel-gap: 14px;
+
+	@apply relative left-1/2 w-[100vw] overflow-hidden bg-transparent pt-8 pb-9;
+	transform: translateX(-50%);
+	mask-image: linear-gradient(
+		90deg,
+		transparent 0%,
+		#000 7%,
+		#000 93%,
+		transparent 100%
+	);
+	-webkit-mask-image: linear-gradient(
+		90deg,
+		transparent 0%,
+		#000 7%,
+		#000 93%,
+		transparent 100%
+	);
+}
+
+@media (max-width: 991px) {
+	.viewport {
+		@apply mb-[6rem];
+	}
+}
+
+.track {
+	@apply flex w-max items-center bg-transparent;
+	gap: var(--carousel-gap);
+	animation: integrations-marquee 34s linear infinite;
+	will-change: transform;
+}
+
+.viewport:hover .track {
+	animation-play-state: paused;
+}
+
+.group {
+	@apply flex shrink-0 items-center bg-transparent;
+	gap: var(--carousel-gap);
+	min-height: 18.5rem;
+}
+
+.card {
+	--base-y: 0px;
+	--float-shift: 16px;
+	--float-tilt: 0.55deg;
+	--float-duration: 6.2s;
+	--float-delay: 0s;
+	--card-height: 230px;
+
+	@apply relative flex w-[292px] shrink-0 snap-start flex-col overflow-hidden rounded-[20px] border border-transparent p-4;
+	height: var(--card-height);
+	background:
+		linear-gradient(
+				160deg,
+				rgb(255 255 255 / 0.98) 0%,
+				rgb(255 244 250 / 0.94) 42%,
+				rgb(255 237 246 / 0.88) 100%
+			)
+			padding-box,
+		linear-gradient(
+				140deg,
+				rgb(255 255 255 / 0.92) 0%,
+				var(--card-accent-border) 24%,
+				rgb(250 89 94 / 0.34) 62%,
+				rgb(248 189 49 / 0.56) 100%
+			)
+			border-box;
+	box-shadow:
+		inset 0 1px 0 rgb(255 255 255 / 0.94),
+		inset 0 -22px 42px var(--card-accent-sheen),
+		0 22px 48px var(--card-accent-glow),
+		0 10px 24px rgb(30 18 58 / 0.1);
+	transition:
+		box-shadow 0.24s ease,
+		border-color 0.24s ease,
+		filter 0.24s ease;
+	animation: card-drift var(--float-duration) ease-in-out infinite;
+	animation-delay: var(--float-delay);
+	will-change: transform;
+}
+
+.group .card:nth-child(4n + 1) {
+	--base-y: -14px;
+	--card-height: 220px;
+	--float-shift: 24px;
+	--float-tilt: -0.75deg;
+	--float-duration: 7.8s;
+	--float-delay: -1.2s;
+}
+
+.group .card:nth-child(4n + 2) {
+	--base-y: 12px;
+	--card-height: 238px;
+	--float-shift: -22px;
+	--float-tilt: 0.7deg;
+	--float-duration: 6.1s;
+	--float-delay: -3.2s;
+}
+
+.group .card:nth-child(4n + 3) {
+	--base-y: -8px;
+	--card-height: 226px;
+	--float-shift: 18px;
+	--float-tilt: 0.5deg;
+	--float-duration: 7.2s;
+	--float-delay: -0.7s;
+}
+
+.group .card:nth-child(4n + 4) {
+	--base-y: 16px;
+	--card-height: 242px;
+	--float-shift: -26px;
+	--float-tilt: -0.65deg;
+	--float-duration: 8.4s;
+	--float-delay: -2.8s;
+}
+
+.card:hover {
+	box-shadow:
+		inset 0 1px 0 rgb(255 255 255 / 0.96),
+		inset 0 -22px 42px var(--card-accent-highlight),
+		0 28px 60px var(--card-accent-glow),
+		0 12px 28px rgb(248 189 49 / 0.16);
+	filter: saturate(1.12);
+}
+
+.card::before {
+	@apply absolute inset-x-0 top-0 h-[4px];
+	content: '';
+	background: linear-gradient(
+		90deg,
+		var(--card-accent) 0%,
+		rgb(250 89 94 / 0.92) 54%,
+		rgb(248 189 49 / 0.96) 100%
+	);
+	box-shadow: 0 0 26px var(--card-accent-glow);
+}
+
+.card::after {
+	@apply pointer-events-none absolute right-[-26px] top-[-34px] h-36 w-36 rounded-full;
+	content: '';
+	background:
+		radial-gradient(
+			circle at 30% 32%,
+			rgb(255 255 255 / 0.92) 0%,
+			var(--card-accent-soft) 38%,
+			rgb(255 255 255 / 0) 76%
+		),
+		radial-gradient(
+			circle at 70% 72%,
+			var(--card-accent-highlight) 0%,
+			rgb(255 255 255 / 0) 58%
+		);
+	opacity: 0.96;
+}
+
+.card .copy::after {
+	@apply pointer-events-none absolute bottom-[-2.75rem] left-[-2rem] h-24 w-24 rounded-full;
+	content: '';
+	background: radial-gradient(
+		circle,
+		var(--card-accent-highlight) 0%,
+		rgb(255 255 255 / 0) 72%
+	);
+	opacity: 0.9;
+}
+
+.cardHeader {
+	@apply mb-4 flex items-center justify-between gap-3;
+}
+
+.iconWrap {
+	@apply relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[12px] border;
+	color: var(--card-accent);
+	background: linear-gradient(
+		135deg,
+		rgb(255 255 255 / 0.94) 0%,
+		var(--card-accent-soft) 100%
+	);
+	border-color: var(--card-accent-border);
+	box-shadow:
+		inset 0 1px 0 rgb(255 255 255 / 0.98),
+		0 12px 24px var(--card-accent-glow);
+}
+
+.iconWrap::after {
+	@apply absolute inset-[4px] rounded-[10px];
+	content: '';
+	background: radial-gradient(
+		circle at 30% 28%,
+		rgb(255 255 255 / 0.78) 0%,
+		rgb(255 255 255 / 0) 66%
+	);
+	opacity: 0.72;
+}
+
+.copy {
+	@apply relative flex min-w-0 flex-1 flex-col;
+}
+
+.tag {
+	@apply inline-flex max-w-[160px] items-center justify-center rounded-[999px] border px-[0.58rem] py-[0.34rem] text-[0.6rem] font-semibold leading-none;
+	color: var(--card-accent);
+	background: linear-gradient(
+		135deg,
+		rgb(255 255 255 / 0.9) 0%,
+		var(--card-accent-highlight) 100%
+	);
+	border-color: var(--card-accent-border);
+	box-shadow:
+		inset 0 1px 0 rgb(255 255 255 / 0.96),
+		0 10px 20px var(--card-accent-sheen);
+	@apply font-sans;
+	letter-spacing: 0.01em;
+	text-align: center;
+	white-space: nowrap;
+}
+
+.title {
+	@apply mb-2 text-[1.08rem] font-bold leading-[1.14] text-[#120f1f];
+	@apply font-display;
+	letter-spacing: 0;
+	text-shadow: 0 1px 0 rgb(255 255 255 / 0.7);
+}
+
+.description {
+	@apply text-[0.82rem] leading-[1.5] text-[#4b4361];
+	@apply font-sans;
+	letter-spacing: 0;
+}
+
+.cardFooter {
+	@apply mt-4 flex items-center text-[0.68rem] font-medium text-[#6c637d];
+	@apply font-sans;
+	letter-spacing: 0;
+}
+
+.status {
+	@apply inline-flex items-center gap-2 rounded-[999px] border px-[0.72rem] py-[0.45rem];
+	background: linear-gradient(
+		135deg,
+		rgb(255 255 255 / 0.9) 0%,
+		var(--card-accent-highlight) 100%
+	);
+	border-color: var(--card-accent-border);
+	box-shadow:
+		inset 0 1px 0 rgb(255 255 255 / 0.94),
+		0 10px 20px var(--card-accent-sheen);
+}
+
+.statusDot {
+	@apply h-[8px] w-[8px] shrink-0 rounded-full;
+	background: var(--card-accent);
+	box-shadow:
+		0 0 0 4px var(--card-accent-soft),
+		0 0 12px var(--card-accent-glow);
+}
+
+@keyframes integrations-marquee {
+	to {
+		transform: translateX(calc(-50% - (var(--carousel-gap) / 2)));
+	}
+}
+
+@keyframes card-drift {
+	0%,
+	100% {
+		transform: translate3d(0, var(--base-y), 0) rotate(0deg);
+	}
+
+	50% {
+		transform: translate3d(0, calc(var(--base-y) + var(--float-shift)), 0)
+			rotate(var(--float-tilt));
+	}
+}
+
+@media (max-width: 767px) {
+	.heading {
+		@apply mb-5;
+	}
+
+	.headingTitle {
+		@apply text-[1.45rem];
+	}
+
+	.viewport {
+		@apply overflow-hidden bg-transparent px-[4vw] pb-5 pt-3;
+		scroll-snap-type: none;
+		scroll-padding-inline: 0;
+		scrollbar-width: none;
+		overscroll-behavior-x: none;
+		touch-action: none;
+		pointer-events: none;
+		user-select: none;
+		mask-image: linear-gradient(
+			90deg,
+			transparent 0%,
+			#000 5%,
+			#000 95%,
+			transparent 100%
+		);
+		-webkit-mask-image: linear-gradient(
+			90deg,
+			transparent 0%,
+			#000 5%,
+			#000 95%,
+			transparent 100%
+		);
+	}
+
+	.viewport::-webkit-scrollbar {
+		display: none;
+	}
+
+	.track {
+		@apply w-max;
+		animation: integrations-marquee 30s linear infinite;
+	}
+
+	.group {
+		min-height: 13.75rem;
+	}
+
+	.card {
+		--base-y: 0px;
+		--float-shift: 10px;
+		--float-tilt: 0.38deg;
+		--float-duration: 5.8s;
+		--float-delay: 0s;
+		--card-height: 208px;
+		@apply w-[266px] p-[0.95rem];
+		box-shadow:
+			inset 0 1px 0 rgb(255 255 255 / 0.82),
+			0 14px 28px var(--card-accent-glow),
+			0 4px 12px rgb(0 0 0 / 0.06);
+	}
+
+	.group .card:nth-child(4n + 1) {
+		--base-y: -8px;
+		--card-height: 202px;
+		--float-shift: 14px;
+		--float-tilt: -0.45deg;
+		--float-duration: 6.5s;
+		--float-delay: -1s;
+	}
+
+	.group .card:nth-child(4n + 2) {
+		--base-y: 8px;
+		--card-height: 214px;
+		--float-shift: -12px;
+		--float-tilt: 0.42deg;
+		--float-duration: 5.6s;
+		--float-delay: -2.3s;
+	}
+
+	.group .card:nth-child(4n + 3) {
+		--base-y: -5px;
+		--card-height: 206px;
+		--float-shift: 9px;
+		--float-tilt: 0.3deg;
+		--float-duration: 6.1s;
+		--float-delay: -0.7s;
+	}
+
+	.group .card:nth-child(4n + 4) {
+		--base-y: 10px;
+		--card-height: 218px;
+		--float-shift: -15px;
+		--float-tilt: -0.4deg;
+		--float-duration: 6.9s;
+		--float-delay: -2.7s;
+	}
+
+	.cardHeader {
+		@apply mb-3;
+	}
+
+	.iconWrap {
+		@apply h-10 w-10;
+	}
+
+	.iconWrap svg {
+		@apply h-6 w-6;
+	}
+}
+
+@media (max-width: 420px) {
+	.group {
+		min-height: 13rem;
+	}
+
+	.card {
+		--base-y: 0px;
+		--float-shift: 8px;
+		--float-tilt: 0.28deg;
+		--float-duration: 5.6s;
+		--card-height: 198px;
+		@apply w-[246px] p-3;
+		height: var(--card-height);
+	}
+
+	.group .card:nth-child(4n + 1) {
+		--base-y: -6px;
+		--card-height: 194px;
+		--float-shift: 11px;
+	}
+
+	.group .card:nth-child(4n + 2) {
+		--base-y: 7px;
+		--card-height: 204px;
+		--float-shift: -10px;
+	}
+
+	.group .card:nth-child(4n + 3) {
+		--base-y: -4px;
+		--card-height: 198px;
+		--float-shift: 7px;
+	}
+
+	.group .card:nth-child(4n + 4) {
+		--base-y: 8px;
+		--card-height: 208px;
+		--float-shift: -12px;
+	}
+
+	.tag {
+		@apply max-w-[142px] px-[0.46rem] py-[0.28rem] text-[0.54rem];
+	}
+
+	.title {
+		@apply mb-[0.35rem] text-[0.92rem];
+	}
+
+	.description {
+		@apply text-[0.72rem] leading-[1.38];
+	}
+
+	.status {
+		@apply px-[0.58rem] py-[0.38rem] text-[0.62rem];
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.track {
+		animation: none;
+	}
+
+	.card {
+		animation: none;
+	}
+}

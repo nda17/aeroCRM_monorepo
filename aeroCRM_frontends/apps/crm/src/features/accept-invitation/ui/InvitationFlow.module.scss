@@ -1,0 +1,18 @@
+.content {
+	@apply flex flex-col gap-5 text-sm leading-6 text-crm-text;
+}
+.content h2 {
+	@apply text-xl font-semibold;
+}
+.note {
+	@apply mt-2 text-crm-muted;
+}
+.identifier {
+	@apply break-all font-mono text-xs;
+}
+.actions {
+	@apply flex flex-wrap gap-3;
+}
+.accountLink {
+	@apply self-start text-primary underline underline-offset-4;
+}

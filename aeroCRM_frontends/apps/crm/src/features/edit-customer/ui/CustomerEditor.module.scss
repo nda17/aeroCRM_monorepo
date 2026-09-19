@@ -1,0 +1,81 @@
+.form {
+	@apply flex flex-col gap-5;
+}
+.callPanel {
+	@apply flex min-w-0 flex-col gap-3 rounded-xl border border-crm-border bg-crm-surface-muted p-3;
+}
+.callHours {
+	@apply grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2;
+}
+.notice {
+	@apply flex flex-col gap-3 rounded-xl border border-crm-warning/20 bg-crm-warning/10 p-4 text-sm text-crm-warning;
+}
+.hint {
+	@apply text-xs leading-relaxed text-crm-muted;
+}
+.secondarySection {
+	@apply flex flex-col items-start gap-3;
+	ul {
+		@apply mt-2 list-inside list-disc space-y-1;
+	}
+}
+.companySearch {
+	@apply grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto];
+}
+.pickerNavigation {
+	@apply flex flex-wrap items-center gap-2;
+}
+.metadata {
+	@apply flex flex-col gap-1 border-t border-crm-border pt-4 text-xs text-crm-muted;
+}
+.archive {
+	@apply flex flex-col gap-3 border-t border-crm-border pt-4 text-sm text-crm-muted;
+}
+.lookup {
+	@apply flex min-w-0 flex-col items-start gap-3;
+}
+.lookupCard {
+	@apply flex min-w-0 w-full flex-col gap-3 rounded-xl border border-crm-border bg-crm-surface-muted p-4 text-sm text-crm-text;
+
+	p,
+	dd,
+	h3 {
+		@apply min-w-0 break-words [overflow-wrap:anywhere];
+	}
+
+	dl {
+		@apply grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2;
+	}
+
+	dl > div {
+		@apply min-w-0;
+	}
+
+	dl > div:last-child {
+		@apply sm:col-span-2;
+	}
+
+	dt {
+		@apply mb-1 text-xs text-crm-muted;
+	}
+}
+.lookupHeading {
+	@apply flex min-w-0 flex-wrap items-start justify-between gap-2;
+
+	h3 {
+		@apply font-semibold;
+	}
+}
+.lookupCheckbox {
+	@apply flex min-h-11 w-full cursor-pointer items-start gap-3 rounded-lg py-2 text-sm leading-6 text-crm-text;
+
+	input {
+		@apply mt-0.5 h-5 w-5 shrink-0 accent-crm-action;
+	}
+}
+.lookupWarning {
+	@apply text-sm leading-6 text-crm-warning;
+}
+.lookupError {
+	@apply text-sm leading-6 text-crm-danger;
+}

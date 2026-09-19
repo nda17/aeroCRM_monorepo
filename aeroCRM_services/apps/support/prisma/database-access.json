@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "service": "support",
+  "tables": {
+    "service_identity": [
+      "SELECT"
+    ],
+    "routing_settings": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "telegram_webhook_inbox": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "telegram_outbound_deliveries": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "support_message_mappings": [
+      "SELECT",
+      "INSERT"
+    ],
+    "outbox_events": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "consumer_receipts": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "consumer_failures": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "messaging_heartbeats": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "web_conversations": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "web_messages": [
+      "SELECT",
+      "INSERT"
+    ],
+    "web_commands": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "web_read_states": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "web_attachments": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "web_notification_settings": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "web_notification_intents": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "web_rate_buckets": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "_prisma_migrations": []
+  },
+  "sequences": {
+    "web_conversations_number_seq": [
+      "SELECT",
+      "USAGE"
+    ]
+  },
+  "types": [
+    "SupportInboxStatus",
+    "SupportInboxOutcome",
+    "SupportMappingKind",
+    "TelegramOutboundMethod",
+    "TelegramOutboundDeliveryStatus",
+    "OutboxExchange",
+    "OutboxStatus",
+    "ConsumerReceiptStatus",
+    "ConsumerFailureStatus",
+    "SupportConversationStatus",
+    "SupportSenderKind",
+    "SupportAttachmentStatus"
+  ],
+  "routines": [
+    "enforce_service_identity_integrity",
+    "notify_live_change",
+    "notify_live_read"
+  ]
+}

@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "service": "crm-sales",
+  "tables": {
+    "service_identity": [
+      "SELECT"
+    ],
+    "_prisma_migrations": [],
+    "pipelines": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "pipeline_stages": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "pipeline_template_installations": [
+      "SELECT",
+      "INSERT"
+    ],
+    "pipeline_template_installation_commands": [
+      "SELECT",
+      "INSERT"
+    ],
+    "deals": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "tasks": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "task_notifications": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "task_series": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "task_series_commands": [
+      "SELECT",
+      "INSERT"
+    ],
+    "task_series_occurrences": [
+      "SELECT",
+      "INSERT"
+    ],
+    "deal_timeline": [
+      "SELECT",
+      "INSERT"
+    ],
+    "command_receipts": [
+      "SELECT",
+      "INSERT"
+    ],
+    "task_command_receipts": [
+      "SELECT",
+      "INSERT"
+    ],
+    "task_timeline": [
+      "SELECT",
+      "INSERT"
+    ],
+    "reminder_rules": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "reminder_rule_commands": [
+      "SELECT",
+      "INSERT"
+    ],
+    "reminder_jobs": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "reminder_deliveries": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "reminder_outbox": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "reminder_runtime": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "intake_operation_slots": [
+      "SELECT",
+      "INSERT"
+    ],
+    "intake_operation_commands": [
+      "SELECT",
+      "INSERT"
+    ],
+    "export_audit": [
+      "SELECT",
+      "INSERT"
+    ]
+  },
+  "sequences": {},
+  "types": [
+    "CrmPipelineStageState",
+    "SalesTaskStatus"
+  ],
+  "routines": [
+    "check_sales_next_action",
+    "guard_task_series_identity",
+    "reject_intake_proof_mutation",
+    "reject_reminder_command_mutation",
+    "wake_task_reminders",
+    "track_task_assignment",
+    "record_task_notifications",
+    "notify_live_change",
+    "enforce_service_identity_integrity"
+  ]
+}

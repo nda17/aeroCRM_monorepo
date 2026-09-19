@@ -1,0 +1,110 @@
+.section {
+	@apply relative overflow-hidden px-4 py-[4rem];
+
+	&::before {
+		content: '';
+		@apply absolute inset-x-0 top-[1rem] mx-auto h-px max-w-[960px] opacity-70;
+		background: linear-gradient(
+			90deg,
+			transparent,
+			rgb(123 92 229 / 0.24),
+			rgb(224 90 138 / 0.2),
+			transparent
+		);
+	}
+}
+
+.layout {
+	@apply relative z-[1] mx-auto grid max-w-[1040px] grid-cols-1 items-center gap-6 lg:grid-cols-[1fr_0.86fr];
+}
+
+.cards {
+	@apply grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-1;
+}
+
+.card {
+	@apply relative overflow-hidden rounded-[24px] border border-white/80 bg-white/80 p-5;
+	box-shadow:
+		0 18px 48px rgb(123 63 160 / 0.1),
+		inset 0 1px 0 rgb(255 255 255 / 0.92);
+	backdrop-filter: blur(16px);
+
+	&::before {
+		content: '';
+		@apply pointer-events-none absolute inset-0;
+		background:
+			linear-gradient(180deg, rgb(255 255 255 / 0.72), transparent 48%),
+			radial-gradient(
+				circle at 18% 0%,
+				rgb(255 183 209 / 0.14),
+				transparent 42%
+			);
+	}
+
+	@media (max-width: 640px) {
+		@apply rounded-[20px] p-4;
+	}
+}
+
+.cardTitle {
+	@apply relative z-[1] text-[1.02rem] font-semibold leading-[1.25] text-[#15183d];
+	@apply font-display;
+}
+
+.cardText {
+	@apply relative z-[1] mt-3 whitespace-pre-line text-[0.93rem] font-medium leading-[1.45] text-[#675d76];
+	@apply font-sans;
+}
+
+.mock {
+	@apply relative overflow-hidden rounded-[28px] border border-white/80 bg-white/80 p-5;
+	box-shadow:
+		0 26px 70px rgb(123 63 160 / 0.14),
+		inset 0 1px 0 rgb(255 255 255 / 0.92);
+	backdrop-filter: blur(18px);
+}
+
+.mockTop {
+	@apply mb-5 flex gap-2;
+
+	span {
+		@apply h-3 w-3 rounded-full bg-[#d9c9ee];
+	}
+}
+
+.mockStats {
+	@apply grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-1;
+}
+
+.mockStat {
+	@apply rounded-[18px] border border-[#eee4f8] bg-white px-4 py-4;
+
+	strong {
+		@apply block text-[1.45rem] font-bold leading-none text-[#7438d4];
+		@apply font-display;
+	}
+
+	span {
+		@apply mt-2 block text-[0.82rem] font-semibold leading-[1.3] text-[#675d76];
+	}
+}
+
+.mockTable {
+	@apply mt-5 flex flex-col gap-3 rounded-[18px] border border-[#eee4f8] bg-white/[0.76] p-4;
+
+	span {
+		@apply h-3 rounded-full bg-[#eee4f8];
+	}
+
+	span:nth-child(2) {
+		@apply w-[82%];
+	}
+
+	span:nth-child(3) {
+		@apply w-[68%];
+	}
+
+	span:nth-child(4) {
+		@apply w-[91%];
+	}
+}

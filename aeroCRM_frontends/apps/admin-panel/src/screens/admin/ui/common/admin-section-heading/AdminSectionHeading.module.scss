@@ -1,0 +1,11 @@
+.heading {
+	@apply relative mb-[1.1rem] flex w-full items-center justify-center gap-2;
+}
+
+.title {
+	@apply select-none text-center text-[1.05rem] font-semibold transition-all;
+
+	&:hover {
+		@apply text-gray-700;
+	}
+}

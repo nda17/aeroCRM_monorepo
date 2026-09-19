@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "domain": "aerocrm.operations.database-backup-provenance.v1",
+  "keys": [
+    {
+      "keyId": "aerocrm-backup-20260920",
+      "publicKeySpkiDerBase64": "MCowBQYDK2VwAyEADPjZS1bKxHT6T2LtinRI5YxRKoYeeilx03QZD+5FjZw="
+    }
+  ]
+}

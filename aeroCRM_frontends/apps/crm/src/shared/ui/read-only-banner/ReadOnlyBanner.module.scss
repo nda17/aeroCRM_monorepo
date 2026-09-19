@@ -1,0 +1,31 @@
+.banner {
+	@apply flex flex-col gap-2 rounded-xl border px-3 py-3 sm:flex-row sm:items-start;
+}
+
+.info {
+	@apply border-crm-info/20 bg-crm-info/10 text-crm-info;
+}
+
+.warning {
+	@apply border-crm-warning/20 bg-crm-warning/10 text-crm-warning;
+}
+
+.icon {
+	@apply inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-crm-surface/80;
+}
+
+.copy {
+	@apply min-w-0 flex-1;
+}
+
+.title {
+	@apply text-sm font-bold;
+}
+
+.description {
+	@apply mt-1 text-sm leading-5 opacity-80;
+}
+
+.action {
+	@apply flex shrink-0 flex-wrap items-center gap-2 sm:justify-end;
+}

@@ -1,0 +1,45 @@
+.triggerGroup {
+	@apply relative inline-flex h-11 w-11 shrink-0;
+}
+.eventNotice {
+	@apply pointer-events-none absolute right-0 top-full z-40 mt-2 w-max max-w-[calc(100vw-2rem)] rounded-xl border border-primary/30 bg-crm-surface px-3 py-2 text-sm font-semibold text-primary shadow-lg;
+}
+.tabs {
+	@apply flex flex-wrap items-center gap-2;
+}
+.trigger {
+	@apply relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-crm-border bg-crm-surface text-crm-muted transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+}
+.badge {
+	@apply absolute -right-1 -top-1 min-w-5 rounded-full bg-primary px-1 text-xs font-semibold leading-5 text-white;
+}
+.content {
+	@apply flex min-w-0 flex-col gap-4 text-sm text-crm-muted;
+}
+.controls {
+	@apply flex flex-wrap items-center justify-between gap-3;
+	label {
+		@apply flex min-h-11 items-center gap-2;
+	}
+	input {
+		@apply h-5 w-5 accent-primary;
+	}
+}
+.items {
+	@apply flex min-w-0 flex-col gap-3;
+	li {
+		@apply flex min-w-0 flex-col items-start gap-3 rounded-xl border border-crm-border bg-crm-surface p-4;
+	}
+	li.unread {
+		@apply border-primary bg-crm-surface-muted;
+	}
+	a {
+		@apply break-words text-base font-semibold text-crm-text underline-offset-4 hover:underline [overflow-wrap:anywhere];
+	}
+	button {
+		@apply w-full sm:w-auto;
+	}
+}
+.kind {
+	@apply text-xs font-medium text-primary;
+}

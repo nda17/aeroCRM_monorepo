@@ -1,0 +1,769 @@
+import {
+	BadRequestException,
+	ConflictException,
+	Injectable,
+	NotFoundException,
+	UnauthorizedException
+} from '@nestjs/common';
+import {
+	AuthIdentityType,
+	Prisma,
+	UserStatus,
+	VerificationChallengePurpose,
+	VerificationChallengeType,
+	type VerificationChallenge
+} from '@prisma/identity-client';
+import { compare, hash } from 'bcryptjs';
+import { randomInt, randomUUID } from 'node:crypto';
+import type { Request } from 'express';
+import {
+	clientIp,
+	normalizeEmail,
+	normalizePhone,
+	PASSWORD_SALT_ROUNDS,
+	USER_DEACTIVATED_MESSAGE,
+	verificationCode
+} from '../common/identity.util';
+import {
+	IdentityEventsService,
+	publicUser
+} from '../events/identity-events.service';
+import { OwnerClientsService } from '../integrations/owner-clients.service';
+import { IdentityPrismaService } from '../prisma/identity-prisma.service';
+import { VerificationTransportService } from '../transports/verification-transport.service';
+import { UsersService } from '../users/users.service';
+import { WorkspaceProvisioningService } from '../workspaces/workspace-provisioning.service';
+import { AccessJwtService } from './access-jwt.service';
+import {
+	AuthDto,
+	EmailRegisterDto,
+	PhoneDto,
+	PhoneLoginDto,
+	PhoneRegisterDto,
+	ResendEmailCodeDto,
+	RestorePasswordDto
+} from './auth.dto';
+import { RefreshTokenService } from './refresh-token.service';
+import { EmailVerificationService } from './email-verification.service';
+import { EmailPasswordRecoveryService } from './email-password-recovery.service';
+
+const USER_INCLUDE = {
+	authIdentities: true,
+	telegramNotificationChannel: true
+} satisfies Prisma.UserInclude;
+
+type IdentityUser = NonNullable<
+	Awaited<ReturnType<UsersService['findById']>>
+>;
+
+export const REFRESH_ROTATION_GRACE_MS = 5_000;
+
+export class RefreshRotationInProgressException extends ConflictException {
+	constructor() {
+		super({
+			code: 'refresh_rotation_in_progress',
+			message: 'Refresh rotation is in progress'
+		});
+	}
+}
+
+@Injectable()
+export class AuthService {
+	constructor(
+		private readonly prisma: IdentityPrismaService,
+		private readonly users: UsersService,
+		private readonly jwt: AccessJwtService,
+		private readonly refreshTokens: RefreshTokenService,
+		private readonly events: IdentityEventsService,
+		private readonly transport: VerificationTransportService,
+		private readonly owners: OwnerClientsService,
+		private readonly workspaces: WorkspaceProvisioningService,
+		private readonly emailVerification: EmailVerificationService = new EmailVerificationService(
+			prisma,
+			transport
+		),
+		private readonly emailRecovery: EmailPasswordRecoveryService = new EmailPasswordRecoveryService(
+			prisma,
+			transport
+		)
+	) {}
+
+	async login(dto: AuthDto, request?: Request) {
+		const email = normalizeEmail(dto.email);
+		return this.startPasswordSession(
+			AuthIdentityType.EMAIL,
+			email,
+			dto.password,
+			request
+		);
+	}
+
+	async register(dto: AuthDto) {
+		const email = normalizeEmail(dto.email);
+		if (await this.users.findByIdentity(AuthIdentityType.EMAIL, email)) {
+			throw new BadRequestException('User already exists');
+		}
+		const { value, ...timing } = await this.emailVerification.issue(
+			{ purpose: 'REGISTER', value: email },
+			await hash(dto.password, PASSWORD_SALT_ROUNDS)
+		);
+		return {
+			email: value,
+			expiresAt: timing.expiresAt,
+			resendAvailableAt: timing.resendAvailableAt
+		};
+	}
+
+	async resendEmailCode(dto: ResendEmailCodeDto) {
+		const email = normalizeEmail(dto.email);
+		if (await this.users.findByIdentity(AuthIdentityType.EMAIL, email)) {
+			await this.deleteRegistrationChallenge(
+				VerificationChallengeType.EMAIL,
+				email
+			);
+			throw new BadRequestException('User already exists');
+		}
+		const { value, ...timing } = await this.emailVerification.issue({
+			purpose: 'REGISTER',
+			value: email
+		});
+		return {
+			email: value,
+			expiresAt: timing.expiresAt,
+			resendAvailableAt: timing.resendAvailableAt
+		};
+	}
+
+	async registerByEmail(dto: EmailRegisterDto, request?: Request) {
+		const email = normalizeEmail(dto.email);
+		if (await this.users.findByIdentity(AuthIdentityType.EMAIL, email)) {
+			throw new BadRequestException('User already exists');
+		}
+		const verified = await this.emailVerification.validate(
+			{ purpose: 'REGISTER', value: email },
+			dto.code
+		);
+		if (!verified.passwordHash)
+			throw new UnauthorizedException('Email verification code not found');
+		const user = await this.prisma.$transaction(async transaction => {
+			if (
+				await transaction.authIdentity.findUnique({
+					where: {
+						type_value: { type: AuthIdentityType.EMAIL, value: email }
+					}
+				})
+			) {
+				throw new BadRequestException('User already exists');
+			}
+			await this.emailVerification.consume(transaction, verified);
+			const created = await transaction.user.create({
+				data: {
+					password: verified.passwordHash!,
+					authIdentities: {
+						create: {
+							type: AuthIdentityType.EMAIL,
+							value: email,
+							verifiedAt: new Date()
+						}
+					}
+				},
+				include: USER_INCLUDE
+			});
+			await this.workspaces.provisionPersonalWorkspace(
+				transaction,
+				created.id
+			);
+			await this.captureReferral(transaction, dto.referrerId, created.id);
+			await this.events.emitUserChanged(transaction, created.id);
+			return created;
+		});
+		return this.startSession(user, request);
+	}
+
+	async sendPhoneCode(dto: PhoneDto) {
+		const phone = normalizePhone(dto.phone);
+		if (await this.users.findByIdentity(AuthIdentityType.PHONE, phone)) {
+			throw new BadRequestException('Phone already exists');
+		}
+		const existing = await this.registrationChallenge(
+			VerificationChallengeType.PHONE,
+			phone
+		);
+		if (existing) this.ensureResend(existing, 5 * 60);
+		const code = verificationCode();
+		await this.prisma.verificationChallenge.upsert({
+			where: {
+				type_purpose_value: {
+					type: VerificationChallengeType.PHONE,
+					purpose: VerificationChallengePurpose.REGISTER,
+					value: phone
+				}
+			},
+			create: {
+				type: VerificationChallengeType.PHONE,
+				purpose: VerificationChallengePurpose.REGISTER,
+				value: phone,
+				codeHash: await hash(code, PASSWORD_SALT_ROUNDS),
+				expiresAt: new Date(Date.now() + 5 * 60_000)
+			},
+			update: {
+				codeHash: await hash(code, PASSWORD_SALT_ROUNDS),
+				attempts: 0,
+				expiresAt: new Date(Date.now() + 5 * 60_000),
+				lastSentAt: new Date()
+			}
+		});
+		await this.transport.smsCode(phone, code);
+		return true;
+	}
+
+	async registerByPhone(dto: PhoneRegisterDto, request?: Request) {
+		const phone = normalizePhone(dto.phone);
+		if (await this.users.findByIdentity(AuthIdentityType.PHONE, phone)) {
+			throw new BadRequestException('Phone already exists');
+		}
+		const passwordHash = await hash(dto.password, PASSWORD_SALT_ROUNDS);
+		const challenge = await this.validatePhoneRegistrationChallenge(
+			phone,
+			dto.code
+		);
+		const user = await this.prisma.$transaction(async transaction => {
+			if (
+				await transaction.authIdentity.findUnique({
+					where: {
+						type_value: { type: AuthIdentityType.PHONE, value: phone }
+					}
+				})
+			) {
+				throw new BadRequestException('Phone already exists');
+			}
+			const consumed = await transaction.verificationChallenge.deleteMany({
+				where: {
+					id: challenge.id,
+					codeHash: challenge.codeHash,
+					attempts: challenge.attempts,
+					expiresAt: { gt: new Date() }
+				}
+			});
+			if (consumed.count !== 1) {
+				throw new UnauthorizedException(
+					'Phone verification code not found'
+				);
+			}
+			const created = await transaction.user.create({
+				data: {
+					password: passwordHash,
+					authIdentities: {
+						create: {
+							type: AuthIdentityType.PHONE,
+							value: phone,
+							verifiedAt: new Date()
+						}
+					}
+				},
+				include: USER_INCLUDE
+			});
+			await this.workspaces.provisionPersonalWorkspace(
+				transaction,
+				created.id
+			);
+			await this.captureReferral(transaction, dto.referrerId, created.id);
+			await this.events.emitUserChanged(transaction, created.id);
+			return created;
+		});
+		return this.startSession(user, request);
+	}
+
+	async loginByPhone(dto: PhoneLoginDto, request?: Request) {
+		return this.startPasswordSession(
+			AuthIdentityType.PHONE,
+			normalizePhone(dto.phone),
+			dto.password,
+			request
+		);
+	}
+
+	async refresh(token: string) {
+		const parsed = this.refreshTokens.parse(token);
+		if (!parsed) throw new UnauthorizedException('Invalid refresh token');
+		const now = new Date();
+		const tokenHashInput = this.refreshTokens.hashInput(token);
+		const session = await this.prisma.userSession.findUnique({
+			where: { id: parsed.sessionId },
+			include: { user: { include: USER_INCLUDE } }
+		});
+		if (!session || session.revokedAt || session.expiresAt <= now) {
+			throw new UnauthorizedException('Invalid refresh token');
+		}
+		const matchesCurrent = await compare(
+			tokenHashInput,
+			session.refreshTokenHash
+		);
+		if (!matchesCurrent) {
+			const matchesPrevious = session.previousRefreshTokenHash
+				? await compare(tokenHashInput, session.previousRefreshTokenHash)
+				: false;
+			if (matchesPrevious) {
+				if (
+					this.withinRefreshRotationGrace(session.refreshRotatedAt, now)
+				) {
+					throw new RefreshRotationInProgressException();
+				}
+				await this.revokeSessionUnsafe(session.id);
+			}
+			throw new UnauthorizedException('Invalid refresh token');
+		}
+		this.ensureActive(session.user);
+		const rotated = this.refreshTokens.create(session.id);
+		const rotatedHash = await hash(
+			this.refreshTokens.hashInput(rotated),
+			PASSWORD_SALT_ROUNDS
+		);
+		const rotationAt = new Date();
+		const changed = await this.prisma.userSession.updateMany({
+			where: {
+				id: session.id,
+				refreshTokenHash: session.refreshTokenHash,
+				revokedAt: null,
+				expiresAt: { gt: rotationAt }
+			},
+			data: {
+				refreshTokenHash: rotatedHash,
+				previousRefreshTokenHash: session.refreshTokenHash,
+				refreshRotatedAt: rotationAt,
+				lastUsedAt: rotationAt
+			}
+		});
+		if (changed.count !== 1) {
+			const latest = await this.prisma.userSession.findUnique({
+				where: { id: session.id },
+				select: {
+					previousRefreshTokenHash: true,
+					refreshRotatedAt: true,
+					expiresAt: true,
+					revokedAt: true
+				}
+			});
+			if (
+				latest &&
+				!latest.revokedAt &&
+				latest.expiresAt > new Date() &&
+				latest.previousRefreshTokenHash &&
+				(await compare(tokenHashInput, latest.previousRefreshTokenHash)) &&
+				this.withinRefreshRotationGrace(
+					latest.refreshRotatedAt,
+					new Date()
+				)
+			) {
+				throw new RefreshRotationInProgressException();
+			}
+			await this.revokeSessionUnsafe(session.id);
+			throw new UnauthorizedException('Invalid refresh token');
+		}
+		return {
+			user: publicUser(session.user),
+			accessToken: this.jwt.issue(
+				session.user.id,
+				session.user.rights,
+				session.id
+			),
+			refreshToken: rotated
+		};
+	}
+
+	async logout(token?: string) {
+		const parsed = token ? this.refreshTokens.parse(token) : null;
+		if (!parsed || !token) return true;
+		const session = await this.prisma.userSession.findUnique({
+			where: { id: parsed.sessionId }
+		});
+		if (
+			session &&
+			!session.revokedAt &&
+			(await compare(
+				this.refreshTokens.hashInput(token),
+				session.refreshTokenHash
+			))
+		) {
+			await this.revokeSessionUnsafe(session.id);
+		}
+		return true;
+	}
+
+	async restorePassword(dto: RestorePasswordDto) {
+		const email = dto.email ? normalizeEmail(dto.email) : undefined;
+		const phone = dto.phone ? normalizePhone(dto.phone) : undefined;
+		if (!email && !phone) {
+			throw new NotFoundException('Email or phone not passed');
+		}
+		const user = email
+			? await this.users.findByIdentity(AuthIdentityType.EMAIL, email)
+			: phone
+				? await this.users.findByIdentity(AuthIdentityType.PHONE, phone)
+				: null;
+		if (!user) {
+			if (email) {
+				const pending = await this.registrationChallenge(
+					VerificationChallengeType.EMAIL,
+					email
+				);
+				if (pending) {
+					throw new BadRequestException(
+						'Email registration not completed'
+					);
+				}
+			}
+			throw new NotFoundException('User not found');
+		}
+		this.ensureActive(user);
+		if (
+			phone &&
+			!user.authIdentities.find(
+				identity =>
+					identity.type === AuthIdentityType.PHONE && identity.verifiedAt
+			)
+		) {
+			throw new UnauthorizedException('Phone not verified');
+		}
+		const password = this.strongPassword();
+		if (email) {
+			return this.emailRecovery.issue(user.id, email, password);
+		}
+		await this.prisma.$transaction(async transaction => {
+			await transaction.user.update({
+				where: { id: user.id },
+				data: { password: await hash(password, PASSWORD_SALT_ROUNDS) }
+			});
+			await transaction.userSession.updateMany({
+				where: { userId: user.id, revokedAt: null },
+				data: { revokedAt: new Date() }
+			});
+			await this.events.emitUserChanged(transaction, user.id);
+		});
+		await this.transport.smsPassword(phone!, password);
+	}
+
+	async sessions(userId: string, currentSessionId: string) {
+		const sessions = await this.prisma.userSession.findMany({
+			where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
+			orderBy: { lastUsedAt: 'desc' }
+		});
+		return sessions.map(session => ({
+			id: session.id,
+			userAgent: session.userAgent,
+			ipAddress: session.ipAddress,
+			createdAt: session.createdAt,
+			lastUsedAt: session.lastUsedAt,
+			expiresAt: session.expiresAt,
+			isCurrent: session.id === currentSessionId
+		}));
+	}
+
+	async revokeSession(
+		userId: string,
+		sessionId: string,
+		currentSessionId: string
+	) {
+		const changed = await this.prisma.userSession.updateMany({
+			where: { id: sessionId, userId, revokedAt: null },
+			data: { revokedAt: new Date() }
+		});
+		if (!changed.count) throw new NotFoundException('Session not found');
+		return { currentSessionRevoked: sessionId === currentSessionId };
+	}
+
+	async revokeAll(userId: string) {
+		await this.prisma.userSession.updateMany({
+			where: { userId, revokedAt: null },
+			data: { revokedAt: new Date() }
+		});
+		return true;
+	}
+
+	async startSession(
+		user: Awaited<ReturnType<UsersService['findById']>> & object,
+		request?: Request
+	) {
+		this.ensureActive(user);
+		const sessionId = randomUUID();
+		const refreshToken = this.refreshTokens.create(sessionId);
+		await this.prisma.userSession.create({
+			data: {
+				id: sessionId,
+				userId: user.id,
+				refreshTokenHash: await hash(
+					this.refreshTokens.hashInput(refreshToken),
+					PASSWORD_SALT_ROUNDS
+				),
+				userAgent: request?.get('user-agent')?.slice(0, 500),
+				ipAddress: request ? clientIp(request) : undefined,
+				expiresAt: new Date(Date.now() + 7 * 86_400_000)
+			}
+		});
+		return {
+			user: publicUser(user),
+			accessToken: this.jwt.issue(user.id, user.rights, sessionId),
+			refreshToken
+		};
+	}
+
+	private async startPasswordSession(
+		type: AuthIdentityType,
+		value: string,
+		password: string,
+		request?: Request
+	) {
+		const { user: candidate, recovery: candidateRecovery } =
+			await this.requirePasswordLogin(
+				await this.users.findByIdentity(type, value),
+				type,
+				password
+			);
+		this.ensureActive(candidate);
+
+		const sessionId = randomUUID();
+		const refreshToken = this.refreshTokens.create(sessionId);
+		const refreshTokenHash = await hash(
+			this.refreshTokens.hashInput(refreshToken),
+			PASSWORD_SALT_ROUNDS
+		);
+		const user = await this.prisma.$transaction(async transaction => {
+			await transaction.$queryRaw(
+				Prisma.sql`SELECT id FROM identity.users WHERE id = ${candidate.id} FOR UPDATE`
+			);
+			const { user: current, recovery } = await this.requirePasswordLogin(
+				await transaction.user.findFirst({
+					where: {
+						id: candidate.id,
+						authIdentities: { some: { type, value } }
+					},
+					include: USER_INCLUDE
+				}),
+				type,
+				password,
+				candidate.password,
+				transaction,
+				candidateRecovery?.id
+			);
+			this.ensureActive(current);
+			if (recovery) {
+				await this.emailRecovery.activate(transaction, current, recovery);
+				await this.events.emitUserChanged(transaction, current.id);
+			}
+			await transaction.userSession.create({
+				data: {
+					id: sessionId,
+					userId: current.id,
+					refreshTokenHash,
+					userAgent: request?.get('user-agent')?.slice(0, 500),
+					ipAddress: request ? clientIp(request) : undefined,
+					expiresAt: new Date(Date.now() + 7 * 86_400_000)
+				}
+			});
+			return current;
+		});
+
+		return {
+			user: publicUser(user),
+			accessToken: this.jwt.issue(user.id, user.rights, sessionId),
+			refreshToken
+		};
+	}
+
+	private async requirePasswordLogin(
+		user: Awaited<ReturnType<UsersService['findById']>>,
+		type: AuthIdentityType,
+		password: string,
+		expectedPasswordHash?: string,
+		transaction?: Prisma.TransactionClient,
+		recoveryId?: string
+	): Promise<{
+		user: IdentityUser;
+		recovery: Awaited<ReturnType<EmailPasswordRecoveryService['match']>>;
+	}> {
+		if (!user) {
+			throw new UnauthorizedException('Email or password invalid');
+		}
+		if (
+			type === AuthIdentityType.PHONE &&
+			!user.authIdentities.some(
+				identity =>
+					identity.type === AuthIdentityType.PHONE && identity.verifiedAt
+			)
+		) {
+			throw new UnauthorizedException('Phone not verified');
+		}
+		if (
+			expectedPasswordHash !== undefined &&
+			user.password !== expectedPasswordHash
+		) {
+			throw new UnauthorizedException('Email or password invalid');
+		}
+		if (user.password && (await compare(password, user.password)))
+			return { user, recovery: null };
+		const recovery =
+			type === AuthIdentityType.EMAIL
+				? await this.emailRecovery.match(
+						user,
+						password,
+						transaction,
+						recoveryId
+					)
+				: null;
+		if (!recovery)
+			throw new UnauthorizedException('Email or password invalid');
+		return { user, recovery };
+	}
+
+	private ensureActive(user: {
+		status: UserStatus;
+		deletedAt: Date | null;
+	}) {
+		if (user.status !== UserStatus.ACTIVE || user.deletedAt) {
+			throw new UnauthorizedException(USER_DEACTIVATED_MESSAGE);
+		}
+	}
+
+	private registrationChallenge(
+		type: VerificationChallengeType,
+		value: string
+	) {
+		return this.prisma.verificationChallenge.findUnique({
+			where: {
+				type_purpose_value: {
+					type,
+					purpose: VerificationChallengePurpose.REGISTER,
+					value
+				}
+			}
+		});
+	}
+
+	private async deleteRegistrationChallenge(
+		type: VerificationChallengeType,
+		value: string
+	) {
+		await this.prisma.verificationChallenge.deleteMany({
+			where: {
+				type,
+				purpose: VerificationChallengePurpose.REGISTER,
+				value
+			}
+		});
+	}
+
+	private ensureResend(challenge: VerificationChallenge, seconds: number) {
+		if (challenge.lastSentAt.getTime() + seconds * 1_000 > Date.now()) {
+			throw new BadRequestException(
+				challenge.type === VerificationChallengeType.PHONE
+					? 'Phone verification resend cooldown'
+					: 'Email verification resend cooldown'
+			);
+		}
+	}
+
+	private async validatePhoneRegistrationChallenge(
+		value: string,
+		code: string
+	): Promise<VerificationChallenge> {
+		const type = VerificationChallengeType.PHONE;
+		const label = 'Phone';
+		const challenge = await this.registrationChallenge(type, value);
+		if (!challenge || challenge.expiresAt <= new Date()) {
+			if (challenge) {
+				await this.deleteRegistrationChallenge(type, value);
+			}
+			throw new UnauthorizedException(
+				`${label} verification code not found`
+			);
+		}
+		if (challenge.attempts >= 5) {
+			throw new UnauthorizedException(
+				`${label} verification code attempts exceeded`
+			);
+		}
+		if (!(await compare(code, challenge.codeHash))) {
+			const changed = await this.prisma.verificationChallenge.updateMany({
+				where: {
+					id: challenge.id,
+					codeHash: challenge.codeHash,
+					attempts: challenge.attempts,
+					expiresAt: { gt: new Date() }
+				},
+				data: { attempts: { increment: 1 } }
+			});
+			if (changed.count !== 1) {
+				throw new UnauthorizedException(
+					`${label} verification code not found`
+				);
+			}
+			if (challenge.attempts + 1 >= 5) {
+				throw new UnauthorizedException(
+					`${label} verification code attempts exceeded`
+				);
+			}
+			throw new UnauthorizedException(
+				`${label} verification code invalid`
+			);
+		}
+		return challenge;
+	}
+
+	private async captureReferral(
+		transaction: Prisma.TransactionClient,
+		referrerId: string | undefined,
+		referredUserId: string
+	) {
+		const value = referrerId?.trim();
+		if (!value || value === referredUserId || value.length > 128) return;
+		const referrer = await transaction.user.findFirst({
+			where: { id: value, status: UserStatus.ACTIVE, deletedAt: null },
+			select: { id: true }
+		});
+		if (!referrer) return;
+		await this.events.emitBillingRequest(transaction, {
+			eventType: 'billing.referral.requested.v1',
+			aggregateType: 'billing.referral-request',
+			aggregateId: referredUserId,
+			state: {
+				referrerId: value,
+				referredUserId,
+				requestedAt: new Date().toISOString()
+			}
+		});
+	}
+
+	private revokeSessionUnsafe(sessionId: string) {
+		return this.prisma.userSession.updateMany({
+			where: { id: sessionId, revokedAt: null },
+			data: { revokedAt: new Date() }
+		});
+	}
+
+	private withinRefreshRotationGrace(
+		rotatedAt: Date | null,
+		now: Date
+	): boolean {
+		if (!rotatedAt) return false;
+		const elapsed = now.getTime() - rotatedAt.getTime();
+		return elapsed >= 0 && elapsed <= REFRESH_ROTATION_GRACE_MS;
+	}
+
+	private strongPassword(): string {
+		const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+		const lower = 'abcdefghijkmnopqrstuvwxyz';
+		const numbers = '23456789';
+		const all = upper + lower + numbers;
+		const chars = [
+			upper[randomInt(upper.length)],
+			lower[randomInt(lower.length)],
+			numbers[randomInt(numbers.length)]
+		];
+		while (chars.length < 12) chars.push(all[randomInt(all.length)]);
+		for (let index = chars.length - 1; index > 0; index -= 1) {
+			const other = randomInt(index + 1);
+			[chars[index], chars[other]] = [chars[other], chars[index]];
+		}
+		return chars.join('');
+	}
+}

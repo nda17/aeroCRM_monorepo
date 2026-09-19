@@ -1,0 +1,42 @@
+.card {
+	@apply overflow-hidden rounded-panel border border-crm-border bg-crm-surface shadow-panel;
+}
+.header {
+	@apply flex flex-wrap items-start justify-between gap-4 border-b border-crm-border p-5 lg:p-6;
+}
+.header > div {
+	@apply min-w-0 flex-1 basis-64;
+}
+.title {
+	@apply mb-2 text-lg font-bold text-crm-text;
+}
+.description {
+	@apply max-w-3xl text-sm leading-relaxed text-crm-muted;
+}
+.prices {
+	@apply grid gap-4 p-5 md:grid-cols-2 lg:p-6;
+}
+.period {
+	@apply flex min-w-0 flex-col gap-2 rounded-xl border border-crm-border bg-crm-surface-muted p-4;
+}
+.period dt {
+	@apply text-sm text-crm-muted;
+}
+.period dd {
+	@apply break-words font-semibold text-crm-text;
+}
+.price {
+	@apply mb-3 text-xl tracking-tight sm:text-2xl;
+}
+.price span {
+	@apply whitespace-nowrap text-sm font-normal text-crm-muted;
+}
+.details {
+	@apply flex flex-col gap-3 px-5 pb-5 text-sm leading-relaxed text-crm-text lg:px-6 lg:pb-6;
+}
+.version {
+	@apply text-xs text-crm-muted;
+}
+.notice {
+	@apply mx-5 mt-5 rounded-xl border border-crm-border bg-crm-surface-muted p-4 text-sm text-crm-muted lg:mx-6;
+}

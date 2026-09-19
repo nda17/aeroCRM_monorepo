@@ -1,0 +1,11 @@
+.content {
+	@apply flex min-w-0 w-full flex-col gap-3;
+}
+
+.search {
+	@apply grid min-w-0 grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto];
+}
+
+.pagination {
+	@apply flex flex-wrap items-center justify-between gap-2 text-xs text-crm-muted;
+}

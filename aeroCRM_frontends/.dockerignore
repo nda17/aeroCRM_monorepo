@@ -1,0 +1,17 @@
+**/node_modules
+**/.next
+**/.git
+**/.github
+**/.env
+**/.env.*
+**/.DS_Store
+**/*.tsbuildinfo
+**/coverage
+**/test-results
+**/playwright-report
+**/TEMP
+**/other_files
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx

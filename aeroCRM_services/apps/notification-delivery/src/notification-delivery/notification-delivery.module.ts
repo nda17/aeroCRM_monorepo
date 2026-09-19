@@ -1,0 +1,76 @@
+import { SupportNotificationContextService } from './support-notification-context.service';
+import { TelegramSupportTransportService } from '../telegram/telegram-support-transport.service';
+import { EmailModule } from '../email/email.module';
+import { RabbitMqModule } from '../messaging/rabbitmq.module';
+import { NotificationDeliveryControlModule } from './control/notification-delivery-control.module';
+import { NotificationDeliveryAdapterService } from './notification-delivery-adapter.service';
+import { NotificationDeliveryHealthController } from './notification-delivery-health.controller';
+import { NotificationDeliveryHealthService } from './notification-delivery-health.service';
+import { NotificationDeliveryHeartbeatService } from './notification-delivery-heartbeat.service';
+import { NotificationDeliveryFailureService } from './notification-delivery-failure.service';
+import { NotificationDeliveryMessageMetadataService } from './notification-delivery-message-metadata.service';
+import { NotificationDeliveryOutboxPublisherService } from './notification-delivery-outbox-publisher.service';
+import { NotificationDeliveryOutcomeService } from './notification-delivery-outcome.service';
+import { NotificationDeliveryReceiptService } from './notification-delivery-receipt.service';
+import { NotificationDeliveryRetentionService } from './notification-delivery-retention.service';
+import { NotificationDeliveryWorkerService } from './notification-delivery-worker.service';
+import { NotificationDeliveryPrismaModule } from './prisma/notification-delivery-prisma.module';
+import { NotificationDeliveryPrismaService } from './prisma/notification-delivery-prisma.service';
+import { TelegramInfoTransportModule } from '../telegram/telegram-info-transport.module';
+import { Module, OnApplicationShutdown } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { WincrmInvitationContextService } from './wincrm-invitation-context.service';
+import { WincrmTaskReminderContextService } from './wincrm-task-reminder-context.service';
+import { WincrmIntakeSlaContextService } from './wincrm-intake-sla-context.service';
+import {
+	WincrmIntakeSlaReadinessController,
+	WincrmIntakeSlaReadinessGuard
+} from './wincrm-intake-sla-readiness.controller';
+import {
+	WincrmTaskReminderReadinessController,
+	WincrmTaskReminderReadinessGuard
+} from './wincrm-task-reminder-readiness.controller';
+
+@Module({
+	imports: [
+		ConfigModule.forRoot({ isGlobal: true }),
+		NotificationDeliveryPrismaModule,
+		NotificationDeliveryControlModule,
+		RabbitMqModule,
+		EmailModule,
+		TelegramInfoTransportModule
+	],
+	controllers: [
+		NotificationDeliveryHealthController,
+		WincrmIntakeSlaReadinessController,
+		WincrmTaskReminderReadinessController
+	],
+	providers: [
+		SupportNotificationContextService,
+		TelegramSupportTransportService,
+		WincrmInvitationContextService,
+		WincrmIntakeSlaContextService,
+		WincrmIntakeSlaReadinessGuard,
+		WincrmTaskReminderContextService,
+		WincrmTaskReminderReadinessGuard,
+		NotificationDeliveryAdapterService,
+		NotificationDeliveryHeartbeatService,
+		NotificationDeliveryMessageMetadataService,
+		NotificationDeliveryOutcomeService,
+		NotificationDeliveryReceiptService,
+		NotificationDeliveryFailureService,
+		NotificationDeliveryWorkerService,
+		NotificationDeliveryOutboxPublisherService,
+		NotificationDeliveryRetentionService,
+		NotificationDeliveryHealthService
+	]
+})
+export class NotificationDeliveryModule implements OnApplicationShutdown {
+	constructor(
+		private readonly prisma: NotificationDeliveryPrismaService
+	) {}
+
+	onApplicationShutdown() {
+		return this.prisma.disconnect();
+	}
+}

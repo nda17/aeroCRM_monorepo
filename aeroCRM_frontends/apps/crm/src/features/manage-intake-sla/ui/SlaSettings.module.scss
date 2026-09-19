@@ -1,0 +1,36 @@
+.panel {
+	@apply min-w-0 rounded-2xl border border-crm-border bg-crm-surface p-4 sm:p-6;
+}
+.heading {
+	@apply mb-4 flex flex-col gap-2;
+	h2 {
+		@apply text-lg font-semibold text-crm-text;
+	}
+}
+.notice {
+	@apply text-sm leading-6 text-crm-muted;
+}
+.form {
+	@apply flex min-w-0 flex-col gap-4;
+}
+.fields {
+	@apply grid min-w-0 gap-4 md:grid-cols-2;
+}
+.checks {
+	@apply flex flex-wrap gap-4;
+	legend {
+		@apply mb-2 text-sm font-medium text-crm-text;
+	}
+}
+.check {
+	@apply flex items-center gap-2 text-sm text-crm-text;
+	input {
+		@apply h-4 w-4 accent-primary;
+	}
+}
+.actions {
+	@apply flex flex-wrap gap-3;
+}
+.error {
+	@apply text-sm text-crm-danger;
+}

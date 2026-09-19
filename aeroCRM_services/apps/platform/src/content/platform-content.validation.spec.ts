@@ -1,0 +1,257 @@
+import { BadRequestException } from '@nestjs/common';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import {
+	sanitizeLegalHtml,
+	validateAndSanitizeStructuredHomeContent,
+	validateRawHomeContent
+} from './platform-content.validation';
+
+
+
+const aiConsultantContentMigration = readFileSync(
+	resolve(
+		__dirname,
+		'../../prisma/migrations/20260827220000_replace_online_consultant_home_content/migration.sql'
+	),
+	'utf8'
+);
+
+const aiConsultantHomeCardMigration = readFileSync(
+	resolve(
+		__dirname,
+		'../../prisma/migrations/20260828010000_publish_ai_consultant_home_card/migration.sql'
+	),
+	'utf8'
+);
+
+const selectedHomeContentRestoreMigration = readFileSync(
+	resolve(
+		__dirname,
+		'../../prisma/migrations/20260828020000_restore_selected_home_content/migration.sql'
+	),
+	'utf8'
+);
+
+describe('Platform content validation', () => {
+	it('removes executable legal markup and every dangerous URL form', () => {
+		const sanitized = sanitizeLegalHtml(
+			'<p onclick="alert(1)">Text</p>' +
+				'<script>alert(1)</script><iframe src="https://attacker.test"></iframe>' +
+				'<img src="x" onerror="alert(1)">' +
+				'<a href="javascript:alert(1)">javascript</a>' +
+				'<a href="data:text/html;base64,PHNjcmlwdD4=">data</a>' +
+				'<a href="//attacker.test/path">protocol-relative</a>'
+		);
+		expect(sanitized).toBe(
+			'<p>Text</p><a>javascript</a><a>data</a><a>protocol-relative</a>'
+		);
+	});
+
+	it('drops the SVG SMIL URL-list payload from GHSA-g8qq-57p8-ggw5', () => {
+		const sanitized = sanitizeLegalHtml(
+			'<svg><a><animate attributeName="href" values="#safe;javascript:alert(1)" dur=".01s" fill="freeze"></animate>' +
+				'<set attributeName="xlink:href" from="#safe" to="javascript:alert(2)"></set>' +
+				'<text y="30">safe</text></a></svg>'
+		);
+
+		expect(sanitized).toBe('<a>safe</a>');
+	});
+
+	it.each(['textarea', 'xmp'])(
+		'drops the %s raw-text payload from GHSA-jxwj-j7wr-gfrw',
+		tag => {
+			expect(
+				sanitizeLegalHtml(
+					`<${tag}></${tag}/><img src=x onerror="alert(document.domain)">`
+				)
+			).toBe('');
+		}
+	);
+
+	it('preserves the explicit legal TipTap tag allowlist', () => {
+		expect(
+			sanitizeLegalHtml(
+				'<h1>H1</h1><h2>H2</h2><h3>H3</h3><h4>H4</h4>' +
+					'<p>Text<br><strong>strong</strong><em>em</em><u>u</u><s>s</s><code>code</code></p>' +
+					'<ul><li>one</li></ul><ol><li>two</li></ol><blockquote>quote</blockquote>' +
+					'<section data-aerocrm-section="renewal" class="unsupported">section</section>'
+			)
+		).toBe(
+			'<h1>H1</h1><h2>H2</h2><h3>H3</h3><h4>H4</h4>' +
+				'<p>Text<br /><strong>strong</strong><em>em</em><u>u</u><s>s</s><code>code</code></p>' +
+				'<ul><li>one</li></ul><ol><li>two</li></ol><blockquote>quote</blockquote>' +
+				'<section data-aerocrm-section="renewal">section</section>'
+		);
+	});
+
+	it('canonicalizes target blank links and drops unsupported link attributes', () => {
+		expect(
+			sanitizeLegalHtml(
+				'<a href="https://aerocrm.space/legal" target="_blank" rel="opener" onclick="alert(1)">safe</a>' +
+					'<a href="mailto:support@aerocrm.space">mail</a><a href="tel:+79991234567">phone</a>'
+			)
+		).toBe(
+			'<a href="https://aerocrm.space/legal" target="_blank" rel="noopener noreferrer">safe</a>' +
+				'<a href="mailto:support@aerocrm.space">mail</a><a href="tel:+79991234567">phone</a>'
+		);
+	});
+
+	it('preserves only the current TipTap heading and alignment output', () => {
+		expect(
+			sanitizeLegalHtml(
+				'<h1 style="text-align: center">Title</h1><p style="text-align: right">Text</p>'
+			)
+		).toBe(
+			'<h1 style="text-align:center">Title</h1><p style="text-align:right">Text</p>'
+		);
+	});
+
+	it('strips hostile and unsupported inline styles', () => {
+		expect(
+			sanitizeLegalHtml(
+				'<h2 style="text-align:justify;color:red;background:url(javascript:alert(1))">Title</h2><div style="text-align:center">Text</div>'
+			)
+		).toBe('<h2>Title</h2>Text');
+	});
+
+	it('accepts the exact raw-code contract', () => {
+		expect(
+			validateRawHomeContent({
+				head: { enabled: true, html: '<meta name="x" content="y">' },
+				body: { enabled: false, html: '' }
+			})
+		).toEqual({
+			head: { enabled: true, html: '<meta name="x" content="y">' },
+			body: { enabled: false, html: '' }
+		});
+	});
+
+	it('rejects structured fields in the DEV raw-code contract', () => {
+		expect(() =>
+			validateRawHomeContent({
+				head: { enabled: true, html: '' },
+				body: { enabled: false, html: '' },
+				hero: {}
+			})
+		).toThrow(BadRequestException);
+	});
+
+	it('rejects head/body in the ADMIN structured contract', () => {
+		expect(() =>
+			validateAndSanitizeStructuredHomeContent({
+				head: { enabled: true, html: '<script>bad()</script>' }
+			})
+		).toThrow('Invalid structured field: content.head');
+	});
+
+	it('rejects removed widget content in the CRM CMS', () => {
+		expect(() => validateAndSanitizeStructuredHomeContent({ demoWidgets: {} }))
+			.toThrow('Invalid structured field: content.demoWidgets');
+	});
+
+	it('migrates persisted AI consultant landing content without a runtime alias', () => {
+		expect(aiConsultantContentMigration.trimStart()).toMatch(/^BEGIN;/);
+		expect(aiConsultantContentMigration.trimEnd()).toMatch(/COMMIT;$/);
+		expect(aiConsultantContentMigration).toContain(
+			"nested_content - 'onlineConsultant'"
+		);
+		expect(aiConsultantContentMigration).toContain(
+			"'aiConsultant',\n                    'Задайте вопрос AI-оператору'"
+		);
+		expect(aiConsultantContentMigration).toContain(
+			'Winwidget — AI-консультант и виджеты для сайта'
+		);
+		expect(aiConsultantContentMigration).toContain(
+			'Сервис требует подтверждать ответ фрагментом вашей инструкции.'
+		);
+		expect(aiConsultantContentMigration).toContain(
+			'Покупатель быстро получает информацию из инструкции компании, а важные условия можно перепроверить.'
+		);
+		expect(aiConsultantContentMigration).toContain(
+			'AI-оператор не обходит сайт и сообщает, что подтверждённых данных недостаточно.'
+		);
+		expect(aiConsultantContentMigration).not.toContain(
+			'получает точную информацию'
+		);
+		expect(aiConsultantContentMigration).not.toContain(
+			'не додумывает ответ'
+		);
+		expect(aiConsultantContentMigration).toContain('/ai-consultants/');
+		expect(aiConsultantContentMigration).toContain('/page-ai-consultant/');
+		expect(aiConsultantContentMigration).toContain(
+			'"platform"."refresh_current_semantic_fingerprint"('
+		);
+	});
+
+	it('publishes the persisted AI consultant home card', () => {
+		expect(aiConsultantHomeCardMigration.trimStart()).toMatch(/^BEGIN;/);
+		expect(aiConsultantHomeCardMigration.trimEnd()).toMatch(/COMMIT;$/);
+		expect(aiConsultantHomeCardMigration).toContain(
+			"item.value ->> 'previewType' = 'aiConsultant'"
+		);
+		expect(aiConsultantHomeCardMigration).toContain("'{comingSoon}'");
+		expect(aiConsultantHomeCardMigration).toContain("'false'::JSONB");
+		expect(aiConsultantHomeCardMigration).toContain(
+			'ORDER BY item.ordinality'
+		);
+		expect(aiConsultantHomeCardMigration).toContain(
+			"tools_content := pg_catalog.jsonb_set(\n        tools_content,\n        '{items}',\n        transformed_items,\n        false\n    );"
+		);
+		expect(aiConsultantHomeCardMigration).toContain(
+			'AND "content" IS DISTINCT FROM current_content'
+		);
+		expect(aiConsultantHomeCardMigration).toContain(
+			'IF ai_consultant_items = 0 THEN'
+		);
+		expect(aiConsultantHomeCardMigration).toContain(
+			'Platform tools must not contain duplicate AI consultant cards'
+		);
+		expect(aiConsultantHomeCardMigration).toContain(
+			'"platform"."refresh_current_semantic_fingerprint"('
+		);
+		expect(aiConsultantHomeCardMigration).toMatch(
+			/IF updated_rows = 1 THEN\s+PERFORM "platform"\."refresh_current_semantic_fingerprint"/
+		);
+	});
+
+	it('restores the selected persisted landing sections', () => {
+		expect(selectedHomeContentRestoreMigration.trimStart()).toMatch(
+			/^BEGIN;/
+		);
+		expect(selectedHomeContentRestoreMigration.trimEnd()).toMatch(
+			/COMMIT;$/
+		);
+		expect(selectedHomeContentRestoreMigration).toContain(
+			"E'Увеличение конверсии\\nсайта до'"
+		);
+		expect(selectedHomeContentRestoreMigration).toContain(
+			"'accentText', '30%'"
+		);
+		expect(selectedHomeContentRestoreMigration).toContain(
+			'Как это работает на практике'
+		);
+		expect(selectedHomeContentRestoreMigration).toContain('Лендинг акции');
+		expect(selectedHomeContentRestoreMigration).toContain(
+			'Установка проще, чем сварить кофе'
+		);
+		expect(selectedHomeContentRestoreMigration).toContain(
+			"E'Ловите\\nгорячие\\nлиды!'"
+		);
+		expect(selectedHomeContentRestoreMigration).not.toContain("'faq'");
+		expect(
+			selectedHomeContentRestoreMigration.match(
+				/COALESCE\(section_content -> 'items' -> [0-2], '\{\}'::JSONB\)/g
+			)
+		).toHaveLength(6);
+		expect(selectedHomeContentRestoreMigration).toContain(
+			"pg_catalog.jsonb_typeof(section_content -> 'items') <> 'array'"
+		);
+		expect(selectedHomeContentRestoreMigration).toContain(
+			'AND "content" IS DISTINCT FROM next_content'
+		);
+		expect(selectedHomeContentRestoreMigration).toMatch(
+			/IF updated_rows = 1 THEN\s+PERFORM "platform"\."refresh_current_semantic_fingerprint"/
+		);
+	});
+});

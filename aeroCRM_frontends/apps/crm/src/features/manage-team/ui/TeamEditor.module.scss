@@ -1,0 +1,33 @@
+.form {
+	@apply flex flex-col gap-5;
+}
+.subject {
+	@apply break-words rounded-xl border border-crm-border bg-crm-surface-muted p-4 font-semibold text-crm-text;
+}
+.muted {
+	@apply text-sm leading-relaxed text-crm-muted;
+}
+.actions {
+	@apply flex flex-wrap items-center justify-between gap-3;
+}
+.error {
+	@apply flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800;
+}
+.picker {
+	@apply flex min-w-0 flex-col gap-3 rounded-xl border border-crm-border p-4;
+}
+.picker legend {
+	@apply px-1 text-sm font-semibold text-crm-text;
+}
+.checklist {
+	@apply flex flex-col gap-2;
+}
+.check {
+	@apply flex items-start gap-3 rounded-lg p-2 text-sm text-crm-text;
+}
+.check input {
+	@apply mt-0.5 h-4 w-4 shrink-0 accent-primary;
+}
+.check span {
+	@apply break-words;
+}

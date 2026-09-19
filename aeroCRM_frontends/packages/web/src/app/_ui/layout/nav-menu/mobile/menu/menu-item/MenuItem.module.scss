@@ -1,0 +1,41 @@
+.wrapper {
+	.link-button {
+		@apply text-[15px] bg-transparent text-[#444] font-medium flex items-center gap-[10px] w-full px-[14px] py-[11px] rounded-[12px] border border-transparent transition-[background,border-color,color] duration-200;
+		@apply font-sans;
+
+		> svg {
+			@apply w-[22px] h-[22px] shrink-0 text-[#c21b84] fill-[#c21b84];
+		}
+
+		&:hover {
+			@apply bg-[#f8f0ff] border-[#c21b84]/[0.18] text-[#470b58];
+		}
+	}
+}
+
+.wrapper .disabled {
+	@apply cursor-not-allowed opacity-60;
+
+	&:hover {
+		@apply border-transparent bg-transparent text-[#444];
+	}
+}
+
+.tooltip {
+	@apply ml-auto rounded-full bg-[#f3e8ff] px-2 py-0.5 text-[11px] font-semibold text-[#7e22ce];
+}
+
+.active {
+	.link-button {
+		@apply border-[#c21b84]/[0.28] text-[#470b58] font-semibold;
+		background: linear-gradient(
+			135deg,
+			rgba(71, 11, 88, 0.07) 0%,
+			rgba(194, 27, 132, 0.07) 100%
+		);
+
+		> svg {
+			@apply text-[#470b58] fill-[#470b58];
+		}
+	}
+}

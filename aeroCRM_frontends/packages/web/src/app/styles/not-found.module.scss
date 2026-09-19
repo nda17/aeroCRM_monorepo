@@ -1,0 +1,44 @@
+.wrapper {
+	@apply flex flex-col items-center justify-center text-center flex-1 w-full py-24 px-4 min-h-[80vh];
+
+	.code {
+		@apply text-[5rem] sm:text-[8rem] lg:text-[9rem] font-bold leading-none mb-4 select-none;
+		@apply font-display;
+		background: linear-gradient(
+			87.12deg,
+			#470b58 1.98%,
+			#c21b84 50.27%,
+			#fa595e 74.42%,
+			#f8bd31 98.56%
+		);
+		-webkit-background-clip: text;
+		-webkit-text-fill-color: transparent;
+		background-clip: text;
+	}
+
+	.title {
+		@apply text-2xl font-semibold mb-3 text-[#2a1540];
+		@apply font-display;
+	}
+
+	.description {
+		@apply text-[0.95rem] leading-relaxed mb-8 max-w-sm text-[#7b6a96];
+	}
+
+	.button {
+		@apply inline-flex items-center gap-2 rounded-full px-7 py-3 text-[0.9rem] font-semibold text-white transition-all;
+		background: linear-gradient(
+			87.12deg,
+			#470b58 1.98%,
+			#c21b84 50.27%,
+			#fa595e 74.42%,
+			#f8bd31 98.56%
+		);
+		box-shadow: 0 4px 20px rgba(194, 27, 132, 0.3);
+
+		&:hover {
+			transform: translateY(-2px);
+			box-shadow: 0 8px 28px rgba(194, 27, 132, 0.45);
+		}
+	}
+}

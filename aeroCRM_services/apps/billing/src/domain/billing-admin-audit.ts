@@ -1,0 +1,104 @@
+import { Prisma } from '@prisma/billing-client';
+import { randomUUID } from 'node:crypto';
+import {
+	BILLING_ADMIN_AUDIT_ROUTING_KEY,
+	BILLING_EVENT_TYPES,
+	BILLING_EVENTS_EXCHANGE
+} from '../messaging/billing-messaging.constants';
+import { getBillingCorrelationId } from '../common/billing-request-context';
+
+export const BILLING_ADMIN_AUDIT_ACTIONS = [
+	'PAYMENT_MANUAL_CHECK',
+	'PAYMENT_UNKNOWN_PROVIDER_RESOLVED',
+	'PAYMENT_CLEANUP_RUN',
+	'SUBSCRIPTION_ACTIVATE',
+	'SUBSCRIPTION_EXTEND_DAYS',
+	'SUBSCRIPTION_CANCEL',
+	'AUTO_RENEWAL_ADMIN_PAUSE',
+	'AUTO_RENEWAL_ADMIN_RESUME',
+	'AUTO_RENEWAL_REVOKE',
+	'AUTO_RENEWAL_RECONCILE',
+	'AUTO_RENEWAL_TECHNICAL_RESUME',
+	'SITE_SETTINGS_UPDATE',
+	'BILLING_DELIVERY_RETRY'
+] as const;
+
+export type BillingAdminAuditAction =
+	(typeof BILLING_ADMIN_AUDIT_ACTIONS)[number];
+export type BillingAdminAuditSection =
+	| 'PAYMENTS'
+	| 'SUBSCRIPTIONS'
+	| 'SITE_SETTINGS'
+	| 'TASKS'
+	| 'MESSAGING';
+
+export interface BillingAdminActor {
+	id: string;
+	role: 'ADMIN' | 'DEV';
+	ip?: string | null;
+	userAgent?: string | null;
+}
+
+export interface BillingAdminAuditInput {
+	actor: BillingAdminActor;
+	section: BillingAdminAuditSection;
+	action: BillingAdminAuditAction;
+	description: string;
+	entity: {
+		type: string;
+		id: string;
+		label: string | null;
+		targetUserId: string | null;
+	};
+	metadata?: Record<string, unknown>;
+	correlationId?: string;
+}
+
+export async function enqueueBillingAdminAudit(
+	transaction: Prisma.TransactionClient,
+	input: BillingAdminAuditInput
+): Promise<void> {
+	const eventId = randomUUID();
+	const occurredAt = new Date().toISOString();
+	const correlationId = input.correlationId || getBillingCorrelationId();
+	const requestIp = boundedContext(input.actor.ip, 128);
+	const requestUserAgent = boundedContext(input.actor.userAgent, 500);
+	await transaction.outboxEvent.create({
+		data: {
+			eventId,
+			eventType: BILLING_EVENT_TYPES.adminAudit,
+			aggregateType: 'billing.admin-audit',
+			aggregateId: input.entity.id,
+			correlationId,
+			exchange: BILLING_EVENTS_EXCHANGE,
+			routingKey: BILLING_ADMIN_AUDIT_ROUTING_KEY,
+			payload: {
+				schemaVersion: 1,
+				eventType: BILLING_EVENT_TYPES.adminAudit,
+				eventId,
+				occurredAt,
+				correlationId,
+				actorId: input.actor.id,
+				section: input.section,
+				action: input.action,
+				description: input.description,
+				entity: input.entity,
+				metadata: {
+					...(input.metadata || {}),
+					actorRole: input.actor.role,
+					requestIp,
+					requestUserAgent
+				}
+			} as Prisma.InputJsonValue
+		}
+	});
+}
+
+function boundedContext(
+	value: string | null | undefined,
+	maxLength: number
+): string | null {
+	if (typeof value !== 'string') return null;
+	const normalized = value.trim();
+	return normalized ? normalized.slice(0, maxLength) : null;
+}

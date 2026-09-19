@@ -1,0 +1,402 @@
+import {
+	YOOKASSA_RECEIPT_CONTRACT,
+	YooKassaService
+} from './yookassa.service';
+
+const ENV_KEYS = [
+	'CRM_PAYMENT_LAUNCH_MODE',
+	'YOOKASSA_TEST_SHOP_ID',
+	'YOOKASSA_TEST_SECRET_KEY',
+	'YOOKASSA_PRODUCTION_SHOP_ID',
+	'YOOKASSA_PRODUCTION_SECRET_KEY'
+] as const;
+
+describe('YooKassaService safe readiness', () => {
+	const original = new Map<string, string | undefined>();
+	const originalFetch = global.fetch;
+
+	beforeEach(() => {
+		for (const key of ENV_KEYS) {
+			original.set(key, process.env[key]);
+			delete process.env[key];
+		}
+	});
+
+	afterEach(() => {
+		global.fetch = originalFetch;
+		for (const key of ENV_KEYS) {
+			const value = original.get(key);
+			if (value === undefined) delete process.env[key];
+			else process.env[key] = value;
+		}
+	});
+
+	it('reports only production credential-presence booleans', () => {
+		process.env.CRM_PAYMENT_LAUNCH_MODE = 'production';
+		process.env.YOOKASSA_PRODUCTION_SHOP_ID = 'test-production-shop-id';
+		process.env.YOOKASSA_PRODUCTION_SECRET_KEY = 'test-production-secret';
+		process.env.YOOKASSA_TEST_SHOP_ID = 'ignored-non-production-shop-id';
+		process.env.YOOKASSA_TEST_SECRET_KEY = 'ignored-non-production-secret';
+		const service = new YooKassaService();
+
+		const status = service.configurationStatus();
+
+		expect(status).toEqual({
+			mode: 'production',
+			shopIdConfigured: true,
+			secretKeyConfigured: true,
+			credentialsConfigured: true
+		});
+		expect(JSON.stringify(status)).not.toContain(
+			'test-production-shop-id'
+		);
+		expect(JSON.stringify(status)).not.toContain('test-production-secret');
+	});
+
+	it('fails readiness closed when either selected credential is absent', () => {
+		process.env.CRM_PAYMENT_LAUNCH_MODE = 'test';
+		process.env.YOOKASSA_TEST_SHOP_ID = 'test-shop-id';
+		const service = new YooKassaService();
+
+		expect(service.configurationStatus()).toEqual({
+			mode: 'test',
+			shopIdConfigured: true,
+			secretKeyConfigured: false,
+			credentialsConfigured: false
+		});
+		expect(service.isConfigured()).toBe(false);
+	});
+
+	it('pins the fiscal receipt request and stored-response field contract', () => {
+		expect(YOOKASSA_RECEIPT_CONTRACT).toEqual({
+			schemaVersion: 1,
+			contractVersion: 'yookassa-receipt-create-v2',
+			requestIncluded: true,
+			customerContactRequired: true,
+			item: {
+				vatCode: 1,
+				paymentSubject: 'service',
+				paymentMode: 'full_payment'
+			},
+			internet: true,
+			normalizedStoredFields: [
+				'id',
+				'status',
+				'type',
+				'fiscal_document_number',
+				'fiscal_storage_number',
+				'fiscal_attribute',
+				'registered_at'
+			],
+			rawProviderResponseStored: true
+		});
+	});
+
+	it('sends the pinned fiscal receipt fields in the mocked create request', async () => {
+		process.env.CRM_PAYMENT_LAUNCH_MODE = 'test';
+		process.env.YOOKASSA_TEST_SHOP_ID = 'test-shop-id';
+		process.env.YOOKASSA_TEST_SECRET_KEY = 'test-secret';
+		const fetchMock = jest.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			json: jest.fn().mockResolvedValue({
+				id: 'provider-payment-1',
+				status: 'pending'
+			})
+		});
+		global.fetch = fetchMock as unknown as typeof fetch;
+		const service = new YooKassaService();
+
+		await service.createPayment(
+			{
+				paymentId: 'payment-1',
+				amount: '990.00',
+				currency: 'RUB',
+				plan: 'EASY',
+				billingPeriod: 'MONTHLY',
+				autoRenew: true,
+				customerEmail: 'payer@example.test',
+				customerPhone: '+79990000000',
+				returnUrl: 'https://aerocrm.space/payment/success',
+				kind: 'ONE_TIME'
+			},
+			'provider-command-1'
+		);
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		const [url, options] = fetchMock.mock.calls[0] as [
+			string,
+			{ body: string; headers: Record<string, string> }
+		];
+		expect(url).toBe('https://api.yookassa.ru/v3/payments');
+		expect(options.headers['Idempotence-Key']).toBe('provider-command-1');
+		const body = JSON.parse(options.body) as Record<string, any>;
+		expect(body.receipt).toEqual({
+			customer: {
+				email: 'payer@example.test',
+				phone: '+79990000000'
+			},
+			items: [
+				{
+					description: 'Подписка aeroCRM EASY',
+					quantity: '1.00',
+					amount: { value: '990.00', currency: 'RUB' },
+					vat_code: 1,
+					payment_subject: 'service',
+					payment_mode: 'full_payment'
+				}
+			],
+			internet: true
+		});
+		expect(body.confirmation).toEqual({
+			type: 'redirect',
+			return_url: 'https://aerocrm.space/payment/success'
+		});
+		expect(body.save_payment_method).toBe(true);
+		expect(body).not.toHaveProperty('payment_method_id');
+		expect(body.description).toBe('aeroCRM EASY MONTHLY');
+		expect(options).not.toHaveProperty('redirect');
+		expect(body.metadata).toEqual({
+			paymentId: 'payment-1',
+			kind: 'ONE_TIME',
+			plan: 'EASY',
+			billingPeriod: 'MONTHLY'
+		});
+	});
+
+	it.each(['ONE_TIME', 'RECURRING'] as const)(
+		'isolates the aeroCRM %s request without changing Widgets metadata',
+		async kind => {
+			process.env.CRM_PAYMENT_LAUNCH_MODE = 'test';
+			process.env.YOOKASSA_TEST_SHOP_ID = 'test-shop-id';
+			process.env.YOOKASSA_TEST_SECRET_KEY = 'test-secret';
+			const fetchMock = jest.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: jest.fn().mockResolvedValue({
+					id: 'crm-provider-payment',
+					status: 'pending'
+				})
+			});
+			global.fetch = fetchMock as unknown as typeof fetch;
+			await new YooKassaService().createPayment(
+				{
+					productCode: 'AEROCRM',
+					paymentId: 'crm-payment-1',
+					amount: '1280.00',
+					currency: 'RUB',
+					plan: 'PAID',
+					billingPeriod: 'MONTHLY',
+					autoRenew: true,
+					customerEmail: 'crm-payer@example.test',
+					returnUrl: 'https://crm.aerocrm.space/settings',
+					...(kind === 'RECURRING'
+						? { paymentMethodId: 'crm-saved-method' }
+						: {}),
+					kind
+				},
+				'wincrm-provider-command-1'
+			);
+			const [, options] = fetchMock.mock.calls[0] as [
+				string,
+				{ body: string; headers: Record<string, string> }
+			];
+			const body = JSON.parse(options.body) as Record<string, any>;
+			expect(options).toMatchObject({ redirect: 'error' });
+			expect(body.description).toBe('aeroCRM PAID MONTHLY');
+			expect(body.metadata).toEqual({
+				productCode: 'AEROCRM',
+				paymentId: 'crm-payment-1',
+				kind,
+				plan: 'PAID',
+				billingPeriod: 'MONTHLY'
+			});
+			expect(body.receipt.items[0].description).toBe(
+				'Подписка aeroCRM PAID'
+			);
+			expect(body.receipt.items[0].amount).toEqual({
+				value: '1280.00',
+				currency: 'RUB'
+			});
+			expect(options.headers['Idempotence-Key']).toBe(
+				'wincrm-provider-command-1'
+			);
+			if (kind === 'RECURRING') {
+				expect(body.payment_method_id).toBe('crm-saved-method');
+				expect(body).not.toHaveProperty('confirmation');
+				expect(body).not.toHaveProperty('save_payment_method');
+			} else {
+				expect(body.confirmation).toEqual({
+					type: 'redirect',
+					return_url: 'https://crm.aerocrm.space/settings'
+				});
+				expect(body.save_payment_method).toBe(true);
+				expect(body).not.toHaveProperty('payment_method_id');
+			}
+		}
+	);
+
+	it('rejects redirects during aeroCRM payment and receipt verification only', async () => {
+		process.env.CRM_PAYMENT_LAUNCH_MODE = 'test';
+		process.env.YOOKASSA_TEST_SHOP_ID = 'test-shop-id';
+		process.env.YOOKASSA_TEST_SECRET_KEY = 'test-secret';
+		const fetchMock = jest.fn().mockImplementation(async () => ({
+			ok: true,
+			status: 200,
+			json: async () => ({ items: [], status: 'pending' })
+		}));
+		global.fetch = fetchMock;
+		const service = new YooKassaService();
+		await service.getPayment('provider-payment', 'AEROCRM');
+		await service.getReceipts('provider-payment', 'AEROCRM');
+		await service.getPayment('provider-payment');
+		await service.getReceipts('provider-payment');
+		for (const index of [0, 1])
+			expect(fetchMock.mock.calls[index][1]).toMatchObject({
+				redirect: 'error'
+			});
+		for (const index of [2, 3])
+			expect(fetchMock.mock.calls[index][1]).not.toHaveProperty(
+				'redirect'
+			);
+	});
+
+	it('uses the saved provider method without redirect fields for recurring payment', async () => {
+		process.env.CRM_PAYMENT_LAUNCH_MODE = 'test';
+		process.env.YOOKASSA_TEST_SHOP_ID = 'test-shop-id';
+		process.env.YOOKASSA_TEST_SECRET_KEY = 'test-secret';
+		const fetchMock = jest.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			json: jest.fn().mockResolvedValue({
+				id: 'provider-payment-1',
+				status: 'pending'
+			})
+		});
+		global.fetch = fetchMock as unknown as typeof fetch;
+		const service = new YooKassaService();
+
+		await service.createPayment(
+			{
+				paymentId: 'payment-1',
+				amount: '990.00',
+				currency: 'RUB',
+				plan: 'EASY',
+				billingPeriod: 'MONTHLY',
+				autoRenew: true,
+				customerEmail: 'payer@example.test',
+				customerPhone: null,
+				returnUrl: 'https://aerocrm.space/payment/success',
+				paymentMethodId: 'provider-method-1',
+				kind: 'RECURRING'
+			},
+			'provider-command-1'
+		);
+
+		const [, options] = fetchMock.mock.calls[0] as [
+			string,
+			{ body: string; headers: Record<string, string> }
+		];
+		const body = JSON.parse(options.body) as Record<string, unknown>;
+		expect(options.headers['Idempotence-Key']).toBe('provider-command-1');
+		expect(body.payment_method_id).toBe('provider-method-1');
+		expect(body).not.toHaveProperty('confirmation');
+		expect(body).not.toHaveProperty('save_payment_method');
+	});
+
+	it('reads every receipt page and forwards only an encoded opaque cursor', async () => {
+		process.env.CRM_PAYMENT_LAUNCH_MODE = 'test';
+		process.env.YOOKASSA_TEST_SHOP_ID = 'test-shop-id';
+		process.env.YOOKASSA_TEST_SECRET_KEY = 'test-secret';
+		const fetchMock = jest
+			.fn()
+			.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				json: jest.fn().mockResolvedValue({
+					type: 'list',
+					items: [{ id: 'provider-receipt-1', status: 'succeeded' }],
+					next_cursor: 'cursor:page-2'
+				})
+			})
+			.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				json: jest.fn().mockResolvedValue({
+					type: 'list',
+					items: [{ id: 'provider-receipt-2', status: 'canceled' }]
+				})
+			});
+		global.fetch = fetchMock as unknown as typeof fetch;
+		const service = new YooKassaService();
+
+		await expect(
+			service.getReceipts('provider-payment:1')
+		).resolves.toEqual({
+			type: 'list',
+			items: [
+				{ id: 'provider-receipt-1', status: 'succeeded' },
+				{ id: 'provider-receipt-2', status: 'canceled' }
+			]
+		});
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(fetchMock.mock.calls[0]?.[0]).toBe(
+			'https://api.yookassa.ru/v3/receipts?payment_id=provider-payment%3A1&limit=100'
+		);
+		expect(fetchMock.mock.calls[1]?.[0]).toBe(
+			'https://api.yookassa.ru/v3/receipts?payment_id=provider-payment%3A1&limit=100&cursor=cursor%3Apage-2'
+		);
+	});
+
+	it('fails closed on a repeated receipt cursor', async () => {
+		process.env.CRM_PAYMENT_LAUNCH_MODE = 'test';
+		process.env.YOOKASSA_TEST_SHOP_ID = 'test-shop-id';
+		process.env.YOOKASSA_TEST_SECRET_KEY = 'test-secret';
+		const fetchMock = jest.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			json: jest.fn().mockResolvedValue({
+				type: 'list',
+				items: [],
+				next_cursor: 'same-cursor'
+			})
+		});
+		global.fetch = fetchMock as unknown as typeof fetch;
+
+		await expect(
+			new YooKassaService().getReceipts('provider-payment-1')
+		).rejects.toMatchObject({
+			code: 'PROVIDER_RECEIPT_PAGINATION_INVALID',
+			retryable: false
+		});
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it('fails closed instead of silently truncating an excessive receipt list', async () => {
+		process.env.CRM_PAYMENT_LAUNCH_MODE = 'test';
+		process.env.YOOKASSA_TEST_SHOP_ID = 'test-shop-id';
+		process.env.YOOKASSA_TEST_SECRET_KEY = 'test-secret';
+		let page = 0;
+		const fetchMock = jest.fn().mockImplementation(() => {
+			page += 1;
+			return Promise.resolve({
+				ok: true,
+				status: 200,
+				json: jest.fn().mockResolvedValue({
+					type: 'list',
+					items: [],
+					next_cursor: `cursor-${page}`
+				})
+			});
+		});
+		global.fetch = fetchMock as unknown as typeof fetch;
+
+		await expect(
+			new YooKassaService().getReceipts('provider-payment-1')
+		).rejects.toMatchObject({
+			code: 'PROVIDER_RECEIPT_PAGINATION_LIMIT',
+			retryable: false
+		});
+		expect(fetchMock).toHaveBeenCalledTimes(10);
+	});
+});

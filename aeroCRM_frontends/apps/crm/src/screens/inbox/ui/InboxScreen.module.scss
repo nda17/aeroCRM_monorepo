@@ -1,0 +1,53 @@
+.screen {
+	@apply flex min-w-0 flex-col gap-4;
+}
+.tabs {
+	@apply flex flex-wrap items-center gap-2;
+}
+.panel {
+	@apply overflow-hidden rounded-panel border border-crm-border bg-crm-surface shadow-panel;
+}
+.panelHeader {
+	@apply flex flex-wrap items-center justify-between gap-3 border-b border-crm-border p-3 sm:p-4;
+}
+.panelTitle {
+	@apply text-base font-semibold text-crm-text;
+}
+.search {
+	@apply flex w-full flex-col gap-3 sm:flex-row sm:items-end lg:w-auto;
+}
+.entryButton {
+	@apply flex min-w-0 max-w-full flex-col items-start gap-1 rounded-lg text-left [overflow-wrap:anywhere] transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+}
+.entryButton strong {
+	@apply font-semibold;
+}
+.entryButton span {
+	@apply text-sm text-crm-muted;
+}
+.contact {
+	@apply flex min-w-0 flex-col gap-1 text-sm [overflow-wrap:anywhere];
+}
+.entriesTable table {
+	@apply md:table-fixed md:min-w-[960px];
+}
+.entriesTable td :where(span, strong) {
+	@apply max-w-full whitespace-normal;
+}
+.titleColumn {
+	@apply w-[26%];
+}
+.contactColumn,
+.receivedColumn {
+	@apply w-[18%];
+}
+.originColumn,
+.statusColumn {
+	@apply w-[12%];
+}
+.slaColumn {
+	@apply w-[14%];
+}
+.pagination {
+	@apply flex flex-wrap items-center justify-end gap-3 border-t border-crm-border p-3 text-sm text-crm-muted;
+}

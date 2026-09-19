@@ -1,0 +1,158 @@
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../node_modules/@prisma/crm-customers-client"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CRM_CUSTOMERS_DATABASE_URL")
+  schemas  = ["crm_customers"]
+}
+
+model ExportAudit {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  actorSubject String @map("actor_subject") @db.VarChar(256)
+  entity String @db.VarChar(16)
+  format String @db.VarChar(4)
+  rowCount Int @map("row_count")
+  byteCount Int @map("byte_count")
+  snapshotAt DateTime @map("snapshot_at")
+  preparedAt DateTime @default(now()) @map("prepared_at")
+
+  @@index([workspaceId, preparedAt, id], map: "export_audit_workspace_prepared_idx")
+  @@map("export_audit")
+  @@schema("crm_customers")
+}
+
+model ServiceIdentity {
+  id          String   @id @default("singleton")
+  serviceName String   @default("crm-customers-service") @map("service_name")
+  databaseId  String   @unique(map: "service_identity_database_id_key") @default(uuid()) @map("database_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("service_identity")
+  @@schema("crm_customers")
+}
+
+model Company {
+  id               String    @id @default(uuid()) @db.Uuid
+  workspaceId      String    @map("workspace_id") @db.Uuid
+  name             String    @db.VarChar(200)
+  inn              String?   @db.VarChar(12)
+  website          String?   @db.VarChar(2048)
+  legalName        String?   @map("legal_name") @db.VarChar(2000)
+  kpp              String?   @db.VarChar(9)
+  ogrn             String?   @db.VarChar(15)
+  legalAddress     String?   @map("legal_address") @db.VarChar(2000)
+  entityType       String?   @map("entity_type") @db.VarChar(16)
+  notes            String?   @db.VarChar(5000)
+  createdBySubject String    @map("created_by_subject") @db.VarChar(256)
+  teamId           String?   @map("team_id") @db.Uuid
+  version          Int       @default(1)
+  archivedAt       DateTime? @map("archived_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  contacts         Contact[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, archivedAt, createdAt, id])
+  @@index([workspaceId, createdBySubject, archivedAt])
+  @@index([workspaceId, teamId, archivedAt])
+  @@index([workspaceId, inn])
+  @@map("companies")
+  @@schema("crm_customers")
+}
+
+model Contact {
+  id               String    @id @default(uuid()) @db.Uuid
+  workspaceId      String    @map("workspace_id") @db.Uuid
+  name             String    @db.VarChar(200)
+  phone            String?   @db.VarChar(16)
+  email            String?   @db.VarChar(254)
+  companyId        String?   @map("company_id") @db.Uuid
+  timeZone         String?   @map("time_zone") @db.VarChar(100)
+  preferredCallStart String? @map("preferred_call_start") @db.VarChar(5)
+  preferredCallEnd  String?  @map("preferred_call_end") @db.VarChar(5)
+  notes            String?   @db.VarChar(5000)
+  createdBySubject String    @map("created_by_subject") @db.VarChar(256)
+  teamId           String?   @map("team_id") @db.Uuid
+  version          Int       @default(1)
+  archivedAt       DateTime? @map("archived_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  company          Company?  @relation(fields: [workspaceId, companyId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, archivedAt, createdAt, id])
+  @@index([workspaceId, createdBySubject, archivedAt])
+  @@index([workspaceId, teamId, archivedAt])
+  @@index([workspaceId, phone])
+  @@index([workspaceId, email])
+  @@index([workspaceId, companyId])
+  @@map("contacts")
+  @@schema("crm_customers")
+}
+
+model CustomerCommand {
+  commandId    String   @id @map("command_id") @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  entityId     String   @map("entity_id") @db.Uuid
+  entityKind   String   @map("entity_kind") @db.VarChar(16)
+  actorSubject String   @map("actor_subject") @db.VarChar(256)
+  requestHash  String   @map("request_hash") @db.Char(64)
+  response     Json
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([workspaceId, entityId])
+  @@map("customer_commands")
+  @@schema("crm_customers")
+}
+
+model CustomerActivity {
+  id            String   @id @default(uuid()) @db.Uuid
+  workspaceId   String   @map("workspace_id") @db.Uuid
+  entityId      String   @map("entity_id") @db.Uuid
+  entityKind    String   @map("entity_kind") @db.VarChar(16)
+  commandId     String   @unique @map("command_id") @db.Uuid
+  actorSubject  String   @map("actor_subject") @db.VarChar(256)
+  action        String   @db.VarChar(16)
+  entityVersion Int      @map("entity_version")
+  changedFields String[] @map("changed_fields")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([workspaceId, entityKind, entityId, createdAt, id], map: "customer_activities_entity_created_idx")
+  @@map("customer_activities")
+  @@schema("crm_customers")
+}
+
+model IntakeOperationSlot {
+  operationId  String    @id @map("operation_id") @db.Uuid
+  workspaceId  String    @map("workspace_id") @db.Uuid
+  workflowId   String    @map("workflow_id") @db.Uuid
+  actorSubject String    @map("actor_subject") @db.VarChar(256)
+  payloadHash  String    @map("payload_hash") @db.Char(64)
+  state        String    @db.VarChar(16)
+  contactId    String?   @map("contact_id") @db.Uuid
+  result       Json?
+  committedAt  DateTime? @map("committed_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@unique([workspaceId, workflowId])
+  @@map("intake_operation_slots")
+  @@schema("crm_customers")
+}
+
+model IntakeOperationCommand {
+  commandId    String   @id @map("command_id") @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  actorSubject String   @map("actor_subject") @db.VarChar(256)
+  requestHash  String   @map("request_hash") @db.Char(64)
+  result       Json
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("intake_operation_commands")
+  @@schema("crm_customers")
+}

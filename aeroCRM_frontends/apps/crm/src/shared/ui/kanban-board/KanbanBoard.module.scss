@@ -1,0 +1,35 @@
+.board {
+	@apply w-full overflow-x-auto pb-2 focus-visible:rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2;
+}
+
+.columns {
+	@apply flex min-w-max items-start gap-4;
+}
+
+.column {
+	@apply w-[19rem] shrink-0 rounded-2xl border border-crm-border bg-crm-surface-muted p-3;
+}
+
+.columnHeader {
+	@apply mb-3 flex min-h-8 items-center justify-between gap-3 px-1;
+}
+
+.columnTitle {
+	@apply min-w-0 text-sm font-bold text-crm-text;
+}
+
+.columnMeta {
+	@apply inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 px-2 text-xs font-bold text-primary;
+}
+
+.cardList {
+	@apply flex flex-col gap-3;
+}
+
+.cardItem {
+	@apply min-w-0;
+}
+
+.emptyColumn {
+	@apply rounded-xl border border-dashed border-crm-border-strong bg-crm-surface px-4 py-8 text-center text-sm leading-5 text-crm-muted;
+}

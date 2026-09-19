@@ -1,0 +1,88 @@
+import { LiveChangesService } from './live/live-changes.service';
+import { LiveChangesController } from './live/live-changes.controller';
+import { Module } from '@nestjs/common';
+import { SalesExportController } from './exports/export.controller';
+import { SalesExportService } from './exports/export.service';
+import { ConfigModule } from '@nestjs/config';
+import { CrmSalesHealthController } from './health/crm-sales-health.controller';
+import { CrmSalesHealthService } from './health/crm-sales-health.service';
+import { CrmSalesPrismaModule } from './prisma/crm-sales-prisma.module';
+import { CrmSalesInternalGuard } from './internal/crm-sales-internal.guard';
+import { PipelineTemplateInstallationController } from './pipelines/pipeline-template-installation.controller';
+import { PipelineTemplateInstallationService } from './pipelines/pipeline-template-installation.service';
+import { PipelineTemplateCatalogController } from './templates/pipeline-template-catalog.controller';
+import { PipelineTemplateCatalogService } from './templates/pipeline-template-catalog.service';
+import { SalesController } from './sales/sales.controller';
+import { SalesService } from './sales/sales.service';
+import { SalesAccessClient, SalesAccessGuard } from './sales/sales-access';
+import { SalesContactClient } from './sales/sales-contact.client';
+import { IntakeOperationClient } from './intake-operations/intake-operation.client';
+import { IntakeOperationGuard } from './intake-operations/intake-operation.guard';
+import { IntakeOperationController } from './intake-operations/intake-operation.controller';
+import { IntakeOperationService } from './intake-operations/intake-operation.service';
+import { WorkdayController } from './workday/workday.controller';
+import { WorkdayService } from './workday/workday.service';
+import { SalesAssigneeClient } from './workday/sales-assignee.client';
+import { ReminderRulesController } from './reminders/reminder-rules.controller';
+import { ReminderRulesService } from './reminders/reminder-rules.service';
+import { ReminderActorClient } from './reminders/reminder-actor.client';
+import {
+	ReminderDeliveryController,
+	ReminderDeliveryGuard
+} from './reminders/reminder-delivery.controller';
+import { ReminderDeliveryService } from './reminders/reminder-delivery.service';
+import { ReminderRecipientsClient } from './reminders/reminder-recipients.client';
+import { ReminderReadinessService } from './reminders/reminder-readiness.service';
+import { TaskSeriesController } from './recurring-tasks/task-series.controller';
+import { TaskSeriesService } from './recurring-tasks/task-series.service';
+import { TaskSeriesAuthorityClient } from './recurring-tasks/task-series-authority.client';
+import { TaskNotificationsController } from './task-notifications/task-notifications.controller';
+import { TaskNotificationsService } from './task-notifications/task-notifications.service';
+
+@Module({
+	imports: [
+		ConfigModule.forRoot({ isGlobal: true }),
+		CrmSalesPrismaModule
+	],
+	controllers: [
+		LiveChangesController,
+		CrmSalesHealthController,
+		PipelineTemplateCatalogController,
+		PipelineTemplateInstallationController,
+		SalesController,
+		WorkdayController,
+		TaskSeriesController,
+		TaskNotificationsController,
+		ReminderRulesController,
+		ReminderDeliveryController,
+		SalesExportController,
+		IntakeOperationController
+	],
+	providers: [
+		LiveChangesService,
+		CrmSalesHealthService,
+		CrmSalesInternalGuard,
+		PipelineTemplateCatalogService,
+		PipelineTemplateInstallationService,
+		SalesService,
+		WorkdayService,
+		TaskSeriesService,
+		TaskNotificationsService,
+		TaskSeriesAuthorityClient,
+		ReminderRulesService,
+		ReminderActorClient,
+		ReminderDeliveryGuard,
+		ReminderDeliveryService,
+		ReminderRecipientsClient,
+		ReminderReadinessService,
+		SalesAssigneeClient,
+		SalesExportService,
+		SalesAccessClient,
+		SalesAccessGuard,
+		SalesContactClient,
+		IntakeOperationClient,
+		IntakeOperationGuard,
+		IntakeOperationService
+	]
+})
+export class CrmSalesModule {}

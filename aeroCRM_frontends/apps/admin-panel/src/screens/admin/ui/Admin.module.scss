@@ -1,0 +1,27 @@
+.wrapper {
+	@apply relative flex w-full min-w-0 flex-col;
+
+	.user {
+		@apply text-red-700;
+	}
+}
+
+.metrics {
+	@apply grid grid-cols-3 gap-3;
+
+	@media (max-width: 760px) {
+		@apply grid-cols-1;
+	}
+
+	article {
+		@apply flex flex-col gap-2 rounded-xl border border-[#e8ddf5] bg-white p-5;
+	}
+
+	span {
+		@apply text-sm text-[#796987];
+	}
+
+	strong {
+		@apply text-2xl text-[#57266f];
+	}
+}

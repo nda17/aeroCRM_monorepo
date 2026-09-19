@@ -1,0 +1,7 @@
+.content {
+	@apply flex min-w-0 flex-col gap-2;
+}
+
+.pagination {
+	@apply flex flex-wrap items-center justify-between gap-2 text-xs text-crm-muted;
+}

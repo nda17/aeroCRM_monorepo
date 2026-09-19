@@ -1,0 +1,9 @@
+.viewport {
+	@apply flex min-h-dvh items-center justify-center bg-crm-bg p-4 sm:p-8;
+}
+.panel {
+	@apply w-full max-w-xl rounded-2xl border border-crm-border bg-crm-surface p-6 shadow-sm sm:p-8;
+}
+.brand {
+	@apply mb-6 text-2xl font-bold text-crm-text;
+}

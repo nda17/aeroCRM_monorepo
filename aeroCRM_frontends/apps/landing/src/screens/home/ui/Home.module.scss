@@ -1,0 +1,38 @@
+.page {
+	@apply contents;
+}
+
+.offerWrapper {
+	@apply relative px-4 py-[4rem];
+
+	&::before {
+		content: '';
+		@apply absolute inset-x-0 top-[1rem] mx-auto h-px max-w-[960px] opacity-70;
+		background: linear-gradient(
+			90deg,
+			transparent,
+			rgb(123 92 229 / 0.24),
+			rgb(224 90 138 / 0.2),
+			transparent
+		);
+	}
+
+	.circleOrange,
+	.circleYellow,
+	.circlePink {
+		@apply absolute rounded-full opacity-[0.8] z-1 pointer-events-none;
+		filter: blur(150px);
+	}
+
+	.circleOrange {
+		@apply left-[-103px] top-[12rem] w-[631px] h-[320px] bg-[#FA595E];
+	}
+
+	.circleYellow {
+		@apply left-[25rem] top-[4rem] w-[749px] h-[362px] bg-[#F8BD31];
+	}
+
+	.circlePink {
+		@apply right-[-8rem] top-[7px] w-[462px] h-[462px] bg-[#C21B84];
+	}
+}

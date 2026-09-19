@@ -1,0 +1,88 @@
+.wrapper {
+	@apply relative flex w-full min-w-0 flex-col;
+}
+
+.pageTabs {
+	@apply flex flex-wrap gap-2 min-w-0 mx-auto mb-4 w-full;
+}
+
+.devOnlyNotice {
+	@apply min-w-0 mx-auto mb-4 flex w-full items-center justify-end gap-2 rounded-lg border border-[#e0d6f0] bg-[#fbf8ff] px-4 py-3 text-sm font-semibold text-[#7b3fa0];
+}
+
+.pageTab {
+	@apply px-4 py-[7px] rounded-lg border border-[#e0d6f0] bg-white text-[#888] text-sm font-medium cursor-pointer transition-all duration-150;
+
+	&:hover {
+		@apply border-[#c4a8e8] text-[#7b3fa0];
+	}
+}
+
+.pageTabActive {
+	@apply text-white;
+	background: linear-gradient(
+		87.12deg,
+		#470b58 1.98%,
+		#c21b84 50.27%,
+		#fa595e 74.42%,
+		#f8bd31 98.56%
+	);
+
+	&:hover {
+		@apply text-white;
+	}
+}
+
+.section {
+	@apply flex flex-col gap-4 bg-white border border-[#e0d6f0] rounded-xl p-5 min-w-0 mx-auto w-full mb-6;
+
+	@media (max-width: 480px) {
+		@apply p-3 rounded-[10px] gap-[14px];
+	}
+}
+
+.sectionHeader {
+	@apply flex items-center gap-3;
+}
+
+.fieldLabel {
+	@apply text-[0.9rem] font-semibold text-[#1a1a1a];
+}
+
+.dirtyBadge {
+	@apply text-xs px-2 py-[2px] rounded-[20px] bg-[#fff8e1] border border-[#f5c842] text-[#b45309] font-medium;
+}
+
+.loading {
+	@apply text-[#bbb] text-[0.9rem] text-center py-10;
+}
+
+.btnRow {
+	@apply flex gap-[10px] flex-wrap;
+}
+
+.saveBtn {
+	@apply rounded-lg border-none text-white text-sm font-semibold cursor-pointer transition-opacity duration-200 py-[9px] px-[22px];
+	background: linear-gradient(
+		87.12deg,
+		#470b58 1.98%,
+		#c21b84 50.27%,
+		#fa595e 74.42%,
+		#f8bd31 98.56%
+	);
+
+	&:hover {
+		@apply opacity-90;
+	}
+	&:disabled {
+		@apply opacity-50 cursor-not-allowed;
+	}
+}
+
+.resetBtn {
+	@apply rounded-lg border border-[#c4a8e8] bg-transparent text-[#7b3fa0] text-sm font-semibold cursor-pointer transition-[background] duration-150 py-[9px] px-[22px];
+
+	&:hover {
+		@apply bg-[#f3eeff];
+	}
+}

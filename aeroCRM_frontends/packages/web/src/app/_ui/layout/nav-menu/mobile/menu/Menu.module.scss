@@ -1,0 +1,42 @@
+.wrapper {
+	@apply fixed right-0 top-0 z-[35] w-[min(22rem,100vw)] h-[100dvh] pb-8 bg-white rounded-bl-[24px] border-l border-[#c21b84]/10 overflow-y-auto flex flex-col;
+	box-shadow:
+		-12px 0 60px rgba(71, 11, 88, 0.12),
+		0 24px 48px rgba(0, 0, 0, 0.08);
+	animation: slideIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.header {
+	@apply flex items-center justify-between px-4 py-[0.9rem] shrink-0 relative;
+
+	&::after {
+		content: '';
+		@apply absolute bottom-0 left-0 right-0 h-[3px];
+		background: linear-gradient(
+			87.12deg,
+			#470b58 1.98%,
+			#c21b84 50.27%,
+			#fa595e 74.42%,
+			#f8bd31 98.56%
+		);
+	}
+}
+
+.closeBtn {
+	@apply flex items-center justify-center w-9 h-9 rounded-full border-[1.5px] border-[#470b58]/[0.15] bg-[#470b58]/[0.05] text-[#470b58] cursor-pointer shrink-0 transition-[background,border-color] duration-200;
+
+	&:hover {
+		@apply bg-[#470b58]/10 border-[#470b58]/25;
+	}
+}
+
+@keyframes slideIn {
+	from {
+		opacity: 0;
+		transform: translateX(16px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}

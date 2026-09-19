@@ -1,0 +1,55 @@
+{
+	"name": "@aerocrm/web",
+	"version": "0.1.0",
+	"private": true,
+	"license": "UNLICENSED",
+	"files": [
+		"src"
+	],
+	"sideEffects": [
+		"**/*.css",
+		"**/*.scss"
+	],
+	"scripts": {
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@tanstack/react-query": "^5.63.0",
+		"@tiptap/core": "^3.22.3",
+		"@tiptap/extension-link": "^3.22.3",
+		"@tiptap/extension-text-align": "^3.22.3",
+		"@tiptap/extension-underline": "^3.22.3",
+		"@tiptap/pm": "^3.22.3",
+		"@tiptap/react": "^3.22.3",
+		"@tiptap/starter-kit": "^3.22.3",
+		"axios": "^1.7.9",
+		"chart.js": "^4.5.1",
+		"clsx": "^2.1.1",
+		"jose": "^5.9.6",
+		"js-cookie": "^3.0.5",
+		"libphonenumber-js": "^1.12.42",
+		"qrcode": "^1.5.4",
+		"react-chartjs-2": "^5.3.1",
+		"react-hook-form": "^7.54.2",
+		"react-hot-toast": "^2.5.1",
+		"react-loading-skeleton": "^3.5.0",
+		"sharp": "^0.34.5",
+		"zustand": "^5.0.3"
+	},
+	"peerDependencies": {
+		"next": "^14.2.23",
+		"react": "^18.3.1",
+		"react-dom": "^18.3.1"
+	},
+	"devDependencies": {
+		"next": "^14.2.23",
+		"react": "^18.3.1",
+		"react-dom": "^18.3.1",
+		"@types/js-cookie": "^3.0.6",
+		"@types/node": "^20.17.12",
+		"@types/qrcode": "^1.5.6",
+		"@types/react": "^18.3.18",
+		"@types/react-dom": "^18.3.5",
+		"typescript": "^5.7.3"
+	}
+}

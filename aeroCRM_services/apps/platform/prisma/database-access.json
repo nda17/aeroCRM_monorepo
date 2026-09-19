@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "service": "platform",
+  "tables": {
+    "service_identity": [
+      "SELECT"
+    ],
+    "source_sequences": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "site_settings": [
+      "SELECT",
+      "UPDATE"
+    ],
+    "legal_pages": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "home_page_content": [
+      "SELECT",
+      "UPDATE"
+    ],
+    "billing_offer_producer_state": [
+      "SELECT"
+    ],
+    "outbox_events": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "_prisma_migrations": []
+  },
+  "sequences": {},
+  "types": [
+    "OutboxStatus"
+  ],
+  "routines": [
+    "current_semantic_fingerprint",
+    "refresh_current_semantic_fingerprint",
+    "enforce_current_semantic_fingerprint",
+    "enforce_service_identity_integrity",
+    "enforce_billing_offer_producer_cursor"
+  ],
+  "columnPrivileges": {
+    "service_identity": {
+      "UPDATE": [
+        "current_semantic_fingerprint",
+        "updated_at"
+      ]
+    },
+    "billing_offer_producer_state": {
+      "UPDATE": [
+        "current_aggregate_version",
+        "current_source_sequence",
+        "updated_at"
+      ]
+    }
+  },
+  "routineExecute": [
+    "current_semantic_fingerprint()",
+    "refresh_current_semantic_fingerprint(text)"
+  ]
+}

@@ -1,0 +1,57 @@
+.content {
+	@apply flex min-w-0 flex-col gap-5;
+}
+.toolbar {
+	@apply grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end;
+}
+.fieldsGrid {
+	@apply grid min-w-0 gap-4 sm:grid-cols-2;
+}
+.card {
+	@apply flex min-w-0 flex-col gap-4 rounded-xl border border-crm-border bg-crm-surface p-4;
+}
+.heading {
+	@apply flex min-w-0 flex-wrap items-start justify-between gap-3;
+	h3 {
+		@apply min-w-0 break-words text-base font-semibold text-crm-text;
+	}
+}
+.details {
+	@apply grid min-w-0 gap-3 text-sm sm:grid-cols-2;
+	dt {
+		@apply mb-1 text-crm-muted;
+	}
+	dd {
+		@apply break-words text-crm-text;
+	}
+}
+.note {
+	@apply break-words text-sm leading-6 text-crm-muted;
+}
+.warning {
+	@apply flex min-w-0 flex-col gap-3 rounded-xl border border-crm-warning/30 bg-crm-warning/10 p-4 text-sm leading-6 text-crm-text;
+}
+.error {
+	@apply rounded-xl border border-crm-danger/20 bg-crm-danger/10 p-3 text-sm leading-6 text-crm-danger;
+}
+.actions {
+	@apply flex min-w-0 flex-wrap gap-2;
+	button {
+		@apply min-h-11 max-sm:w-full;
+	}
+}
+.footer {
+	@apply sticky bottom-0 flex flex-wrap justify-end gap-3 border-t border-crm-border bg-crm-surface py-4;
+	button {
+		@apply min-h-11 max-sm:w-full;
+	}
+}
+.pagination {
+	@apply flex flex-wrap items-center justify-between gap-3 text-sm text-crm-muted;
+	button {
+		@apply min-h-11;
+	}
+}
+.form {
+	@apply m-0 flex min-w-0 flex-col gap-4 border-0 p-0;
+}

@@ -1,0 +1,119 @@
+.wrapper {
+	@apply relative flex w-full min-w-0 flex-col;
+}
+
+.section {
+	@apply flex flex-col gap-4 bg-white border border-[#e0d6f0] rounded-xl p-5 min-w-0 mx-auto w-full mb-6;
+
+	@media (max-width: 480px) {
+		@apply p-3 rounded-[10px] gap-[14px];
+	}
+}
+
+.toggleRow {
+	@apply flex items-center justify-between gap-4;
+}
+
+.field {
+	@apply flex flex-col gap-[6px];
+}
+
+.taskList {
+	@apply flex flex-col gap-4;
+}
+
+.taskRow {
+	@apply flex items-start justify-between gap-4 border border-[#efe8fb] rounded-xl p-4 bg-[#fcfaff];
+
+	@media (max-width: 640px) {
+		@apply flex-col items-stretch p-3;
+	}
+}
+
+.taskMeta {
+	@apply flex flex-col gap-[6px];
+}
+
+.fieldLabel {
+	@apply text-[0.9rem] font-semibold text-[#1a1a1a];
+}
+
+.fieldLabelRow {
+	@apply flex items-center gap-2;
+}
+
+.fieldHint {
+	@apply text-[0.8rem] text-[#aaa] mt-[2px];
+}
+
+.charCount {
+	@apply text-[0.78rem] text-[#bbb] text-right;
+}
+
+.taskResult {
+	@apply flex flex-col gap-[2px] text-[0.8rem] text-[#6f5a87] mt-1;
+}
+
+.taskTimestamp {
+	@apply text-[0.75rem] text-[#a592bb];
+}
+
+.toggle {
+	@apply relative shrink-0 rounded-full cursor-pointer border-none w-12 h-[26px] bg-[#e0d6f0] transition-[background] duration-200;
+}
+.toggle.toggleOn {
+	background: linear-gradient(90deg, #7b3fa0, #c21b84);
+}
+.toggle:disabled {
+	@apply opacity-60 cursor-not-allowed;
+}
+.toggleThumb {
+	@apply absolute top-1 left-1 w-[18px] h-[18px] bg-white rounded-full transition-transform duration-200;
+}
+.toggleOn .toggleThumb {
+	@apply translate-x-[22px];
+}
+
+.textarea {
+	@apply w-full bg-[#f8f5ff] border border-[#e0d6f0] rounded-lg text-[#1a1a1a] text-[0.9rem] outline-none resize-y transition-[border-color] duration-200 px-[14px] py-[10px];
+	font-family: inherit;
+}
+.textarea:focus {
+	@apply border-[#c4a8e8];
+}
+.textarea::placeholder {
+	@apply text-[#ccc];
+}
+
+.saveBtn {
+	@apply self-start rounded-lg border-none text-white text-sm font-semibold cursor-pointer transition-opacity duration-200 py-[9px] px-[22px];
+	background: linear-gradient(
+		87.12deg,
+		#470b58 1.98%,
+		#c21b84 50.27%,
+		#fa595e 74.42%,
+		#f8bd31 98.56%
+	);
+}
+.saveBtn:hover {
+	@apply opacity-90;
+}
+.saveBtn:disabled {
+	@apply opacity-50 cursor-not-allowed;
+}
+
+.taskBtn {
+	@apply shrink-0 self-start rounded-lg border border-[#d7c4ee] bg-white text-[#6b2d8f] text-sm font-semibold cursor-pointer transition-[opacity,transform,border-color] duration-200 py-[9px] px-[18px];
+
+	&:hover {
+		@apply opacity-90 -translate-y-px border-[#c21b84];
+	}
+
+	&:disabled {
+		@apply opacity-50 cursor-not-allowed;
+	}
+
+	@media (max-width: 640px) {
+		@apply w-full self-stretch;
+	}
+}

@@ -1,0 +1,19 @@
+.logo {
+	@apply inline-flex max-w-full shrink-0 items-center text-crm-brand no-underline;
+}
+
+.logo:focus-visible {
+	@apply rounded-xl outline-none ring-2 ring-primary/40 ring-offset-2;
+}
+
+.wordmark {
+	@apply block h-auto w-[168px] max-w-full sm:w-48;
+}
+
+.srOnly {
+	@apply sr-only;
+}
+
+.wordmarkCompact {
+	@apply w-24 sm:w-24;
+}

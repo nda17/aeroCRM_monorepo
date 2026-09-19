@@ -1,0 +1,15 @@
+.link-auth-button {
+	@apply inline-flex items-center gap-[0.45rem] rounded-max px-[0.8rem] py-[0.1rem] font-500 transition-all border border-white/[0.08] bg-white/[0.04] shadow-[0_3px_12px_rgba(0,0,0,0.12)];
+
+	> svg {
+		@apply w-[1.25rem] h-[1.25rem] transition-all rounded-max p-[0.12rem] shrink-0 bg-white/[0.06];
+	}
+
+	&:hover {
+		@apply -translate-y-px border-white/[0.16] bg-white/[0.08] shadow-[0_8px_16px_rgba(0,0,0,0.16)];
+
+		> svg {
+			@apply bg-white/10;
+		}
+	}
+}

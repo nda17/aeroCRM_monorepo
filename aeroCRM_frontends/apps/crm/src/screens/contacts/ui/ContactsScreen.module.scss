@@ -1,0 +1,52 @@
+.screen {
+	@apply flex flex-col gap-6;
+}
+
+.panel {
+	@apply overflow-hidden rounded-panel border border-crm-border bg-crm-surface shadow-panel;
+}
+
+.panelHeader {
+	@apply flex flex-col gap-4 border-b border-crm-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between lg:px-6;
+}
+
+.panelTitle {
+	@apply text-lg font-bold text-crm-text;
+}
+
+.panelDescription {
+	@apply mt-1 text-sm text-crm-muted;
+}
+
+.contactButton {
+	@apply flex min-w-[14rem] items-center gap-3 rounded-lg text-left transition-colors hover:text-primary;
+}
+
+.avatar {
+	@apply flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary;
+}
+
+.contactCopy {
+	@apply flex flex-col gap-1;
+
+	strong {
+		@apply text-sm font-semibold text-crm-text;
+	}
+
+	span {
+		@apply text-xs text-crm-muted;
+	}
+}
+
+.tabs {
+	@apply flex flex-wrap items-center gap-2;
+}
+.search {
+	@apply grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:max-w-sm;
+}
+.pagination {
+	@apply flex flex-wrap items-center justify-between gap-3 border-t border-crm-border px-5 py-4 text-sm text-crm-muted;
+}
+.notes {
+	@apply block max-w-xs truncate;
+}

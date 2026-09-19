@@ -1,0 +1,9 @@
+.content {
+	@apply col-span-full grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-2;
+}
+.field {
+	@apply flex min-w-0 flex-col gap-3;
+}
+.hint {
+	@apply col-span-full text-sm leading-relaxed text-crm-muted;
+}

@@ -1,0 +1,126 @@
+.form {
+	@apply w-full mx-auto overflow-hidden min-h-[22.699rem] z-10;
+	&.otp-form .link-button {
+		@apply min-h-11;
+	}
+
+	.otp-notice {
+		@apply mb-5 rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm leading-relaxed text-violet-950;
+		strong {
+			@apply mb-1 block text-base;
+		}
+	}
+
+	.otp-channels {
+		@apply mb-4 grid grid-cols-2 gap-3 border-0 p-0;
+	}
+	.otp-legend {
+		@apply mb-2 text-sm font-medium text-slate-700;
+	}
+	.otp-channel {
+		@apply flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-violet-950;
+		&:has(input:checked) {
+			@apply border-violet-600 bg-violet-50;
+		}
+		&:has(input:disabled) {
+			@apply cursor-default opacity-70;
+		}
+		input {
+			@apply h-4 w-4 accent-violet-700;
+		}
+	}
+	.otp-field {
+		@apply mb-4 flex min-w-0 flex-col gap-2 text-sm font-medium text-slate-700;
+		input {
+			@apply min-h-12 w-full min-w-0 rounded-xl border border-violet-200 bg-white px-4 py-3 text-base text-slate-900 outline-none;
+			&:focus {
+				@apply border-violet-500 ring-2 ring-violet-100;
+			}
+			&:disabled {
+				@apply cursor-default bg-slate-50 text-slate-500;
+			}
+		}
+	}
+
+	.auth-method-toggle {
+		@apply mb-5 grid grid-cols-2 gap-2 rounded-[1.15rem] border border-[#e0d6f0] p-1 bg-[#f8f5ff];
+
+		.method-button {
+			@apply rounded-[0.9rem] px-4 py-3 text-[0.95rem] font-medium transition-all text-[#888];
+
+			&:hover {
+				@apply text-[#7b3fa0] bg-[#f3eeff];
+			}
+		}
+
+		.method-button-active {
+			@apply text-white shadow-[0_4px_16px_rgb(100_60_180/0.2)];
+			background: linear-gradient(
+				87.12deg,
+				#470b58 1.98%,
+				#c21b84 50.27%,
+				#fa595e 74.42%,
+				#f8bd31 98.56%
+			);
+		}
+	}
+
+	.auth-alert {
+		@apply mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-relaxed text-red-700;
+	}
+
+	.verification-hint {
+		@apply rounded-2xl border border-[#e0d6f0] px-4 py-2 text-[0.78rem] leading-snug mb-3 text-[#666] bg-[#f8f5ff];
+	}
+
+	.link-actions {
+		@apply flex flex-wrap gap-2 mb-4;
+	}
+
+	.link-button {
+		@apply rounded-full border border-[#e0d6f0] px-3 py-2 text-[0.76rem] font-medium transition-all text-[#7b3fa0] bg-[#f3eeff];
+
+		&:hover:not(:disabled) {
+			@apply bg-[#e0d6f0];
+		}
+
+		&:disabled {
+			@apply cursor-not-allowed opacity-[0.65];
+		}
+	}
+
+	.wrapper-button {
+		@apply mb-4;
+
+		.button-primary {
+			@apply mt-1 w-full rounded-2xl px-4 py-3.5 text-[0.95rem] font-semibold transition-all duration-300 ease-in-out text-white shadow-[0_8px_24px_rgb(100_60_180/0.2)];
+			background: linear-gradient(
+				87.12deg,
+				#470b58 1.98%,
+				#c21b84 50.27%,
+				#fa595e 74.42%,
+				#f8bd31 98.56%
+			);
+
+			&:hover:not(:disabled) {
+				@apply -translate-y-px opacity-90 shadow-[0_12px_30px_rgb(100_60_180/0.28)];
+			}
+
+			&:disabled {
+				@apply cursor-not-allowed opacity-60 shadow-none;
+			}
+		}
+	}
+
+	.social-section {
+		@apply mb-4;
+
+		&:empty {
+			@apply hidden;
+		}
+	}
+
+	.telegram-auth-box {
+		@apply mt-4;
+	}
+}
