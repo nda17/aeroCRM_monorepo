@@ -3,7 +3,8 @@ import { Metadata } from 'next'
 
 export const metadata: Metadata = {
 	title: 'Политика в отношении файлов cookie',
-	description: 'Политика в отношении файлов cookie aeroCRM.ru'
+	description: 'Политика в отношении файлов cookie aeroCRM на aerocrm.space',
+	alternates: { canonical: 'https://aerocrm.space/legal-documentation/cookie-notice' }
 }
 
 async function fetchContent(): Promise<string> {

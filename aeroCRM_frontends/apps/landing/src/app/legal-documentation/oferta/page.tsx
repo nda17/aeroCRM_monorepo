@@ -3,7 +3,8 @@ import { Metadata } from 'next'
 
 export const metadata: Metadata = {
 	title: 'Публичная оферта',
-	description: 'Публичная оферта aeroCRM.ru'
+	description: 'Публичная оферта aeroCRM на aerocrm.space',
+	alternates: { canonical: 'https://aerocrm.space/legal-documentation/oferta' }
 }
 
 async function fetchContent(): Promise<string> {

@@ -4,6 +4,14 @@ export const AUTH_RETURN_INTENT_STORAGE_KEY =
 
 const WINCRM_ORIGIN = 'https://workspace.aerocrm.space'
 const LOCAL_WINCRM_ORIGIN = 'http://localhost:3001'
+const ADMIN_ORIGIN = 'https://admin.aerocrm.space'
+const LOCAL_ADMIN_ORIGIN = 'http://localhost:3003'
+const ADMIN_RETURN_PATHS = new Set([
+	'/admin', '/admin/alerts', '/admin/content', '/admin/crm',
+	'/admin/databases', '/admin/event-log', '/admin/mailings',
+	'/admin/messaging', '/admin/settings', '/admin/support',
+	'/admin/system', '/admin/telegram-bot', '/admin/user-list'
+])
 const AUTH_RETURN_URL_MAX_LENGTH = 2048
 const AUTH_RETURN_INTENT_TTL_MS = 15 * 60 * 1000
 const UNSAFE_URL_CHARACTERS = /[\\\u0000-\u001f\u007f]/
@@ -60,23 +68,22 @@ export const getSafeAuthReturnUrl = (
 	}
 
 	if (allowedOrigins.has(url.origin)) return url.toString()
-	// Operator notifications return to this one protected screen. Do not expand
-	// the general same-origin redirect surface or accept credentials in links.
-	const supportOrigins = new Set(['https://aerocrm.space'])
+	// Admin returns are limited to known routes on the separate admin origin.
+	const adminOrigins = new Set([ADMIN_ORIGIN])
 	if (isLocalhostAllowed(options))
-		supportOrigins.add('http://localhost:3000')
+		adminOrigins.add(LOCAL_ADMIN_ORIGIN)
+	const allowedPath = ADMIN_RETURN_PATHS.has(url.pathname) ||
+		/^\/admin\/user\/edit\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(url.pathname)
 	const conversations = url.searchParams.getAll('conversationId')
-	return supportOrigins.has(url.origin) &&
-		url.pathname === '/admin/support' &&
+	return adminOrigins.has(url.origin) &&
+		allowedPath &&
 		!url.hash &&
-		Array.from(url.searchParams.keys()).every(
-			key => key === 'conversationId'
-		) &&
-		(conversations.length === 0 ||
-			(conversations.length === 1 &&
-				/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-					conversations[0]
-				)))
+		(url.pathname !== '/admin/support'
+			? !url.search
+			: Array.from(url.searchParams.keys()).every(key => key === 'conversationId') &&
+				(conversations.length === 0 ||
+					(conversations.length === 1 &&
+						/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(conversations[0]))))
 		? url.toString()
 		: null
 }

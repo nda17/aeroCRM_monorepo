@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useMemo } from 'react'
-import { needsDocumentNavigation } from './frontend-zones'
+import { needsDocumentNavigation, resolveFrontendHref } from './frontend-zones'
 
 export function useZoneRouter() {
 	const router = useRouter()
@@ -10,11 +10,11 @@ export function useZoneRouter() {
 		() => ({
 			...router,
 			push: (...[href, options]: Parameters<typeof router.push>) => {
-				if (needsDocumentNavigation(href)) window.location.assign(href)
+				if (needsDocumentNavigation(href)) window.location.assign(resolveFrontendHref(href))
 				else router.push(href, options)
 			},
 			replace: (...[href, options]: Parameters<typeof router.replace>) => {
-				if (needsDocumentNavigation(href)) window.location.replace(href)
+				if (needsDocumentNavigation(href)) window.location.replace(resolveFrontendHref(href))
 				else router.replace(href, options)
 			},
 			prefetch: (

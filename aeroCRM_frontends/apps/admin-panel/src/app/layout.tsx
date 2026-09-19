@@ -8,9 +8,9 @@ import { cookies } from 'next/headers'
 import type { PropsWithChildren } from 'react'
 
 export const metadata: Metadata = {
-	metadataBase: new URL('https://aerocrm.space'),
+	metadataBase: new URL('https://admin.aerocrm.space'),
 	title: {
-		default: 'Панель администратора aeroCRM и aeroCRM',
+		default: 'Панель администратора aeroCRM',
 		template: '%s — aeroCRM'
 	},
 	robots: { index: false, follow: false, nocache: true },

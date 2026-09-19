@@ -2,7 +2,7 @@
 
 import NextLink from 'next/link'
 import { forwardRef, type ComponentProps } from 'react'
-import { needsDocumentNavigation } from './frontend-zones'
+import { needsDocumentNavigation, resolveFrontendHref } from './frontend-zones'
 
 type ZoneLinkProps = Omit<ComponentProps<typeof NextLink>, 'href'> & {
 	href: string
@@ -36,7 +36,7 @@ const ZoneLink = forwardRef<HTMLAnchorElement, ZoneLinkProps>(
 			_passHref
 		]
 		return (
-			<a {...anchor} ref={ref}>
+			<a {...anchor} href={resolveFrontendHref(props.href)} ref={ref}>
 				{children}
 			</a>
 		)

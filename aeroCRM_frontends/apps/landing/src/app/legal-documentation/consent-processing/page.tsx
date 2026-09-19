@@ -3,7 +3,8 @@ import { Metadata } from 'next'
 
 export const metadata: Metadata = {
 	title: 'Согласие на обработку персональных данных',
-	description: 'Согласие на обработку персональных данных aeroCRM.ru'
+	description: 'Согласие на обработку персональных данных aeroCRM на aerocrm.space',
+	alternates: { canonical: 'https://aerocrm.space/legal-documentation/consent-processing' }
 }
 
 async function fetchContent(): Promise<string> {

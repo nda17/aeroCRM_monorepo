@@ -222,5 +222,5 @@ export function supportConversationUrl(
 ): string {
 	return client
 		? `https://workspace.aerocrm.space/inbox?supportConversation=${content.conversationId}`
-		: `https://aerocrm.space/admin/support?conversationId=${content.conversationId}`;
+		: `https://admin.aerocrm.space/admin/support?conversationId=${content.conversationId}`;
 }
