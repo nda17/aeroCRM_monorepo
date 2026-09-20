@@ -1,6 +1,7 @@
 import {
 	ConsumerReceiptStatus,
 	OutboxExchange,
+	Prisma,
 	SupportInboxOutcome,
 	SupportInboxStatus,
 	SupportMappingKind
@@ -262,6 +263,28 @@ describe('SupportWebhookWorkerService', () => {
 		expect(
 			context.transaction.telegramWebhookInbox.updateMany
 		).not.toHaveBeenCalled();
+	});
+
+	it('requeues a serialization conflict during claim without parking poison', async () => {
+		const fixture = messageFixture(privateUpdate());
+		const context = setup(fixture);
+		context.prisma.$transaction.mockRejectedValueOnce(
+			new Prisma.PrismaClientKnownRequestError('serialization conflict', {
+				code: 'P2034',
+				clientVersion: '5.22.0'
+			})
+		);
+
+		await context.handle(fixture.message);
+
+		expect(context.rabbit.nack).toHaveBeenCalledWith(
+			fixture.message,
+			true
+		);
+		expect(context.rabbit.ack).not.toHaveBeenCalled();
+		expect(context.transaction.consumerFailure.upsert).not.toHaveBeenCalled();
+		expect(context.transaction.outboxEvent.create).not.toHaveBeenCalled();
+		expect(context.transaction.outboxEvent.createMany).not.toHaveBeenCalled();
 	});
 
 	it('parks a receipt payload mismatch in the DLQ before acking', async () => {

@@ -125,6 +125,13 @@ export class SupportWebhookWorkerService
 		try {
 			claim = await this.claim(parsed);
 		} catch (error) {
+			if (
+				error instanceof Prisma.PrismaClientKnownRequestError &&
+				error.code === 'P2034'
+			) {
+				this.rabbit.nack(message, true);
+				return;
+			}
 			try {
 				await this.parkPoison(message, error, parsed.eventId);
 				this.rabbit.ack(message);
