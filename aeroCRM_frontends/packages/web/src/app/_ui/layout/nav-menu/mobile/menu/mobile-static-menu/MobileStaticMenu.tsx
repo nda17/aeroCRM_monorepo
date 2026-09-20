@@ -12,6 +12,7 @@ import { useHamburgerStore } from '@/features/mobile-navigation'
 import { useVeilBackgroundStore } from '@/shared/lib/veil-background'
 import Link from '@/shared/lib/navigation/ZoneLink'
 import { getCrmAppUrl } from '@/shared/config/crm-release.config'
+import { PUBLIC_PAGES } from '@/shared/config/pages/public.config'
 
 const MobileStaticMenu: NextPage = () => {
 	const application = usesApplicationMenu(
@@ -26,12 +27,29 @@ const MobileStaticMenu: NextPage = () => {
 		<ul className={styles.wrapper}>
 			{application ? (
 				<li>
-					<Link href={getCrmAppUrl()} onClick={() => { setMenu(false); setVeil(false) }}>Рабочая область</Link>
+					<Link
+						href={getCrmAppUrl()}
+						onClick={() => {
+							setMenu(false)
+							setVeil(false)
+						}}
+					>
+						Рабочая область
+					</Link>
 				</li>
 			) : (
-				staticMenu.items?.map((item: IMenuItem) => (
-					<MenuItem item={item} key={item.link} />
-				))
+				<>
+					{staticMenu.items?.map((item: IMenuItem) => (
+						<MenuItem item={item} key={item.link} />
+					))}
+					<MenuItem
+						item={{
+							icon: 'apps',
+							link: PUBLIC_PAGES.MOBILE_APP,
+							title: 'Мобильные приложения'
+						}}
+					/>
+				</>
 			)}
 		</ul>
 	)

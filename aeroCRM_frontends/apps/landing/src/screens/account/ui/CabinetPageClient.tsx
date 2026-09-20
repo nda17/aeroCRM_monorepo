@@ -3,6 +3,7 @@ import styles from './AccountPage.module.scss'
 import { useUser, useAuthStore } from '@/entities/user'
 import { useProfileEdit } from '@/features/edit-profile'
 import { useProfileIdentityBinding } from '@/features/bind-profile-identity'
+import { useCrmBillingWorkspaces } from '@/entities/crm-pricing/client'
 import SkeletonLoader from '@/shared/ui/skeleton-loader/SkeletonLoader'
 import authService, {
 	type IUserSession
@@ -12,12 +13,10 @@ import {
 	useQuery,
 	useQueryClient
 } from '@tanstack/react-query'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, type FormEvent } from 'react'
 import toast from 'react-hot-toast'
-
-const CRM_URL = 'https://workspace.aerocrm.space'
+import AccountHeader from './AccountHeader'
 
 export default function CabinetPageClient() {
 	const router = useRouter()
@@ -26,6 +25,11 @@ export default function CabinetPageClient() {
 	const isAuthResolved = useAuthStore(state => state.isAuthResolved)
 	const { user, isLoading: isProfileLoading } = useUser()
 	const userId = auth && typeof user.id === 'string' ? user.id : null
+	const {
+		ownerWorkspaces,
+		isLoading: billingLoading,
+		isError: billingError
+	} = useCrmBillingWorkspaces(userId)
 	const profileEdit = useProfileEdit()
 	const binding = useProfileIdentityBinding()
 	const [name, setName] = useState('')
@@ -34,6 +38,9 @@ export default function CabinetPageClient() {
 	const [emailCode, setEmailCode] = useState('')
 	const [phone, setPhone] = useState('')
 	const [phoneCode, setPhoneCode] = useState('')
+	const [activeSection, setActiveSection] = useState<
+		'profile' | 'sessions'
+	>('profile')
 
 	useEffect(() => {
 		if (isAuthResolved && !auth)
@@ -42,6 +49,9 @@ export default function CabinetPageClient() {
 	useEffect(() => {
 		if (userId) setName(user.name ?? '')
 	}, [userId, user.name])
+	useEffect(() => {
+		if (window.location.hash === '#sessions') setActiveSection('sessions')
+	}, [])
 
 	const sessions = useQuery({
 		queryKey: ['account-sessions', userId],
@@ -102,14 +112,20 @@ export default function CabinetPageClient() {
 
 	return (
 		<main className={styles.page}>
-			<h1>Личный кабинет</h1>
-			<p>Личные данные и активные сессии вашего аккаунта aeroCRM.</p>
-			<div className={styles.links}>
-				<a href={CRM_URL}>Открыть CRM</a>
-				<Link href="/payment">Подписка и оплата</Link>
-			</div>
+			<AccountHeader
+				user={user}
+				ownerWorkspaces={ownerWorkspaces}
+				billingLoading={billingLoading}
+				billingError={billingError}
+				active={activeSection}
+				onSelectSection={setActiveSection}
+			/>
 
-			<section className={styles.card}>
+			<section
+				id="account-profile-panel"
+				className={styles.card}
+				hidden={activeSection !== 'profile'}
+			>
 				<h2>Профиль</h2>
 				<p>
 					Email: {user.email || 'не указан'}
@@ -153,7 +169,10 @@ export default function CabinetPageClient() {
 				</form>
 			</section>
 
-			<section className={styles.card}>
+			<section
+				className={styles.card}
+				hidden={activeSection !== 'profile'}
+			>
 				<h2>Контакты для входа</h2>
 				<div className={styles.fields}>
 					<div>
@@ -168,7 +187,7 @@ export default function CabinetPageClient() {
 							/>
 						</label>
 						<button
-							className={styles.secondary}
+							className={`${styles.secondary} ${styles.contactButton}`}
 							type="button"
 							disabled={
 								binding.isSendingEmailCode ||
@@ -180,7 +199,7 @@ export default function CabinetPageClient() {
 							Получить код
 						</button>
 						{binding.emailCodeRequested && (
-							<div>
+							<div className={styles.contactFollowup}>
 								<label className={styles.field}>
 									Код из email
 									<input
@@ -191,7 +210,7 @@ export default function CabinetPageClient() {
 									/>
 								</label>
 								<button
-									className={styles.secondary}
+									className={`${styles.secondary} ${styles.contactButton}`}
 									type="button"
 									disabled={binding.isVerifyingEmailCode || !emailCode}
 									onClick={() =>
@@ -218,7 +237,7 @@ export default function CabinetPageClient() {
 							/>
 						</label>
 						<button
-							className={styles.secondary}
+							className={`${styles.secondary} ${styles.contactButton}`}
 							type="button"
 							disabled={binding.isSendingPhoneCode || !phone.trim()}
 							onClick={() => void binding.requestPhoneCode(phone)}
@@ -226,7 +245,7 @@ export default function CabinetPageClient() {
 							Получить код
 						</button>
 						{binding.phoneCodeRequested && (
-							<div>
+							<div className={styles.contactFollowup}>
 								<label className={styles.field}>
 									Код из SMS
 									<input
@@ -237,7 +256,7 @@ export default function CabinetPageClient() {
 									/>
 								</label>
 								<button
-									className={styles.secondary}
+									className={`${styles.secondary} ${styles.contactButton}`}
 									type="button"
 									disabled={binding.isVerifyingPhoneCode || !phoneCode}
 									onClick={() =>
@@ -255,8 +274,12 @@ export default function CabinetPageClient() {
 				</div>
 			</section>
 
-			<section className={styles.card}>
-				<h2>Сессии</h2>
+			<section
+				id="account-sessions-panel"
+				className={styles.card}
+				hidden={activeSection !== 'sessions'}
+			>
+				<h2>Активные сессии</h2>
 				{sessions.isLoading && (
 					<div aria-busy="true">
 						<span className={styles.srOnly} role="status">

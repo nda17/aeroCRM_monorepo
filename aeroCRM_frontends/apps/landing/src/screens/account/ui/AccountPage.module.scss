@@ -1,5 +1,5 @@
 .page {
-	@apply mx-auto w-full max-w-3xl px-4 py-10 text-slate-800;
+	@apply mx-auto w-full max-w-4xl px-4 py-6 text-slate-800 sm:py-10;
 	h1 {
 		@apply mb-3 text-3xl font-semibold;
 	}
@@ -9,6 +9,45 @@
 	p {
 		@apply mb-4 leading-relaxed;
 	}
+}
+.accountHeader {
+	@apply mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm;
+}
+.accountIdentity {
+	@apply flex flex-wrap items-center gap-4 p-5 sm:p-6;
+}
+.accountAvatar {
+	@apply h-16 w-16 shrink-0 rounded-full border border-slate-200 object-cover;
+}
+.accountIdentityText {
+	@apply min-w-0 flex-1;
+	h1 {
+		@apply mb-1 break-words text-2xl font-semibold sm:text-3xl;
+	}
+	p {
+		@apply mb-0 break-all text-sm text-slate-500;
+	}
+}
+.accountEyebrow {
+	@apply mb-1 block text-xs font-semibold uppercase tracking-wider text-violet-700;
+}
+.accountSubscription {
+	@apply flex w-full flex-col gap-1 rounded-xl bg-violet-50 px-4 py-3 text-sm text-violet-950 sm:w-auto sm:max-w-[18rem];
+	span {
+		@apply text-xs font-medium text-violet-700;
+	}
+	strong {
+		@apply font-semibold leading-snug;
+	}
+}
+.accountNav {
+	@apply grid grid-cols-2 gap-2 border-t border-slate-200 bg-slate-50 p-3 sm:flex sm:flex-wrap;
+}
+.accountNavItem {
+	@apply inline-flex min-h-11 items-center justify-center rounded-lg px-3 py-2 text-center text-sm font-medium text-slate-700 hover:bg-white;
+}
+.accountNavActive {
+	@apply bg-violet-700 text-white hover:bg-violet-800;
 }
 .card {
 	@apply mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm;
@@ -28,11 +67,26 @@
 .secondary {
 	@apply inline-flex min-h-11 items-center justify-center rounded-lg border border-violet-300 px-4 py-2 text-sm font-medium text-violet-800 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50;
 }
-.links {
-	@apply mb-6 flex flex-wrap gap-4 text-sm font-medium text-violet-800 underline;
+.contactButton {
+	@apply mt-3;
 }
-.list {
-	@apply mb-5 flex flex-col gap-3;
+.contactFollowup {
+	@apply mt-4;
+}
+.workspaceList {
+	@apply flex flex-col gap-3;
+}
+.workspaceItem {
+	@apply flex flex-col gap-3 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between;
+	a {
+		@apply w-full sm:w-auto;
+	}
+}
+.workspaceCopy {
+	@apply flex min-w-0 flex-col gap-1;
+	span {
+		@apply break-words;
+	}
 }
 .session {
 	@apply flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 py-3 last:border-0;

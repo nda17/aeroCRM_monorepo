@@ -15,7 +15,7 @@ pnpm typecheck:frontends
 pnpm build:frontends
 ```
 
-Каждый backend app устанавливает зависимости и собирается отдельно по своему `package.json` и Dockerfile. Инфраструктура и выпуск размещены в соседнем приватном `aeroCRM_infra`; подготовка host, env и миграций выполняется его скриптами по утверждённым приватным inputs.
+Каждый backend app устанавливает зависимости и собирается отдельно по своему `package.json` и Dockerfile. Инфраструктура и выпуск размещены в соседнем `aeroCRM_infra`; подготовка host, env и миграций выполняется его скриптами по утверждённым приватным inputs.
 
 CI проверяет три frontend на dev/PR; immutable образы по SHA собираются только для `prod_0.1.0`. Release требует успешный CI именно этого SHA и сверяет lock/env hashes перед загрузкой образов.
 

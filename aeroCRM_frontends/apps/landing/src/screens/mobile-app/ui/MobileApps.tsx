@@ -112,9 +112,6 @@ const MobileApps = ({ release }: { release: AndroidReleaseMetadata }) => {
 								<dd>Android {release.minAndroidVersion} и новее</dd>
 							</div>
 						</dl>
-						<p className={styles.note}>
-							Для работы нужны интернет и {release.compatibleBrowser}.
-						</p>
 					</>
 				) : (
 					<p className={styles.note}>

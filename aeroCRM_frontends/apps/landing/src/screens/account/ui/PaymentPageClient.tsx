@@ -3,9 +3,11 @@ import styles from './AccountPage.module.scss'
 import { useCrmBillingWorkspaces } from '@/entities/crm-pricing/client'
 import { useAuthStore, useUser } from '@/entities/user'
 import SkeletonLoader from '@/shared/ui/skeleton-loader/SkeletonLoader'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
+import AccountHeader, {
+	formatWorkspaceSubscription
+} from './AccountHeader'
 
 const CRM_URL = 'https://workspace.aerocrm.space'
 
@@ -23,7 +25,7 @@ export default function PaymentPageClient() {
 			router.replace('/login?returnUrl=%2Fpayment')
 	}, [auth, isAuthResolved, router])
 
-	if (!isAuthResolved || !auth || isProfileLoading || isLoading)
+	if (!isAuthResolved || !auth || isProfileLoading)
 		return (
 			<main className={styles.page} aria-busy="true">
 				<span className={styles.srOnly} role="status">
@@ -41,39 +43,60 @@ export default function PaymentPageClient() {
 
 	return (
 		<main className={styles.page}>
-			<h1>Подписка и оплата</h1>
-			<p>
-				Выберите своё рабочее пространство, чтобы открыть управление
-				подпиской в CRM.
-			</p>
-			{isError ? (
-				<p role="alert">
-					Не удалось загрузить подписки. Обновите страницу или откройте
+			<AccountHeader
+				user={user}
+				ownerWorkspaces={ownerWorkspaces}
+				billingLoading={isLoading}
+				billingError={isError}
+				active="payment"
+			/>
+			<section className={styles.card}>
+				<h2>Подписка и оплата</h2>
+				<p>
+					Выберите рабочее пространство, чтобы управлять его подпиской в
 					CRM.
 				</p>
-			) : ownerWorkspaces.length ? (
-				<ul className={styles.list}>
-					{ownerWorkspaces.map((workspace, index) => (
-						<li key={workspace.workspaceId}>
-							<a
-								className={styles.button}
-								href={`${CRM_URL}/billing?workspaceId=${encodeURIComponent(workspace.workspaceId)}`}
+				{isLoading ? (
+					<div aria-busy="true">
+						<span className={styles.srOnly} role="status">
+							Загружаем рабочие пространства
+						</span>
+						<SkeletonLoader count={2} height={64} />
+					</div>
+				) : isError ? (
+					<p role="alert">
+						Не удалось загрузить подписки. Обновите страницу или откройте
+						CRM.
+					</p>
+				) : ownerWorkspaces.length ? (
+					<ul className={styles.workspaceList}>
+						{ownerWorkspaces.map((workspace, index) => (
+							<li
+								className={styles.workspaceItem}
+								key={workspace.workspaceId}
 							>
-								Рабочее пространство {index + 1} — открыть оплату
-							</a>
-						</li>
-					))}
-				</ul>
-			) : (
-				<p>
-					У вас нет рабочего пространства с правом владельца. Управлять
-					оплатой может владелец пространства.
-				</p>
-			)}
-			<div className={styles.links}>
-				<a href={CRM_URL}>Открыть CRM</a>
-				<Link href="/cabinet">Личный кабинет</Link>
-			</div>
+								<div className={styles.workspaceCopy}>
+									<strong>Рабочее пространство {index + 1}</strong>
+									<span className={styles.muted}>
+										{formatWorkspaceSubscription(workspace)}
+									</span>
+								</div>
+								<a
+									className={styles.button}
+									href={`${CRM_URL}/billing?workspaceId=${encodeURIComponent(workspace.workspaceId)}`}
+								>
+									Управлять оплатой
+								</a>
+							</li>
+						))}
+					</ul>
+				) : (
+					<p>
+						У вас нет рабочего пространства с правом владельца. Управлять
+						оплатой может владелец пространства.
+					</p>
+				)}
+			</section>
 		</main>
 	)
 }
