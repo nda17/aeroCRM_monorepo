@@ -1036,8 +1036,8 @@ const AdminTelegramBot: NextPage = () => {
 							<div>
 								<p className={styles.label}>Webhook ботов</p>
 								<p className={styles.hint}>
-									Переустанавливает webhook с секретом и очищает старую
-									очередь Telegram-обновлений
+									Переустанавливает webhook с секретом. Ожидающие
+									обновления INFO и SUPPORT сохраняются
 								</p>
 							</div>
 							<div className={styles.webhookActions}>

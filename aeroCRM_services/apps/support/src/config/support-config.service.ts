@@ -7,7 +7,7 @@ const PRODUCTION_TELEGRAM_API_BASE_URL =
 	'https://telegram.aerocrm.space/telegram-api';
 const PRODUCTION_TELEGRAM_API_PROXY_IP = '185.184.122.62';
 const PRODUCTION_WEBHOOK_URL =
-	'https://api.aerocrm.space/api/v1/telegram-bot/support-webhook';
+	'https://telegram.aerocrm.space/api/v1/telegram-bot/support-webhook';
 const PLACEHOLDERS = new Set([
 	'change_me',
 	'change-me',

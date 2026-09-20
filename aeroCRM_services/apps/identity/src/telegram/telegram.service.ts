@@ -173,12 +173,9 @@ export class TelegramService {
 		const config = this.webhookConfig(kind);
 		const token = this.botToken(kind, true);
 		const webhookUrl = this.webhookUrl(kind);
-		await this.telegramApi(token, 'deleteWebhook', {
-			drop_pending_updates: true
-		});
 		await this.telegramApi(token, 'setWebhook', {
 			url: webhookUrl,
-			drop_pending_updates: true,
+			drop_pending_updates: false,
 			max_connections: 40,
 			allowed_updates: config.allowedUpdates,
 			secret_token: this.webhookSecret(kind, true)
@@ -187,7 +184,7 @@ export class TelegramService {
 			bot: config.bot,
 			title: config.title,
 			webhookUrl,
-			dropPendingUpdates: true,
+			dropPendingUpdates: false,
 			allowedUpdates: config.allowedUpdates,
 			secretConfigured: true,
 			installedAt: new Date().toISOString()

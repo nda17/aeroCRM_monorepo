@@ -8,7 +8,7 @@ const canonicalEnvironment = {
 	TELEGRAM_SUPPORT_BOT_USERNAME: 'AeroCrmSupportBot',
 	TELEGRAM_SUPPORT_BOT_WEBHOOK_SECRET: 'w'.repeat(48),
 	SUPPORT_WEBHOOK_PUBLIC_URL:
-		'https://api.aerocrm.space/api/v1/telegram-bot/support-webhook',
+		'https://telegram.aerocrm.space/api/v1/telegram-bot/support-webhook',
 	TELEGRAM_API_BASE_URL: 'https://telegram.aerocrm.space/telegram-api',
 	TELEGRAM_API_PROXY_IP: '185.184.122.62'
 };
@@ -31,6 +31,9 @@ function build(
 describe('SupportConfigService', () => {
 	it('accepts the exact production Telegram bridge URL and host pin', () => {
 		const config = build();
+		expect(config.webhookPublicUrl).toBe(
+			'https://telegram.aerocrm.space/api/v1/telegram-bot/support-webhook'
+		);
 		expect(config.telegramApiBaseUrl).toBe(
 			'https://telegram.aerocrm.space/telegram-api'
 		);
@@ -41,6 +44,10 @@ describe('SupportConfigService', () => {
 		['TELEGRAM_API_BASE_URL', 'https://api.telegram.org'],
 		['TELEGRAM_API_BASE_URL', 'https://185.184.122.62/telegram-api'],
 		['TELEGRAM_API_PROXY_IP', '185.184.122.63'],
+		[
+			'SUPPORT_WEBHOOK_PUBLIC_URL',
+			'https://api.aerocrm.space/api/v1/telegram-bot/support-webhook'
+		],
 		['SUPPORT_WEBHOOK_PUBLIC_URL', 'https://example.test/support-webhook']
 	])('fails closed for a non-canonical %s', (name, value) => {
 		expect(() => build({ [name]: value })).toThrow();

@@ -5,11 +5,11 @@ import {
 } from './support-telegram.transport';
 
 const config = {
-	telegramApiBaseUrl: 'https://tg.aerocrm.space/telegram-api',
+	telegramApiBaseUrl: 'https://telegram.aerocrm.space/telegram-api',
 	botToken: `123456:${'A'.repeat(32)}`,
 	botUsername: 'WinWidgetSupportBot',
 	webhookPublicUrl:
-		'https://tg.aerocrm.space/api/v1/telegram-bot/support-webhook',
+		'https://telegram.aerocrm.space/api/v1/telegram-bot/support-webhook',
 	webhookSecret: 'w'.repeat(48)
 } as SupportConfigService;
 

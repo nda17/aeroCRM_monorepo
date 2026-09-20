@@ -312,7 +312,7 @@ describe('Telegram Info admin webhook contract', () => {
 		process.env.TELEGRAM_INFO_BOT_USERNAME = '@winwidget_info_bot';
 		process.env.TELEGRAM_INFO_BOT_WEBHOOK_SECRET =
 			'configured-info-webhook-secret';
-		process.env.TELEGRAM_WEBHOOK_HOST = 'https://api.aerocrm.space';
+		process.env.TELEGRAM_WEBHOOK_HOST = 'https://telegram.aerocrm.space';
 	});
 
 	afterEach(() => {
@@ -357,7 +357,7 @@ describe('Telegram Info admin webhook contract', () => {
 				const url = String(input);
 				const result = url.endsWith('/getWebhookInfo')
 					? {
-							url: 'https://api.aerocrm.space/api/v1/telegram-bot/webhook',
+							url: 'https://telegram.aerocrm.space/api/v1/telegram-bot/webhook',
 							pending_update_count: 0,
 							allowed_updates: ['message']
 						}
@@ -376,7 +376,7 @@ describe('Telegram Info admin webhook contract', () => {
 				configured: true,
 				ok: true,
 				expectedWebhookUrl:
-					'https://api.aerocrm.space/api/v1/telegram-bot/webhook',
+					'https://telegram.aerocrm.space/api/v1/telegram-bot/webhook',
 				webhookMatchesExpected: true,
 				secretConfigured: true,
 				configuredUsername: 'winwidget_info_bot',
@@ -415,16 +415,17 @@ describe('Telegram Info admin webhook contract', () => {
 			expect.objectContaining({
 				bot: 'info',
 				title: 'Info_bot',
-				webhookUrl: 'https://api.aerocrm.space/api/v1/telegram-bot/webhook',
-				dropPendingUpdates: true,
+				webhookUrl: 'https://telegram.aerocrm.space/api/v1/telegram-bot/webhook',
+				dropPendingUpdates: false,
 				allowedUpdates: ['message'],
 				secretConfigured: true
 			})
 		);
-		expect(fetchMock).toHaveBeenCalledTimes(2);
-		expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({
-			url: 'https://api.aerocrm.space/api/v1/telegram-bot/webhook',
-			drop_pending_updates: true,
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(String(fetchMock.mock.calls[0][0])).toContain('/setWebhook');
+		expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+			url: 'https://telegram.aerocrm.space/api/v1/telegram-bot/webhook',
+			drop_pending_updates: false,
 			max_connections: 40,
 			allowed_updates: ['message'],
 			secret_token: 'configured-info-webhook-secret'
@@ -439,7 +440,7 @@ describe('Telegram Info admin webhook contract', () => {
 				metadata: {
 					bot: 'info',
 					title: 'Info_bot',
-					dropPendingUpdates: true,
+					dropPendingUpdates: false,
 					allowedUpdates: ['message'],
 					secretConfigured: true,
 					installedAt: expect.stringMatching(/Z$/)
