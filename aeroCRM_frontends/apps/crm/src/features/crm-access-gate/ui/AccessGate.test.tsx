@@ -28,6 +28,8 @@ import {
 
 import {
 	activateCrmTrial,
+	createPersonalCrmWorkspace,
+	CrmWorkspaceRequiredError,
 	getCrmAccessBootstrap,
 	getPipelineTemplates,
 	installCrmTemplate
@@ -43,8 +45,10 @@ vi.mock('@/entities/crm-workspace-branding', () => ({
 	useWorkspaceBranding: () => ({ data: undefined })
 }))
 
-vi.mock('../api/crm-access.api', () => ({
+vi.mock('../api/crm-access.api', async importOriginal => ({
+	...(await importOriginal<typeof import('../api/crm-access.api')>()),
 	activateCrmTrial: vi.fn(),
+	createPersonalCrmWorkspace: vi.fn(),
 	getCrmAccessBootstrap: vi.fn(),
 	getPipelineTemplates: vi.fn(),
 	installCrmTemplate: vi.fn()
@@ -188,6 +192,51 @@ const WorkspacePermissions = () => {
 }
 
 describe('AccessGate', () => {
+	it('shows personal workspace creation for a typed missing-workspace 403', async () => {
+		vi.mocked(getCrmAccessBootstrap).mockRejectedValue(
+			new CrmWorkspaceRequiredError()
+		)
+		vi.mocked(createPersonalCrmWorkspace).mockResolvedValue({
+			workspaceId
+		})
+		render(
+			<AccessGate>
+				<div>workspace</div>
+			</AccessGate>,
+			{ wrapper: Wrapper }
+		)
+
+		await screen.findByRole('heading', {
+			name: 'Создайте рабочее пространство'
+		})
+		fireEvent.click(
+			screen.getByRole('button', {
+			name: 'Создать рабочее пространство'
+		})
+		)
+		await waitFor(() =>
+			expect(createPersonalCrmWorkspace).toHaveBeenCalledWith('token', null)
+		)
+		expect(activateCrmTrial).not.toHaveBeenCalled()
+	})
+
+	it('keeps the workspace closed for a generic forbidden access error', async () => {
+		vi.mocked(getCrmAccessBootstrap).mockRejectedValue(
+			new AuthenticatedApiError('forbidden', 'generic forbidden')
+		)
+		render(
+			<AccessGate>
+				<div>workspace</div>
+			</AccessGate>,
+			{ wrapper: Wrapper }
+		)
+
+		await screen.findByRole('heading', { name: 'CRM временно недоступна' })
+		expect(screen.queryByText('workspace')).toBeNull()
+		expect(createPersonalCrmWorkspace).not.toHaveBeenCalled()
+		expect(activateCrmTrial).not.toHaveBeenCalled()
+	})
+
 	it.each([false, true])(
 		'gates the billing navigation without changing Trial activation (enabled=%s)',
 		async enabled => {

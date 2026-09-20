@@ -13,6 +13,7 @@ export type TurnstileWidget = {
 			action: string
 			execution: 'render'
 			appearance: 'always'
+			theme: 'light'
 			size: 'flexible' | 'compact'
 			callback: (token: string) => void
 			'error-callback': () => void

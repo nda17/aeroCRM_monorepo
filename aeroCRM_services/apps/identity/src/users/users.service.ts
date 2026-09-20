@@ -12,6 +12,10 @@ import {
 	Prisma,
 	Role,
 	UserStatus,
+	WorkspaceMemberRole,
+	WorkspaceMemberStatus,
+	WorkspaceStatus,
+	WorkspaceType,
 	VerificationChallengePurpose,
 	VerificationChallengeType
 } from '@prisma/identity-client';
@@ -37,6 +41,7 @@ import {
 import { IdentityPrismaService } from '../prisma/identity-prisma.service';
 import { VerificationTransportService } from '../transports/verification-transport.service';
 import { EmailVerificationService } from '../auth/email-verification.service';
+import { WorkspaceProvisioningService } from '../workspaces/workspace-provisioning.service';
 import {
 	BindEmailStartDto,
 	BindEmailVerifyDto,
@@ -61,7 +66,8 @@ export class UsersService {
 		private readonly emailVerification: EmailVerificationService = new EmailVerificationService(
 			prisma,
 			transport
-		)
+		),
+		private readonly workspaces: WorkspaceProvisioningService = new WorkspaceProvisioningService()
 	) {}
 
 	findById(id: string) {
@@ -82,6 +88,50 @@ export class UsersService {
 		const user = await this.findById(id);
 		if (!user) throw new NotFoundException('User not found');
 		return publicUser(user);
+	}
+
+	async ensurePersonalWorkspace(userId: string) {
+		return this.prisma.$transaction(async transaction => {
+			await transaction.$queryRaw(
+				Prisma.sql`SELECT id FROM identity.users WHERE id = ${userId} FOR UPDATE`
+			);
+			const user = await transaction.user.findUnique({
+				where: { id: userId },
+				select: { status: true, deletedAt: true }
+			});
+			if (!user || user.status !== UserStatus.ACTIVE || user.deletedAt)
+				throw new ForbiddenException('Account is not active');
+
+			const existing = await transaction.workspace.findUnique({
+				where: { personalOwnerUserId: userId },
+				select: {
+					id: true,
+					type: true,
+					status: true,
+					members: {
+						where: { userId },
+						select: { role: true, status: true }
+					}
+				}
+			});
+			if (existing) {
+				if (
+					existing.type !== WorkspaceType.PERSONAL ||
+					existing.status !== WorkspaceStatus.ACTIVE ||
+					existing.members.length !== 1 ||
+					existing.members[0].role !== WorkspaceMemberRole.OWNER ||
+					existing.members[0].status !== WorkspaceMemberStatus.ACTIVE
+				)
+					throw new ConflictException('Personal workspace is unavailable');
+				return { schemaVersion: 1 as const, workspaceId: existing.id };
+			}
+
+			const created = await this.workspaces.provisionPersonalWorkspace(
+				transaction,
+				userId
+			);
+			return { schemaVersion: 1 as const, workspaceId: created.id };
+		});
 	}
 
 	async updateProfile(

@@ -9,6 +9,8 @@ class AdminPages {
 	TELEGRAM_BOT = '/admin/telegram-bot'
 	CONTENT = '/admin/content'
 	CRM = '/admin/crm'
+	FINANCE_SUBSCRIPTIONS = '/admin/finance/subscriptions'
+	FINANCE_PRICING = '/admin/finance/pricing'
 	SUPPORT = '/admin/support'
 	SYSTEM = '/admin/system'
 	MESSAGING = '/admin/messaging'

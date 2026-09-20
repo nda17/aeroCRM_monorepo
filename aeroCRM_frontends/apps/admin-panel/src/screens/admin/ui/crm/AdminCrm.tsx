@@ -14,9 +14,6 @@ import { useQuery } from '@tanstack/react-query'
 import { NextPage } from 'next'
 import toast from 'react-hot-toast'
 import styles from './AdminCrm.module.scss'
-import CrmPricingSettings from './CrmPricingSettings'
-import CrmSubscriptionAdmin from './CrmSubscriptionAdmin'
-import CrmProviderOperations from './CrmProviderOperations'
 
 const CRM_SERVICES = [
 	{
@@ -74,19 +71,18 @@ const AdminCrm: NextPage = () => {
 			<AdminNavigation />
 			<AdminSectionHeading
 				text="aeroCRM"
-				title="Глобальные настройки aeroCRM"
+				title="Каталог и устройство aeroCRM"
 				description="Операторский экран продукта. Клиентские воронки, контакты и сделки здесь не хранятся и управляются только на workspace.aerocrm.space."
-				risk="medium"
-				riskText="ADMIN и DEV просматривают тариф и каталог, меняют цены и лимиты, начисляют дни клиентам или себе. Изменения записываются в Журнал событий."
+				risk="low"
+				riskText="Здесь доступен просмотр каталога шаблонов и операторская справка. Подписки, платежи и тарифы находятся в разделе «Финансы»."
 			/>
 
 			{!CRM_RELEASE.apiEnabled && (
 				<div className={styles.releaseNote} role="status">
 					<strong>aeroCRM · {CRM_RELEASE.unavailableLabel}</strong>
 					<p>
-						Справочная часть доступна. Тарифы, каталог и изменения
-						подключатся после выпуска CRM-сервисов. Подписки aeroCRM
-						работают независимо.
+						Справочная часть доступна. Каталог шаблонов подключится после
+						выпуска CRM-сервисов.
 					</p>
 				</div>
 			)}
@@ -112,10 +108,6 @@ const AdminCrm: NextPage = () => {
 					</p>
 				</article>
 			</div>
-
-			<CrmPricingSettings />
-			<CrmSubscriptionAdmin />
-			<CrmProviderOperations />
 
 			<div className={styles.section}>
 				<div className={styles.sectionHeader}>

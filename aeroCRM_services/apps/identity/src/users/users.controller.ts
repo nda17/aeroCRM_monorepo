@@ -122,6 +122,13 @@ export class UsersController {
 		return this.users.profile(userId);
 	}
 
+	@Post('profile/workspace')
+	@HttpCode(200)
+	@Auth(Role.USER, Role.ADMIN, Role.DEV)
+	personalWorkspace(@CurrentUser('id') userId: string) {
+		return this.users.ensurePersonalWorkspace(userId);
+	}
+
 	@Patch('profile')
 	@HttpCode(200)
 	@Auth(Role.USER)

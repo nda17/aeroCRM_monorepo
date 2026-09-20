@@ -17,8 +17,7 @@ export const adminNavGroups: IAdminNavGroup[] = [
 	{
 		id: 'products',
 		title: 'Клиенты и продукты',
-		description:
-			'Аккаунты и рабочие пространства aeroCRM.',
+		description: 'Аккаунты и рабочие пространства aeroCRM.',
 		items: [
 			{
 				title: 'Пользователи',
@@ -31,11 +30,13 @@ export const adminNavGroups: IAdminNavGroup[] = [
 	{
 		id: 'finance',
 		title: 'Финансы',
-		description:
-			'Платежи и тарифы aeroCRM.',
+		description: 'Платежи и тарифы aeroCRM.',
 		items: [
-			{ title: 'Подписки и платежи CRM', link: ADMIN_PAGES.CRM },
-			{ title: 'Тарифы CRM', link: ADMIN_PAGES.CRM }
+			{
+				title: 'Подписки и платежи CRM',
+				link: ADMIN_PAGES.FINANCE_SUBSCRIPTIONS
+			},
+			{ title: 'Тарифы CRM', link: ADMIN_PAGES.FINANCE_PRICING }
 		]
 	},
 	{

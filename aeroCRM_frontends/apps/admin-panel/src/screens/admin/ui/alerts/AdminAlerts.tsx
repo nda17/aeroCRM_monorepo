@@ -113,17 +113,28 @@ const getAlertActions = (item: IAdminAlert) => {
 	}
 
 	if (
-		['CRM_PROVIDER_OPERATION_UNKNOWN', 'CRM_SUCCEEDED_ORDER_WITHOUT_ENTITLEMENT', 'CRM_RECEIPT_PENDING'].includes(item.type)
+		[
+			'CRM_PROVIDER_OPERATION_UNKNOWN',
+			'CRM_SUCCEEDED_ORDER_WITHOUT_ENTITLEMENT',
+			'CRM_RECEIPT_PENDING'
+		].includes(item.type)
 	) {
-		actions.push({ href: ADMIN_PAGES.CRM, label: 'Платежи' })
+		actions.push({
+			href: ADMIN_PAGES.FINANCE_SUBSCRIPTIONS,
+			label: 'Платежи'
+		})
 	}
 
 	if (
-		['CRM_ENTITLEMENT_EXPIRES_SOON', 'EXPIRED_ACTIVE_CRM_ENTITLEMENT'].includes(
-			item.type
-		)
+		[
+			'CRM_ENTITLEMENT_EXPIRES_SOON',
+			'EXPIRED_ACTIVE_CRM_ENTITLEMENT'
+		].includes(item.type)
 	) {
-		actions.push({ href: ADMIN_PAGES.CRM, label: 'Подписки' })
+		actions.push({
+			href: ADMIN_PAGES.FINANCE_SUBSCRIPTIONS,
+			label: 'Подписки'
+		})
 	}
 
 	if (item.type === 'INTEGRATION_PROBLEM') {

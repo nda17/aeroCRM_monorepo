@@ -61,12 +61,14 @@ export const useTurnstile = (action: string) => {
 				throw new TurnstileUnavailableError()
 			removeWidget()
 			const generation = generationRef.current
+			container.dataset.turnstileSize = size
 			widgetActionRef.current = widgetAction
 			widgetIdRef.current = turnstile.render(container, {
 				sitekey: siteKey,
 				action: widgetAction,
 				execution: 'render',
 				appearance: 'always',
+				theme: 'light',
 				size,
 				callback: token => {
 					if (generation !== generationRef.current) return

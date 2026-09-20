@@ -13,7 +13,7 @@ import {
 	authenticatedRequest,
 	invalidContractError
 } from '@/shared/api/authenticated-http-client'
-import { isRecord } from '@/shared/lib/contract'
+import { hasExactKeys, isRecord, isUuidV4 } from '@/shared/lib/contract'
 import axios from 'axios'
 
 import { parseCrmTemplateInstallationResponse } from '../model/crm-template-installation.parser'
@@ -21,6 +21,29 @@ import type {
 	CrmTemplateInstallationResponse,
 	InstallCrmTemplateCommand
 } from '../model/crm-template-installation.types'
+
+export class CrmWorkspaceRequiredError extends AuthenticatedApiError {
+	constructor() {
+		super('forbidden', 'Создайте рабочее пространство для работы с CRM.')
+		this.name = 'CrmWorkspaceRequiredError'
+	}
+}
+
+export const createPersonalCrmWorkspace = async (accessToken: string) => {
+	const response = await authenticatedRequest({
+		accessToken,
+		method: 'POST',
+		url: '/users/profile/workspace'
+	})
+	if (
+		!isRecord(response) ||
+		!hasExactKeys(response, ['schemaVersion', 'workspaceId']) ||
+		response.schemaVersion !== 1 ||
+		!isUuidV4(response.workspaceId)
+	)
+		throw invalidContractError()
+	return { workspaceId: response.workspaceId }
+}
 
 const mapTemplateInstallationError = (error: unknown) => {
 	if (
@@ -52,7 +75,14 @@ export const getCrmAccessBootstrap = async (
 		accessToken,
 		method: 'GET',
 		url: '/crm/access/bootstrap',
-		params: workspaceId ? { workspaceId } : undefined
+		params: workspaceId ? { workspaceId } : undefined,
+		mapError: error =>
+			axios.isAxiosError(error) &&
+			error.response?.status === 403 &&
+			isRecord(error.response.data) &&
+			error.response.data.code === 'crm_workspace_required'
+				? new CrmWorkspaceRequiredError()
+				: undefined
 	})
 	const parsed = parseCrmAccessBootstrap(response, workspaceId)
 	if (!parsed) throw invalidContractError()

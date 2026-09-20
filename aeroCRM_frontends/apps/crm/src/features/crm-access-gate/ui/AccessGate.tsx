@@ -33,6 +33,8 @@ import { Button, ScreenState, SelectField } from '@/shared/ui'
 
 import {
 	activateCrmTrial,
+	createPersonalCrmWorkspace,
+	CrmWorkspaceRequiredError,
 	getCrmAccessBootstrap
 } from '../api/crm-access.api'
 import { crmAccessQueryKey } from '../model/crm-access.queries'
@@ -262,6 +264,32 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 	const currentTrial = trial.variables?.accessScope === accessScope
 	const trialFailed = currentTrial && trial.isError
 	const trialPending = currentTrial && trial.isPending
+	const createWorkspace = useMutation({
+		mutationFn: (
+			request: SessionOwnedRequest<null, { workspaceId: string }> & {
+				scope: string
+			}
+		) => request.execute(),
+		onSuccess: (result, request) => {
+			if (
+				!request.isCurrent() ||
+				currentAccessScope.current !== request.scope
+			)
+				return
+			toast.success('Рабочее пространство готово')
+			selectWorkspace(result.workspaceId)
+		},
+		onError: (_, request) => {
+			if (
+				!request.isCurrent() ||
+				currentAccessScope.current !== request.scope
+			)
+				return
+			toast.error(
+				'Не удалось подтвердить создание пространства. Повторите попытку.'
+			)
+		}
+	})
 
 	if (invalidTarget)
 		return (
@@ -287,7 +315,44 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 	if (!session || access.isPending)
 		return (
 			<div className={styles.gate}>
-				<ScreenState variant="loading" title="Проверяем доступ к aeroCRM" />
+				<ScreenState
+					variant="loading"
+					title="Проверяем доступ к aeroCRM"
+				/>
+			</div>
+		)
+	if (access.error instanceof CrmWorkspaceRequiredError)
+		return (
+			<div className={styles.gate}>
+				<ScreenState
+					variant="empty"
+					title="Создайте рабочее пространство"
+					description="У вас пока нет рабочего пространства CRM. Создайте его для своей команды. Пробный период на 10 дней запускается отдельно."
+					action={
+						<div className={styles.actions}>
+							<Button
+								isLoading={createWorkspace.isPending}
+								disabled={access.isFetching}
+								onClick={() =>
+									createWorkspace.mutate({
+										scope: accessScope,
+										...sessionOwnedRequest(
+											session,
+											sessionRevision,
+											null,
+											createPersonalCrmWorkspace
+										)
+									})
+								}
+							>
+								Создать рабочее пространство
+							</Button>
+							<a href={`${getRuntimeConfig().mainAppOrigin}/cabinet`}>
+								Личный кабинет
+							</a>
+						</div>
+					}
+				/>
 			</div>
 		)
 	if (access.isError && !access.data)

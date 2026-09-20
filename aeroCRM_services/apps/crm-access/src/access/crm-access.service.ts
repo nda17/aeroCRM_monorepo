@@ -421,9 +421,10 @@ export class CrmAccessService {
 		workspaceId?: string
 	): CrmWorkspaceMembership | null {
 		if (!context.memberships.length) {
-			throw new ForbiddenException(
-				'No active WinCRM workspace membership'
-			);
+			throw new ForbiddenException({
+				code: 'crm_workspace_required',
+				message: 'No active CRM workspace membership'
+			});
 		}
 		if (workspaceId) return this.requireMembership(context, workspaceId);
 		if (context.memberships.length === 1) return context.memberships[0];

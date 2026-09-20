@@ -24,13 +24,31 @@ export const axiosInterceptorsRequest = axios.create(axiosOptions)
 let refreshPromise: Promise<AxiosResponse<IAccessTokenResponse>> | null =
 	null
 
+const requestRefreshToken = async () => {
+	try {
+		return await axiosClassicRequest.post<IAccessTokenResponse>(
+			'/auth/refresh'
+		)
+	} catch (error) {
+		if (
+			!axios.isAxiosError(error) ||
+			error.response?.status !== 409 ||
+			error.response.data?.code !== 'refresh_rotation_in_progress'
+		)
+			throw error
+		// A parallel frontend can rotate the shared refresh cookie. Retry once
+		// with the browser's updated cookie after Identity's five-second window.
+		await new Promise(resolve => setTimeout(resolve, 5_250))
+		return axiosClassicRequest.post<IAccessTokenResponse>('/auth/refresh')
+	}
+}
+
 export const refreshAccessToken = () => {
 	if (refreshPromise) {
 		return refreshPromise
 	}
 
-	refreshPromise = axiosClassicRequest
-		.post<IAccessTokenResponse>('/auth/refresh')
+	refreshPromise = requestRefreshToken()
 		.then(response => {
 			if (!response.data?.accessToken) {
 				throw new Error('Refresh response does not contain access token')

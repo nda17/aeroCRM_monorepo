@@ -29,7 +29,7 @@
 	@apply inline-flex min-h-11 items-center justify-center rounded-lg border border-violet-300 px-4 py-2 text-sm font-medium text-violet-800 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50;
 }
 .links {
-	@apply flex flex-wrap gap-4 text-sm font-medium text-violet-800 underline;
+	@apply mb-6 flex flex-wrap gap-4 text-sm font-medium text-violet-800 underline;
 }
 .list {
 	@apply mb-5 flex flex-col gap-3;

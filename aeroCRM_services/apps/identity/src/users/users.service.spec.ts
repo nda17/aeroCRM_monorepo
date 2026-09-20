@@ -7,6 +7,10 @@ import {
 	AuthIdentityType,
 	Role,
 	UserStatus,
+	WorkspaceMemberRole,
+	WorkspaceMemberStatus,
+	WorkspaceStatus,
+	WorkspaceType,
 	VerificationChallengePurpose,
 	VerificationChallengeType
 } from '@prisma/identity-client';
@@ -47,6 +51,7 @@ function request(): Request {
 
 function createService(transaction?: Record<string, any>) {
 	const tx = {
+		$queryRaw: jest.fn(),
 		user: {
 			findUnique: jest.fn(),
 			findUniqueOrThrow: jest.fn(),
@@ -64,6 +69,10 @@ function createService(transaction?: Record<string, any>) {
 			findUnique: jest.fn(),
 			updateMany: jest.fn(),
 			deleteMany: jest.fn()
+		},
+		workspace: {
+			findUnique: jest.fn(),
+			create: jest.fn()
 		},
 		...transaction
 	};
@@ -107,6 +116,81 @@ function createService(transaction?: Record<string, any>) {
 }
 
 describe('UsersService security and frozen contracts', () => {
+	it('returns the same active personal owner workspace without provisioning', async () => {
+		const value = createService();
+		const existing = {
+			id: '00000000-0000-4000-8000-000000000010',
+			type: WorkspaceType.PERSONAL,
+			status: WorkspaceStatus.ACTIVE,
+			members: [
+				{
+					role: WorkspaceMemberRole.OWNER,
+					status: WorkspaceMemberStatus.ACTIVE
+				}
+			]
+		};
+		value.tx.user.findUnique.mockResolvedValue({
+			status: UserStatus.ACTIVE,
+			deletedAt: null
+		});
+		value.tx.workspace.findUnique.mockResolvedValue(existing);
+
+		await expect(value.service.ensurePersonalWorkspace(USER_ID)).resolves.toEqual({
+			schemaVersion: 1,
+			workspaceId: existing.id
+		});
+		expect(value.tx.workspace.create).not.toHaveBeenCalled();
+		expect(value.prisma.$transaction).toHaveBeenCalledTimes(1);
+	});
+
+	it('provisions a missing personal workspace inside the transaction', async () => {
+		const value = createService();
+		const workspaceId = '00000000-0000-4000-8000-000000000011';
+		value.tx.user.findUnique.mockResolvedValue({
+			status: UserStatus.ACTIVE,
+			deletedAt: null
+		});
+		value.tx.workspace.findUnique.mockResolvedValue(null);
+		value.tx.workspace.create.mockResolvedValue({ id: workspaceId });
+
+		await expect(value.service.ensurePersonalWorkspace(USER_ID)).resolves.toEqual({
+			schemaVersion: 1,
+			workspaceId
+		});
+		expect(value.tx.workspace.create).toHaveBeenCalledWith({
+			data: {
+				id: expect.any(String),
+				type: WorkspaceType.PERSONAL,
+				status: WorkspaceStatus.ACTIVE,
+				personalOwnerUserId: USER_ID,
+				members: {
+					create: {
+						id: expect.any(String),
+						userId: USER_ID,
+						role: WorkspaceMemberRole.OWNER,
+						status: WorkspaceMemberStatus.ACTIVE
+					}
+				}
+			},
+			select: { id: true }
+		});
+		expect(value.prisma.$transaction).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not revive an inactive user or workspace', async () => {
+		const value = createService();
+		value.tx.user.findUnique.mockResolvedValue({
+			status: UserStatus.DEACTIVATED,
+			deletedAt: null
+		});
+
+		await expect(value.service.ensurePersonalWorkspace(USER_ID)).rejects.toEqual(
+			new ForbiddenException('Account is not active')
+		);
+		expect(value.tx.workspace.findUnique).not.toHaveBeenCalled();
+		expect(value.tx.workspace.create).not.toHaveBeenCalled();
+	});
+
 	it('revokes every pre-change session transactionally on self password change', async () => {
 		const value = createService();
 		value.tx.user.update.mockResolvedValue(user());

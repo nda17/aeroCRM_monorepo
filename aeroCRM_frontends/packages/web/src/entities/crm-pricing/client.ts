@@ -2,6 +2,7 @@
 import { useAuthStore } from '@/entities/user'
 import { axiosInterceptorsRequest } from '@/shared/api'
 import { useQuery } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
 
 export interface CrmBillingWorkspace {
 	workspaceId: string
@@ -54,8 +55,22 @@ const ownerIds = (value: unknown): string[] => {
 const readOwnerWorkspaces = async (
 	userId: string
 ): Promise<CrmBillingWorkspace[]> => {
-	const { data: bootstrap } =
-		await axiosInterceptorsRequest.get<Bootstrap>('/crm/access/bootstrap')
+	let bootstrap: Bootstrap
+	try {
+		const response = await axiosInterceptorsRequest.get<Bootstrap>(
+			'/crm/access/bootstrap'
+		)
+		bootstrap = response.data
+	} catch (error) {
+		if (
+			isAxiosError(error) &&
+			error.response?.status === 403 &&
+			isRecord(error.response.data) &&
+			error.response.data.code === 'crm_workspace_required'
+		)
+			return []
+		throw error
+	}
 	const ids = ownerIds(bootstrap)
 	return Promise.all(
 		ids.map(async workspaceId => {
