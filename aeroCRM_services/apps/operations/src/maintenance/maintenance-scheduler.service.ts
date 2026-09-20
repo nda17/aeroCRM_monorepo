@@ -125,7 +125,7 @@ export class MaintenanceSchedulerService
 					periodStart: reportPeriod.start,
 					periodEnd: reportPeriod.end,
 					input: { schemaVersion: 1, chatId: settings.dailySummaryChatId, messageThreadId: settings.databaseBackupThreadId },
-					maxAttempts: 1000,
+					maxAttempts: 100,
 					availableAt: reportFor
 				});
 			}

@@ -11,7 +11,7 @@ export interface BrandLogoProps {
 
 export const BrandLogo = ({ href, className }: BrandLogoProps) => {
 	const logo = (
-		<svg className={styles.wordmark} viewBox="0 0 278 66" role="img" aria-label="aeroCRM">
+		<svg className={styles.wordmark} viewBox={brand.viewBox} role="img" aria-label="aeroCRM">
 			<path d={brand.wing} fill="#efc85b" />
 			<path d={brand.wordmark} fill="currentColor" />
 		</svg>

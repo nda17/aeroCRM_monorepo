@@ -6,25 +6,31 @@ import {
 } from './verification-transport.service';
 
 describe('Identity verification email parity', () => {
-	const configuredSiteUrl = process.env.RECAPTCHA_CLIENT_URL;
+	const configuredSiteUrl = process.env.TURNSTILE_CLIENT_URL;
 
 	beforeAll(() => {
-		delete process.env.RECAPTCHA_CLIENT_URL;
+		delete process.env.TURNSTILE_CLIENT_URL;
 	});
 
 	afterAll(() => {
 		if (configuredSiteUrl === undefined) {
-			delete process.env.RECAPTCHA_CLIENT_URL;
+			delete process.env.TURNSTILE_CLIENT_URL;
 			return;
 		}
-		process.env.RECAPTCHA_CLIENT_URL = configuredSiteUrl;
+		process.env.TURNSTILE_CLIENT_URL = configuredSiteUrl;
 	});
 
 	it('renders the frozen confirmation layout, mobile CSS and subject', () => {
 		const html = render(verificationEmail('123456'));
 		expect(VERIFICATION_EMAIL_SUBJECT).toBe('Код подтверждения email');
 		expect(html).toContain('@media only screen and (max-width: 600px)');
-		expect(html).toContain('class="ww-brand-logo-cell"');
+		expect(html).toContain('class="ww-brand-logo"');
+		expect(html).toContain('href="https://aerocrm.space"');
+		expect(html).toContain('alt="aeroCRM"');
+		expect(html).toContain('height="54"');
+		expect(html).toContain('width="234"');
+		expect(html).toContain('width:234px');
+		expect(html).toContain('.ww-brand-logo { width: 195px !important; height: auto !important; }');
 		expect(html).toContain('role="presentation"');
 		expect(html).toContain('Код подтверждения email');
 		expect(html).toContain('123456');
@@ -32,6 +38,8 @@ describe('Identity verification email parity', () => {
 		expect(html).toContain('Письмо отправлено автоматически сервисом');
 		expect(html).toContain('https://aerocrm.space');
 		expect(html).toContain('src="cid:aerocrm-identity-logo"');
+		expect(html).not.toContain('ww-brand-logo-cell');
+		expect(html).not.toContain('ww-brand-name');
 		expect(html).not.toContain('/widgets/email-logo.png');
 	});
 

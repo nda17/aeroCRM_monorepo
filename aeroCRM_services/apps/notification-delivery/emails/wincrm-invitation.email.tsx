@@ -11,14 +11,14 @@ export default function WincrmInvitationEmail({
 }) {
 	return (
 		<EmailLayout
-			preview="Приглашение в WinCRM"
-			title="Приглашение в WinCRM"
+			preview="Приглашение в aeroCRM"
+			title="Приглашение в aeroCRM"
 			subtitle={`Действует до ${expiresAtLabel} МСК`}
 			actionLabel="Открыть приглашение"
 			actionHref={`https://workspace.aerocrm.space/invitations/${invitationId}`}
 		>
 			<Text className="ww-primary-text">
-				Вас пригласили в команду WinCRM. Войдите с адресом электронной
+				Вас пригласили в команду aeroCRM. Войдите с адресом электронной
 				почты, на который отправлено это письмо.
 			</Text>
 			<Text className="ww-secondary-text">

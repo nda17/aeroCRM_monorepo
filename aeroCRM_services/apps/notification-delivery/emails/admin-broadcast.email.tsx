@@ -36,7 +36,7 @@ const AdminBroadcastEmail = ({
 		</Text>
 		<Text style={noteTextStyle} className="ww-note-text">
 			Вы получили это письмо, потому что у вас есть аккаунт на
-			aerocrm.space.
+			aeroCRM.
 		</Text>
 	</EmailLayout>
 );

@@ -14,7 +14,7 @@ const LogoImage = ({ isLight }: LogoImageProps) => (
 		className={clsx(styles.logo, isLight && styles.logoLight)}
 		aria-label="aeroCRM — перейти на главную"
 	>
-		<svg className={styles.logoSvg} viewBox="0 0 278 66" role="img" aria-label="aeroCRM">
+		<svg className={styles.logoSvg} viewBox={brand.viewBox} role="img" aria-label="aeroCRM">
 			<path d={brand.wing} fill="#efc85b" />
 			<path d={brand.wordmark} fill="currentColor" />
 		</svg>

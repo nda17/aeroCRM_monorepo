@@ -19,8 +19,8 @@ export default function WincrmTaskReminderEmail({
 		<EmailLayout
 			preview={
 				trigger === 'ASSIGNED'
-					? 'Назначение задачи WinCRM'
-					: 'Напоминание о задаче WinCRM'
+					? 'Назначение задачи aeroCRM'
+					: 'Напоминание о задаче aeroCRM'
 			}
 			title={
 				trigger === 'ASSIGNED'
@@ -33,7 +33,7 @@ export default function WincrmTaskReminderEmail({
 		>
 			<Text className="ww-primary-text">{title}</Text>
 			<Text className="ww-secondary-text">
-				Проверьте задачу в WinCRM. Для просмотра потребуется вход в рабочее
+				Проверьте задачу в aeroCRM. Для просмотра потребуется вход в рабочее
 				пространство с доступом к этой задаче.
 			</Text>
 		</EmailLayout>

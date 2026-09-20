@@ -56,34 +56,11 @@ const brandRowStyle = {
 	marginBottom: '22px'
 };
 
-const brandTableStyle = {
-	borderCollapse: 'collapse' as const
-};
-
-const brandLogoCellStyle = {
-	padding: '0 14px 0 0',
-	verticalAlign: 'middle' as const
-};
-
 const logoStyle = {
 	display: 'block',
-	height: '52px',
-	width: '52px'
-};
-
-const brandNameCellStyle = {
-	verticalAlign: 'middle' as const
-};
-
-const brandNameStyle = {
-	color: '#ffffff',
-	display: 'block',
-	fontSize: '28px',
-	fontWeight: '700',
-	lineHeight: '32px',
-	letterSpacing: '-0.02em',
-	margin: '0',
-	textDecoration: 'none'
+	height: 'auto',
+	width: '234px',
+	maxWidth: '100%'
 };
 
 const titleStyle = {
@@ -162,17 +139,8 @@ const EmailLayout = ({
 						}
 
 						.ww-brand-logo {
-							width: 40px !important;
-							height: 40px !important;
-						}
-
-						.ww-brand-logo-cell {
-							padding-right: 10px !important;
-						}
-
-						.ww-brand-name {
-							font-size: 22px !important;
-							line-height: 26px !important;
+							width: 195px !important;
+							height: auto !important;
 						}
 
 						.ww-title {
@@ -247,39 +215,16 @@ const EmailLayout = ({
 					<Section style={cardStyle}>
 						<Section style={headerStyle} className="ww-header">
 							<Section style={brandRowStyle} className="ww-brand-row">
-								<table
-									role="presentation"
-									cellPadding="0"
-									cellSpacing="0"
-									style={brandTableStyle}
-								>
-									<tbody>
-										<tr>
-											<td
-												style={brandLogoCellStyle}
-												className="ww-brand-logo-cell"
-											>
-												<Img
-													src={logoUrl}
-													alt="aeroCRM"
-													width="52"
-													height="52"
-													style={logoStyle}
-													className="ww-brand-logo"
-												/>
-											</td>
-											<td style={brandNameCellStyle}>
-												<Link
-													href={siteUrl}
-													style={brandNameStyle}
-													className="ww-brand-name"
-												>
-													aerocrm.space
-												</Link>
-											</td>
-										</tr>
-									</tbody>
-								</table>
+								<Link href={siteUrl} style={{ display: 'inline-block' }}>
+									<Img
+										src={logoUrl}
+										alt="aeroCRM"
+										width="234"
+										height="54"
+										style={logoStyle}
+										className="ww-brand-logo"
+									/>
+								</Link>
 							</Section>
 							<Text style={titleStyle} className="ww-title">
 								{title}
@@ -311,7 +256,7 @@ const EmailLayout = ({
 					<Text style={footerStyle} className="ww-footer">
 						Письмо отправлено автоматически сервисом{' '}
 						<Link href="https://aerocrm.space" style={footerLinkStyle}>
-							aerocrm.space
+							aeroCRM
 						</Link>
 					</Text>
 				</Container>

@@ -28,7 +28,7 @@ export default function SupportNotificationEmail({
 		>
 			<Text className="ww-primary-text">
 				{client
-					? 'Ответ оператора уже доступен в вашем чате поддержки WinCRM.'
+					? 'Ответ оператора уже доступен в вашем чате поддержки aeroCRM.'
 					: 'Откройте обращение в панели администратора, чтобы прочитать сообщения и ответить клиенту.'}
 			</Text>
 			<Text className="ww-secondary-text">

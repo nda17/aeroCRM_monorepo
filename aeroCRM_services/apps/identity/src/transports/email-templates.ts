@@ -10,7 +10,7 @@ import {
 	Section,
 	Text
 } from '@react-email/components';
-import { createElement, type CSSProperties, type ReactNode } from 'react';
+import { createElement, type ReactNode } from 'react';
 
 const brandGradient =
 	'linear-gradient(87.12deg, #470B58 1.98%, #C21B84 50.27%, #FA595E 74.42%, #F8BD31 98.56%)';
@@ -20,9 +20,7 @@ const mobileStyles = `
 		.ww-body { padding: 18px 8px !important; }
 		.ww-header { padding: 20px 20px 22px !important; }
 		.ww-brand-row { margin-bottom: 16px !important; }
-		.ww-brand-logo { width: 40px !important; height: 40px !important; }
-		.ww-brand-logo-cell { padding-right: 10px !important; }
-		.ww-brand-name { font-size: 22px !important; line-height: 26px !important; }
+		.ww-brand-logo { width: 195px !important; height: auto !important; }
 		.ww-title { font-size: 15px !important; line-height: 20px !important; margin-bottom: 8px !important; }
 		.ww-subtitle { font-size: 10px !important; line-height: 14px !important; }
 		.ww-content { padding: 22px 20px !important; }
@@ -92,70 +90,18 @@ function layout(input: {
 						},
 						createElement(
 							Section,
-							{
-								style: { marginBottom: '22px' },
-								className: 'ww-brand-row'
-							},
+							{ style: { marginBottom: '22px' }, className: 'ww-brand-row' },
 							createElement(
-								'table',
-								{
-									role: 'presentation',
-									cellPadding: '0',
-									cellSpacing: '0',
-									style: { borderCollapse: 'collapse' } as CSSProperties
-								},
-								createElement(
-									'tbody',
-									null,
-									createElement(
-										'tr',
-										null,
-										createElement(
-											'td',
-											{
-												style: {
-													padding: '0 14px 0 0',
-													verticalAlign: 'middle'
-												},
-												className: 'ww-brand-logo-cell'
-											},
-											createElement(Img, {
-												src: 'cid:aerocrm-identity-logo',
-												alt: 'aeroCRM',
-												width: '52',
-												height: '52',
-												style: {
-													display: 'block',
-													height: '52px',
-													width: '52px'
-												},
-												className: 'ww-brand-logo'
-											})
-										),
-										createElement(
-											'td',
-											{ style: { verticalAlign: 'middle' } },
-											createElement(
-												Link,
-												{
-													href: siteUrl,
-													style: {
-														color: '#ffffff',
-														display: 'block',
-														fontSize: '28px',
-														fontWeight: '700',
-														lineHeight: '32px',
-														letterSpacing: '-0.02em',
-														margin: 0,
-														textDecoration: 'none'
-													},
-													className: 'ww-brand-name'
-												},
-												'aerocrm.space'
-											)
-										)
-									)
-								)
+								Link,
+								{ href: siteUrl, style: { display: 'inline-block' } },
+								createElement(Img, {
+									src: 'cid:aerocrm-identity-logo',
+									alt: 'aeroCRM',
+									width: '234',
+									height: '54',
+									style: { display: 'block', width: '234px', maxWidth: '100%', height: 'auto' },
+									className: 'ww-brand-logo'
+								})
 							)
 						),
 						createElement(
@@ -238,7 +184,7 @@ function layout(input: {
 							href: 'https://aerocrm.space',
 							style: { color: '#c21b84', textDecoration: 'underline' }
 						},
-						'aerocrm.space'
+						'aeroCRM'
 					)
 				)
 			)
@@ -271,7 +217,7 @@ export function verificationEmail(code: string) {
 			createElement(
 				Text,
 				{ style: leadStyle, className: 'ww-body-text' },
-				'Вы получили это письмо, потому что кто-то указал данный адрес при регистрации в сервисе aerocrm.space. Если это были вы, используйте код ниже для подтверждения email.'
+				'Вы получили это письмо, потому что кто-то указал данный адрес при регистрации в сервисе aeroCRM. Если это были вы, используйте код ниже для подтверждения email.'
 			),
 			createElement(
 				Section,

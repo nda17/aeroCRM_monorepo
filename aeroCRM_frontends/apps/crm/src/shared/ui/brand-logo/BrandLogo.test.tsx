@@ -2,6 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { BrandLogo } from './BrandLogo'
 import styles from './BrandLogo.module.scss'
+import brand from '../../../../../../brand/aerocrm-wing.json'
 
 afterEach(cleanup)
 
@@ -9,7 +10,7 @@ describe('aeroCRM wordmark', () => {
 	it('renders one accessible SVG brand', () => {
 		const { container } = render(<BrandLogo />)
 		const svg = screen.getByRole('img', { name: 'aeroCRM' })
-		expect(svg.getAttribute('viewBox')).toBe('0 0 278 66')
+		expect(svg.getAttribute('viewBox')).toBe(brand.viewBox)
 		expect(svg.classList.contains(styles.wordmark)).toBe(true)
 		expect(container.querySelectorAll('svg')).toHaveLength(1)
 	})

@@ -23,7 +23,7 @@ export default function WincrmIntakeSlaEmail({
 		>
 			<Text className="ww-primary-text">{title}</Text>
 			<Text className="ww-secondary-text">
-				Обращение ещё не взято в работу. Откройте WinCRM, проверьте историю
+				Обращение ещё не взято в работу. Откройте aeroCRM, проверьте историю
 				и свяжитесь с клиентом. Для просмотра потребуется доступ к этому
 				обращению.
 			</Text>

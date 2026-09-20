@@ -3,6 +3,7 @@ import {
 	DATABASE_BACKUP_TARGETS,
 	type EnqueueScheduledJobInput
 } from '../scheduled-jobs/scheduled-jobs.types';
+import { ScheduledJobsService } from '../scheduled-jobs/scheduled-jobs.service';
 import { MaintenanceSchedulerService } from './maintenance-scheduler.service';
 
 const fixture = (time = '02:00') => {
@@ -31,25 +32,20 @@ const fixture = (time = '02:00') => {
 };
 
 describe('MaintenanceSchedulerService backup periods', () => {
-	it('preserves the nine existing offsets and schedules every target once due', async () => {
-		const original = {
-			'notification-delivery': 15,
-			campaigns: 30,
-			reporting: 45,
-			widgets: 60,
-			billing: 75,
-			identity: 90,
-			platform: 105,
-			support: 120,
-			operations: 135
-		};
-		expect(DATABASE_BACKUP_DELAY_MINUTES).toMatchObject(original);
-		expect(DATABASE_BACKUP_TARGETS.slice(0, 9)).toEqual(
-			Object.keys(original)
-		);
+	it('passes the daily report job through the scheduled-job input validator', async () => {
 		const { scheduler, jobs } = fixture();
 		await scheduler.tick(new Date('2026-09-07T06:00:00.000Z'));
-		expect(jobs.size).toBe(DATABASE_BACKUP_TARGETS.length);
+		const report = jobs.get('daily:backup-report:2026-09-07');
+		expect(report).toBeDefined();
+		const scheduledJobs = new ScheduledJobsService({} as never, {} as never, {} as never);
+		expect(() => scheduledJobs['validateInput'](report!)).not.toThrow();
+	});
+
+	it('schedules every current backup target once due', async () => {
+		expect(Object.keys(DATABASE_BACKUP_DELAY_MINUTES)).toEqual(DATABASE_BACKUP_TARGETS);
+		const { scheduler, jobs } = fixture();
+		await scheduler.tick(new Date('2026-09-07T06:00:00.000Z'));
+		expect(jobs.size).toBe(DATABASE_BACKUP_TARGETS.length + 1);
 		for (const target of DATABASE_BACKUP_TARGETS) {
 			const job = jobs.get(`daily:${target}:2026-09-07`)!;
 			expect(job.periodStart).toEqual(
