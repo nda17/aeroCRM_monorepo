@@ -9,7 +9,7 @@ import {
 export interface WorkspaceInvitation {
 	id: string
 	workspaceId: string
-	productCode: 'WINCRM'
+	productCode: 'AEROCRM'
 	version: number
 	status: 'PENDING' | 'ACCEPTED' | 'REVOKED' | 'EXPIRED'
 	expiresAt: string
@@ -25,7 +25,7 @@ export interface WorkspaceInvitationAcceptance {
 	invitationId: string
 	invitationVersion: number
 	workspaceId: string
-	productCode: 'WINCRM'
+	productCode: 'AEROCRM'
 	subject: string
 	membershipId: string
 	acceptedAt: string
@@ -61,7 +61,7 @@ export const parseWorkspaceInvitation = (
 		]) ||
 		invitation.id !== invitationId ||
 		!isUuidV4(invitation.workspaceId) ||
-		invitation.productCode !== 'WINCRM' ||
+		invitation.productCode !== 'AEROCRM' ||
 		!version(invitation.version) ||
 		!['PENDING', 'ACCEPTED', 'REVOKED', 'EXPIRED'].includes(
 			String(invitation.status)
@@ -115,7 +115,7 @@ export const parseInvitationAcceptance = (
 		!isNonEmptyString(subject, 256) ||
 		!isUuidV4(accepted.membershipId) ||
 		!version(accepted.invitationVersion) ||
-		accepted.productCode !== 'WINCRM' ||
+		accepted.productCode !== 'AEROCRM' ||
 		!isIsoDate(accepted.acceptedAt) ||
 		!isIsoDate(accepted.emailVerifiedAt) ||
 		accepted.emailVerifiedAt > accepted.acceptedAt

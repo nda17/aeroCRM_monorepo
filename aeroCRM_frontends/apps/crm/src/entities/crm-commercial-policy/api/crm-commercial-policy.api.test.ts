@@ -13,7 +13,7 @@ vi.mock('@/shared/api/authenticated-http-client', async original => ({
 }))
 const policy = {
 	schemaVersion: 1,
-	productCode: 'WINCRM',
+	productCode: 'AEROCRM',
 	version: 2,
 	currency: 'RUB',
 	monthlyPriceMinor: 129_900,

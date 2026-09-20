@@ -38,7 +38,7 @@ const workspaceId = '22222222-2222-4222-8222-222222222222'
 const invitation: WorkspaceInvitation = {
 	id,
 	workspaceId,
-	productCode: 'WINCRM',
+	productCode: 'AEROCRM',
 	version: 1,
 	status: 'PENDING',
 	expiresAt: '2099-01-01T00:00:00.000Z',
@@ -49,7 +49,7 @@ const accepted = {
 	invitationId: id,
 	invitationVersion: 2,
 	workspaceId,
-	productCode: 'WINCRM' as const,
+	productCode: 'AEROCRM' as const,
 	subject: 'user-1',
 	membershipId: '44444444-4444-4444-8444-444444444444',
 	acceptedAt: '2026-09-05T00:00:00.000Z',

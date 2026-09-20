@@ -41,7 +41,7 @@ let ready: boolean
 let client: QueryClient
 const policy: CrmCommercialPolicy = {
 	schemaVersion: 1,
-	productCode: 'WINCRM',
+	productCode: 'AEROCRM',
 	version: 3,
 	currency: 'RUB',
 	monthlyPriceMinor: 129_901,

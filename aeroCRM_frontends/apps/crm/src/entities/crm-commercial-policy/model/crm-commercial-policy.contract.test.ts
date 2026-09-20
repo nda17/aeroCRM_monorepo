@@ -3,7 +3,7 @@ import { parseCrmCommercialPolicy } from './crm-commercial-policy.contract'
 
 const policy = {
 	schemaVersion: 1,
-	productCode: 'WINCRM',
+	productCode: 'AEROCRM',
 	version: 1,
 	currency: 'RUB',
 	monthlyPriceMinor: 129_901,

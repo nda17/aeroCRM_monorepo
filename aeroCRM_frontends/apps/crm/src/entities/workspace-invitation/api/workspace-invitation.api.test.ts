@@ -26,7 +26,7 @@ const acceptance = {
 	invitationId: id,
 	invitationVersion: 2,
 	workspaceId,
-	productCode: 'WINCRM',
+	productCode: 'AEROCRM',
 	subject: 'user-1',
 	membershipId: '55555555-5555-4555-8555-555555555555',
 	acceptedAt: '2026-09-05T00:00:00.000Z',

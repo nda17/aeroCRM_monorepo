@@ -2,7 +2,7 @@ import { hasExactKeys, isIsoDate, isRecord } from '@/shared/lib/contract'
 
 export interface CrmCommercialPolicy {
 	schemaVersion: 1
-	productCode: 'WINCRM'
+	productCode: 'AEROCRM'
 	version: number
 	currency: 'RUB'
 	monthlyPriceMinor: number
@@ -46,7 +46,7 @@ export const parseCrmCommercialPolicy = (
 			'createdAt'
 		]) ||
 		value.schemaVersion !== 1 ||
-		value.productCode !== 'WINCRM' ||
+		value.productCode !== 'AEROCRM' ||
 		value.currency !== 'RUB' ||
 		!integer(value.version, 1, Number.MAX_SAFE_INTEGER) ||
 		!prices.every(key => integer(value[key], 1, 100_000_000)) ||
