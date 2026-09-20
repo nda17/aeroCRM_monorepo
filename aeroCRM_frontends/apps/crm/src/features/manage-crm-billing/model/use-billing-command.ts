@@ -37,6 +37,11 @@ export const useBillingCommand = (
 	onConfirmed: (operation: BillingOperation) => void
 ) => {
 	const { actor } = context
+	const checkedOperation = (operation: BillingOperation) => {
+		if (operation.state === 'PENDING' && actor.current())
+			context.refreshRelated()
+		return confirmedOperation(operation)
+	}
 	const command = useMemoryCommand<BillingIntent, BillingOperation>(
 		{
 			owner: commandOwner(actor.session?.userId, actor.sessionRevision),
@@ -47,7 +52,7 @@ export const useBillingCommand = (
 		actor.enabled,
 		context.authorize,
 		async (token, intent) =>
-			confirmedOperation(
+			checkedOperation(
 				intent.mutation
 					? await mutateBilling(token, intent.mutation)
 					: await recoverBillingOperation(
@@ -60,7 +65,7 @@ export const useBillingCommand = (
 			if (actor.current()) onConfirmed(operation)
 		},
 		async (token, intent) =>
-			confirmedOperation(
+			checkedOperation(
 				await recoverBillingOperation(
 					token,
 					actor.workspaceId,

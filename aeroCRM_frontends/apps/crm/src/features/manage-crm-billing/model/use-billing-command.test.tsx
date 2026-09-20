@@ -39,7 +39,7 @@ const TestProvider = ({ children }: PropsWithChildren) => {
 	)
 }
 const authorize = vi.fn(async () => 'synthetic-token')
-const context = (workspace = workspaceId) => {
+const context = (workspace = workspaceId, refreshRelated = vi.fn()) => {
 	const { session, sessionRevision } = useSessionStore.getState()
 	return {
 		actor: {
@@ -58,7 +58,8 @@ const context = (workspace = workspaceId) => {
 				)
 			}
 		},
-		authorize
+		authorize,
+		refreshRelated
 	} as unknown as ReturnType<typeof useBillingContext>
 }
 const checkout = (commandId: string): BillingMutation => ({
@@ -139,6 +140,7 @@ describe('CRM billing immutable command and recovery lifecycle', () => {
 		expect(authorize).toHaveBeenCalledTimes(3)
 	})
 	it('does not release pending evidence and explicitly recovers the original UUID', async () => {
+		const refreshRelated = vi.fn()
 		vi.mocked(mutateBilling).mockImplementation(
 			async (_token, mutation) => ({
 				...closed(mutation.body.commandId),
@@ -151,12 +153,20 @@ describe('CRM billing immutable command and recovery lifecycle', () => {
 		)
 		const onConfirmed = vi.fn()
 		const { result } = renderHook(
-			() => useBillingCommand(context(), vi.fn(), onConfirmed),
+			() =>
+				useBillingCommand(
+					context(workspaceId, refreshRelated),
+					vi.fn(),
+					onConfirmed
+				),
 			{ wrapper: TestProvider }
 		)
 		await act(() => result.current.submit(checkout))
 		const id = result.current.snapshot.commandId!
 		expect(result.current.uncertain).toBe(true)
+		expect(result.current.locked).toBe(true)
+		expect(mutateBilling).toHaveBeenCalledTimes(1)
+		expect(refreshRelated).toHaveBeenCalledTimes(1)
 		expect(onConfirmed).not.toHaveBeenCalled()
 		await act(() => result.current.recoverReference(id))
 		expect(recoverBillingOperation).toHaveBeenCalledExactlyOnceWith(
@@ -166,6 +176,67 @@ describe('CRM billing immutable command and recovery lifecycle', () => {
 		)
 		expect(onConfirmed).toHaveBeenCalledWith(closed(id))
 		expect(result.current.uncertain).toBe(false)
+	})
+	it('refreshes context for a PENDING recovery without replaying the mutation', async () => {
+		const refreshRelated = vi.fn()
+		vi.mocked(mutateBilling).mockRejectedValueOnce(
+			new AuthenticatedApiError('temporary', 'Unknown')
+		)
+		vi.mocked(recoverBillingOperation).mockImplementationOnce(
+			async (_token, _workspace, commandId) => ({
+				...closed(commandId),
+				state: 'PENDING',
+				requestHash: 'a'.repeat(64)
+			})
+		)
+		const { result } = renderHook(
+			() =>
+				useBillingCommand(
+					context(workspaceId, refreshRelated),
+					vi.fn(),
+					vi.fn()
+				),
+			{ wrapper: TestProvider }
+		)
+		await act(() => result.current.submit(checkout))
+		const id = result.current.snapshot.commandId!
+		await act(() => result.current.recoverReference(id))
+		expect(recoverBillingOperation).toHaveBeenCalledExactlyOnceWith(
+			'synthetic-token',
+			workspaceId,
+			id
+		)
+		expect(refreshRelated).toHaveBeenCalledTimes(1)
+		expect(mutateBilling).toHaveBeenCalledTimes(1)
+		expect(result.current.uncertain).toBe(true)
+		expect(result.current.locked).toBe(true)
+	})
+	it('does not refresh a PENDING result after the actor becomes stale', async () => {
+		const refreshRelated = vi.fn()
+		vi.mocked(mutateBilling).mockImplementation(
+			async (_token, mutation) => {
+				useSessionStore
+					.getState()
+					.setAuthenticated({ userId: 'other', accessToken: 'new-token' })
+				return {
+					...closed(mutation.body.commandId),
+					state: 'PENDING',
+					requestHash: 'a'.repeat(64)
+				}
+			}
+		)
+		const { result } = renderHook(
+			() =>
+				useBillingCommand(
+					context(workspaceId, refreshRelated),
+					vi.fn(),
+					vi.fn()
+				),
+			{ wrapper: TestProvider }
+		)
+		await act(() => result.current.submit(checkout))
+		expect(mutateBilling).toHaveBeenCalledTimes(1)
+		expect(refreshRelated).not.toHaveBeenCalled()
 	})
 	it('cannot substitute a foreign command reference for an in-memory unknown operation', async () => {
 		vi.mocked(mutateBilling).mockRejectedValue(
