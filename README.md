@@ -19,6 +19,8 @@ pnpm build:frontends
 
 CI проверяет три frontend на dev/PR; immutable образы по SHA собираются только для `prod_0.1.0`. Release требует успешный CI именно этого SHA и сверяет lock/env hashes перед загрузкой образов.
 
-Первый запуск использует чистые базы: trial 10 дней, базовый тариф включает владельца и двух сотрудников; годовая оплата со скидкой 10%. ЮKassa пока работает с явно выбранным тестовым магазином.
+Первый запуск использует чистые базы: trial 10 дней, базовый тариф включает владельца и двух сотрудников; годовая оплата со скидкой 10%. На production ЮKassa переключена на боевой магазин: `CRM_PAYMENT_LAUNCH_MODE=production`, `BILLING_CRM_PAYMENTS_ENABLED=true`. Реквизиты хранятся только в приватных env.
+
+URL HTTP-уведомлений ЮKassa: `https://api.aerocrm.space/api/v1/payments/webhook`. Обрабатываются `payment.succeeded`, `payment.waiting_for_capture`, `payment.canceled`; обработка `refund.succeeded` пока не реализована.
 
 До запуска publishers применяются service-owned миграции и ACL, затем `bootstrap:admin` в Identity, `bootstrap:crm-policy` в Billing и `scripts/bootstrap-db-settings.mjs` для настроек сервисов. Приватные bootstrap env передаются только соответствующим one-shot процессам. Администраторы сервиса не получают рабочее пространство или trial автоматически.
