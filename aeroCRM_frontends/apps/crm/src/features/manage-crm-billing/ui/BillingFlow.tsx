@@ -46,9 +46,13 @@ export const BillingFlow = ({
 		'SEAT_CHANGE' | 'RENEWAL' | 'DISABLE' | null
 	>(null)
 	const [lastResult, setLastResult] = useState<string | null>(null)
+	const [confirmedCommandId, setConfirmedCommandId] = useState<
+		string | null
+	>(null)
 	const confirmed = (operation: BillingOperation) => {
 		if (!actor.current()) return
 		const orderId = operation.billing?.order?.id
+		setConfirmedCommandId(operation.commandId)
 		onReference(orderId ? { orderId } : undefined)
 		const message =
 			operation.state === 'NOT_STARTED'
@@ -90,7 +94,9 @@ export const BillingFlow = ({
 	const commandId =
 		command.snapshot.commandId && command.uncertain
 			? command.snapshot.commandId
-			: (route.commandId ?? data?.capacity.pendingOperationId ?? null)
+			: [route.commandId, data?.capacity.pendingOperationId].find(
+					id => id && id !== confirmedCommandId
+				) || null
 	const orderId = route.orderId ?? data?.billing.pendingOrder?.id ?? null
 	const formLocked = command.locked || !!commandId
 	const closeDialog = () => {

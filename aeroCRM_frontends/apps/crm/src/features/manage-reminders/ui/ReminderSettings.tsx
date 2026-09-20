@@ -117,7 +117,6 @@ export const ReminderSettingsBody = ({
 						change(() => {
 							setScope(event.target.value as ReminderScope)
 							setPage(1)
-							toast('Раздел напоминаний изменён')
 						})
 					}
 				>
@@ -128,16 +127,16 @@ export const ReminderSettingsBody = ({
 					<input
 						type="checkbox"
 						checked={archived}
+						aria-describedby="reminder-archive-hint"
 						disabled={!ready || command.locked}
 						onChange={event =>
 							change(() => {
 								setArchived(event.target.checked)
 								setPage(1)
-								toast('Список правил обновлён')
 							})
 						}
 					/>
-					Архив правил
+					Показать архивные правила
 				</label>
 				<Button
 					variant="secondary"
@@ -161,13 +160,16 @@ export const ReminderSettingsBody = ({
 					onClick={() => {
 						if (context.current()) {
 							setEditor('new')
-							toast('Новое правило')
 						}
 					}}
 				>
 					Добавить правило
 				</Button>
 			</div>
+			<p id="reminder-archive-hint" className={styles.notice}>
+				Архивные правила не отправляют напоминания. Галочка только
+				переключает список и не меняет сами правила.
+			</p>
 			{!context.canRead ? (
 				<ScreenState
 					compact

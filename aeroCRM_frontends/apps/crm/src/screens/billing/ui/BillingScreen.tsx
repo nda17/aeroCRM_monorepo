@@ -10,7 +10,7 @@ import { BillingFlow } from '@/features/manage-crm-billing'
 import { ScreenState } from '@/shared/ui'
 import { getRuntimeConfig } from '@/shared/config/runtime'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Suspense, useEffect } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import styles from './BillingScreen.module.scss'
 
 const BillingReturnRedirect = ({ route }: { route: BillingRoute }) => {
@@ -26,6 +26,34 @@ const BillingReturnRedirect = ({ route }: { route: BillingRoute }) => {
 			variant="loading"
 			title="Возвращаемся к проверке заказа"
 			description="Возврат от провайдера не подтверждает оплату. Сейчас проверим прежний заказ через сервер aeroCRM."
+		/>
+	)
+}
+
+const BillingFlowRoute = ({ route }: { route: BillingRoute }) => {
+	const source = `${route.orderId ?? ''}:${route.commandId ?? ''}`
+	const [override, setOverride] = useState<{
+		from: string
+		reference: Pick<BillingRoute, 'orderId' | 'commandId'>
+	} | null>(null)
+	const reference = override?.from === source ? override.reference : route
+	return (
+		<BillingFlow
+			route={{ ...route, ...reference }}
+			onReference={next => {
+				const href = billingHref(route.workspaceId, next)
+				// Synchronous, bounded reference before dispatch: no JWT, PII, price,
+				// consent text or command body enters browser persistence.
+				if (!href) return
+				window.history.replaceState(window.history.state, '', href)
+				setOverride({
+					from: source,
+					reference: {
+						orderId: next && 'orderId' in next ? next.orderId : null,
+						commandId: next && 'commandId' in next ? next.commandId : null
+					}
+				})
+			}}
 		/>
 	)
 }
@@ -61,16 +89,9 @@ const BillingRouteScreen = ({ returning }: { returning: boolean }) => {
 				) : returning ? (
 					<BillingReturnRedirect route={route} />
 				) : (
-					<BillingFlow
+					<BillingFlowRoute
 						key={`${session?.userId}:${sessionRevision}:${route.workspaceId}`}
 						route={route}
-						onReference={reference => {
-							const href = billingHref(route.workspaceId, reference)
-							// Synchronous, bounded reference before dispatch: no JWT, PII, price,
-							// consent text or command body enters browser persistence.
-							if (href)
-								window.history.replaceState(window.history.state, '', href)
-						}}
 					/>
 				)}
 			</div>

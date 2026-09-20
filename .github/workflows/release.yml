@@ -23,6 +23,14 @@ on:
       backend_env_hash:
         description: SHA-256 of sorted backend env-file hashes on VPS
         required: false
+      billing_capacity_migration:
+        description: Backend target only; apply the reviewed additive Billing capacity FK migration before switching images
+        type: boolean
+        default: false
+        required: true
+      billing_migration_env_hash:
+        description: SHA-256 of the private VPS migrations/billing.env file; required only for Billing capacity migration
+        required: false
       crm_contracts_cutover:
         description: Backend target only; release frontend separately after a successful CRM contract cutover
         type: boolean
@@ -61,9 +69,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ inputs.ci_run_id }}
           SHA: ${{ inputs.sha }}
+          INFRA_SHA: ${{ inputs.infra_sha }}
           TARGET: ${{ inputs.target }}
           FRONT_HASH: ${{ inputs.frontend_env_hash }}
           BACK_HASH: ${{ inputs.backend_env_hash }}
+          BILLING_MIGRATION: ${{ inputs.billing_capacity_migration && 'true' || 'false' }}
+          BILLING_MIGRATION_HASH: ${{ inputs.billing_migration_env_hash }}
           CUTOVER: ${{ inputs.crm_contracts_cutover && 'true' || 'false' }}
           RESUME: ${{ inputs.crm_contracts_cutover_resume && 'true' || 'false' }}
           STAGED_DIR: ${{ inputs.crm_contracts_staged_env_dir }}
@@ -72,6 +83,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$INFRA_SHA" =~ ^[a-f0-9]{40}$ ]]
           [[ "$RUN_ID" =~ ^[0-9]+$ ]]
           read -r conclusion head_sha branch workflow_path <<< "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '[.conclusion,.head_sha,.head_branch,.path] | join(" ")')"
           [[ "$conclusion" == success && "$head_sha" == "$SHA" && "$branch" == prod_0.1.0 && "$workflow_path" == .github/workflows/ci.yml ]]
@@ -83,6 +95,11 @@ jobs:
             [[ "$STAGED_DIR" != *'//'* && "$DEFINITIONS_FILE" != *'//'* ]]
           else
             [[ "$RESUME" == false && -z "$STAGED_DIR" && -z "$STAGED_HASH" && -z "$DEFINITIONS_FILE" ]]
+          fi
+          if [[ "$BILLING_MIGRATION" == true ]]; then
+            [[ "$TARGET" == backend && "$CUTOVER" == false && "$BILLING_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
+          else
+            [[ -z "$BILLING_MIGRATION_HASH" ]]
           fi
           case "$TARGET" in
             all)
@@ -141,6 +158,8 @@ jobs:
           BACK_KEY: ${{ secrets.BACKEND_SSH_KEY }}
           FRONT_HASH: ${{ inputs.frontend_env_hash }}
           BACK_HASH: ${{ inputs.backend_env_hash }}
+          BILLING_MIGRATION: ${{ inputs.billing_capacity_migration && 'true' || 'false' }}
+          BILLING_MIGRATION_HASH: ${{ inputs.billing_migration_env_hash }}
           KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
           CUTOVER: ${{ inputs.crm_contracts_cutover && 'true' || 'false' }}
           RESUME: ${{ inputs.crm_contracts_cutover_resume && 'true' || 'false' }}
@@ -173,6 +192,11 @@ jobs:
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "bash -c 'set -euo pipefail; cd /opt/aerocrm; actual=\$(cd env/backend && find . -maxdepth 1 -type f -name \"*.env\" -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d\" \" -f1); staged=\$(cd \"$STAGED_DIR/backend\" && find . -maxdepth 1 -type f -name \"*.env\" -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d\" \" -f1); test \"\$actual\" = \"$BACK_HASH\"; test \"\$staged\" = \"$STAGED_HASH\"; test -f \"$STAGED_DIR/migrations/identity.env\"; test -f \"$STAGED_DIR/migrations/notification-delivery.env\"; test -f \"$DEFINITIONS_FILE\"'"
           fi
+          if [ "$ROLE" = backend ] && [ "$BILLING_MIGRATION" = true ]; then
+            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/billing-capacity-migration.mjs infra/scripts/ensure-cutover-node.sh "$dest:/opt/aerocrm/scripts/"
+            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'bash /opt/aerocrm/scripts/ensure-cutover-node.sh --billing')
+            [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
+          fi
           for app in $APPS; do
             gzip -dc "images/$app/$app.tar.gz" | ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'docker load >/dev/null'
           done
@@ -180,6 +204,8 @@ jobs:
             resume_arg=
             if [ "$RESUME" = true ]; then resume_arg=' --resume'; fi
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && '$node_bin' scripts/crm-contract-cutover.mjs '$SHA' '$STAGED_DIR' '$DEFINITIONS_FILE'$resume_arg"
+          elif [ "$ROLE" = backend ] && [ "$BILLING_MIGRATION" = true ]; then
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash' true '$BILLING_MIGRATION_HASH'"
           else
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash'"
           fi

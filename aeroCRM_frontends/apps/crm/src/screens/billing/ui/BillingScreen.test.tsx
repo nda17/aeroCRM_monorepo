@@ -1,7 +1,13 @@
 import { resetSessionStore, useSessionStore } from '@/entities/session'
 import { BillingFlow } from '@/features/manage-crm-billing'
 import { getRuntimeConfig } from '@/shared/config/runtime'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor
+} from '@testing-library/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BillingScreen } from './BillingScreen'
@@ -12,10 +18,34 @@ vi.mock('next/navigation', () => ({
 	useSearchParams: vi.fn()
 }))
 vi.mock('@/features/manage-crm-billing', () => ({
-	BillingFlow: vi.fn(() => <div>Confirmed billing flow</div>)
+	BillingFlow: vi.fn(
+		({
+			route,
+			onReference
+		}: {
+			route: { commandId: string | null; orderId: string | null }
+			onReference: (
+				reference?: { commandId: string } | { orderId: string }
+			) => void
+		}) => (
+			<div>
+				<div>Confirmed billing flow</div>
+				{route.commandId ? (
+					<section aria-label="Восстановление операции">
+						<h2>Сначала подтвердите прежнюю операцию</h2>
+						<button onClick={() => onReference()}>
+							Подтвердить терминальный результат
+						</button>
+					</section>
+				) : null}
+				{route.orderId ? <p role="status">Заказ {route.orderId}</p> : null}
+			</div>
+		)
+	)
 }))
 const workspaceId = 'b531b13e-3624-4ec5-b66d-f24373b0b374'
 const orderId = 'b1c1d3d9-dc5a-4a50-98ba-c79b3895db62'
+const commandId = '0f1e2d3c-4b5a-4678-89ab-cdef01234567'
 const replace = vi.fn()
 beforeEach(() => {
 	vi.clearAllMocks()
@@ -34,6 +64,7 @@ beforeEach(() => {
 afterEach(() => {
 	cleanup()
 	resetSessionStore()
+	window.history.replaceState({}, '', '/inbox')
 	vi.restoreAllMocks()
 })
 
@@ -98,5 +129,70 @@ describe('paid billing route release gate', () => {
 		render(<BillingScreen />)
 		expect(screen.getByText('Некорректная ссылка оплаты')).toBeTruthy()
 		expect(BillingFlow).not.toHaveBeenCalled()
+	})
+	it('removes the visible recovery prompt after a terminal proof for the same command', async () => {
+		vi.mocked(getRuntimeConfig).mockReturnValue({
+			crmBillingEnabled: true
+		} as never)
+		vi.mocked(useSearchParams).mockReturnValue(
+			new URLSearchParams({ workspaceId, commandId }) as never
+		)
+		window.history.replaceState(
+			{},
+			'',
+			`/billing?workspaceId=${workspaceId}&commandId=${commandId}`
+		)
+
+		render(<BillingScreen />)
+		expect(
+			screen.getByRole('region', { name: 'Восстановление операции' })
+		).toBeTruthy()
+		fireEvent.click(
+			screen.getByRole('button', {
+				name: 'Подтвердить терминальный результат'
+			})
+		)
+		await waitFor(() =>
+			expect(
+				screen.queryByRole('region', { name: 'Восстановление операции' })
+			).toBeNull()
+		)
+		expect(window.location.search).toBe(`?workspaceId=${workspaceId}`)
+	})
+	it('preserves a committed order reference while replacing the stale command reference', async () => {
+		vi.mocked(getRuntimeConfig).mockReturnValue({
+			crmBillingEnabled: true
+		} as never)
+		vi.mocked(useSearchParams).mockReturnValue(
+			new URLSearchParams({ workspaceId, commandId }) as never
+		)
+		window.history.replaceState(
+			{},
+			'',
+			`/billing?workspaceId=${workspaceId}&commandId=${commandId}`
+		)
+		vi.mocked(BillingFlow).mockImplementation(({ route, onReference }) => (
+			<div>
+				{route.commandId ? (
+					<section aria-label="Восстановление операции">
+						<button onClick={() => onReference({ orderId })}>
+							Подтвердить успешную операцию
+						</button>
+					</section>
+				) : null}
+				{route.orderId ? <p role="status">Заказ {route.orderId}</p> : null}
+			</div>
+		))
+
+		render(<BillingScreen />)
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Подтвердить успешную операцию' })
+		)
+		await waitFor(() =>
+			expect(screen.getByRole('status').textContent).toContain(orderId)
+		)
+		expect(window.location.search).toBe(
+			`?workspaceId=${workspaceId}&orderId=${orderId}`
+		)
 	})
 })

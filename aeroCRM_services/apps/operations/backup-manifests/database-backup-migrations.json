@@ -33,11 +33,15 @@
 			]
 		},
 		"billing": {
-			"manifestSha256": "5f3d29f2d92b83b2635e008bf6545d54583d8f8e98b11d5a137f31b02c6c7ed0",
+			"manifestSha256": "cd4191bed8dea349740769c7877d74df98c93aed8211aba13a05a7fd1f902d56",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
 					"checksum": "b6a6babe34607ec210b864289d5f17b285c4924234e3570a9acf190253d85266"
+				},
+				{
+					"name": "20260921010000_defer_crm_capacity_bindings",
+					"checksum": "9318239e1b2e2926102f643faacd852782bb64901028f9950eb586fc2d498307"
 				}
 			]
 		},

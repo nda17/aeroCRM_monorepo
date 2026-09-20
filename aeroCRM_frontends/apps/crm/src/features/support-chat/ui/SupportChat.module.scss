@@ -1,5 +1,9 @@
 .launcher {
 	@apply fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] z-40 flex h-11 w-11 items-center justify-center rounded-full border-0 bg-crm-action p-0 text-white shadow-floating transition-colors hover:bg-crm-action/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2;
+	@media (max-width: 639px) {
+		bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 12vh);
+		bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 12dvh);
+	}
 }
 .launcher[hidden] {
 	@apply hidden;
