@@ -87,12 +87,13 @@ afterEach(() => {
 	vi.useRealTimers()
 	vi.restoreAllMocks()
 })
-const view = (locked = false) => (
+const view = (locked = false, navigationBusy = false) => (
 	<QueryClientProvider client={client}>
 		<BillingOrderPanel
 			context={context}
 			orderId={id}
 			locked={locked}
+			navigationBusy={navigationBusy}
 			onVerify={onVerify}
 			onRefreshContext={onRefreshContext}
 		/>
@@ -138,6 +139,71 @@ describe('read-only order polling and explicit provider verification', () => {
 			})
 		)
 		expect(onVerify).toHaveBeenCalledExactlyOnceWith(initial.order)
+	})
+	it('allows the existing pending one-time order to open while recovery is locked', async () => {
+		const popup = {
+			opener: window,
+			location: { replace: vi.fn() },
+			close: vi.fn()
+		}
+		vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
+		render(view(true))
+		await screen.findByRole('button', {
+			name: 'Перейти к оплате в YooKassa'
+		})
+		const verify = screen.getByRole('button', {
+			name: 'Запросить проверку у провайдера'
+		})
+		expect(verify).toHaveProperty('disabled', true)
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Перейти к оплате в YooKassa' })
+		)
+		await waitFor(() =>
+			expect(popup.location.replace).toHaveBeenCalledExactlyOnceWith(
+				safeUrl
+			)
+		)
+		expect(onVerify).not.toHaveBeenCalled()
+	})
+	it('keeps the existing order navigation blocked while a command is running', async () => {
+		render(view(true, true))
+		const open = await screen.findByRole('button', {
+			name: 'Перейти к оплате в YooKassa'
+		})
+		expect(open).toHaveProperty('disabled', true)
+	})
+	it('does not offer payment navigation without a valid existing one-time order URL', async () => {
+		vi.mocked(getBillingOrder).mockResolvedValue({
+			...initial,
+			order: { ...initial.order, confirmationUrl: null }
+		})
+		render(view(true))
+		await screen.findByText('Ожидает оплаты или подтверждения')
+		expect(
+			screen.queryByRole('button', { name: 'Перейти к оплате в YooKassa' })
+		).toBeNull()
+	})
+	it('does not offer payment navigation for a recurring order even with a safe URL', async () => {
+		vi.mocked(getBillingOrder).mockResolvedValue({
+			...initial,
+			order: { ...initial.order, kind: 'RECURRING' }
+		})
+		render(view(true))
+		await screen.findByText('Ожидает оплаты или подтверждения')
+		expect(
+			screen.queryByRole('button', { name: 'Перейти к оплате в YooKassa' })
+		).toBeNull()
+	})
+	it('does not open an uncertain replay while the server order is UNKNOWN', async () => {
+		vi.mocked(getBillingOrder).mockResolvedValue({
+			...initial,
+			order: { ...initial.order, state: 'UNKNOWN' }
+		})
+		render(view(true))
+		await screen.findByText('Результат платежа уточняется')
+		expect(
+			screen.queryByRole('button', { name: 'Перейти к оплате в YooKassa' })
+		).toBeNull()
 	})
 	it('does not offer provider verification without backend bound-provider evidence', async () => {
 		vi.mocked(getBillingOrder).mockResolvedValue({

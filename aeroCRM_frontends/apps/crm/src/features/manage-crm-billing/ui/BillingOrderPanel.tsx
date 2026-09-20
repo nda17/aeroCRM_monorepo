@@ -25,12 +25,14 @@ export const BillingOrderPanel = ({
 	orderId,
 	onRefreshContext,
 	locked,
+	navigationBusy,
 	onVerify
 }: {
 	context: ReturnType<typeof useBillingContext>
 	orderId: string
 	onRefreshContext: () => void
 	locked: boolean
+	navigationBusy: boolean
 	onVerify: (order: BillingOrder) => Promise<void>
 }) => {
 	const actor = useBillingActor(context.actor.workspaceId)
@@ -105,7 +107,7 @@ export const BillingOrderPanel = ({
 		if (
 			!row ||
 			!context.ready ||
-			locked ||
+			navigationBusy ||
 			opening ||
 			!actor.current() ||
 			!navigator.onLine
@@ -131,6 +133,7 @@ export const BillingOrderPanel = ({
 			)
 			if (!actor.current()) return
 			if (
+				fresh.order.kind !== 'ONE_TIME' ||
 				fresh.order.state !== 'PENDING' ||
 				!isBillingConfirmationUrl(fresh.order.confirmationUrl) ||
 				Date.parse(fresh.serverTime) >=
@@ -202,7 +205,8 @@ export const BillingOrderPanel = ({
 							</div>
 						) : null}
 					</dl>
-					{row.state === 'PENDING' &&
+					{row.kind === 'ONE_TIME' &&
+					row.state === 'PENDING' &&
 					row.confirmationUrl &&
 					isBillingConfirmationUrl(row.confirmationUrl) &&
 					order.data &&
@@ -210,7 +214,7 @@ export const BillingOrderPanel = ({
 						Date.parse(row.checkoutExpiresAt) ? (
 						<Button
 							tooltip="Открыть страницу оплаты существующего заказа в YooKassa"
-							disabled={locked || order.isFetching}
+							disabled={navigationBusy || !actor.online || order.isFetching}
 							isLoading={opening}
 							onClick={() => void openPayment()}
 						>

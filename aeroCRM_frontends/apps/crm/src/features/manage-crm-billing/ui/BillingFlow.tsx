@@ -360,6 +360,7 @@ export const BillingFlow = ({
 					orderId={orderId}
 					onRefreshContext={context.refreshRelated}
 					locked={formLocked}
+					navigationBusy={command.running}
 					onVerify={order =>
 						command.submit(commandId => ({
 							action: 'orders/verify',
