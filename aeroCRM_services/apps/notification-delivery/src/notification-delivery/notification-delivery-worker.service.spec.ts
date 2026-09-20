@@ -433,10 +433,10 @@ describe('NotificationDeliveryWorkerService', () => {
 
 	const createInvitationMessage = (): ConsumeMessage => {
 		const message = createPaymentMessage(
-			'notification.wincrm.invitation.email.requested.v1'
+			'notification.crm.invitation.email.requested.v1'
 		);
 		message.properties.type =
-			'notification.wincrm.invitation.email.requested.v1';
+			'notification.crm.invitation.email.requested.v1';
 		message.content = Buffer.from(
 			JSON.stringify({
 				schemaVersion: 1,
@@ -444,7 +444,7 @@ describe('NotificationDeliveryWorkerService', () => {
 				eventType: message.properties.type,
 				occurredAt: '2026-09-05T00:00:00.000Z',
 				reference: {
-					type: 'wincrm-invitation',
+					type: 'crm-invitation',
 					id: '22222222-2222-4222-8222-222222222222',
 					workspaceId: '33333333-3333-4333-8333-333333333333'
 				},
@@ -462,8 +462,8 @@ describe('NotificationDeliveryWorkerService', () => {
 		const message = createInvitationMessage();
 		const payload = JSON.parse(message.content.toString());
 		payload.eventType =
-			'notification.wincrm.task-reminder.email.requested.v1';
-		payload.reference.type = 'wincrm-task-reminder';
+			'notification.crm.task-reminder.email.requested.v1';
+		payload.reference.type = 'crm-task-reminder';
 		delete payload.destination;
 		delete payload.content;
 		message.properties.type = payload.eventType;
@@ -474,14 +474,14 @@ describe('NotificationDeliveryWorkerService', () => {
 	};
 	it('defers quiet hours atomically without creating a failure or consuming a retry attempt, before ACK', async () => {
 		const { service, rabbitMq, adapter, transaction } = createService(
-			'wincrm-task-reminder-email'
+			'crm-task-reminder-email'
 		);
 		const retryAt = new Date(Date.now() + 3600_000).toISOString();
 		jest
 			.mocked(adapter.deliver)
 			.mockResolvedValue({ status: 'DEFERRED', retryAt });
 		await (service as any).handle(
-			'wincrm-task-reminder-email',
+			'crm-task-reminder-email',
 			createReminderMessage()
 		);
 		expect(
@@ -490,7 +490,7 @@ describe('NotificationDeliveryWorkerService', () => {
 			expect.objectContaining({
 				where: expect.objectContaining({
 					eventId,
-					consumer: 'wincrm-task-reminder-email',
+					consumer: 'crm-task-reminder-email',
 					status: 'PROCESSING',
 					lockToken: expect.any(String)
 				}),
@@ -508,7 +508,7 @@ describe('NotificationDeliveryWorkerService', () => {
 		expect(outbox).toMatchObject({
 			messageId: eventId,
 			exchange: 'EVENTS',
-			routingKey: 'manual.wincrm-task-reminder-email',
+			routingKey: 'manual.crm-task-reminder-email',
 			availableAt: new Date(retryAt),
 			headers: {
 				'x-retry-attempt': 3,
@@ -531,7 +531,7 @@ describe('NotificationDeliveryWorkerService', () => {
 		'does not ACK an uncommitted quiet-hours defer after %s failure',
 		async failure => {
 			const { service, rabbitMq, adapter, transaction } = createService(
-				'wincrm-task-reminder-email'
+				'crm-task-reminder-email'
 			);
 			jest.mocked(adapter.deliver).mockResolvedValue({
 				status: 'DEFERRED',
@@ -546,7 +546,7 @@ describe('NotificationDeliveryWorkerService', () => {
 					new Error('commit unavailable')
 				);
 			await (service as any).handle(
-				'wincrm-task-reminder-email',
+				'crm-task-reminder-email',
 				createReminderMessage()
 			);
 			expect(rabbitMq.ack).not.toHaveBeenCalled();
@@ -558,14 +558,14 @@ describe('NotificationDeliveryWorkerService', () => {
 	);
 	it('terminal task reminder no-send is closed, not delivered', async () => {
 		const { service, adapter, transaction } = createService(
-			'wincrm-task-reminder-email'
+			'crm-task-reminder-email'
 		);
 		jest.mocked(adapter.deliver).mockResolvedValue({
 			status: 'SKIPPED',
 			reason: 'TASK_REMINDER_UNAVAILABLE'
 		});
 		await (service as any).handle(
-			'wincrm-task-reminder-email',
+			'crm-task-reminder-email',
 			createReminderMessage()
 		);
 		expect(
@@ -583,18 +583,18 @@ describe('NotificationDeliveryWorkerService', () => {
 		);
 	});
 	it('reports actual opted-in consumer kinds rather than configuration alone', async () => {
-		const { service } = createService('wincrm-task-reminder-email');
-		expect(service.isReadyForKinds(['wincrm-task-reminder-email'])).toBe(
+		const { service } = createService('crm-task-reminder-email');
+		expect(service.isReadyForKinds(['crm-task-reminder-email'])).toBe(
 			false
 		);
 		await service.onModuleInit();
-		expect(service.isReadyForKinds(['wincrm-task-reminder-email'])).toBe(
+		expect(service.isReadyForKinds(['crm-task-reminder-email'])).toBe(
 			true
 		);
 		expect(
 			service.isReadyForKinds([
-				'wincrm-task-reminder-email',
-				'wincrm-task-reminder-telegram'
+				'crm-task-reminder-email',
+				'crm-task-reminder-telegram'
 			])
 		).toBe(false);
 	});
@@ -603,14 +603,14 @@ describe('NotificationDeliveryWorkerService', () => {
 		'records %s as a terminal skip, not provider delivery, before ack',
 		async reason => {
 			const { service, rabbitMq, adapter, transaction } = createService(
-				'wincrm-invitation-email'
+				'crm-invitation-email'
 			);
 			jest.mocked(adapter.deliver).mockResolvedValue({
 				status: 'SKIPPED',
 				reason: reason as 'INVITATION_EXPIRED'
 			});
 			await (service as any).handle(
-				'wincrm-invitation-email',
+				'crm-invitation-email',
 				createInvitationMessage()
 			);
 			expect(
@@ -618,7 +618,7 @@ describe('NotificationDeliveryWorkerService', () => {
 			).toHaveBeenCalledWith({
 				where: expect.objectContaining({
 					eventId,
-					consumer: 'wincrm-invitation-email',
+					consumer: 'crm-invitation-email',
 					status: NotificationDeliveryReceiptStatus.PROCESSING,
 					lockedBy: expect.any(String),
 					lockToken: expect.any(String)
@@ -667,7 +667,7 @@ describe('NotificationDeliveryWorkerService', () => {
 	);
 	it('never acknowledges or closes a failure when the terminal skip CAS is lost', async () => {
 		const { service, rabbitMq, adapter, transaction } = createService(
-			'wincrm-invitation-email'
+			'crm-invitation-email'
 		);
 		jest.mocked(adapter.deliver).mockResolvedValue({
 			status: 'SKIPPED',
@@ -677,7 +677,7 @@ describe('NotificationDeliveryWorkerService', () => {
 			count: 0
 		});
 		await (service as any).handle(
-			'wincrm-invitation-email',
+			'crm-invitation-email',
 			createInvitationMessage()
 		);
 		expect(rabbitMq.ack).not.toHaveBeenCalled();
@@ -688,7 +688,7 @@ describe('NotificationDeliveryWorkerService', () => {
 	});
 	it('deduplicates a previously skipped invitation without calling its adapter', async () => {
 		const { service, rabbitMq, adapter, prisma } = createService(
-			'wincrm-invitation-email'
+			'crm-invitation-email'
 		);
 		jest
 			.mocked(prisma.notificationDeliveryReceipt.create)
@@ -704,7 +704,7 @@ describe('NotificationDeliveryWorkerService', () => {
 				status: NotificationDeliveryReceiptStatus.CLOSED_NO_RETRY
 			} as never);
 		await (service as any).handle(
-			'wincrm-invitation-email',
+			'crm-invitation-email',
 			createInvitationMessage()
 		);
 		expect(adapter.deliver).not.toHaveBeenCalled();
@@ -712,15 +712,15 @@ describe('NotificationDeliveryWorkerService', () => {
 	});
 	it('uses the invitation-only retry route after eligibility or SMTP failure', async () => {
 		const { service, adapter, transaction, rabbitMq } = createService(
-			'wincrm-invitation-email'
+			'crm-invitation-email'
 		);
 		jest
 			.mocked(adapter.deliver)
 			.mockRejectedValue(
-				new Error('WinCRM invitation eligibility is unavailable')
+				new Error('aeroCRM invitation eligibility is unavailable')
 			);
 		await (service as any).handle(
-			'wincrm-invitation-email',
+			'crm-invitation-email',
 			createInvitationMessage()
 		);
 		expect(
@@ -728,8 +728,8 @@ describe('NotificationDeliveryWorkerService', () => {
 		).toHaveBeenCalledWith(
 			expect.objectContaining({
 				data: expect.objectContaining({
-					routingKey: 'manual.wincrm-invitation-email',
-					eventType: 'notification.wincrm.invitation.email.requested.v1'
+					routingKey: 'manual.crm-invitation-email',
+					eventType: 'notification.crm.invitation.email.requested.v1'
 				})
 			})
 		);

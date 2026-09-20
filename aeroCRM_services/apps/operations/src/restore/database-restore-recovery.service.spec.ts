@@ -27,7 +27,7 @@ const recoveryService = (state: unknown) =>
 			...(state as Record<string, unknown>)
 		} as never,
 		{
-			get: jest.fn(() => ({ database: 'winwidget_reporting' })),
+			get: jest.fn(() => ({ database: 'aerocrm_reporting' })),
 			connection: jest.fn(async () => ({}))
 		} as never,
 		{ apply: jest.fn(async () => ({})) } as never,
@@ -203,7 +203,7 @@ describe('DatabaseRestoreRecoveryService', () => {
 		const service = new DatabaseRestoreRecoveryService(
 			state as never,
 			{
-				get: jest.fn(() => ({ database: 'winwidget_reporting' })),
+				get: jest.fn(() => ({ database: 'aerocrm_reporting' })),
 				connection: jest.fn(async () => ({}))
 			} as never,
 			writerFence as never,

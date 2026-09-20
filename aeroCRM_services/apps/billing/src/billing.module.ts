@@ -10,13 +10,13 @@ import { BillingAdminAlertsService } from './domain/billing-admin-alerts.service
 import { InternalCommandsService } from './domain/internal-commands.service';
 import { CrmEntitlementService } from './domain/crm-entitlement.service';
 import { CrmCommercialPolicyService } from './domain/crm-commercial-policy.service';
-import { WincrmCommerceService } from './domain/wincrm-commerce.service';
-import { BillingWincrmCommerceController } from './http/billing-wincrm-commerce.controller';
-import { BillingCrmWebhookController, BillingWincrmProviderController } from './http/billing-wincrm-provider.controller';
-import { WincrmProviderRabbitMqService } from './provider/wincrm-provider-rabbitmq.service';
-import { WincrmProviderWorkerService } from './provider/wincrm-provider-worker.service';
-import { WincrmAccessAuthorizationClient } from './provider/wincrm-access-authorization.client';
-import { WincrmCommerceSchedulerService } from './scheduler/wincrm-commerce-scheduler.service';
+import { CrmCommerceService } from './domain/crm-commerce.service';
+import { BillingCrmCommerceController } from './http/billing-crm-commerce.controller';
+import { BillingCrmWebhookController, BillingCrmProviderController } from './http/billing-crm-provider.controller';
+import { CrmProviderRabbitMqService } from './provider/crm-provider-rabbitmq.service';
+import { CrmProviderWorkerService } from './provider/crm-provider-worker.service';
+import { CrmAccessAuthorizationClient } from './provider/crm-access-authorization.client';
+import { CrmCommerceSchedulerService } from './scheduler/crm-commerce-scheduler.service';
 import { BillingMessagingAdminService } from './domain/billing-messaging-admin.service';
 import { BillingHealthController } from './health/billing-health.controller';
 import { BillingHealthService } from './health/billing-health.service';
@@ -49,8 +49,8 @@ const API_CONTROLLERS =
 				CrmAdminSubscriptionController,
 				BillingCampaignAudienceController,
 				BillingCrmAccessController,
-				BillingWincrmCommerceController,
-				BillingWincrmProviderController,
+				BillingCrmCommerceController,
+				BillingCrmProviderController,
 				BillingCrmWebhookController,
 				BillingIdentityController,
 				BillingSettingsController,
@@ -83,11 +83,11 @@ const API_PROVIDERS =
 		InternalCommandsService,
 		CrmEntitlementService,
 		CrmCommercialPolicyService,
-		WincrmCommerceService,
-		WincrmAccessAuthorizationClient,
-		WincrmProviderRabbitMqService,
-		WincrmProviderWorkerService,
-		WincrmCommerceSchedulerService,
+		CrmCommerceService,
+		CrmAccessAuthorizationClient,
+		CrmProviderRabbitMqService,
+		CrmProviderWorkerService,
+		CrmCommerceSchedulerService,
 		BillingCampaignAudienceService,
 		BillingAdminAlertsService,
 		BillingMessagingAdminService,

@@ -1,14 +1,14 @@
 // Service-owned copy of the versioned Billing HTTP contract. Never import
 // another app's runtime. Parity is exercised by the contract tests.
-export type WincrmBillingCycle = 'MONTHLY' | 'YEARLY';
+export type CrmBillingCycle = 'MONTHLY' | 'YEARLY';
 
-export type WincrmOrderState =
+export type CrmOrderState =
 	| 'PENDING'
 	| 'SUCCEEDED'
 	| 'CANCELLED'
 	| 'UNKNOWN';
 
-export interface WincrmPriceSnapshot {
+export interface CrmPriceSnapshot {
 	policyVersion: number;
 	monthlyPriceMinor: number;
 	yearlyPriceMinor: number;
@@ -18,72 +18,72 @@ export interface WincrmPriceSnapshot {
 	graceDays: number;
 }
 
-export interface WincrmCapacityFence {
+export interface CrmCapacityFence {
 	operationId: string;
 	requestHash: string;
 	fenceRevision: number;
 	targetSeats: number;
 }
 
-export interface WincrmCommerceContext {
+export interface CrmCommerceContext {
 	schemaVersion: 1;
 	workspaceId: string;
 	actorSubject: string;
 }
 
-export interface WincrmCommerceCommand extends WincrmCommerceContext {
+export interface CrmCommerceCommand extends CrmCommerceContext {
 	commandId: string;
 	expectedBillingVersion: string;
 }
 
-export interface WincrmCheckoutCommand extends WincrmCommerceCommand {
+export interface CrmCheckoutCommand extends CrmCommerceCommand {
 	expectedPolicyVersion: number;
-	cycle: WincrmBillingCycle;
+	cycle: CrmBillingCycle;
 	totalSeats: number;
 	autoRenew: boolean;
 	consentVersion: string | null;
-	capacityFence: WincrmCapacityFence;
+	capacityFence: CrmCapacityFence;
 }
 
-export interface WincrmSeatChangeCommand extends WincrmCommerceCommand {
+export interface CrmSeatChangeCommand extends CrmCommerceCommand {
 	expectedPeriodId: string;
 	expectedPeriodVersion: number;
 	newTotalSeats: number;
-	capacityFence: WincrmCapacityFence;
+	capacityFence: CrmCapacityFence;
 }
 
-export interface WincrmDisableRenewalCommand extends WincrmCommerceCommand {
+export interface CrmDisableRenewalCommand extends CrmCommerceCommand {
 	expectedRenewalVersion: number;
 }
 
-export interface WincrmConfirmRenewalCommand extends WincrmDisableRenewalCommand {
+export interface CrmConfirmRenewalCommand extends CrmDisableRenewalCommand {
 	expectedPolicyVersion: number;
 	consentVersion: string;
 }
 
-export interface WincrmVerifyOrderCommand extends WincrmCommerceCommand {
+export interface CrmVerifyOrderCommand extends CrmCommerceCommand {
 	orderId: string;
 	expectedOrderVersion: number;
 }
 
-export interface WincrmQuoteRequest extends WincrmCommerceContext {
+export interface CrmQuoteRequest extends CrmCommerceContext {
 	intent: 'CHECKOUT' | 'SEAT_CHANGE' | 'RENEWAL';
-	cycle: WincrmBillingCycle;
+	cycle: CrmBillingCycle;
 	totalSeats: number;
 }
 
-export interface WincrmCommerceQuote {
+export interface CrmCommerceQuote {
 	schemaVersion: 1;
 	workspaceId: string;
 	billingVersion: string;
 	serverTime: string;
 	validUntil: string;
 	intent: 'CHECKOUT' | 'SEAT_CHANGE' | 'RENEWAL';
-	cycle: WincrmBillingCycle;
+	cycle: CrmBillingCycle;
 	totalSeats: number;
 	amountMinor: string;
 	currency: 'RUB';
-	priceSnapshot: WincrmPriceSnapshot;
+	priceSnapshot: CrmPriceSnapshot;
 	startsAt: string;
 	expiresAt: string;
 	period: {
@@ -97,49 +97,49 @@ export interface WincrmCommerceQuote {
 	consent: { version: string; text: string };
 }
 
-export interface WincrmCommandStatusRequest extends WincrmCommerceContext {
+export interface CrmCommandStatusRequest extends CrmCommerceContext {
 	commandId: string;
 	requestHash: string;
 }
 
-export interface WincrmCloseCommand extends WincrmCommandStatusRequest {
+export interface CrmCloseCommand extends CrmCommandStatusRequest {
 	commandType: 'AEROCRM_CHECKOUT' | 'AEROCRM_SEAT_CHANGE';
-	capacityFence: WincrmCapacityFence;
+	capacityFence: CrmCapacityFence;
 }
 
-export interface WincrmOrderRequest extends WincrmCommerceContext {
+export interface CrmOrderRequest extends CrmCommerceContext {
 	orderId: string;
 }
 
-export interface WincrmHistoryRequest extends WincrmCommerceContext {
+export interface CrmHistoryRequest extends CrmCommerceContext {
 	page: number;
 	pageSize: number;
 }
 
-export interface WincrmOrderResponse {
+export interface CrmOrderResponse {
 	schemaVersion: 1;
 	workspaceId: string;
 	serverTime: string;
-	order: WincrmOrderView;
+	order: CrmOrderView;
 }
 
-export interface WincrmHistoryResponse {
+export interface CrmHistoryResponse {
 	schemaVersion: 1;
 	workspaceId: string;
 	page: number;
 	pageSize: number;
 	total: number;
-	items: WincrmOrderView[];
+	items: CrmOrderView[];
 }
 
-export interface WincrmOrderView {
+export interface CrmOrderView {
 	canVerify: boolean;
 	id: string;
 	workspaceId: string;
 	version: number;
 	kind: 'ONE_TIME' | 'RECURRING';
-	state: WincrmOrderState;
-	cycle: WincrmBillingCycle;
+	state: CrmOrderState;
+	cycle: CrmBillingCycle;
 	totalSeats: number;
 	amountMinor: string;
 	currency: 'RUB';
@@ -154,20 +154,20 @@ export interface WincrmOrderView {
 	expiresAt: string | null;
 }
 
-export interface WincrmPaidPeriodView {
+export interface CrmPaidPeriodView {
 	id: string;
 	orderId: string;
 	version: number;
-	cycle: WincrmBillingCycle;
+	cycle: CrmBillingCycle;
 	totalSeats: number;
-	priceSnapshot: WincrmPriceSnapshot;
+	priceSnapshot: CrmPriceSnapshot;
 	startsAt: string;
 	expiresAt: string;
 	graceUntil: string;
 	state: 'SCHEDULED' | 'ACTIVE' | 'GRACE' | 'EXPIRED';
 }
 
-export interface WincrmRenewalView {
+export interface CrmRenewalView {
 	version: number;
 	state:
 		| 'NONE'
@@ -185,19 +185,19 @@ export interface WincrmRenewalView {
 	methodTitle: string | null;
 }
 
-export interface WincrmCommerceSummary {
+export interface CrmCommerceSummary {
 	schemaVersion: 1;
 	workspaceId: string;
 	billingVersion: string;
 	serverTime: string;
-	policy: WincrmPriceSnapshot;
+	policy: CrmPriceSnapshot;
 	trial: { startsAt: string; expiresAt: string; seatLimit: number } | null;
-	period: WincrmPaidPeriodView | null;
-	pendingOrder: WincrmOrderView | null;
-	renewal: WincrmRenewalView;
+	period: CrmPaidPeriodView | null;
+	pendingOrder: CrmOrderView | null;
+	renewal: CrmRenewalView;
 }
 
-export interface WincrmCommerceCommandProof {
+export interface CrmCommerceCommandProof {
 	schemaVersion: 1;
 	workspaceId: string;
 	commandId: string;
@@ -206,8 +206,8 @@ export interface WincrmCommerceCommandProof {
 	billingVersion: string;
 	releaseFence: boolean;
 	holdUntil: string | null;
-	order: WincrmOrderView | null;
-	period: WincrmPaidPeriodView | null;
+	order: CrmOrderView | null;
+	period: CrmPaidPeriodView | null;
 }
 export type CommerceCommandType =
 	| 'AEROCRM_CHECKOUT'
@@ -216,24 +216,24 @@ export type CommerceCommandType =
 	| 'AEROCRM_CONFIRM_RENEWAL'
 	| 'AEROCRM_VERIFY_ORDER';
 export type CommerceUserCommand =
-	| Omit<WincrmCheckoutCommand, 'capacityFence'>
-	| Omit<WincrmSeatChangeCommand, 'capacityFence'>
-	| WincrmDisableRenewalCommand
-	| WincrmConfirmRenewalCommand
-	| WincrmVerifyOrderCommand;
+	| Omit<CrmCheckoutCommand, 'capacityFence'>
+	| Omit<CrmSeatChangeCommand, 'capacityFence'>
+	| CrmDisableRenewalCommand
+	| CrmConfirmRenewalCommand
+	| CrmVerifyOrderCommand;
 export interface CrmBillingOperationView {
 	schemaVersion: 1;
 	workspaceId: string;
 	commandId: string;
 	state: 'PENDING' | 'COMMITTED' | 'CANCELLED' | 'NOT_STARTED';
 	requestHash: string | null;
-	billing: WincrmCommerceCommandProof | null;
+	billing: CrmCommerceCommandProof | null;
 }
 export interface CrmBillingContext {
 	schemaVersion: 1;
 	workspaceId: string;
 	actorSubject: string;
-	billing: WincrmCommerceSummary;
+	billing: CrmCommerceSummary;
 	capacity: {
 		usedSeats: number;
 		admissionCeiling: number | null;

@@ -24,9 +24,9 @@ const tildaPath = `${sourcePath}/tilda`;
 // Synthetic credentials only; no private fixture or production environment.
 const sourceKey = Buffer.alloc(32, 17).toString('base64url');
 const credentials = { authorization: `Bearer ${sourceKey}` };
-const tildaCredentials = { 'x-wincrm-source-token': sourceKey };
+const tildaCredentials = { 'x-crm-source-token': sourceKey };
 
-describe('WinCRM source credential route configuration', () => {
+describe('aeroCRM source credential route configuration', () => {
 	const configFor = (pathPrefix: string) =>
 		loadConfig({
 			JWT_JWKS_URL: 'http://127.0.0.1:4299/jwks',
@@ -62,7 +62,7 @@ describe('WinCRM source credential route configuration', () => {
 		});
 });
 
-describe('WinCRM source credential gateway boundary', () => {
+describe('aeroCRM source credential gateway boundary', () => {
 	const signing = createSigningFixture('crm-source-jwt-test');
 	const captured: {
 		url: string;
@@ -219,11 +219,12 @@ describe('WinCRM source credential gateway boundary', () => {
 				body
 			});
 			assert.equal(response.statusCode, 200);
+			assert.equal(response.headers['cache-control'], 'no-store');
 			const actual = captured.at(-1)!;
 			assert.equal(actual.url, tildaPath);
 			assert.equal(actual.body, body);
 			assert.equal(actual.headers['content-type'], contentType);
-			assert.equal(actual.headers['x-wincrm-source-token'], sourceKey);
+			assert.equal(actual.headers['x-crm-source-token'], sourceKey);
 			assert.equal(actual.headers.authorization, undefined);
 			assert.equal(actual.headers['x-user-id'], undefined);
 			assert.equal(
@@ -243,11 +244,11 @@ describe('WinCRM source credential gateway boundary', () => {
 			credentials,
 			{ ...tildaCredentials, ...credentials },
 			{ authorization: `Bearer ${signAccessToken(signing)}` },
-			{ 'x-wincrm-source-token': '' },
-			{ 'x-wincrm-source-token': `Bearer ${sourceKey}` },
-			{ 'x-wincrm-source-token': `${sourceKey}=` },
-			{ 'x-wincrm-source-token': `${sourceKey.slice(0, -1)}F` },
-			{ 'x-wincrm-source-token': signAccessToken(signing) }
+			{ 'x-crm-source-token': '' },
+			{ 'x-crm-source-token': `Bearer ${sourceKey}` },
+			{ 'x-crm-source-token': `${sourceKey}=` },
+			{ 'x-crm-source-token': `${sourceKey.slice(0, -1)}F` },
+			{ 'x-crm-source-token': signAccessToken(signing) }
 		]) {
 			const response = await makeRequest(new URL(tildaPath, base), {
 				method: 'POST',
@@ -262,9 +263,9 @@ describe('WinCRM source credential gateway boundary', () => {
 					{
 						method: 'POST',
 						headers: [
-							'X-WinCRM-Source-Token',
+							'X-CRM-Source-Token',
 							sourceKey,
-							'x-wincrm-source-token',
+							'x-crm-source-token',
 							sourceKey,
 							'Host',
 							base.host,
@@ -344,7 +345,7 @@ describe('WinCRM source credential gateway boundary', () => {
 				200
 			);
 			assert.equal(
-				captured.at(-1)!.headers['x-wincrm-source-token'],
+				captured.at(-1)!.headers['x-crm-source-token'],
 				undefined
 			);
 		}

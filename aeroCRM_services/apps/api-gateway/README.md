@@ -1,6 +1,6 @@
 # API Gateway
 
-Публичная HTTP-точка входа WinWidget. Gateway не владеет состоянием PostgreSQL
+Публичная HTTP-точка входа aeroCRM. Gateway не владеет состоянием PostgreSQL
 или RabbitMQ: он проверяет access JWT по Identity JWKS и проксирует каждый
 явно заданный префикс `/api/v1` в соответствующий доменный сервис.
 
@@ -17,7 +17,7 @@
   инициализировать или обновить в пределах настроенного окна устаревания.
 - `/api/v1/internal/**` никогда не публикуется через публичный Gateway.
 
-Для входящего API WinCRM существует отдельная политика `crm-source`,
+Для входящего API aeroCRM существует отдельная политика `crm-source`,
 разрешённая **только** для префикса `/api/v1/crm/intake/ingest`. Она пропускает
 только `POST` и preflight `OPTIONS` на точный путь `/:sourceId` с canonical
 lowercase UUIDv4, без query, encoded path, завершающего slash и дочерних путей.
@@ -59,7 +59,7 @@ pnpm install --frozen-lockfile
 pnpm run typecheck
 pnpm test
 pnpm run build
-docker build --build-arg APP_REVISION="$(git rev-parse HEAD)" -t winwidget-api-gateway .
+docker build --build-arg APP_REVISION="$(git rev-parse HEAD)" -t aerocrm-api-gateway .
 ```
 
 После развёртывания проверьте обе health-точки и хотя бы один маршрут для

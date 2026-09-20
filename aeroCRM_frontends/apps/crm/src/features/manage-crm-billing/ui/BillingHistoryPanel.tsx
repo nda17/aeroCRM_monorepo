@@ -77,7 +77,6 @@ export const BillingHistoryPanel = ({
 					disabled={!visible}
 					onClick={() => {
 						onSelect(row.id)
-						toast('Открываем статус выбранного заказа')
 					}}
 				>
 					Подробнее
@@ -117,7 +116,6 @@ export const BillingHistoryPanel = ({
 					disabled={!visible || page <= 1}
 					onClick={() => {
 						setPage(value => value - 1)
-						toast('Открываем предыдущую страницу платежей')
 					}}
 				>
 					Назад
@@ -131,7 +129,6 @@ export const BillingHistoryPanel = ({
 					disabled={!visible || page >= pages}
 					onClick={() => {
 						setPage(value => value + 1)
-						toast('Открываем следующую страницу платежей')
 					}}
 				>
 					Далее
@@ -141,12 +138,13 @@ export const BillingHistoryPanel = ({
 					size="sm"
 					disabled={!context.ready || history.isFetching}
 					onClick={async () => {
-						toast('Обновляем историю платежей')
+						const toastId = toast.loading('Пожалуйста, подождите')
 						const result = await history.refetch()
 						if (actor.current()) {
-							if (result.isError) toast.error('История пока недоступна')
-							else toast.success('История обновлена')
-						}
+							if (result.isError)
+								toast.error('История пока недоступна', { id: toastId })
+							else toast.success('История обновлена', { id: toastId })
+						} else toast.dismiss(toastId)
 					}}
 				>
 					Обновить историю

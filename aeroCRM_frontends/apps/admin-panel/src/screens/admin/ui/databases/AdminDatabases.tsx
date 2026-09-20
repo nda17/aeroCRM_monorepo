@@ -820,7 +820,7 @@ const useDatabaseBackup = (
 		const promise = databaseBackupMutation.mutateAsync(idempotencyKey)
 
 		toast.promise(promise, {
-			loading: `Ставим backup ${getDatabaseBackupTargetLabel(target)} в очередь...`,
+			loading: 'Пожалуйста, подождите',
 			success: result =>
 				result.created
 					? `Backup ${getDatabaseBackupTargetLabel(target)} поставлен в очередь`
@@ -1956,7 +1956,7 @@ const DatabaseRestorePanel = ({
 			backupProvenance: restoreBackupProvenance.raw
 		})
 		void toast.promise(promise, {
-			loading: 'Создаём one-shot permit...',
+			loading: 'Пожалуйста, подождите',
 			success:
 				'Permit создан. Передайте его ID второму DEV для независимого подтверждения.',
 			error: error => `Не удалось создать permit: ${errorCatch(error)}`
@@ -1981,7 +1981,7 @@ const DatabaseRestorePanel = ({
 		const promise =
 			databaseRestorePermitApprovalMutation.mutateAsync(permitId)
 		void toast.promise(promise, {
-			loading: 'Подтверждаем exact permit...',
+			loading: 'Пожалуйста, подождите',
 			success: 'Permit подтверждён вторым DEV',
 			error: error => `Не удалось подтвердить permit: ${errorCatch(error)}`
 		})
@@ -2017,7 +2017,6 @@ const DatabaseRestorePanel = ({
 		if (databaseRestoreStorageKey) {
 			saveDatabaseRestoreMarker(databaseRestoreStorageKey, marker)
 		}
-		toast.success('Запрашиваем read-only статус задания')
 	}
 
 	const handleRestoreDatabaseBackup = () => {
@@ -2162,7 +2161,7 @@ const DatabaseRestorePanel = ({
 		})
 
 		toast.promise(promise, {
-			loading: `Загружаем backup БД ${selectedTargetSettings.label}...`,
+			loading: 'Пожалуйста, подождите',
 			success: `Восстановление БД ${selectedTargetSettings.label} поставлено в очередь`,
 			error: error =>
 				isAxiosError(error) &&
@@ -2192,7 +2191,7 @@ const DatabaseRestorePanel = ({
 			action: recoveryAction
 		})
 		void toast.promise(promise, {
-			loading: 'Создаём recovery action...',
+			loading: 'Пожалуйста, подождите',
 			success:
 				'Recovery action создан. Выполнение начнётся только после подтверждения другим DEV.',
 			error: error =>
@@ -2218,7 +2217,7 @@ const DatabaseRestorePanel = ({
 			actionId: action.actionId
 		})
 		void toast.promise(promise, {
-			loading: 'Подтверждаем recovery action...',
+			loading: 'Пожалуйста, подождите',
 			success: 'Recovery action подтверждён и поставлен в durable очередь',
 			error: error =>
 				`Не удалось подтвердить recovery action: ${errorCatch(error)}`
@@ -2262,7 +2261,7 @@ const DatabaseRestorePanel = ({
 			restoreJob.jobId
 		)
 		void toast.promise(promise, {
-			loading: 'Фиксируем отмену до начала блокировки БД...',
+			loading: 'Пожалуйста, подождите',
 			success: 'Отмена принята. Worker завершит задание без изменения БД.',
 			error: error =>
 				`Не удалось отменить восстановление: ${errorCatch(error)}`
@@ -3146,10 +3145,17 @@ const AdminDatabases: NextPage = () => {
 				className={styles.secondaryBtn}
 				disabled={settingsQuery.isFetching}
 				onClick={() => {
-					toast.success('Повторно проверяем настройки', {
-						id: 'database-settings-retry'
+					const promise = settingsQuery.refetch().then(result => {
+						if (result.isError || !result.data) {
+							throw result.error ?? new Error('Настройки не получены')
+						}
+						return result.data
 					})
-					void settingsQuery.refetch()
+					void toast.promise(promise, {
+						loading: 'Пожалуйста, подождите',
+						success: 'Настройки резервных копий обновлены',
+						error: 'Не удалось загрузить настройки резервных копий'
+					})
 				}}
 			>
 				Повторить загрузку
@@ -3298,11 +3304,6 @@ const AdminDatabases: NextPage = () => {
 							<Link
 								className={styles.secondaryBtn}
 								href={ADMIN_PAGES.TELEGRAM_BOT}
-								onClick={() =>
-									toast.success(
-										'Открываем настройки расписания и Telegram'
-									)
-								}
 							>
 								Настроить расписание
 							</Link>

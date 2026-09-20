@@ -452,7 +452,7 @@ describe('CrmEntitlementService', () => {
 		const service = new CrmEntitlementService(prisma as never);
 
 		await expect(service.activateTrial(payload)).rejects.toThrow(
-			'WinCRM activation receipt has an invalid result'
+			'aeroCRM activation receipt has an invalid result'
 		);
 	});
 
@@ -492,7 +492,7 @@ describe('CrmEntitlementService', () => {
 			const service = new CrmEntitlementService(prisma as never);
 
 			await expect(service.activateTrial(payload)).rejects.toThrow(
-				'WinCRM entitlement provenance does not match its accepted activation receipt'
+				'aeroCRM entitlement provenance does not match its accepted activation receipt'
 			);
 		}
 	);

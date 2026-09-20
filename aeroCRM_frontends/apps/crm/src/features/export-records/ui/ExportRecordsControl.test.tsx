@@ -50,7 +50,12 @@ vi.mock('@/entities/crm-access', async original => ({
 vi.mock('../api/export.api', () => ({ prepareRecordExport: vi.fn() }))
 vi.mock('@/shared/lib/download-file', () => ({ downloadFile: vi.fn() }))
 vi.mock('react-hot-toast', () => ({
-	default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() })
+	default: Object.assign(vi.fn(), {
+		loading: vi.fn(() => 'export-loading'),
+		dismiss: vi.fn(),
+		success: vi.fn(),
+		error: vi.fn()
+	})
 }))
 const workspaceId = '11111111-1111-4111-8111-111111111111'
 let target = workspaceId
@@ -62,7 +67,7 @@ const result = {
 		entity: 'contacts' as const,
 		format: 'json' as const,
 		workspaceId,
-		filename: 'wincrm-contacts.json',
+		filename: 'aerocrm-contacts.json',
 		mediaType: 'application/json; charset=utf-8',
 		bytes: 2,
 		rowCount: 0,
@@ -157,7 +162,7 @@ describe('OWNER exports', () => {
 			JSON.stringify(
 				client.getQueryData(['crm-permissions', workspaceId, 'owner', 1])
 			)
-		).not.toContain('wincrm-contacts')
+		).not.toContain('aerocrm-contacts')
 	})
 	it.each(['CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'ANALYST'] as const)(
 		'keeps the export action disabled for %s',

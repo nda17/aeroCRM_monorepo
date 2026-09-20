@@ -1,6 +1,6 @@
 'use client'
 
-import { getBillingContext } from '@/entities/crm-billing'
+import { getBillingContext, type BillingContext } from '@/entities/crm-billing'
 import {
 	AuthenticatedApiError,
 	invalidContractError
@@ -58,6 +58,7 @@ export const useBillingContext = (workspaceId: string) => {
 		actor,
 		query,
 		authorize,
+		latestData: () => client.getQueryData<BillingContext>(queryKey),
 		denied,
 		ready:
 			actor.enabled && !denied && query.isSuccess && !query.isFetching,

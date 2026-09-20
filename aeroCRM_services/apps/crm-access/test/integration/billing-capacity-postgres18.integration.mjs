@@ -114,7 +114,7 @@ try {
 	const request = command();
 	const results = await Promise.allSettled(
 		Array.from({ length: 6 }, () =>
-			service.prepare('WINCRM_CHECKOUT', request, 2)
+			service.prepare('CRM_CHECKOUT', request, 2)
 		)
 	);
 	assert.ok(results.every(result => result.status === 'fulfilled'));
@@ -143,11 +143,11 @@ try {
 		{ totalSeats: 6 }
 	])
 		await assert.rejects(
-			service.prepare('WINCRM_CHECKOUT', { ...request, ...patch }, 2),
+			service.prepare('CRM_CHECKOUT', { ...request, ...patch }, 2),
 			error => error?.getStatus?.() === 409
 		);
 	await assert.rejects(
-		service.prepare('WINCRM_CHECKOUT', command(), 2),
+		service.prepare('CRM_CHECKOUT', command(), 2),
 		error => error?.getStatus?.() === 409
 	);
 
@@ -230,7 +230,7 @@ try {
 
 	phase = 'atomic-close-and-late-execute-fence';
 	const cancelled = await service.prepare(
-		'WINCRM_CHECKOUT',
+		'CRM_CHECKOUT',
 		command({ totalSeats: 3 }),
 		5
 	);
@@ -251,7 +251,7 @@ try {
 		'NOT_STARTED'
 	);
 	await assert.rejects(
-		service.prepare('WINCRM_CHECKOUT', untouched),
+		service.prepare('CRM_CHECKOUT', untouched),
 		error => error?.getStatus?.() === 409
 	);
 	assert.equal(
@@ -302,7 +302,7 @@ try {
 		billing,
 		identity
 	);
-	await assert.rejects(faulty.prepare('WINCRM_CHECKOUT', faultRequest, 2));
+	await assert.rejects(faulty.prepare('CRM_CHECKOUT', faultRequest, 2));
 	assert.equal(faultReached, true);
 	assert.equal(
 		await prisma.crmBillingOperation.count({
@@ -335,7 +335,7 @@ try {
 			activatedBySubject: actorSubject,
 			billingEntitlementId: entitlementId,
 			provisioningCommandId: randomUUID(),
-			provisioningCommandType: 'ACTIVATE_WINCRM_TRIAL',
+			provisioningCommandType: 'ACTIVATE_CRM_TRIAL',
 			onboardingCommandId: randomUUID(),
 			onboardingTemplateKey: 'sales',
 			onboardingTemplateVersion: 1,
@@ -419,7 +419,7 @@ try {
 	await reached;
 	try {
 		const decrease = await service.prepare(
-			'WINCRM_CHECKOUT',
+			'CRM_CHECKOUT',
 			command({ workspaceId: raceWorkspace, totalSeats: 2 }),
 			5
 		);
@@ -460,7 +460,7 @@ try {
 	assert.equal(active.workspaceId, raceWorkspace);
 	await assert.rejects(
 		service.prepare(
-			'WINCRM_CHECKOUT',
+			'CRM_CHECKOUT',
 			command({ workspaceId, totalSeats: 1 })
 		),
 		error => Boolean(error)
@@ -506,7 +506,7 @@ try {
 		denial
 	);
 	console.log(
-		'PASS WinCRM Access billing PostgreSQL18: concurrent reservation/replay, global command binding, scheduled fences, DB-clock recovery, confirmed ceiling versus stale real admission, close/tombstone, post-insert rollback, least privileges and immutable bindings'
+		'PASS aeroCRM Access billing PostgreSQL18: concurrent reservation/replay, global command binding, scheduled fences, DB-clock recovery, confirmed ceiling versus stale real admission, close/tombstone, post-insert rollback, least privileges and immutable bindings'
 	);
 } catch (error) {
 	console.error(

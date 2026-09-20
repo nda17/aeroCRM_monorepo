@@ -1,0 +1,48 @@
+{
+  "packageId": "space.aerocrm.workspace",
+  "host": "workspace.aerocrm.space",
+  "name": "aeroCRM",
+  "launcherName": "aeroCRM",
+  "display": "standalone",
+  "themeColor": "#4C165E",
+  "themeColorDark": "#4C165E",
+  "navigationColor": "#FFFFFF",
+  "navigationColorDark": "#17111F",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#FFFFFF",
+  "enableNotifications": false,
+  "startUrl": "/inbox",
+  "iconUrl": "https://workspace.aerocrm.space/icons/icon-512.png",
+  "maskableIconUrl": "https://workspace.aerocrm.space/icons/maskable-512.png",
+  "splashScreenFadeOutDuration": 200,
+  "signingKey": {
+    "path": "../../.private/android/aerocrm-release.keystore",
+    "alias": "aerocrm-release"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli@1.25.0",
+  "webManifestUrl": "https://workspace.aerocrm.space/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://workspace.aerocrm.space/",
+  "minSdkVersion": 29,
+  "orientation": "default",
+  "fingerprints": [
+    {
+      "value": "C3:95:81:79:C3:44:1E:00:AD:D7:CD:CC:EC:C5:A1:1B:D3:B7:8F:B6:D3:AD:D2:D5:5B:83:0E:19:50:C0:FA:87"
+    }
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "displayOverride": [],
+  "appVersion": "1.0.0"
+}

@@ -1,3 +1,5 @@
+@use '@aerocrm/web/src/app/styles/select';
+
 .wrapper {
 	@apply relative flex w-full min-w-0 flex-col;
 }
@@ -146,4 +148,8 @@
 
 .emptyState {
 	@apply px-5 py-8 text-center;
+}
+
+select.filter-input {
+	@include select.chevron;
 }

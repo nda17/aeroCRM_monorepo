@@ -1,5 +1,8 @@
-export const THEME_STORAGE_KEY = 'wincrm.theme'
-export const THEME_CHANGE_EVENT = 'wincrm:theme-change'
+export const THEME_STORAGE_KEY = 'aerocrm.theme'
+// Transitional adapter for preferences saved before the standalone rename.
+// Keep the literal readable and synchronize existing old tabs until they reload.
+const LEGACY_THEME_STORAGE_KEY = 'wincrm.theme'
+export const THEME_CHANGE_EVENT = 'aerocrm:theme-change'
 export const DARK_MEDIA_QUERY = '(prefers-color-scheme: dark)'
 export const themePreferences = ['light', 'dark', 'system'] as const
 export type ThemePreference = (typeof themePreferences)[number]
@@ -14,7 +17,32 @@ export const resolveTheme = (
 	preference === 'system' ? (systemDark ? 'dark' : 'light') : preference
 
 /** Runs before the first paint. No session, network or user data is needed. */
-export const themeBootstrapScript = `(()=>{let p='light';try{const v=localStorage.getItem('${THEME_STORAGE_KEY}');if(v==='dark'||v==='system')p=v}catch{}const r=document.documentElement;r.dataset.themePreference=p;r.dataset.theme=p==='system'?(window.matchMedia?.('${DARK_MEDIA_QUERY}').matches?'dark':'light'):p})()`
+export const themeBootstrapScript = `(()=>{let p='light';try{let v=localStorage.getItem('${THEME_STORAGE_KEY}');if(v===null){v=localStorage.getItem('${LEGACY_THEME_STORAGE_KEY}');if(v==='light'||v==='dark'||v==='system'){p=v;try{localStorage.setItem('${THEME_STORAGE_KEY}',v)}catch{}}}if(v==='dark'||v==='system')p=v}catch{}const r=document.documentElement;r.dataset.themePreference=p;r.dataset.theme=p==='system'?(window.matchMedia?.('${DARK_MEDIA_QUERY}').matches?'dark':'light'):p})()`
+
+const readStoredThemePreference = () => {
+	const current = window.localStorage.getItem(THEME_STORAGE_KEY)
+	if (current !== null) return parseThemePreference(current)
+	const legacy = window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY)
+	const preference = parseThemePreference(legacy)
+	if (themePreferences.some(value => value === legacy)) {
+		try {
+			window.localStorage.setItem(THEME_STORAGE_KEY, preference)
+		} catch {
+			// The old preference remains readable if migration storage is blocked.
+		}
+	}
+	return preference
+}
+
+const persistThemePreference = (preference: ThemePreference) => {
+	window.localStorage.setItem(THEME_STORAGE_KEY, preference)
+	try {
+		if (window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY) !== null)
+			window.localStorage.setItem(LEGACY_THEME_STORAGE_KEY, preference)
+	} catch {
+		// The canonical preference is already persisted.
+	}
+}
 
 export const getThemePreference = (): ThemePreference =>
 	parseThemePreference(document.documentElement.dataset.themePreference)
@@ -35,7 +63,7 @@ const applyTheme = (preference: ThemePreference) => {
 export const setThemePreference = (preference: ThemePreference) => {
 	let persisted = true
 	try {
-		window.localStorage.setItem(THEME_STORAGE_KEY, preference)
+		persistThemePreference(preference)
 	} catch {
 		persisted = false
 	}
@@ -51,9 +79,7 @@ export const subscribeTheme = (notify: () => void) => {
 export const startThemeSynchronization = () => {
 	let preference = getThemePreference()
 	try {
-		preference = parseThemePreference(
-			window.localStorage.getItem(THEME_STORAGE_KEY)
-		)
+		preference = readStoredThemePreference()
 	} catch {
 		// Keep a theme already applied before hydration, even with blocked storage.
 	}
@@ -63,12 +89,26 @@ export const startThemeSynchronization = () => {
 		if (getThemePreference() === 'system') applyTheme('system')
 	}
 	const onStorage = (event: StorageEvent) => {
-		if (event.key !== null && event.key !== THEME_STORAGE_KEY) return
+		if (
+			event.key !== null &&
+			event.key !== THEME_STORAGE_KEY &&
+			event.key !== LEGACY_THEME_STORAGE_KEY
+		)
+			return
 		try {
 			if (event.storageArea && event.storageArea !== window.localStorage)
 				return
 		} catch {
 			return
+		}
+		if (event.key === LEGACY_THEME_STORAGE_KEY) {
+			try {
+				const preference = parseThemePreference(event.newValue)
+				if (window.localStorage.getItem(THEME_STORAGE_KEY) !== preference)
+					window.localStorage.setItem(THEME_STORAGE_KEY, preference)
+			} catch {
+				// In-memory synchronization still works when storage is blocked.
+			}
 		}
 		applyTheme(parseThemePreference(event.newValue))
 	}

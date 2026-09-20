@@ -24,14 +24,10 @@ const BillingEntryCardEnabled = ({
 			</div>
 			<p className={styles.note}>
 				Управление оплатой доступно владельцу и при доступе только для
-				чтения. Настройки подписки Widgets не меняются.
+				чтения.
 			</p>
 			{context.ready && href ? (
-				<a
-					className={styles.link}
-					href={href}
-					onClick={() => toast('Открываем управление подпиской aeroCRM')}
-				>
+				<a className={styles.link} href={href}>
 					Открыть подписку и оплату
 				</a>
 			) : (
@@ -47,13 +43,18 @@ const BillingEntryCardEnabled = ({
 						tooltip="Повторно проверить права владельца и доступ к управлению подпиской aeroCRM"
 						disabled={!context.actor.online || context.query.isFetching}
 						onClick={async () => {
-							toast('Проверяем доступ к оплате')
+							const toastId = toast.loading('Пожалуйста, подождите')
 							const result = await context.query.refetch()
 							if (context.actor.current()) {
 								if (result.isError)
-									toast.error('Доступ к оплате пока не подтверждён')
-								else toast.success('Доступ к оплате подтверждён')
-							}
+									toast.error('Доступ к оплате пока не подтверждён', {
+										id: toastId
+									})
+								else
+									toast.success('Доступ к оплате подтверждён', {
+										id: toastId
+									})
+							} else toast.dismiss(toastId)
 						}}
 					>
 						Проверить доступ к оплате
@@ -69,14 +70,11 @@ export const BillingEntryCard = ({
 }: {
 	workspaceId: string
 }) =>
-	getRuntimeConfig().wincrmBillingEnabled ? (
+	getRuntimeConfig().crmBillingEnabled ? (
 		<BillingEntryCardEnabled workspaceId={workspaceId} />
 	) : (
 		<section className={styles.card}>
 			<h2>Оплата aeroCRM скоро будет доступна</h2>
-			<p className={styles.note}>
-				Платёжные действия пока не выпущены. Подписка Widgets не
-				изменяется.
-			</p>
+			<p className={styles.note}>Платёжные действия пока не выпущены.</p>
 		</section>
 	)

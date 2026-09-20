@@ -89,7 +89,7 @@ function expectReadable(
 	).toBeGreaterThanOrEqual(4.5)
 }
 
-describe.each(themes)('WinCRM %s palette contrast', theme => {
+describe.each(themes)('aeroCRM %s palette contrast', theme => {
 	const palette = readPalette(theme)
 
 	it('defines valid RGB values for every tested semantic token', () => {
@@ -149,5 +149,5 @@ describe.each(themes)('WinCRM %s palette contrast', theme => {
 	)
 })
 
-// The fixed brand wordmark is intentionally not a normal-text token. Its
-// unchanged identity color has a separate regression test in BrandLogo.test.tsx.
+// The wordmark uses the approved purple/white brand variants with a fixed gold
+// wing, rather than a normal-text palette token.

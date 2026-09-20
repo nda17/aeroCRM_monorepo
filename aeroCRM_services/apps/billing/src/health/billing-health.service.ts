@@ -6,9 +6,9 @@ import { BillingPrismaService } from '../prisma/billing-prisma.service';
 import { PaymentMethodCryptoService } from '../provider/payment-method-crypto.service';
 import { YooKassaService } from '../provider/yookassa.service';
 import { BillingRuntimeService } from '../runtime/billing-runtime.service';
-import { WincrmProviderWorkerService } from '../provider/wincrm-provider-worker.service';
-import { WincrmCommerceSchedulerService } from '../scheduler/wincrm-commerce-scheduler.service';
-import { wincrmProviderMessagingEnabled } from '../provider/wincrm-provider.config';
+import { CrmProviderWorkerService } from '../provider/crm-provider-worker.service';
+import { CrmCommerceSchedulerService } from '../scheduler/crm-commerce-scheduler.service';
+import { crmProviderMessagingEnabled } from '../provider/crm-provider.config';
 
 @Injectable()
 export class BillingHealthService {
@@ -20,8 +20,8 @@ export class BillingHealthService {
 		private readonly yookassa: YooKassaService,
 		private readonly paymentMethodCrypto: PaymentMethodCryptoService,
 		private readonly publisher: BillingOutboxPublisherService,
-		private readonly wincrmWorker: WincrmProviderWorkerService,
-		private readonly wincrmScheduler: WincrmCommerceSchedulerService
+		private readonly crmWorker: CrmProviderWorkerService,
+		private readonly crmScheduler: CrmCommerceSchedulerService
 	) {}
 
 	liveness() {
@@ -65,7 +65,7 @@ export class BillingHealthService {
 					select: { commandId: true }
 				});
 			}
-			if (wincrmProviderMessagingEnabled()) {
+			if (crmProviderMessagingEnabled()) {
 				await Promise.all([
 					this.prisma.crmCommerceAccount.findFirst({
 						select: { workspaceId: true, version: true }
@@ -101,18 +101,18 @@ export class BillingHealthService {
 				'Billing Outbox publisher is not ready'
 			);
 		}
-		if (this.runtime.schedulerEnabled && !this.wincrmScheduler.isReady()) {
+		if (this.runtime.schedulerEnabled && !this.crmScheduler.isReady()) {
 			throw new ServiceUnavailableException(
 				'Billing scheduler is not ready'
 			);
 		}
 		if (
-			wincrmProviderMessagingEnabled() &&
-			((this.runtime.workerEnabled && !this.wincrmWorker.isReady()) ||
-				(this.runtime.schedulerEnabled && !this.wincrmScheduler.isReady()))
+			crmProviderMessagingEnabled() &&
+			((this.runtime.workerEnabled && !this.crmWorker.isReady()) ||
+				(this.runtime.schedulerEnabled && !this.crmScheduler.isReady()))
 		) {
 			throw new ServiceUnavailableException(
-				'WinCRM commerce workers are not ready'
+				'aeroCRM commerce workers are not ready'
 			);
 		}
 		const paymentMethodEncryptionKeyConfigured =

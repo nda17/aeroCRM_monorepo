@@ -3,13 +3,14 @@ import {
 	ServiceUnavailableException
 } from '@nestjs/common';
 import { CrmCommercialPolicyService } from './crm-commercial-policy.service';
+import { billingCommandRequestHash } from './billing-command-idempotency';
 
 const command = {
 	schemaVersion: 1 as const,
 	commandId: '22222222-2222-4222-8222-222222222222',
 	expectedVersion: 1,
 	monthlyPriceMinor: 98900,
-	yearlyPriceMinor: 1068120,
+	yearlyPriceMinor: 1068100,
 	additionalSeatMonthlyPriceMinor: 28900,
 	additionalSeatYearlyPriceMinor: 346800,
 	includedSeats: 3,
@@ -217,6 +218,66 @@ describe('CrmCommercialPolicyService', () => {
 			1
 		);
 		expect(transaction.outboxEvent.create).toHaveBeenCalledTimes(1);
+	});
+
+	it('replays a historical fractional-ruble receipt before checking new prices', async () => {
+		const { service, transaction } = harness();
+		const historicalCommand = { ...command, yearlyPriceMinor: 1068120 };
+		const historicalResult = {
+			...initial,
+			version: 2,
+			yearlyPriceMinor: 1068120
+		};
+		transaction.billingCommandReceipt.findUnique.mockResolvedValueOnce({
+			commandType: 'UPDATE_AEROCRM_COMMERCIAL_POLICY',
+			requestHashVersion: 1,
+			requestHash: billingCommandRequestHash(
+				'UPDATE_AEROCRM_COMMERCIAL_POLICY',
+				{ ...historicalCommand, actorId: context.actor.subject }
+			),
+			result: historicalResult
+		});
+		await expect(
+			service.update(historicalCommand, context as never)
+		).resolves.toEqual(historicalResult);
+		expect(transaction.crmCommercialPolicy.findFirst).not.toHaveBeenCalled();
+		expect(transaction.crmCommercialPolicy.create).not.toHaveBeenCalled();
+	});
+
+	it('rounds the yearly price up from a fractional whole-ruble result', async () => {
+		const { service, transaction } = harness();
+		await expect(
+			service.update(
+				{
+					...command,
+					monthlyPriceMinor: 99100,
+					yearlyPriceMinor: 1070300
+				},
+				context as never
+			)
+		).resolves.toMatchObject({
+			monthlyPriceMinor: 99100,
+			yearlyPriceMinor: 1070300
+		});
+		expect(transaction.crmCommercialPolicy.create).toHaveBeenCalledWith({
+			data: expect.objectContaining({
+				monthlyPriceMinor: 99100,
+				yearlyPriceMinor: 1070300
+			})
+		});
+	});
+
+	it.each([
+		{ monthlyPriceMinor: 98901 },
+		{ yearlyPriceMinor: 1068120 },
+		{ additionalSeatMonthlyPriceMinor: 28901 },
+		{ additionalSeatYearlyPriceMinor: 346801 }
+	])('rejects a new fractional-ruble policy %p', async override => {
+		const { service, transaction } = harness();
+		await expect(
+			service.update({ ...command, ...override }, context as never)
+		).rejects.toMatchObject({ status: 400 });
+		expect(transaction.crmCommercialPolicy.create).not.toHaveBeenCalled();
 	});
 
 	it.each(['payload', 'actor', 'type', 'legacy'])(

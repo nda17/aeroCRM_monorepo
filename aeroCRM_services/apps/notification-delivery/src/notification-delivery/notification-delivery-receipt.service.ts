@@ -25,8 +25,8 @@ import { NotificationDeliveryMessageMetadataService } from './notification-deliv
 import { NotificationDeliveryOutcomeService } from './notification-delivery-outcome.service';
 import { NotificationDeliveryPrismaService } from './prisma/notification-delivery-prisma.service';
 import type { NotificationDeliverySkipReason } from './notification-delivery-adapter.service';
-import { WINCRM_TASK_REMINDER_KINDS } from '../messaging/messaging.constants';
-import { WINCRM_INTAKE_SLA_KINDS } from '../messaging/messaging.constants';
+import { CRM_TASK_REMINDER_KINDS } from '../messaging/messaging.constants';
+import { CRM_INTAKE_SLA_KINDS } from '../messaging/messaging.constants';
 
 const DELIVERY_RECEIPT_LEASE_MS = 10 * 60 * 1000;
 const DELIVERY_RECOVERY_GRACE_MS = 5_000;
@@ -203,13 +203,13 @@ export class NotificationDeliveryReceiptService {
 					SUPPORT_NOTIFICATION_SKIP_REASONS.some(
 						item => item === reason
 					)) ||
-				(consumer === 'wincrm-invitation-email' &&
+				(consumer === 'crm-invitation-email' &&
 					['INVITATION_EXPIRED', 'INVITATION_UNAVAILABLE'].includes(
 						reason
 					)) ||
-				(WINCRM_TASK_REMINDER_KINDS.some(kind => kind === consumer) &&
+				(CRM_TASK_REMINDER_KINDS.some(kind => kind === consumer) &&
 					reason === 'TASK_REMINDER_UNAVAILABLE') ||
-				(WINCRM_INTAKE_SLA_KINDS.some(kind => kind === consumer) &&
+				(CRM_INTAKE_SLA_KINDS.some(kind => kind === consumer) &&
 					reason === 'INTAKE_SLA_UNAVAILABLE')
 			)
 		)
@@ -339,7 +339,7 @@ export class NotificationDeliveryReceiptService {
 		const now = Date.now();
 		const requested = Date.parse(input.retryAt);
 		if (
-			!WINCRM_TASK_REMINDER_KINDS.some(kind => kind === input.kind) ||
+			!CRM_TASK_REMINDER_KINDS.some(kind => kind === input.kind) ||
 			!Number.isFinite(requested) ||
 			requested > now + 72 * 60 * 60 * 1000
 		)

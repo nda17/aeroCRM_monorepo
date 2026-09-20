@@ -360,26 +360,24 @@ const AdminTelegramBot: NextPage = () => {
 	})
 
 	const saveWithToast = (
-		patch: Parameters<typeof adminTelegramBotService.update>[0],
-		loading: string
+		patch: Parameters<typeof adminTelegramBotService.update>[0]
 	) => {
 		const promise = mutation.mutateAsync(patch)
 
 		toast.promise(promise, {
-			loading,
+			loading: 'Пожалуйста, подождите',
 			success: 'Настройки сохранены',
 			error: error => `Ошибка сохранения: ${errorCatch(error)}`
 		})
 	}
 
 	const saveDailySummaryWithToast = (
-		patch: UpdateReportingDailySummarySettings,
-		loading: string
+		patch: UpdateReportingDailySummarySettings
 	) => {
 		const promise = dailySummaryMutation.mutateAsync(patch)
 
 		toast.promise(promise, {
-			loading,
+			loading: 'Пожалуйста, подождите',
 			success: 'Настройки Daily Summary сохранены',
 			error: error => `Ошибка сохранения: ${errorCatch(error)}`
 		})
@@ -393,7 +391,7 @@ const AdminTelegramBot: NextPage = () => {
 		const promise = supportRoutingMutation.mutateAsync(patch)
 
 		toast.promise(promise, {
-			loading: 'Сохраняем маршрутизацию Support_bot...',
+			loading: 'Пожалуйста, подождите',
 			success: 'Настройки Support_bot сохранены',
 			error: error => `Ошибка сохранения Support: ${errorCatch(error)}`
 		})
@@ -412,12 +410,7 @@ const AdminTelegramBot: NextPage = () => {
 		})
 
 		toast.promise(promise, {
-			loading:
-				bot === 'auth'
-					? 'Переустанавливаем webhook Auth_bot...'
-					: bot === 'support'
-						? 'Переустанавливаем webhook SUPPORT-бот...'
-						: 'Переустанавливаем webhook INFO-бот...',
+			loading: 'Пожалуйста, подождите',
 			success: result => `Webhook ${result.title} переустановлен`,
 			error: error => `Ошибка webhook: ${errorCatch(error)}`
 		})
@@ -432,7 +425,7 @@ const AdminTelegramBot: NextPage = () => {
 		])
 
 		toast.promise(promise, {
-			loading: 'Обновляем статусы webhook...',
+			loading: 'Пожалуйста, подождите',
 			success: 'Статусы webhook обновлены',
 			error: error => `Ошибка обновления: ${errorCatch(error)}`
 		})
@@ -468,10 +461,7 @@ const AdminTelegramBot: NextPage = () => {
 			}
 		}
 
-		saveDailySummaryWithToast(
-			{ enabled: !dailySummarySettings.enabled },
-			'Применяем настройку...'
-		)
+		saveDailySummaryWithToast({ enabled: !dailySummarySettings.enabled })
 	}
 
 	const handleToggleDatabaseBackup = () => {
@@ -489,10 +479,9 @@ const AdminTelegramBot: NextPage = () => {
 			}
 		}
 
-		saveWithToast(
-			{ databaseBackupEnabled: !settings.databaseBackupEnabled },
-			'Применяем настройку backup...'
-		)
+		saveWithToast({
+			databaseBackupEnabled: !settings.databaseBackupEnabled
+		})
 	}
 
 	const handleSaveTelegramRouting = () => {
@@ -573,7 +562,7 @@ const AdminTelegramBot: NextPage = () => {
 				normalizedTopicIds.operationalAlertsThreadId
 		}
 
-		saveWithToast(patch, 'Сохраняем маршрутизацию Telegram...')
+		saveWithToast(patch)
 	}
 
 	const handleSaveSupportRouting = () => {
@@ -690,7 +679,7 @@ const AdminTelegramBot: NextPage = () => {
 		}
 
 		if (Object.keys(patch).length === 0) return
-		saveDailySummaryWithToast(patch, 'Сохраняем Daily Summary...')
+		saveDailySummaryWithToast(patch)
 	}
 
 	const handleSaveBackupSchedule = () => {
@@ -733,10 +722,7 @@ const AdminTelegramBot: NextPage = () => {
 			})
 		}
 
-		saveWithToast(
-			{ databaseBackupTime: backupTime },
-			'Сохраняем расписание backup...'
-		)
+		saveWithToast({ databaseBackupTime: backupTime })
 	}
 
 	const lastSentText = dailySummarySettings?.lastSuccessfulDelivery
@@ -901,9 +887,7 @@ const AdminTelegramBot: NextPage = () => {
 					<>
 						<div className={styles.statusGrid}>
 							<div className={styles.statusItem}>
-								<p className={styles.statusLabel}>
-									Токен INFO-бот
-								</p>
+								<p className={styles.statusLabel}>Токен INFO-бот</p>
 								<span
 									className={`${styles.badge} ${
 										settings.telegramBotTokenConfigured
@@ -917,9 +901,7 @@ const AdminTelegramBot: NextPage = () => {
 								</span>
 							</div>
 							<div className={styles.statusItem}>
-								<p className={styles.statusLabel}>
-									Username INFO-бот
-								</p>
+								<p className={styles.statusLabel}>Username INFO-бот</p>
 								<span
 									className={`${styles.badge} ${
 										settings.telegramBotUsernameConfigured
@@ -951,9 +933,7 @@ const AdminTelegramBot: NextPage = () => {
 								</span>
 							</div>
 							<div className={styles.statusItem}>
-								<p className={styles.statusLabel}>
-									Токен SUPPORT-бот
-								</p>
+								<p className={styles.statusLabel}>Токен SUPPORT-бот</p>
 								<span
 									className={`${styles.badge} ${
 										supportWebhookStatus?.configured
@@ -1387,7 +1367,8 @@ const AdminTelegramBot: NextPage = () => {
 							<div>
 								<p className={styles.label}>Отправка backup</p>
 								<p className={styles.hint}>
-									Backup баз сохраняется в приватном S3. Notification Delivery — в{' '}
+									Backup баз сохраняется в приватном S3. Notification
+									Delivery — в{' '}
 									{settings.notificationDeliveryDatabaseBackupTimeLabel},
 									Campaigns — в {settings.campaignsDatabaseBackupTimeLabel}
 									, Reporting — в{' '}
@@ -1550,9 +1531,9 @@ const AdminTelegramBot: NextPage = () => {
 							</div>
 							<p className={styles.hint}>
 								Время указывается по Москве. Notification Delivery,
-								Campaigns, Reporting, Billing, Identity, Platform,
-								Support, Operations, CRM Access, CRM Intake, CRM Customers
-								и CRM Sales запускаются через{' '}
+								Campaigns, Reporting, Billing, Identity, Platform, Support,
+								Operations, CRM Access, CRM Intake, CRM Customers и CRM
+								Sales запускаются через{' '}
 								{settings.notificationDeliveryDatabaseBackupDelayMinutes}
 								{', '}
 								{settings.campaignsDatabaseBackupDelayMinutes}
@@ -1700,7 +1681,7 @@ const AdminTelegramBot: NextPage = () => {
 										onClick={() => {
 											const promise = refetchSupportRoutingSettings()
 											toast.promise(promise, {
-												loading: 'Проверяем Support Service...',
+												loading: 'Пожалуйста, подождите',
 												success: 'Настройки Support обновлены',
 												error: error =>
 													`Support недоступен: ${errorCatch(error)}`

@@ -31,16 +31,16 @@ export interface SlaEvent {
 	generation: number;
 }
 export const SLA_EMAIL_EVENT =
-	'notification.wincrm.intake-sla.email.requested.v1';
+	'notification.crm.intake-sla.email.requested.v1';
 export const SLA_TELEGRAM_EVENT =
-	'notification.wincrm.intake-sla.telegram.requested.v1';
+	'notification.crm.intake-sla.telegram.requested.v1';
 export interface SlaNotificationEvent {
 	schemaVersion: 1;
 	eventId: string;
 	eventType: typeof SLA_EMAIL_EVENT | typeof SLA_TELEGRAM_EVENT;
 	occurredAt: string;
 	reference: {
-		type: 'wincrm-intake-sla';
+		type: 'crm-intake-sla';
 		id: string;
 		workspaceId: string;
 	};
@@ -67,7 +67,7 @@ export function parseSlaNotificationEvent(
 		new Date(value.occurredAt).toISOString() !== value.occurredAt ||
 		!slaRecord(value.reference) ||
 		!slaKeys(value.reference, ['type', 'id', 'workspaceId']) ||
-		value.reference.type !== 'wincrm-intake-sla' ||
+		value.reference.type !== 'crm-intake-sla' ||
 		value.reference.id !== value.eventId ||
 		!slaUuid(value.reference.workspaceId)
 	)

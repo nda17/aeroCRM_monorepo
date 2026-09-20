@@ -117,9 +117,9 @@ describe('version 2 owner Workday task export', () => {
 			...TASK_EXPORT_V2_COLUMNS
 		]);
 		expect(exportHeaders(file)).toMatchObject({
-			'X-WinCRM-Export-Schema': '2',
-			'X-WinCRM-Export-Entity': 'tasks',
-			'Content-Disposition': 'attachment; filename="wincrm-tasks-v2.json"',
+			'X-CRM-Export-Schema': '2',
+			'X-CRM-Export-Entity': 'tasks',
+			'Content-Disposition': 'attachment; filename="aerocrm-tasks-v2.json"',
 			'Content-Length': String(file.body.byteLength),
 			'Cache-Control': 'no-store'
 		});
@@ -235,8 +235,8 @@ describe('version 2 owner Workday task export', () => {
 			deal: { workspaceId }
 		});
 		expect(exportHeaders(file)).toMatchObject({
-			'X-WinCRM-Export-Schema': '1',
-			'Content-Disposition': 'attachment; filename="wincrm-tasks.json"'
+			'X-CRM-Export-Schema': '1',
+			'Content-Disposition': 'attachment; filename="aerocrm-tasks.json"'
 		});
 	});
 	it.each(['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'])(
@@ -281,8 +281,8 @@ describe('version 2 owner Workday task export', () => {
 				`"${task(1).id}","${workspaceId}","","1","'=Переговоры\n""😀""","${date.toISOString()}","IN_PROGRESS","owner","${membershipId}","${teamId}","","${date.toISOString()}","${date.toISOString()}"\r\n`
 		);
 		expect(exportHeaders(file)).toMatchObject({
-			'X-WinCRM-Export-Schema': '2',
-			'Content-Disposition': 'attachment; filename="wincrm-tasks-v2.csv"'
+			'X-CRM-Export-Schema': '2',
+			'Content-Disposition': 'attachment; filename="aerocrm-tasks-v2.csv"'
 		});
 	});
 	it.each(['json', 'csv'] as const)(
@@ -295,7 +295,7 @@ describe('version 2 owner Workday task export', () => {
 				format
 			);
 			expect(file.rowCount).toBe(0);
-			expect(exportHeaders(file)['X-WinCRM-Export-Schema']).toBe('2');
+			expect(exportHeaders(file)['X-CRM-Export-Schema']).toBe('2');
 			if (format === 'json')
 				expect(JSON.parse(file.body.toString())).toMatchObject({
 					schemaVersion: 2,

@@ -2,7 +2,7 @@
 	"name": "@aerocrm/crm-sales",
 	"version": "1.0.0",
 	"private": true,
-	"description": "WinCRM sales pipeline microservice",
+	"description": "aeroCRM sales pipeline microservice",
 	"license": "UNLICENSED",
 	"packageManager": "pnpm@9.15.9",
 	"engines": {

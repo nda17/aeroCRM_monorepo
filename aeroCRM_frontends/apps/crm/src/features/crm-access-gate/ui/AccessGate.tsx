@@ -302,7 +302,6 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 						<Button
 							variant="secondary"
 							onClick={() => {
-								toast('Переходим к выбору рабочего пространства')
 								selectWorkspace()
 							}}
 						>
@@ -361,7 +360,6 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 				<RetryState
 					isRetrying={access.isFetching}
 					onRetry={() => {
-						toast('Повторяем проверку доступа')
 						void access.refetch()
 					}}
 				/>
@@ -375,7 +373,6 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 				<RetryState
 					isRetrying={access.isFetching}
 					onRetry={() => {
-						toast('Повторяем проверку доступа')
 						void access.refetch()
 					}}
 				/>
@@ -401,7 +398,6 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 								)
 							)
 								return
-							toast('Проверяем доступ рабочего пространства')
 							if (workspaceId === selected) void access.refetch()
 							else selectWorkspace(selected)
 						}}
@@ -446,7 +442,7 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 		)
 	const billingUrl = billingHref(data.selectedWorkspaceId)
 	const billingLink =
-		getRuntimeConfig().wincrmBillingEnabled &&
+		getRuntimeConfig().crmBillingEnabled &&
 		data.membership.role === 'OWNER' &&
 		!access.isFetching &&
 		!access.isError &&
@@ -454,7 +450,6 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 			<a
 				href={billingUrl}
 				className={styles.billingLink}
-				onClick={() => toast('Открываем управление подпиской aeroCRM')}
 			>
 				Подписка и оплата aeroCRM
 			</a>
@@ -547,7 +542,6 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 							variant="secondary"
 							isLoading={access.isFetching}
 							onClick={() => {
-								toast('Обновляем состояние доступа')
 								void access.refetch()
 							}}
 						>

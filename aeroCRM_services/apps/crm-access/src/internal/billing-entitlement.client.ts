@@ -154,7 +154,7 @@ export class BillingEntitlementClient {
 		}
 		if (response.status === 409) {
 			throw new ConflictException(
-				'Command ID conflicts with a previous WinCRM trial activation'
+				'Command ID conflicts with a previous aeroCRM trial activation'
 			);
 		}
 		if (!response.ok) {

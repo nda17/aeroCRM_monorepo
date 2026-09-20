@@ -257,7 +257,7 @@ export class SlaProcessor {
 										: SLA_TELEGRAM_EVENT,
 								occurredAt: item.createdAt.toISOString(),
 								reference: {
-									type: 'wincrm-intake-sla',
+									type: 'crm-intake-sla',
 									id: item.id,
 									workspaceId: item.workspaceId
 								}

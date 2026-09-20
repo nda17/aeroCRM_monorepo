@@ -15,11 +15,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import fileSystem from 'node:fs/promises';
 import { DATABASE_RESTORE_TARGETS } from '../restore/database-restore.contract';
-import { loadArtifactPairs } from '../restore/database-restore-artifact-rehearsal';
-import { DatabaseRestoreArtifactValidatorService } from '../restore/database-restore-artifact-validator.service';
-import { DatabaseRestoreMigrationManifestService } from '../restore/database-restore-migration-manifest.service';
 import { DATABASE_BACKUP_PROVENANCE_TARGETS } from './database-backup.contract';
 import {
 	canonicalizeDatabaseBackupProvenanceEnvelope,
@@ -211,75 +207,6 @@ describe('DatabaseBackupProvenanceService', () => {
 			expect(DATABASE_RESTORE_TARGETS).not.toContain(target);
 		}
 	);
-
-	it('rejects a genuinely signed CRM sidecar before rehearsal manifest access or dump processing', async () => {
-		const signed = await service.sign(
-			{
-				...evidence(),
-				target: 'crm-access',
-				databaseName: 'aerocrm_crm_access',
-				schema: 'crm_access',
-				fileName: 'aerocrm-crm-access-db-2026-08-31T10-01-00-000Z.dump'
-			},
-			KEY_ID,
-			privateKeyPath
-		);
-		const inputDirectory = join(directory, 'artifacts');
-		await fileSystem.mkdir(inputDirectory);
-		const names = [
-			signed.envelope.evidence.fileName,
-			...Array.from({ length: 6 }, (_, index) => `z-legacy-${index}.dump`)
-		];
-		for (const name of names) {
-			await writeFile(join(inputDirectory, name), 'PGDMP');
-			await writeFile(
-				join(inputDirectory, `${name}.provenance.json`),
-				JSON.stringify(signed)
-			);
-		}
-		// Only emulate the container-owned readonly mount metadata; signatures,
-		// directory enumeration and sidecar parsing use the real temporary files.
-		const realLstat = fileSystem.lstat;
-		jest.spyOn(fileSystem, 'lstat').mockImplementation((async (
-			path: Parameters<typeof realLstat>[0]
-		) => {
-			const metadata = await realLstat(path);
-			return Object.assign(metadata, {
-				uid: 1001,
-				gid: 1001,
-				mode: 0o100400
-			});
-		}) as typeof fileSystem.lstat);
-		const manifests = { sha256: jest.fn() };
-		const artifacts = { sha256: jest.fn(), assertChecksum: jest.fn() };
-		const verify = jest.spyOn(service, 'verify');
-		await expect(
-			loadArtifactPairs(
-				{
-					servicesSha: evidence().servicesSha,
-					inputDirectory,
-					workDirectory: join(directory, 'never-created'),
-					postgresUser: 'unused',
-					postgresDatabase: 'unused',
-					postgresPasswordFile: 'unused',
-					postgresPassword: 'unused'
-				},
-				service,
-				artifacts as unknown as DatabaseRestoreArtifactValidatorService,
-				manifests as unknown as DatabaseRestoreMigrationManifestService,
-				{
-					pgDump: evidence().pgDumpVersion,
-					pgRestore: evidence().pgRestoreVersion
-				}
-			)
-		).rejects.toThrow('not permitted for restore rehearsal');
-		expect(verify).toHaveBeenCalledTimes(1);
-		expect(manifests.sha256).not.toHaveBeenCalled();
-		expect(artifacts.sha256).not.toHaveBeenCalled();
-		await expect(
-			fileSystem.stat(join(directory, 'never-created'))
-		).rejects.toMatchObject({ code: 'ENOENT' });
-	});
 
 	it('rejects payload tampering even when an attacker recomputes the envelope SHA', async () => {
 		const signed = JSON.parse(

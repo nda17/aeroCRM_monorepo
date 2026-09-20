@@ -57,7 +57,7 @@ export const metadata = (
 	entity: 'tasks',
 	format,
 	workspaceId,
-	filename: `wincrm-tasks-v2.${format}`,
+	filename: `aerocrm-tasks-v2.${format}`,
 	mediaType:
 		format === 'json'
 			? 'application/json; charset=utf-8'
@@ -72,11 +72,11 @@ export const headers = (meta: WorkdayExportMetadata, hash = actorHash) =>
 		'Content-Disposition': `attachment; filename="${meta.filename}"`,
 		'Cache-Control': 'no-store',
 		'X-Content-Type-Options': 'nosniff',
-		'X-WinCRM-Export-Schema': '2',
-		'X-WinCRM-Workspace-Id': meta.workspaceId,
-		'X-WinCRM-Export-Entity': 'tasks',
-		'X-WinCRM-Export-Rows': String(meta.rowCount),
-		'X-WinCRM-Export-Bytes': String(meta.bytes),
-		'X-WinCRM-Export-Snapshot-At': meta.snapshotAt,
-		'X-WinCRM-Export-Actor-SHA256': hash
+		'X-CRM-Export-Schema': '2',
+		'X-CRM-Workspace-Id': meta.workspaceId,
+		'X-CRM-Export-Entity': 'tasks',
+		'X-CRM-Export-Rows': String(meta.rowCount),
+		'X-CRM-Export-Bytes': String(meta.bytes),
+		'X-CRM-Export-Snapshot-At': meta.snapshotAt,
+		'X-CRM-Export-Actor-SHA256': hash
 	})

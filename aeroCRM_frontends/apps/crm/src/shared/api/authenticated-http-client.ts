@@ -176,7 +176,7 @@ export const authenticatedRequest = async ({
 
 		throw new AuthenticatedApiError(
 			'temporary',
-			'Сервис WinCRM временно недоступен. Повторите попытку.'
+			'Сервис aeroCRM временно недоступен. Повторите попытку.'
 		)
 	}
 }
@@ -184,5 +184,5 @@ export const authenticatedRequest = async ({
 export const invalidContractError = () =>
 	new AuthenticatedApiError(
 		'temporary',
-		'Сервис WinCRM вернул некорректный ответ.'
+		'Сервис aeroCRM вернул некорректный ответ.'
 	)

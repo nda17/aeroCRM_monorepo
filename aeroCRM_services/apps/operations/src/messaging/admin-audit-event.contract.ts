@@ -117,10 +117,8 @@ const IDENTITY_REQUEST_METADATA_FIELDS = [
 ] as const;
 const REPORTING_CONSUMERS = [
 	'identityUser',
-	'billingPayment',
-	'billingSubscription',
-	'widget',
-	'lead',
+	'crmOrder',
+	'crmEntitlement',
 	'reportingSettings',
 	'deliveryOutcome'
 ] as const;

@@ -16,7 +16,7 @@ interface Props {
 }
 
 const formatRub = (minor: number) =>
-	new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 2 }).format(minor / 100)
+	new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(minor / 100)
 
 const HomePricing = ({ content, crmPricingPolicy }: Props) => {
 	const [billing, setBilling] = useState<BillingPeriod>('monthly')

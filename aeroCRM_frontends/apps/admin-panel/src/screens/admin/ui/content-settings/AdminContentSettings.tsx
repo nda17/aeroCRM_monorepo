@@ -76,7 +76,7 @@ const AdminContentSettings: NextPage = () => {
 			})
 			.finally(() => setIsSaving(false))
 		toast.promise(promise, {
-			loading: 'Сохранение...',
+			loading: 'Пожалуйста, подождите',
 			success: 'Сохранено',
 			error: 'Ошибка сохранения'
 		})

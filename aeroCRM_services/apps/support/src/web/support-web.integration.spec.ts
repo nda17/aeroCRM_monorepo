@@ -85,7 +85,7 @@ integration('Support web PostgreSQL transaction integration', () => {
 			const url = new URL(process.env[key] || '');
 			if (
 				!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) ||
-				!/^\/(?:support_web_test|support_test|support_ci|winwidget_support_test_ci)$/.test(
+				!/^\/(?:support_web_test|support_test|support_ci|aerocrm_support_test_ci)$/.test(
 					url.pathname
 				)
 			)

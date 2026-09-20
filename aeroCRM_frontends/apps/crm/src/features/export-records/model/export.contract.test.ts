@@ -145,7 +145,7 @@ const metadata = (
 	bytes,
 	rowCount,
 	snapshotAt: date,
-	filename: `wincrm-${entity}.${format}`,
+	filename: `aerocrm-${entity}.${format}`,
 	mediaType:
 		format === 'json'
 			? 'application/json; charset=utf-8'
@@ -154,16 +154,16 @@ const metadata = (
 const headers = () =>
 	new Headers({
 		'Content-Type': 'application/json; charset=utf-8',
-		'Content-Disposition': 'attachment; filename="wincrm-contacts.json"',
+		'Content-Disposition': 'attachment; filename="aerocrm-contacts.json"',
 		'Cache-Control': 'no-store',
 		'X-Content-Type-Options': 'nosniff',
-		'X-WinCRM-Export-Schema': '1',
-		'X-WinCRM-Workspace-Id': workspaceId,
-		'X-WinCRM-Export-Entity': 'contacts',
-		'X-WinCRM-Export-Rows': '1',
-		'X-WinCRM-Export-Bytes': '100',
-		'X-WinCRM-Export-Snapshot-At': date,
-		'X-WinCRM-Export-Actor-SHA256': actorHash
+		'X-CRM-Export-Schema': '1',
+		'X-CRM-Workspace-Id': workspaceId,
+		'X-CRM-Export-Entity': 'contacts',
+		'X-CRM-Export-Rows': '1',
+		'X-CRM-Export-Bytes': '100',
+		'X-CRM-Export-Snapshot-At': date,
+		'X-CRM-Export-Actor-SHA256': actorHash
 	})
 const jsonBytes = (
 	entity: ExportEntity,
@@ -288,12 +288,11 @@ describe('Export metadata and body validation', () => {
 			validateExportBody(bytes, metadata('deals', 'json', bytes.length))
 		).toThrow()
 	})
-	it('exports native sourceId and null name through the original 20-column schema without a payload', () => {
+	it('exports API sourceId through the original 20-column schema without a payload', () => {
 		const row = {
 			...rows.inbox,
-			origin: 'WIDGET',
-			sourceId: id,
-			name: null
+			origin: 'API',
+			sourceId: id
 		}
 		const json = jsonBytes('inbox', [row])
 		expect(() =>
@@ -307,7 +306,7 @@ describe('Export metadata and body validation', () => {
 		expect(exportColumns.inbox).not.toContain('payload')
 		for (const invalid of [
 			{ ...row, payload: {} },
-			{ ...row, origin: 'API' }
+			{ ...row, name: null }
 		]) {
 			const bytes = jsonBytes('inbox', [invalid])
 			expect(() =>
@@ -327,13 +326,13 @@ describe('Export metadata and body validation', () => {
 		).toEqual(metadata('contacts', 'json', 100))
 	})
 	it.each([
-		'X-WinCRM-Export-Schema',
-		'X-WinCRM-Workspace-Id',
-		'X-WinCRM-Export-Entity',
-		'X-WinCRM-Export-Rows',
-		'X-WinCRM-Export-Bytes',
-		'X-WinCRM-Export-Snapshot-At',
-		'X-WinCRM-Export-Actor-SHA256',
+		'X-CRM-Export-Schema',
+		'X-CRM-Workspace-Id',
+		'X-CRM-Export-Entity',
+		'X-CRM-Export-Rows',
+		'X-CRM-Export-Bytes',
+		'X-CRM-Export-Snapshot-At',
+		'X-CRM-Export-Actor-SHA256',
 		'Content-Disposition',
 		'Content-Type',
 		'Cache-Control',
@@ -351,9 +350,9 @@ describe('Export metadata and body validation', () => {
 	})
 	it('rejects excessive row and logical byte counts', () => {
 		for (const [name, value] of [
-			['X-WinCRM-Export-Rows', '10001'],
-			['X-WinCRM-Export-Bytes', '16777217'],
-			['X-WinCRM-Export-Rows', '01']
+			['X-CRM-Export-Rows', '10001'],
+			['X-CRM-Export-Bytes', '16777217'],
+			['X-CRM-Export-Rows', '01']
 		]) {
 			const h = headers()
 			h.set(name, value)

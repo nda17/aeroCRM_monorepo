@@ -103,17 +103,17 @@ describe('Sales export actual HTTP contract', () => {
 		expect(response.headers.get('content-length')).toBe(
 			String(body.byteLength)
 		);
-		expect(response.headers.get('x-wincrm-export-bytes')).toBe(
+		expect(response.headers.get('x-crm-export-bytes')).toBe(
 			String(body.byteLength)
 		);
 		expect(response.headers.get('content-disposition')).toBe(
-			'attachment; filename="wincrm-deals.json"'
+			'attachment; filename="aerocrm-deals.json"'
 		);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(response.headers.get('x-content-type-options')).toBe('nosniff');
 		expect(
 			response.headers.get('access-control-expose-headers')
-		).toContain('x-wincrm-export-actor-sha256');
+		).toContain('x-crm-export-actor-sha256');
 		expect(
 			response.headers.get('access-control-expose-headers')
 		).toContain('x-content-type-options');
@@ -156,14 +156,14 @@ describe('Sales export actual HTTP contract', () => {
 			);
 			expect(response.status).toBe(200);
 			expect(response.headers.get('content-disposition')).toBe(
-				`attachment; filename="wincrm-tasks-v2.${format}"`
+				`attachment; filename="aerocrm-tasks-v2.${format}"`
 			);
-			expect(response.headers.get('x-wincrm-export-schema')).toBe('2');
-			expect(response.headers.get('x-wincrm-export-entity')).toBe('tasks');
-			expect(response.headers.get('x-wincrm-workspace-id')).toBe(
+			expect(response.headers.get('x-crm-export-schema')).toBe('2');
+			expect(response.headers.get('x-crm-export-entity')).toBe('tasks');
+			expect(response.headers.get('x-crm-workspace-id')).toBe(
 				workspaceId
 			);
-			expect(response.headers.get('x-wincrm-export-actor-sha256')).toBe(
+			expect(response.headers.get('x-crm-export-actor-sha256')).toBe(
 				exportActorHash('owner')
 			);
 			expect(response.headers.get('cache-control')).toBe('no-store');
@@ -172,9 +172,9 @@ describe('Sales export actual HTTP contract', () => {
 			);
 			expect(
 				response.headers.get('access-control-expose-headers')
-			).toContain('x-wincrm-export-schema');
+			).toContain('x-crm-export-schema');
 			const bytes = Buffer.from(await response.arrayBuffer());
-			expect(response.headers.get('x-wincrm-export-bytes')).toBe(
+			expect(response.headers.get('x-crm-export-bytes')).toBe(
 				String(bytes.byteLength)
 			);
 			if (format === 'json') expect(bytes).toEqual(tasksBody);

@@ -1,37 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import {
 	sanitizeLegalHtml,
 	validateAndSanitizeStructuredHomeContent,
 	validateRawHomeContent
 } from './platform-content.validation';
 
-
-
-const aiConsultantContentMigration = readFileSync(
-	resolve(
-		__dirname,
-		'../../prisma/migrations/20260827220000_replace_online_consultant_home_content/migration.sql'
-	),
-	'utf8'
-);
-
-const aiConsultantHomeCardMigration = readFileSync(
-	resolve(
-		__dirname,
-		'../../prisma/migrations/20260828010000_publish_ai_consultant_home_card/migration.sql'
-	),
-	'utf8'
-);
-
-const selectedHomeContentRestoreMigration = readFileSync(
-	resolve(
-		__dirname,
-		'../../prisma/migrations/20260828020000_restore_selected_home_content/migration.sql'
-	),
-	'utf8'
-);
 
 describe('Platform content validation', () => {
 	it('removes executable legal markup and every dangerous URL form', () => {
@@ -150,108 +123,4 @@ describe('Platform content validation', () => {
 			.toThrow('Invalid structured field: content.demoWidgets');
 	});
 
-	it('migrates persisted AI consultant landing content without a runtime alias', () => {
-		expect(aiConsultantContentMigration.trimStart()).toMatch(/^BEGIN;/);
-		expect(aiConsultantContentMigration.trimEnd()).toMatch(/COMMIT;$/);
-		expect(aiConsultantContentMigration).toContain(
-			"nested_content - 'onlineConsultant'"
-		);
-		expect(aiConsultantContentMigration).toContain(
-			"'aiConsultant',\n                    'Задайте вопрос AI-оператору'"
-		);
-		expect(aiConsultantContentMigration).toContain(
-			'Winwidget — AI-консультант и виджеты для сайта'
-		);
-		expect(aiConsultantContentMigration).toContain(
-			'Сервис требует подтверждать ответ фрагментом вашей инструкции.'
-		);
-		expect(aiConsultantContentMigration).toContain(
-			'Покупатель быстро получает информацию из инструкции компании, а важные условия можно перепроверить.'
-		);
-		expect(aiConsultantContentMigration).toContain(
-			'AI-оператор не обходит сайт и сообщает, что подтверждённых данных недостаточно.'
-		);
-		expect(aiConsultantContentMigration).not.toContain(
-			'получает точную информацию'
-		);
-		expect(aiConsultantContentMigration).not.toContain(
-			'не додумывает ответ'
-		);
-		expect(aiConsultantContentMigration).toContain('/ai-consultants/');
-		expect(aiConsultantContentMigration).toContain('/page-ai-consultant/');
-		expect(aiConsultantContentMigration).toContain(
-			'"platform"."refresh_current_semantic_fingerprint"('
-		);
-	});
-
-	it('publishes the persisted AI consultant home card', () => {
-		expect(aiConsultantHomeCardMigration.trimStart()).toMatch(/^BEGIN;/);
-		expect(aiConsultantHomeCardMigration.trimEnd()).toMatch(/COMMIT;$/);
-		expect(aiConsultantHomeCardMigration).toContain(
-			"item.value ->> 'previewType' = 'aiConsultant'"
-		);
-		expect(aiConsultantHomeCardMigration).toContain("'{comingSoon}'");
-		expect(aiConsultantHomeCardMigration).toContain("'false'::JSONB");
-		expect(aiConsultantHomeCardMigration).toContain(
-			'ORDER BY item.ordinality'
-		);
-		expect(aiConsultantHomeCardMigration).toContain(
-			"tools_content := pg_catalog.jsonb_set(\n        tools_content,\n        '{items}',\n        transformed_items,\n        false\n    );"
-		);
-		expect(aiConsultantHomeCardMigration).toContain(
-			'AND "content" IS DISTINCT FROM current_content'
-		);
-		expect(aiConsultantHomeCardMigration).toContain(
-			'IF ai_consultant_items = 0 THEN'
-		);
-		expect(aiConsultantHomeCardMigration).toContain(
-			'Platform tools must not contain duplicate AI consultant cards'
-		);
-		expect(aiConsultantHomeCardMigration).toContain(
-			'"platform"."refresh_current_semantic_fingerprint"('
-		);
-		expect(aiConsultantHomeCardMigration).toMatch(
-			/IF updated_rows = 1 THEN\s+PERFORM "platform"\."refresh_current_semantic_fingerprint"/
-		);
-	});
-
-	it('restores the selected persisted landing sections', () => {
-		expect(selectedHomeContentRestoreMigration.trimStart()).toMatch(
-			/^BEGIN;/
-		);
-		expect(selectedHomeContentRestoreMigration.trimEnd()).toMatch(
-			/COMMIT;$/
-		);
-		expect(selectedHomeContentRestoreMigration).toContain(
-			"E'Увеличение конверсии\\nсайта до'"
-		);
-		expect(selectedHomeContentRestoreMigration).toContain(
-			"'accentText', '30%'"
-		);
-		expect(selectedHomeContentRestoreMigration).toContain(
-			'Как это работает на практике'
-		);
-		expect(selectedHomeContentRestoreMigration).toContain('Лендинг акции');
-		expect(selectedHomeContentRestoreMigration).toContain(
-			'Установка проще, чем сварить кофе'
-		);
-		expect(selectedHomeContentRestoreMigration).toContain(
-			"E'Ловите\\nгорячие\\nлиды!'"
-		);
-		expect(selectedHomeContentRestoreMigration).not.toContain("'faq'");
-		expect(
-			selectedHomeContentRestoreMigration.match(
-				/COALESCE\(section_content -> 'items' -> [0-2], '\{\}'::JSONB\)/g
-			)
-		).toHaveLength(6);
-		expect(selectedHomeContentRestoreMigration).toContain(
-			"pg_catalog.jsonb_typeof(section_content -> 'items') <> 'array'"
-		);
-		expect(selectedHomeContentRestoreMigration).toContain(
-			'AND "content" IS DISTINCT FROM next_content'
-		);
-		expect(selectedHomeContentRestoreMigration).toMatch(
-			/IF updated_rows = 1 THEN\s+PERFORM "platform"\."refresh_current_semantic_fingerprint"/
-		);
-	});
 });

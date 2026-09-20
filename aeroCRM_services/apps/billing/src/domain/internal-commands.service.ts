@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/billing-client';
-import { ConflictException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import type { RevokeEntitlementsCommandDto } from '../http/billing.dto';
 import { BillingPrismaService } from '../prisma/billing-prisma.service';
 import {
@@ -47,7 +47,7 @@ export class InternalCommandsService {
 		let unknownOrders = 0;
 		for (const account of accounts) {
 			const workspaceId = account.workspaceId;
-			await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`billing-wincrm-entitlement:${workspaceId}`}, 0))`;
+			await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`billing-crm-entitlement:${workspaceId}`}, 0))`;
 			const renewal = await transaction.crmAutoRenewal.findUnique({
 				where: { workspaceId }
 			});

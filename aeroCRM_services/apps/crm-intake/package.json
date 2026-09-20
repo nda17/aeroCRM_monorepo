@@ -2,7 +2,7 @@
 	"name": "@aerocrm/crm-intake",
 	"version": "1.0.0",
 	"private": true,
-	"description": "WinCRM lead intake microservice",
+	"description": "aeroCRM lead intake microservice",
 	"license": "UNLICENSED",
 	"packageManager": "pnpm@9.15.9",
 	"engines": {

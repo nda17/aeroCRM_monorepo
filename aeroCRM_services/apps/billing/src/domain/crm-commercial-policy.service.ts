@@ -70,10 +70,6 @@ export class CrmCommercialPolicyService {
 			userAgent?: string | null;
 		}
 	) {
-		const annualPriceMinor = Math.round(dto.monthlyPriceMinor * 108 / 10);
-		if (dto.yearlyPriceMinor !== annualPriceMinor) {
-			throw new BadRequestException('Годовая цена должна учитывать скидку 10%');
-		}
 		const actorRole = context.actor.roles.includes('DEV')
 			? 'DEV'
 			: context.actor.roles.includes('ADMIN')
@@ -104,9 +100,23 @@ export class CrmCommercialPolicyService {
 								requestHash
 							);
 						}
+						const prices = [
+							dto.monthlyPriceMinor,
+							dto.yearlyPriceMinor,
+							dto.additionalSeatMonthlyPriceMinor,
+							dto.additionalSeatYearlyPriceMinor
+						];
+						if (prices.some(price => price < 100 || price % 100 !== 0)) {
+							throw new BadRequestException('Цены должны быть указаны целыми рублями');
+						}
+						const annualPriceMinor =
+							Math.round(dto.monthlyPriceMinor * 108 / 1000) * 100;
+						if (dto.yearlyPriceMinor !== annualPriceMinor) {
+							throw new BadRequestException('Годовая цена должна учитывать скидку 10%');
+						}
 						await transaction.$executeRaw(Prisma.sql`
 							SELECT pg_advisory_xact_lock(
-								hashtextextended('billing-wincrm-commercial-policy', 0)
+								hashtextextended('billing-crm-commercial-policy', 0)
 							)
 						`);
 						const current = await requireCrmCommercialPolicy(transaction);

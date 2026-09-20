@@ -309,7 +309,7 @@ describe('CrmAccessService bootstrap', () => {
 		);
 		expect(current.sales.getInstallation).toHaveBeenCalledTimes(1);
 		if (result.state === 'WORKSPACE_SELECTION_REQUIRED') {
-			throw new Error('Expected a resolved WinCRM workspace');
+			throw new Error('Expected a resolved aeroCRM workspace');
 		}
 		expect(result.entitlement).not.toHaveProperty('provisioningCommandId');
 		expect(result.entitlement).not.toHaveProperty('activatedByUserId');

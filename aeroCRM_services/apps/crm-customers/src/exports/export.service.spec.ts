@@ -99,7 +99,7 @@ describe('Customers export snapshot authorization', () => {
 				2
 			);
 			expect(file.schemaVersion).toBe(2);
-			expect(exportHeaders(file)['X-WinCRM-Export-Schema']).toBe('2');
+			expect(exportHeaders(file)['X-CRM-Export-Schema']).toBe('2');
 			expect(authorize).toHaveBeenCalledTimes(2);
 			expect(audit).toHaveBeenCalledTimes(1);
 			expect(
@@ -128,7 +128,7 @@ describe('Customers export snapshot authorization', () => {
 			'json'
 		);
 		expect(file.schemaVersion).toBeUndefined();
-		expect(exportHeaders(file)['X-WinCRM-Export-Schema']).toBe('1');
+		expect(exportHeaders(file)['X-CRM-Export-Schema']).toBe('1');
 		expect(JSON.parse(file.body.toString()).schemaVersion).toBe(1);
 		expect(
 			Object.keys(tx.company.findMany.mock.calls[0][0].select)
@@ -160,7 +160,7 @@ describe('Customers export snapshot authorization', () => {
 				undefined,
 				2
 			);
-			expect(exportHeaders(file)['X-WinCRM-Export-Schema']).toBe('2');
+			expect(exportHeaders(file)['X-CRM-Export-Schema']).toBe('2');
 			expect(
 				Object.keys(tx.contact.findMany.mock.calls[0][0].select)
 			).toEqual(CONTACT_EXPORT_V2_COLUMNS);
@@ -183,7 +183,7 @@ describe('Customers export snapshot authorization', () => {
 				'contacts',
 				'json'
 			);
-			expect(exportHeaders(legacyFile)['X-WinCRM-Export-Schema']).toBe(
+			expect(exportHeaders(legacyFile)['X-CRM-Export-Schema']).toBe(
 				'1'
 			);
 			expect(

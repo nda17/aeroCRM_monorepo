@@ -392,7 +392,7 @@ const AdminMailings = () => {
 
 		pendingCreateRef.current = { fingerprint, idempotencyKey }
 		setConfirmOpened(false)
-		toast.loading('Создаём кампанию...', { id: TOAST_IDS.create })
+		toast.loading('Пожалуйста, подождите', { id: TOAST_IDS.create })
 
 		try {
 			const campaign = await createMutation.mutateAsync({
@@ -419,7 +419,7 @@ const AdminMailings = () => {
 
 		const campaign = cancelCampaign
 		setCancelCampaign(null)
-		toast.loading('Запрашиваем остановку кампании...', {
+		toast.loading('Пожалуйста, подождите', {
 			id: `${TOAST_IDS.cancel}-${campaign.id}`
 		})
 
@@ -452,7 +452,7 @@ const AdminMailings = () => {
 
 		pendingRetryKeysRef.current.set(delivery.id, idempotencyKey)
 		setRetryingDeliveryId(delivery.id)
-		toast.loading('Ставим доставку на повтор...', { id: toastId })
+		toast.loading('Пожалуйста, подождите', { id: toastId })
 
 		try {
 			await retryMutation.mutateAsync({
@@ -472,7 +472,7 @@ const AdminMailings = () => {
 	}
 
 	const retryCampaignList = async () => {
-		toast.loading('Повторно загружаем кампании...', {
+		toast.loading('Пожалуйста, подождите', {
 			id: TOAST_IDS.listRetry
 		})
 		const result = await campaigns.refetch()
@@ -493,7 +493,7 @@ const AdminMailings = () => {
 	}
 
 	const retryCampaignDetail = async () => {
-		toast.loading('Повторно загружаем кампанию...', {
+		toast.loading('Пожалуйста, подождите', {
 			id: TOAST_IDS.detailRetry
 		})
 		const result = await campaignDetail.refetch()
@@ -514,7 +514,7 @@ const AdminMailings = () => {
 	}
 
 	const retryDeliveries = async () => {
-		toast.loading('Повторно загружаем доставки...', {
+		toast.loading('Пожалуйста, подождите', {
 			id: TOAST_IDS.deliveriesRetry
 		})
 		const result = await deliveries.refetch()

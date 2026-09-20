@@ -19,9 +19,11 @@ export class OAuthController {
 	@Get('google')
 	google(
 		@Query('ref', IDENTITY_SCALAR_QUERY_PIPE) ref: string | undefined,
+		@Query('client', IDENTITY_SCALAR_QUERY_PIPE) client: string | undefined,
+		@Query('returnPath', IDENTITY_SCALAR_QUERY_PIPE) returnPath: string | undefined,
 		@Res() response: Response
 	) {
-		return this.oauth.start('google', ref, response);
+		return this.oauth.start('google', ref, response, client, returnPath);
 	}
 
 	@Get('google/redirect')
@@ -42,9 +44,11 @@ export class OAuthController {
 	@Get('yandex')
 	yandex(
 		@Query('ref', IDENTITY_SCALAR_QUERY_PIPE) ref: string | undefined,
+		@Query('client', IDENTITY_SCALAR_QUERY_PIPE) client: string | undefined,
+		@Query('returnPath', IDENTITY_SCALAR_QUERY_PIPE) returnPath: string | undefined,
 		@Res() response: Response
 	) {
-		return this.oauth.start('yandex', ref, response);
+		return this.oauth.start('yandex', ref, response, client, returnPath);
 	}
 
 	@Get('yandex/redirect')
@@ -65,9 +69,11 @@ export class OAuthController {
 	@Get('vk')
 	vk(
 		@Query('ref', IDENTITY_SCALAR_QUERY_PIPE) ref: string | undefined,
+		@Query('client', IDENTITY_SCALAR_QUERY_PIPE) client: string | undefined,
+		@Query('returnPath', IDENTITY_SCALAR_QUERY_PIPE) returnPath: string | undefined,
 		@Res() response: Response
 	) {
-		return this.oauth.start('vk', ref, response);
+		return this.oauth.start('vk', ref, response, client, returnPath);
 	}
 
 	@Get('vk/redirect')

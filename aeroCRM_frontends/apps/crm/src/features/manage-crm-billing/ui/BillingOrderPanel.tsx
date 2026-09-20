@@ -83,15 +83,19 @@ export const BillingOrderPanel = ({
 	}, [actor, attempts, context.ready, order, pending])
 	const refresh = async () => {
 		if (!actor.current() || !actor.online || order.isFetching) return
-		toast('Проверяем прежний заказ, новый платёж не создаётся')
+		const toastId = toast.loading('Пожалуйста, подождите')
 		const result = await order.refetch()
-		if (!actor.current()) return
+		if (!actor.current()) {
+			toast.dismiss(toastId)
+			return
+		}
 		if (result.isError)
 			toast.error(
-				'Статус пока не подтверждён. Не создавайте повторный платёж.'
+				'Статус пока не подтверждён. Не создавайте повторный платёж.',
+				{ id: toastId }
 			)
 		else {
-			toast.success('Статус заказа обновлён')
+			toast.success('Статус заказа обновлён', { id: toastId })
 			onRefreshContext()
 		}
 	}
@@ -135,9 +139,6 @@ export const BillingOrderPanel = ({
 				throw invalidContractError()
 			popup.location.replace(fresh.order.confirmationUrl)
 			blankWindow.current = null
-			toast(
-				'Открываем YooKassa в отдельной вкладке. Подписка Widgets не изменяется.'
-			)
 		} catch {
 			if (actor.current())
 				toast.error(

@@ -45,7 +45,7 @@ const readTildaSourceToken = (
 		const name = rawHeaders[index]?.toLowerCase();
 		if (name === 'authorization')
 			throw new JwtValidationError('Invalid source credential');
-		if (name !== 'x-wincrm-source-token') continue;
+		if (name !== 'x-crm-source-token') continue;
 		if (token !== undefined)
 			throw new JwtValidationError('Multiple source credentials');
 		token = rawHeaders[index + 1];
@@ -608,7 +608,7 @@ const createUpstreamHeaders = (
 			lowerName.startsWith('x-forwarded-') ||
 			lowerName.startsWith('x-user') ||
 			lowerName.startsWith('x-auth') ||
-			lowerName === 'x-wincrm-source-token' ||
+			lowerName === 'x-crm-source-token' ||
 			lowerName === 'x-aerocrm-internal-token' ||
 			lowerName.startsWith('x-internal-')
 		) {
@@ -1158,7 +1158,7 @@ export const createGateway = (
 					: undefined
 			);
 			if (tildaSourceToken)
-				upstreamHeaders['x-wincrm-source-token'] = tildaSourceToken;
+				upstreamHeaders['x-crm-source-token'] = tildaSourceToken;
 			const useTls = route.upstreamUrl.protocol === 'https:';
 			const requestFn = useTls ? httpsRequest : httpRequest;
 			const proxyRequest = requestFn(
@@ -1178,6 +1178,21 @@ export const createGateway = (
 						requestId,
 						correlationId
 					);
+					const sessionResponse =
+						/^\/api\/v1\/(?:auth|sessions?)(?:\/|$)/.test(
+							target.routingPathname
+						) &&
+						target.routingPathname !==
+							'/api/v1/auth/.well-known/jwks.json';
+					if (
+						route.authPolicy === 'required' ||
+						sourceAuthentication ||
+						bearerToken ||
+						sessionResponse ||
+						upstreamResponse.headers['set-cookie']
+					) {
+						downstreamHeaders['cache-control'] = 'no-store';
+					}
 					response.writeHead(
 						upstreamResponse.statusCode ?? 502,
 						downstreamHeaders

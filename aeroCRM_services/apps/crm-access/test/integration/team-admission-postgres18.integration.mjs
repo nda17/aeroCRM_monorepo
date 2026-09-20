@@ -298,7 +298,7 @@ try {
 		releaseBrandingLock = resolve;
 	});
 	const lockingBrandingChange = prisma.$transaction(async tx => {
-		await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`wincrm-team:${workspaceId}`}, 0))`;
+		await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`crm-team:${workspaceId}`}, 0))`;
 		await tx.crmWorkspaceAccess.update({
 			where: { workspaceId },
 			data: { lifecycle: 'READ_ONLY' }
@@ -427,7 +427,7 @@ try {
 			invitationId: result.invitation.id,
 			invitationVersion: 2,
 			workspaceId,
-			productCode: 'WINCRM',
+			productCode: 'AEROCRM',
 			subject,
 			membershipId,
 			acceptedAt: new Date().toISOString(),
@@ -437,7 +437,7 @@ try {
 		const event = {
 			schemaVersion: 1,
 			eventId: randomUUID(),
-			eventType: 'identity.wincrm.invitation-accepted.v1',
+			eventType: 'identity.crm.invitation-accepted.v1',
 			invitationId: proof.invitationId,
 			invitationVersion: 2,
 			workspaceId,
@@ -1233,7 +1233,7 @@ try {
 	);
 
 	console.log(
-		'PASS WinCRM team PostgreSQL18: least privilege, page directory binding, scoped department names and selected pagination, archive/foreign/revoked exclusion, parallel command/acceptance replay, FIFO Trial quota including owner, disabled/pending no seat, tenant joins, read-only deny, revoke race, receipt-before-effect, real 30s durable retry across publisher recreation, replay, unpublished legacy conversion (transport double)'
+		'PASS aeroCRM team PostgreSQL18: least privilege, page directory binding, scoped department names and selected pagination, archive/foreign/revoked exclusion, parallel command/acceptance replay, FIFO Trial quota including owner, disabled/pending no seat, tenant joins, read-only deny, revoke race, receipt-before-effect, real 30s durable retry across publisher recreation, replay, unpublished legacy conversion (transport double)'
 	);
 } catch (error) {
 	console.error(

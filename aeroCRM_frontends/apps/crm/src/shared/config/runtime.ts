@@ -13,7 +13,7 @@ export interface PublicRuntimeEnvironment {
 	NEXT_PUBLIC_APP_URL?: string
 	NEXT_PUBLIC_MAIN_APP_URL?: string
 	NEXT_PUBLIC_API_URL?: string
-		NEXT_PUBLIC_CRM_BILLING_ENABLED?: string
+	NEXT_PUBLIC_CRM_BILLING_ENABLED?: string
 	NODE_ENV?: string
 }
 
@@ -22,8 +22,8 @@ export interface RuntimeConfig {
 	appOrigin: string
 	mainAppOrigin: string
 	apiBaseUrl: string
-	wincrmEnabled: boolean
-	wincrmBillingEnabled: boolean
+	crmEnabled: boolean
+	crmBillingEnabled: boolean
 }
 
 const parseMode = (environment: PublicRuntimeEnvironment): RuntimeMode => {
@@ -130,8 +130,8 @@ export const resolveRuntimeConfig = (
 		appOrigin,
 		mainAppOrigin,
 		apiBaseUrl,
-		wincrmEnabled: true,
-		wincrmBillingEnabled: billingFlag !== 'false'
+		crmEnabled: true,
+		crmBillingEnabled: billingFlag !== 'false'
 	}
 }
 

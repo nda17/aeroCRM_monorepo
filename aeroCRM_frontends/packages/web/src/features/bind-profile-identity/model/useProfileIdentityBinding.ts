@@ -58,7 +58,7 @@ export const useProfileIdentityBinding = () => {
 		mutationKey: ['profile-send-email-code'],
 		mutationFn: (email: string) =>
 			userService.sendProfileEmailCode({ email }),
-		onMutate: () => toast.loading('Отправляем код на email...'),
+		onMutate: () => toast.loading('Пожалуйста, подождите'),
 		onSuccess(response, email, toastId) {
 			setPendingEmail(email)
 			setEmailDeliveryUncertain(false)
@@ -102,8 +102,7 @@ export const useProfileIdentityBinding = () => {
 		mutationKey: ['profile-verify-email-code'],
 		mutationFn: ({ email, code }: { email: string; code: string }) =>
 			userService.verifyProfileEmailCode({ email, code }),
-		onMutate: () =>
-			toast.loading('Проверяем код, пожалуйста подождите...'),
+		onMutate: () => toast.loading('Пожалуйста, подождите'),
 		onSuccess(_, __, toastId) {
 			setPendingEmail('')
 			setEmailDeliveryUncertain(false)
@@ -135,7 +134,7 @@ export const useProfileIdentityBinding = () => {
 		mutationKey: ['profile-send-phone-code'],
 		mutationFn: (phone: string) =>
 			userService.sendProfilePhoneCode({ phone }),
-		onMutate: () => toast.loading('Отправляем SMS с кодом...'),
+		onMutate: () => toast.loading('Пожалуйста, подождите'),
 		onSuccess(_, __, toastId) {
 			setPhoneCodeRequested(true)
 			toast.success('Код подтверждения отправлен по SMS', { id: toastId })
@@ -154,8 +153,7 @@ export const useProfileIdentityBinding = () => {
 		mutationKey: ['profile-verify-phone-code'],
 		mutationFn: ({ phone, code }: { phone: string; code: string }) =>
 			userService.verifyProfilePhoneCode({ phone, code }),
-		onMutate: () =>
-			toast.loading('Проверяем код, пожалуйста подождите...'),
+		onMutate: () => toast.loading('Пожалуйста, подождите'),
 		onSuccess(_, __, toastId) {
 			setPhoneCodeRequested(false)
 			toast.success('Телефон успешно привязан', { id: toastId })
@@ -188,7 +186,7 @@ export const useProfileIdentityBinding = () => {
 	} = useMutation({
 		mutationKey: ['profile-unlink-telegram-binding'],
 		mutationFn: () => userService.unlinkProfileTelegramBinding(),
-		onMutate: () => toast.loading('Отвязываем Telegram...'),
+		onMutate: () => toast.loading('Пожалуйста, подождите'),
 		onSuccess(_, __, toastId) {
 			setTelegramBindingRequested(false)
 			toast.success('Telegram отвязан как способ входа', {
@@ -251,7 +249,7 @@ export const useProfileIdentityBinding = () => {
 	} = useMutation({
 		mutationKey: ['profile-disconnect-telegram-notifications'],
 		mutationFn: () => userService.disconnectProfileTelegramNotifications(),
-		onMutate: () => toast.loading('Отключаем Telegram-уведомления...'),
+		onMutate: () => toast.loading('Пожалуйста, подождите'),
 		onSuccess(_, __, toastId) {
 			setTelegramNotificationsBindingRequested(false)
 			toast.success('Telegram-уведомления отключены', { id: toastId })

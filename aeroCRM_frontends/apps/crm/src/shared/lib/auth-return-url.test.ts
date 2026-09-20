@@ -1,39 +1,30 @@
 import type { RuntimeConfig } from '@/shared/config/runtime'
 import { describe, expect, it } from 'vitest'
 
-import { buildLoginUrl } from './auth-return-url'
+import { buildLoginUrl, parseWorkspaceReturnPath } from './auth-return-url'
 
 const config: RuntimeConfig = {
 	mode: 'production',
 	appOrigin: 'https://workspace.aerocrm.space',
 	mainAppOrigin: 'https://aerocrm.space',
 	apiBaseUrl: 'https://api.aerocrm.space/api/v1',
-	wincrmEnabled: true,
-	wincrmBillingEnabled: false
+	crmEnabled: true,
+	crmBillingEnabled: false
 }
 
-describe('buildLoginUrl', () => {
-	it('preserves the CRM path and query in an encoded returnUrl', () => {
-		const value = buildLoginUrl(
-			'https://workspace.aerocrm.space/deals?stage=new&owner=me',
-			config
-		)
-		const loginUrl = new URL(value)
-
-		expect(loginUrl.origin).toBe('https://aerocrm.space')
-		expect(loginUrl.pathname).toBe('/login')
-		expect(loginUrl.searchParams.get('returnUrl')).toBe(
-			'https://workspace.aerocrm.space/deals?stage=new&owner=me'
-		)
-	})
-
-	it('drops fragments from the return target', () => {
+describe('workspace auth return path', () => {
+	it('redirects to the local login page with a bounded workspace path', () => {
 		const loginUrl = new URL(
-			buildLoginUrl('https://workspace.aerocrm.space/inbox#message-1', config)
+			buildLoginUrl(
+				'https://workspace.aerocrm.space/deals?stage=new&owner=me#card',
+				config
+			)
 		)
 
-		expect(loginUrl.searchParams.get('returnUrl')).toBe(
-			'https://workspace.aerocrm.space/inbox'
+		expect(loginUrl.origin).toBe(config.appOrigin)
+		expect(loginUrl.pathname).toBe('/login')
+		expect(loginUrl.searchParams.get('returnPath')).toBe(
+			'/deals?stage=new&owner=me'
 		)
 	})
 
@@ -42,18 +33,32 @@ describe('buildLoginUrl', () => {
 		'https://workspace.aerocrm.space:444/inbox',
 		'https://user@workspace.aerocrm.space/inbox',
 		'javascript:alert(1)',
-		'/inbox'
-	])('rejects unsafe return target %s', value => {
+		'/inbox',
+		'https://workspace.aerocrm.space/login'
+	])('rejects an unsafe source URL %s', value => {
 		expect(() => buildLoginUrl(value, config)).toThrow()
 	})
 
-	it('rejects an excessively long return target', () => {
-		const prefix = 'https://workspace.aerocrm.space/inbox?query='
-		const maximumLengthUrl = `${prefix}${'x'.repeat(2048 - prefix.length)}`
+	it.each([
+		'//evil.example',
+		'https://evil.example',
+		'/login',
+		'/inbox/../login',
+		'/inbox\\evil',
+		'/inbox#fragment',
+		'/inbox/%2f%2fevil',
+		'/inbox?x=1\n',
+		'x'.repeat(2049)
+	])('rejects unsafe return path %s', value => {
+		expect(parseWorkspaceReturnPath(value)).toBeNull()
+	})
 
-		expect(() => buildLoginUrl(maximumLengthUrl, config)).not.toThrow()
-		expect(() => buildLoginUrl(`${maximumLengthUrl}x`, config)).toThrow(
-			'CRM return URL is invalid'
-		)
+	it('accepts an invitation UUID and defaults to inbox', () => {
+		expect(parseWorkspaceReturnPath(null)).toBe('/inbox')
+		expect(
+			parseWorkspaceReturnPath(
+				'/invitations/123e4567-e89b-42d3-a456-426614174000'
+			)
+		).toBe('/invitations/123e4567-e89b-42d3-a456-426614174000')
 	})
 })

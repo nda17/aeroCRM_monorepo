@@ -40,7 +40,6 @@ describe('Identity verification email parity', () => {
 		expect(html).toContain('src="cid:aerocrm-identity-logo"');
 		expect(html).not.toContain('ww-brand-logo-cell');
 		expect(html).not.toContain('ww-brand-name');
-		expect(html).not.toContain('/widgets/email-logo.png');
 	});
 
 	it('renders the frozen password action and subject without dropping mobile classes', () => {

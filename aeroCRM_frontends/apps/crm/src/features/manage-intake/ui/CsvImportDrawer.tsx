@@ -147,7 +147,6 @@ const CsvImportPanel = ({ access, onClose, onSaved }: Props) => {
 			)
 			return
 		}
-		toast(summary ? 'Импорт завершён' : 'Панель импорта закрыта')
 		onClose()
 	}
 	const downloadTemplate = () => {
@@ -158,7 +157,7 @@ const CsvImportPanel = ({ access, onClose, onSaved }: Props) => {
 				new Blob([inboxCsvTemplate], { type: 'text/csv;charset=utf-8' })
 			)
 			link.href = url
-			link.download = 'wincrm-inbox-template.csv'
+			link.download = 'aerocrm-inbox-template.csv'
 			document.body.appendChild(link)
 			link.click()
 			toast('Шаблон CSV подготовлен')
@@ -193,7 +192,6 @@ const CsvImportPanel = ({ access, onClose, onSaved }: Props) => {
 			return
 		}
 		setError(null)
-		toast('Отправляем проверенные обращения во входящие')
 		void command.execute(() => input)
 	}
 	return (

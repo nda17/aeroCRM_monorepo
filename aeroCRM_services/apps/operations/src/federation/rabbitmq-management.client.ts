@@ -27,9 +27,7 @@ export class RabbitMqManagementClient {
 		const baseUrl = this.baseUrl();
 		const user = this.required('RABBITMQ_MONITOR_USER');
 		const password = this.required('RABBITMQ_MONITOR_PASSWORD');
-		const vhost = encodeURIComponent(
-			this.config.get<string>('RABBITMQ_VHOST')?.trim() || 'winwidget'
-		);
+		const vhost = encodeURIComponent(this.required('RABBITMQ_VHOST'));
 		const response = await fetch(`${baseUrl}/api/queues/${vhost}`, {
 			headers: {
 				authorization: `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`,

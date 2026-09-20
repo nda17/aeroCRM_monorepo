@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "available": true,
+  "versionName": "1.0.0",
+  "versionCode": 1,
+  "packageId": "space.aerocrm.workspace",
+  "downloadUrl": "https://s3.twcstorage.ru/content-files/aerocrm/android/1.0.0/aeroCRM.apk",
+  "sizeBytes": 1411514,
+  "sha256": "630f81528a4a3821978b88215813ef190f03e4be4e21718aaff21ce8212e232b",
+  "minSdk": 29,
+  "minAndroidVersion": "10",
+  "compatibleBrowser": "Актуальный Chrome или другой браузер с поддержкой TWA"
+}

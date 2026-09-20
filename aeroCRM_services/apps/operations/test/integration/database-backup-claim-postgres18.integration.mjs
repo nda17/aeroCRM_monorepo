@@ -101,7 +101,7 @@ const assertBoundary = () => {
 	const info = JSON.parse(docker(['inspect', container]))[0];
 	assert.equal(info.State.Running, true);
 	assert.equal(
-		info.Config.Labels?.['winwidget.operations-control-ledger'],
+		info.Config.Labels?.['aerocrm.operations-control-ledger'],
 		'true'
 	);
 	assert.ok(
@@ -374,7 +374,6 @@ async function verifyClaims() {
 			'notification-delivery',
 			'campaigns',
 			'reporting',
-			'widgets',
 			'billing',
 			'identity',
 			'platform',

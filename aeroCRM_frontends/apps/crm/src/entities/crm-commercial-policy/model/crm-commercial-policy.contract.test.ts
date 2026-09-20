@@ -16,7 +16,7 @@ const policy = {
 	graceDays: 3,
 	createdAt: '2026-09-05T12:00:00.000Z'
 }
-describe('published WinCRM commercial policy', () => {
+describe('published aeroCRM commercial policy', () => {
 	it('accepts only the complete product policy, keeping periods and seats independent', () => {
 		expect(parseCrmCommercialPolicy(policy)).toEqual(policy)
 		expect(
@@ -58,7 +58,7 @@ describe('published WinCRM commercial policy', () => {
 			delete partial[key]
 			expect(parseCrmCommercialPolicy(partial)).toBeNull()
 		}
-		for (const value of [null, [], { policy }, 'WINCRM'])
+		for (const value of [null, [], { policy }, 'invalid-policy'])
 			expect(parseCrmCommercialPolicy(value)).toBeNull()
 	})
 })

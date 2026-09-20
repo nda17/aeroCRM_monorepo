@@ -33,6 +33,8 @@ export type CrmPricingCommand = CrmPricingValues & {
 
 const MAX_PRICE_MINOR = 100_000_000
 const MAX_SEATS = 10_000
+export const annualCrmPriceMinor = (monthlyPriceMinor: number): number =>
+	Math.round((monthlyPriceMinor * 108) / 1000) * 100
 const UUID_PATTERN =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const SETTINGS_KEYS = [
@@ -61,7 +63,7 @@ export const parseCrmPricingSettings = (
 	value: unknown
 ): CrmPricingSettings => {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
-		throw new Error('Invalid WinCRM pricing settings')
+		throw new Error('Invalid aeroCRM pricing settings')
 	}
 
 	const settings = value as Record<string, unknown>
@@ -89,7 +91,7 @@ export const parseCrmPricingSettings = (
 		!Number.isFinite(Date.parse(settings.createdAt)) ||
 		new Date(settings.createdAt).toISOString() !== settings.createdAt
 	) {
-		throw new Error('Invalid WinCRM pricing settings')
+		throw new Error('Invalid aeroCRM pricing settings')
 	}
 
 	return { ...settings } as CrmPricingSettings
@@ -101,7 +103,9 @@ export const parseCrmRublesInput = (value: string): number | null => {
 
 	const [rubles, kopecks = ''] = input.split(/[.,]/)
 	const minor = Number(rubles) * 100 + Number(kopecks.padEnd(2, '0'))
-	return isIntegerInRange(minor, 1, MAX_PRICE_MINOR) ? minor : null
+	return isIntegerInRange(minor, 100, MAX_PRICE_MINOR) && minor % 100 === 0
+		? minor
+		: null
 }
 
 export const formatCrmRublesInput = (minor: number): string => {
@@ -116,7 +120,9 @@ export const createCrmPricingDraft = (
 	settings: CrmPricingValues
 ): CrmPricingDraft => ({
 	monthlyPriceMinor: formatCrmRublesInput(settings.monthlyPriceMinor),
-	yearlyPriceMinor: formatCrmRublesInput(settings.yearlyPriceMinor),
+	yearlyPriceMinor: formatCrmRublesInput(
+		annualCrmPriceMinor(settings.monthlyPriceMinor)
+	),
 	additionalSeatMonthlyPriceMinor: formatCrmRublesInput(
 		settings.additionalSeatMonthlyPriceMinor
 	),
@@ -144,7 +150,8 @@ export const parseCrmPricingDraft = (
 		}
 		values[key] = value
 	}
-	if (values.yearlyPriceMinor !== Math.round(values.monthlyPriceMinor * 108 / 10)) return null
+	if (values.yearlyPriceMinor !== annualCrmPriceMinor(values.monthlyPriceMinor))
+		return null
 	return values
 }
 
@@ -159,7 +166,7 @@ export const createCrmPricingCommand = (
 
 	const values = parseCrmPricingDraft(draft)
 	if (!values || !UUID_PATTERN.test(commandId)) {
-		throw new Error('Invalid WinCRM pricing command')
+		throw new Error('Invalid aeroCRM pricing command')
 	}
 
 	return {
@@ -181,7 +188,7 @@ export const parseCrmPricingCommandResult = (
 			key => settings[key] === command[key]
 		)
 	) {
-		throw new Error('Unexpected WinCRM pricing command result')
+		throw new Error('Unexpected aeroCRM pricing command result')
 	}
 	return settings
 }

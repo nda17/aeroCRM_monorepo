@@ -2,11 +2,11 @@ import SupportNotificationEmail from '../../emails/support-notification.email';
 import type { SupportNotificationContent } from '../messaging/support-notification.contract';
 import AdminBroadcastEmail from '../../emails/admin-broadcast.email';
 import SubscriptionExpiryReminderEmail from '../../emails/subscription-expiry-reminder.email';
-import WincrmInvitationEmail from '../../emails/wincrm-invitation.email';
-import WincrmTaskReminderEmail from '../../emails/wincrm-task-reminder.email';
-import WincrmIntakeSlaEmail from '../../emails/wincrm-intake-sla.email';
-import type { SlaContent } from '../messaging/wincrm-intake-sla.contract';
-import type { ReminderContent } from '../messaging/wincrm-task-reminder.contract';
+import CrmInvitationEmail from '../../emails/crm-invitation.email';
+import CrmTaskReminderEmail from '../../emails/crm-task-reminder.email';
+import CrmIntakeSlaEmail from '../../emails/crm-intake-sla.email';
+import type { SlaContent } from '../messaging/crm-intake-sla.contract';
+import type { ReminderContent } from '../messaging/crm-task-reminder.contract';
 import { EMAIL_TRANSPORTER } from '../config/mailer.config';
 import { Inject, Injectable } from '@nestjs/common';
 import { render } from '@react-email/render';
@@ -74,14 +74,14 @@ export class EmailService {
 		return this.sendEmail(to, subject, html, options);
 	}
 
-	sendWincrmInvitation(
+	sendCrmInvitation(
 		to: string,
 		invitationId: string,
 		expiresAt: string,
 		eventId: string
 	) {
 		const html = render(
-			WincrmInvitationEmail({
+			CrmInvitationEmail({
 				invitationId,
 				expiresAtLabel: new Date(expiresAt).toLocaleString('ru-RU', {
 					timeZone: 'Europe/Moscow'
@@ -89,7 +89,7 @@ export class EmailService {
 			})
 		);
 		return this.sendEmail(to, 'Приглашение в aeroCRM', html, {
-			messageId: `<${eventId}.wincrm-invitation@aerocrm.space>`
+			messageId: `<${eventId}.crm-invitation@aerocrm.space>`
 		});
 	}
 
@@ -103,13 +103,13 @@ export class EmailService {
 		return `${days} дней`;
 	}
 
-	sendWincrmTaskReminder(
+	sendCrmTaskReminder(
 		to: string,
 		content: ReminderContent,
 		eventId: string
 	) {
 		const html = render(
-			WincrmTaskReminderEmail({
+			CrmTaskReminderEmail({
 				...content,
 				dueAtLabel: new Date(content.dueAt).toLocaleString('ru-RU', {
 					timeZone: content.timeZone
@@ -123,7 +123,7 @@ export class EmailService {
 				: 'Напоминание о задаче aeroCRM',
 			html,
 			{
-				messageId: `<${eventId}.wincrm-task-reminder@aerocrm.space>`
+				messageId: `<${eventId}.crm-task-reminder@aerocrm.space>`
 			}
 		);
 	}
@@ -144,19 +144,19 @@ export class EmailService {
 			}
 		);
 	}
-	sendWincrmIntakeSla(to: string, content: SlaContent, eventId: string) {
+	sendCrmIntakeSla(to: string, content: SlaContent, eventId: string) {
 		return this.sendEmail(
 			to,
 			'Обращение без ответа в aeroCRM',
 			render(
-				WincrmIntakeSlaEmail({
+				CrmIntakeSlaEmail({
 					...content,
 					dueAtLabel: new Date(content.dueAt).toLocaleString('ru-RU', {
 						timeZone: content.timeZone
 					})
 				})
 			),
-			{ messageId: `<${eventId}.wincrm-intake-sla@aerocrm.space>` }
+			{ messageId: `<${eventId}.crm-intake-sla@aerocrm.space>` }
 		);
 	}
 }

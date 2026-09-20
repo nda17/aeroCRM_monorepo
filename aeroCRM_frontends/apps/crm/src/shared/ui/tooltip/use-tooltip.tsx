@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom'
 import styles from './Tooltip.module.scss'
 
 // Coordinate descriptions across navigation and actions without a global store.
-const OPEN_DESCRIPTION_EVENT = 'wincrm:navigation-description-open'
+const OPEN_DESCRIPTION_EVENT = 'aerocrm:navigation-description-open'
 
 interface TooltipAnchor {
 	element: HTMLElement

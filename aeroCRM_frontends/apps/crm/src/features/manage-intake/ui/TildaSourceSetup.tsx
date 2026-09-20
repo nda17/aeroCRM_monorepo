@@ -33,7 +33,7 @@ export const TildaSourceSetup = ({ sourceId }: { sourceId: string }) => {
 					этот адрес.
 				</li>
 				<li>
-					Укажите имя API-ключа <code>X-aeroCRM-Source-Token</code>, а в
+					Укажите имя API-ключа <code>X-CRM-Source-Token</code>, а в
 					значении — секретный ключ источника без <code>Bearer</code>.
 					Выберите передачу ключа <strong>в заголовке</strong>, не в теле
 					POST-запроса.

@@ -102,7 +102,7 @@ describe('Tilda payload normalization', () => {
 			Cookie: 'private-cookie',
 			Authorization: 'private-authorization',
 			api_key: 'private-api-key',
-			'X-WinCRM-Source-Token': 'private-token',
+			'X-CRM-Source-Token': 'private-token',
 			Password: 'private-password',
 			client_secret: 'private-secret',
 			auth: 'private-auth',

@@ -628,11 +628,11 @@ describe('NotificationDeliveryControlService', () => {
 						'support-team-email',
 						'support-team-telegram',
 						'support-client-email',
-						'wincrm-invitation-email',
-						'wincrm-task-reminder-email',
-						'wincrm-task-reminder-telegram',
-						'wincrm-intake-sla-email',
-						'wincrm-intake-sla-telegram'
+						'crm-invitation-email',
+						'crm-task-reminder-email',
+						'crm-task-reminder-telegram',
+						'crm-intake-sla-email',
+						'crm-intake-sla-telegram'
 					]
 				}
 			},

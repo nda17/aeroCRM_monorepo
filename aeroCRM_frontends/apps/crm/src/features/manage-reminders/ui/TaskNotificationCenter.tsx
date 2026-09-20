@@ -209,7 +209,6 @@ export const TaskNotificationPanel = ({
 					disabled={busy || !ready || query.isFetching}
 					onClick={() => {
 						void query.refetch()
-						toast('Обновляем уведомления')
 					}}
 				>
 					Обновить
@@ -229,7 +228,6 @@ export const TaskNotificationPanel = ({
 						disabled={context.permissions.isFetching}
 						onClick={() => {
 							void context.permissions.refetch()
-							toast('Повторно проверяем доступ к уведомлениям')
 						}}
 					>
 						Проверить доступ
@@ -246,7 +244,6 @@ export const TaskNotificationPanel = ({
 						disabled={context.self.loading}
 						onClick={() => {
 							void context.self.refetch()
-							toast('Повторно проверяем текущего сотрудника')
 						}}
 					>
 						Проверить сотрудника
@@ -288,7 +285,6 @@ export const TaskNotificationPanel = ({
 												return
 											}
 											setOpen(false)
-											toast('Открываем задачу')
 										}}
 									>
 										{item.title}

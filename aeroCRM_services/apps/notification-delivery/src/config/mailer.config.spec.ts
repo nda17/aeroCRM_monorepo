@@ -16,10 +16,11 @@ describe('mailer config', () => {
 		jest.clearAllMocks();
 	});
 
-	it('preserves explicit SMTP settings and the default sender', async () => {
+	it('preserves explicit SMTP settings and the required sender', async () => {
 		const config = new ConfigService({
 			MODE: 'production',
 			SMTP_SERVER: 'smtp.example.com',
+			SMTP_FROM: '"aeroCRM" <no-reply@aerocrm.space>',
 			SMTP_PORT: '2526',
 			SMTP_SECURE: 'false',
 			SMTP_LOGIN: 'mailer',
@@ -40,7 +41,7 @@ describe('mailer config', () => {
 				auth: { user: 'mailer', pass: 'password' }
 			},
 			defaults: {
-				from: '"winwidget.ru" <no-reply@winwidget.ru>'
+				from: '"aeroCRM" <no-reply@aerocrm.space>'
 			}
 		});
 	});
@@ -49,6 +50,7 @@ describe('mailer config', () => {
 		const config = new ConfigService({
 			MODE: 'development',
 			SMTP_SERVER: 'localhost',
+			SMTP_FROM: '"aeroCRM" <no-reply@aerocrm.space>',
 			SMTP_PORT: 'invalid',
 			SMTP_SECURE: 'invalid',
 			SMTP_LOGIN: 'mailer',
@@ -73,7 +75,7 @@ describe('mailer config', () => {
 				socketTimeout: 15_000,
 				auth: { user: 'mailer', pass: 'password' }
 			},
-			{ from: '"winwidget.ru" <no-reply@winwidget.ru>' }
+			{ from: '"aeroCRM" <no-reply@aerocrm.space>' }
 		);
 	});
 });

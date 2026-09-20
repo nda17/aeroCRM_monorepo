@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
-import toast from 'react-hot-toast'
 import { useWorkdaySession } from '@/entities/crm-workday'
 import { listInbox } from '@/entities/intake'
 import { invalidContractError } from '@/shared/api/authenticated-http-client'
@@ -66,7 +65,6 @@ export const WorkdayInboxSummary = ({
 				<Link
 					className={styles.inboxLink}
 					href="/inbox"
-					onClick={() => toast('Открываем входящие')}
 				>
 					{content}
 				</Link>

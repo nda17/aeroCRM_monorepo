@@ -12,13 +12,13 @@ import {
 } from './billing-capacity.service';
 import { commerceHash } from './billing.validation';
 import type {
-	WincrmCheckoutCommand,
-	WincrmCommerceCommandProof
+	CrmCheckoutCommand,
+	CrmCommerceCommandProof
 } from './billing.contract';
 
 const workspaceId = randomUUID();
 const actorSubject = 'billing-owner';
-const checkout = (): Omit<WincrmCheckoutCommand, 'capacityFence'> => ({
+const checkout = (): Omit<CrmCheckoutCommand, 'capacityFence'> => ({
 	schemaVersion: 1,
 	workspaceId,
 	actorSubject,
@@ -139,8 +139,8 @@ function fixture() {
 	);
 	const proof = (
 		op: CrmBillingOperation,
-		patch: Partial<WincrmCommerceCommandProof> = {}
-	): WincrmCommerceCommandProof => ({
+		patch: Partial<CrmCommerceCommandProof> = {}
+	): CrmCommerceCommandProof => ({
 		schemaVersion: 1,
 		workspaceId,
 		commandId: op.commandId,
@@ -188,7 +188,7 @@ describe('CRM Billing durable capacity fence', () => {
 		expect(f.tx.crmBillingOperation.create).toHaveBeenCalledTimes(1);
 		expect(f.billing.request).not.toHaveBeenCalled();
 		expect(f.tx.$executeRaw.mock.calls.flat()).toContain(
-			`wincrm-team:${workspaceId}`
+			`crm-team:${workspaceId}`
 		);
 		expect(f.state.capacity).toMatchObject({
 			pendingOperationId: command.commandId,
@@ -297,7 +297,7 @@ describe('CRM Billing durable capacity fence', () => {
 		const f = fixture(),
 			op = await f.service.prepare('AEROCRM_CHECKOUT', checkout());
 		const period = { totalSeats: 5 } as NonNullable<
-			WincrmCommerceCommandProof['period']
+			CrmCommerceCommandProof['period']
 		>;
 		const scheduled = await f.service.applyProof(
 			op,

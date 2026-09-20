@@ -165,7 +165,7 @@ describe('YooKassaService safe readiness', () => {
 	});
 
 	it.each(['ONE_TIME', 'RECURRING'] as const)(
-		'isolates the aeroCRM %s request without changing Widgets metadata',
+		'uses the aeroCRM %s request metadata contract',
 		async kind => {
 			process.env.CRM_PAYMENT_LAUNCH_MODE = 'test';
 			process.env.YOOKASSA_TEST_SHOP_ID = 'test-shop-id';
@@ -195,7 +195,7 @@ describe('YooKassaService safe readiness', () => {
 						: {}),
 					kind
 				},
-				'wincrm-provider-command-1'
+				'crm-provider-command-1'
 			);
 			const [, options] = fetchMock.mock.calls[0] as [
 				string,
@@ -219,7 +219,7 @@ describe('YooKassaService safe readiness', () => {
 				currency: 'RUB'
 			});
 			expect(options.headers['Idempotence-Key']).toBe(
-				'wincrm-provider-command-1'
+				'crm-provider-command-1'
 			);
 			if (kind === 'RECURRING') {
 				expect(body.payment_method_id).toBe('crm-saved-method');

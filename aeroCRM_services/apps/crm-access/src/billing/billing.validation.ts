@@ -9,7 +9,7 @@ import {
 import type {
 	CommerceCommandType,
 	CommerceUserCommand,
-	WincrmQuoteRequest
+	CrmQuoteRequest
 } from './billing.contract';
 
 export const billingEnabled = (config: ConfigService): boolean => {
@@ -95,7 +95,7 @@ export function query(
 }
 export function parseQuote(
 	body: unknown
-): Omit<WincrmQuoteRequest, 'actorSubject'> {
+): Omit<CrmQuoteRequest, 'actorSubject'> {
 	if (
 		!isRecord(body) ||
 		!hasExactKeys(body, [
@@ -114,7 +114,7 @@ export function parseQuote(
 	)
 		invalid();
 	workspace(body.workspaceId);
-	return body as unknown as Omit<WincrmQuoteRequest, 'actorSubject'>;
+	return body as unknown as Omit<CrmQuoteRequest, 'actorSubject'>;
 }
 export function parseCommand(
 	type: CommerceCommandType,

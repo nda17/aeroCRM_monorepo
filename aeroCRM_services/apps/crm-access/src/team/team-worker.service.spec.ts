@@ -123,7 +123,7 @@ const setup = () => {
 	return { worker, prisma, rows, outbox, rabbit, admissions };
 };
 
-describe('WinCRM team durable delivery', () => {
+describe('aeroCRM team durable delivery', () => {
 	afterEach(() => jest.useRealTimers());
 	it('takes a durable PROCESSING receipt before the first external call and acks only after delivered commit', async () => {
 		const { worker, rows, admissions, rabbit } = setup();

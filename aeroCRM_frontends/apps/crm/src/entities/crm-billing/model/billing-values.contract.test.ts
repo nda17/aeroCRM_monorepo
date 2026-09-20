@@ -39,7 +39,7 @@ const quote: BillingQuote = {
 	startsAt: '2026-09-10T12:00:00.000Z',
 	expiresAt: '2026-10-10T12:00:00.000Z',
 	period: null,
-	consent: { version: 'wincrm-v1', text: 'Synthetic consent text' }
+	consent: { version: 'test-consent-v1', text: 'Synthetic consent text' }
 }
 
 describe('strict Billing commerce values', () => {

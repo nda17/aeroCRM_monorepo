@@ -17,7 +17,7 @@ import {
 	lockBillingCommand
 } from './billing-command-idempotency';
 import { requireCrmCommercialPolicy } from './crm-commercial-policy.service';
-import { readWincrmPriceSnapshot } from './wincrm-commerce.helpers';
+import { readCrmPriceSnapshot } from './crm-commerce.helpers';
 
 const CRM_PRODUCT_CODE = 'AEROCRM';
 const CRM_TRIAL_PLAN_CODE = 'TRIAL';
@@ -73,7 +73,7 @@ export class CrmEntitlementService {
 			orderBy: [{ startsAt: 'desc' }, { id: 'desc' }]
 		});
 		if (!paid) return this.response(entitlement, now);
-		const snapshot = readWincrmPriceSnapshot(paid.priceSnapshot);
+		const snapshot = readCrmPriceSnapshot(paid.priceSnapshot);
 		return this.response(
 			{
 				...entitlement,
@@ -119,7 +119,7 @@ export class CrmEntitlementService {
 							});
 							if (!current) {
 								throw new Error(
-									'WinCRM entitlement is missing for an accepted activation receipt'
+									'aeroCRM entitlement is missing for an accepted activation receipt'
 								);
 							}
 							this.assertAcceptedProvisioningProvenance(
@@ -136,7 +136,7 @@ export class CrmEntitlementService {
 
 						await transaction.$executeRaw(Prisma.sql`
 							SELECT pg_advisory_xact_lock(
-								hashtextextended(${`billing-wincrm-entitlement:${dto.workspaceId}`}, 0)
+								hashtextextended(${`billing-crm-entitlement:${dto.workspaceId}`}, 0)
 							)
 						`);
 						const existing = await transaction.crmEntitlement.findUnique({
@@ -206,7 +206,7 @@ export class CrmEntitlementService {
 				}
 			}
 		}
-		throw new Error('WinCRM trial activation retry loop exhausted');
+		throw new Error('aeroCRM trial activation retry loop exhausted');
 	}
 
 	private response(
@@ -313,7 +313,7 @@ export class CrmEntitlementService {
 			Array.isArray(result) ||
 			typeof result.activated !== 'boolean'
 		) {
-			throw new Error('WinCRM activation receipt has an invalid result');
+			throw new Error('aeroCRM activation receipt has an invalid result');
 		}
 		if (!result.activated) return;
 		if (
@@ -323,7 +323,7 @@ export class CrmEntitlementService {
 			entitlement.activatedByUserId !== dto.activatedByUserId
 		) {
 			throw new Error(
-				'WinCRM entitlement provenance does not match its accepted activation receipt'
+				'aeroCRM entitlement provenance does not match its accepted activation receipt'
 			);
 		}
 	}

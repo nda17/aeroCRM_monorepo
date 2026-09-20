@@ -15,3 +15,11 @@
 *.sql.gz
 .deploy/
 deploy/private/
+**/.gradle/
+**/build/
+**/local.properties
+*.apk
+*.aab
+*.keystore
+*.jks
+*.p12

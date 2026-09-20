@@ -183,8 +183,7 @@ const DealsWorkspaceScreen = ({
 				queryKey: ['sales', 'deals', 'stage']
 			})
 		if (result.every(item => !item.isError)) {
-			if (layout === 'board') toast('Воронка обновляется')
-			else toast.success('Данные обновлены')
+			toast.success('Данные обновлены')
 		} else toast.error('Не удалось обновить данные')
 	}
 	const saved = () => {

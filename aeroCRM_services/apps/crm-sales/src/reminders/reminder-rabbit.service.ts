@@ -104,7 +104,7 @@ export class ReminderRabbitService
 		if (!this.channel) throw new Error('REMINDER_BROKER_DISABLED');
 		if (
 			eventType !== REMINDER_TICK &&
-			!/^notification\.wincrm\.task-reminder\.(email|telegram)\.requested\.v1$/.test(
+			!/^notification\.crm\.task-reminder\.(email|telegram)\.requested\.v1$/.test(
 				eventType
 			)
 		)

@@ -37,11 +37,10 @@ describe('OperationsRabbitMqService consumer readiness', () => {
 		await new Promise<void>(resolve => setImmediate(resolve));
 		await new Promise<void>(resolve => setImmediate(resolve));
 	};
-	it('keeps seven service audit sources and no Core compatibility queue', () => {
+	it('keeps six service audit sources and no Core compatibility queue', () => {
 		expect(OPERATIONS_AUDIT_SOURCES.map(source => source.source)).toEqual([
 			'campaigns',
 			'reporting',
-			'widgets',
 			'billing',
 			'identity',
 			'platform',

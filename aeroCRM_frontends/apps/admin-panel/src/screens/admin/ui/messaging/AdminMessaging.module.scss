@@ -1,3 +1,5 @@
+@use '@aerocrm/web/src/app/styles/select';
+
 .wrapper {
 	@apply relative flex w-full min-w-0 flex-col;
 }
@@ -105,10 +107,6 @@
 .selectWrap {
 	@apply relative inline-flex items-center;
 
-	&::after {
-		content: '';
-		@apply pointer-events-none absolute right-3 size-2 rotate-45 border-b-2 border-r-2 border-[#6b2d8f] -translate-y-0.5;
-	}
 }
 
 .failureSkeletons {
@@ -210,4 +208,8 @@
 
 .lockedBadge {
 	@apply rounded-full border border-[#d7c4ee] bg-white px-4 py-2 text-sm font-semibold text-[#6b2d8f] shadow-sm;
+}
+
+.filters select {
+	@include select.chevron;
 }

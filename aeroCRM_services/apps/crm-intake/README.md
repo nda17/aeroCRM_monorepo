@@ -1,13 +1,11 @@
-# WinCRM Intake
+# aeroCRM Intake
 
-Автономный Inbox WinCRM. Реализованы ручные обращения, поиск, серверная
+Автономный Inbox aeroCRM. Реализованы ручные обращения, поиск, серверная
 пагинация, отклонение с проверкой версии, история и настройка API-источников
 с безопасной ротацией/отзывом credentials, синхронный приём API/webhook и
 атомарный импорт подтверждённых CSV-строк.
 
-Нативная доставка Widgets реализована отдельным opt-in consumer и по умолчанию
-выключена; её включение требует совместимого reader и проверенных интеграционных
-gates, описанных ниже. Явный приём в работу запускает durable
+Явный приём в работу запускает durable
 workflow создания контакта, сделки и первой задачи; `ACCEPTED` появляется
 только после подтверждённых результатов Customers и Sales.
 
@@ -33,7 +31,7 @@ RabbitMQ, restart policy и восстановления очередей пер
 
 ## SLA входящих: первый ответ и уведомления
 
-Миграция `20260908150000_add_intake_sla` добавляет только Intake-owned
+Базовая миграция `20260920000000_init_aerocrm` содержит Intake-owned
 `sla_rules`, append-only `sla_commands` (журнал команд), `sla_jobs`,
 `sla_receipts`, `sla_outbox`, append-only `sla_notifications`. Существующие источники, видимость обращений,
 назначения и семь процессов не меняются. Runtime/API SLA по умолчанию
@@ -79,7 +77,7 @@ DB-trigger атомарно отменяет задания при выходе 
 Два новых process roles того же Intake image: `sla-worker` (5317, PG pool 2)
 и `sla-publisher` (5318, PG pool 1). Они не входят в старый `all`.
 Отдельный `CRM_INTAKE_SLA_RABBITMQ_URL` нужен каждому процессу; fallback на
-acceptance/Widgets principal отсутствует. Transport: direct exchanges
+acceptance principal отсутствует. Transport: direct exchanges
 `aerocrm.crm-intake.sla.events` / `aerocrm.crm-intake.sla.dead-letter`,
 queue `aerocrm.crm-intake.sla.v1` / `.dead-letter`, exact routing key
 `crm.intake.sla.evaluate.v1`. JSON содержит только
@@ -117,11 +115,11 @@ ALL/OWN/TEAM права, точный membership, текущая оплачен�
 Worker атомарно создаёт `sla_notifications` (уникальная пара job+binding+канал),
 ND Outbox и следующую страницу job. В broker только opaque reference:
 `{schemaVersion:1,eventId,eventType,occurredAt,
-reference:{type:"wincrm-intake-sla",id:eventId,workspaceId}}`.
-Два eventType: `notification.wincrm.intake-sla.email.requested.v1` и
-`notification.wincrm.intake-sla.telegram.requested.v1`, exchange `aerocrm.events`.
-ND kinds `wincrm-intake-sla-email`, `wincrm-intake-sla-telegram` **не входят в
-defaults**; новый reader не изменяет Widgets или Sales/ASSIGNED уведомления.
+reference:{type:"crm-intake-sla",id:eventId,workspaceId}}`.
+Два eventType: `notification.crm.intake-sla.email.requested.v1` и
+`notification.crm.intake-sla.telegram.requested.v1`, exchange `aerocrm.events`.
+ND kinds `crm-intake-sla-email`, `crm-intake-sla-telegram` **не входят в
+defaults**; reader не изменяет Sales/ASSIGNED уведомления.
 
 ND захватывает свой существующий durable delivery receipt, затем запрашивает
 `POST /internal/v1/notification-delivery/intake-sla/:id/delivery-context`
@@ -148,14 +146,14 @@ crash до фиксации receipt; exactly-once SMTP/Telegram не обеща�
    ND получает `CRM_INTAKE_INTERNAL_BASE_URL`; Intake API и новые роли —
    `NOTIFICATION_DELIVERY_INTERNAL_BASE_URL`, `CRM_ACCESS_INTERNAL_BASE_URL`
    и существующий `CRM_ACCESS_CRM_INTAKE_TOKEN`. Никаких новых Identity ключей.
-4. В существующем vhost `winwidget` provisioner создаёт SLA direct exchanges/
-   queues выше. Новые независимые principals: `winwidget-crm-intake-sla-worker`
+4. В существующем vhost `aerocrm` provisioner создаёт SLA direct exchanges/
+   queues выше. Новые независимые principals: `aerocrm-crm-intake-sla-worker`
    (read только SLA main queue, configure/write пустые) и
-   `winwidget-crm-intake-sla-publisher` (write только SLA events, SLA dead-letter,
+   `aerocrm-crm-intake-sla-publisher` (write только SLA events, SLA dead-letter,
    aerocrm.events; read/configure пустые). Topic ACL aerocrm.events:
    только два exact SLA eventType. Старые семь Intake principals не менять.
 5. ND topology: для каждого канала EMAIL/TELEGRAM базовая очередь
-   `aerocrm.notification.wincrm.intake-sla.email|telegram`, её `.dead-letter`
+   `aerocrm.notification.crm.intake-sla.email|telegram`, её `.dead-letter`
    и `.retry-v2.1`…`.retry-v2.3` по существующему ND `RETRY_DELAYS_MS`.
    Bindings и manual retry строго через существующие `MESSAGING_*` helpers,
    без нового retry engine. Добавить только эти names в ND exact ACL, сохранить
@@ -177,7 +175,7 @@ crash до фиксации receipt; exactly-once SMTP/Telegram не обеща�
 Production env/Infra в кодовом этапе не меняются. Полные owner env файлы,
 SHA/immutable images и scoped activation согласует release owner через CI/CD.
 Targeted проверки: Intake `pnpm typecheck`, `pnpm test -- src/sla`; Access
-`pnpm test -- intake-sla`; ND `pnpm test -- wincrm-intake-sla wincrm-task-reminder`.
+`pnpm test -- intake-sla`; ND `pnpm test -- crm-intake-sla crm-task-reminder`.
 Эти проверки не доказывают production-активацию или фактическую доставку.
 
 ## Граница владения
@@ -283,7 +281,7 @@ ALL/TEAM/OWN scope, в том числе в READ_ONLY. Невидимый имп
 ограниченная локальная операция не публикует RabbitMQ-события; последующее
 явное принятие использует обычный durable workflow.
 
-Миграция `20260906130000_add_csv_imports` добавляет только собственные
+Базовая миграция `20260920000000_init_aerocrm` содержит собственные
 `csv_imports`/`csv_import_rows`; runtime получает **SELECT/INSERT**, без
 UPDATE/DELETE/TRUNCATE/DDL. Composite workspace FKs и deferred integrity
 проверяют полный rowCount, origin/actor/team, создание audit и bound receipt.
@@ -330,16 +328,16 @@ GET источников требует `OWNER|CRM_ADMIN` и `intake:read`; бе
 ### Формы Tilda
 
 `POST /api/v1/crm/intake/ingest/:sourceId/tilda` — адаптер обычных форм Tilda
-внутри Intake, поверх существующего API-источника. Покупка Widgets не нужна.
+внутри Intake, поверх существующего API-источника. Отдельная покупка интеграции не требуется.
 Новых сервисов, схем, переменных окружения или источника `kind:TILDA` нет.
 Прежний JSON webhook ниже не изменён.
 
 Подключение для OWNER/CRM_ADMIN:
 
-1. WinCRM → Входящие → Источники → **Подключить Tilda**. Указать понятное
+1. aeroCRM → Входящие → Источники → **Подключить Tilda**. Указать понятное
    название сайта/формы, создать источник и скопировать одноразовый ключ.
 2. Tilda → Настройки сайта → Формы → Webhook. Вставить URL из инструкции
-   WinCRM (обязательно с `/tilda`), имя API-ключа `X-WinCRM-Source-Token`,
+   aeroCRM (обязательно с `/tilda`), имя API-ключа `X-CRM-Source-Token`,
    значение — ключ без префикса Bearer. Передавать ключ **в заголовке**,
    не в POST-полях и не в URL. Cookies передавать не нужно.
 3. Сохранить. POST `test=test` проходит проверку текущего source token,
@@ -369,7 +367,7 @@ Cookies, поля с секретами и авторизацией не сох�
 через RabbitMQ. Дальнейшие существующие SLA/acceptance потоки не меняются.
 
 Ключ хранится только хэшом; ротация/отзыв и текущие права действуют как у API.
-Потерянный ключ заменяют в WinCRM и обновляют в Tilda. В READ_ONLY приём и
+Потерянный ключ заменяют в aeroCRM и обновляют в Tilda. В READ_ONLY приём и
 проверка подключения не проходят. Tilda ожидает ответ за 5 секунд и делает
 ограниченные повторы; после длительной недоступности проверяйте журнал заявок
 Tilda и повторяйте отправку с прежним tranid — бесконечный retry не обещается.
@@ -591,8 +589,8 @@ credentials lifecycle, конкурентный API replay, source-scoped клю
 rollback и append-only grants;
 удаляет только созданные им случайные workspace через migration-role.
 
-Production rollout отсутствует: новые CRM VPS пока не созданы. Нынешний
-этап локальный, существующий Widgets runtime не меняется.
+Production использует отдельную инфраструктуру aeroCRM. Точный релиз и
+проверки фиксируются в корневом `aeroCRM.md`.
 
 ## Bounded owner export
 
@@ -600,7 +598,7 @@ GET `/api/v1/crm/intake/exports/{entity}?workspaceId={uuid-v4}&format=json|csv`,
 where entity is `inbox`. A current user Bearer session is required.
 Only OWNER with both `intake:read` and `intake:export` may export,
 including GRACE and READ_ONLY. This is an additive route: ordinary CRUD semantics,
-Widgets and existing source endpoints are unchanged.
+Existing source endpoints retain their own authorization policy.
 
 Each request reads only this service's business tables in one REPEATABLE READ,
 READ ONLY snapshot, ordered by immutable UUID with keyset pages of 500. Archived
@@ -640,11 +638,11 @@ re-import**. Column order is fixed:
 
 - inbox: `id, workspaceId, title, name, phone, email, message, origin, sourceId, status, createdBySubject, teamId, version, contactId, dealId, rejectionReason, receivedAt, updatedAt, acceptedAt, rejectedAt`.
 
-Successful replies have a fixed attachment filename `wincrm-{entity}.{format}`,
+Successful replies have a fixed attachment filename `aerocrm-{entity}.{format}`,
 `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` and an exact origin
-`Content-Length`. Metadata headers are `X-WinCRM-Export-Entity`, `-Rows`,
+`Content-Length`. Metadata headers are `X-CRM-Export-Entity`, `-Rows`,
 `-Snapshot-At`, `-Schema`, `-Bytes`, `-Actor-SHA256` plus
-`X-WinCRM-Workspace-Id`. Actor SHA-256 is lowercase hexadecimal over the exact
+`X-CRM-Workspace-Id`. Actor SHA-256 is lowercase hexadecimal over the exact
 UTF-8 subject: it is pseudonymous, not anonymous. `-Bytes` is the logical UTF-8
 body length; proxies may compress/remove/change Content-Length and browsers
 decode automatically. Consumers must bound their decoded stream, not equate
@@ -656,7 +654,7 @@ authority, 413 row/byte limit, 429 process memory guard, and 503 dependency,
 deadline or audit failure. No row, request value or credential is included in
 error details or logs.
 
-Migration `20260906140000_add_export_audit` adds only this service's
+The service baseline includes its own
 `crm_intake.export_audit`: UUID, workspace, actor subject, entity, format,
 row/byte counts, snapshot timestamp and preparation timestamp. Grant runtime
 **SELECT, INSERT only**, including SELECT for readiness; no UPDATE, DELETE,
@@ -676,497 +674,3 @@ updates, fresh revoke, OWN/TEAM isolation, archives, output limits, SQL timeout,
 audit failure and append-only/foreign-schema ACL. These PG tests stub the Access
 response to control revocation; end-to-end HTTP authorization remains a separate
 local-stack/rollout gate.
-
-## Managed Widgets control plane (opt-in)
-
-`CRM_INTAKE_WIDGETS_ENABLED=false` by default. The control plane manages the
-desired Widgets connection and its durable acknowledgement; lead delivery belongs
-to the separate opt-in transfer processes documented below. Control commands do
-not create Inbox entries or import history. Existing manual/CSV/API sources,
-source secrets and ingestion retain their contracts.
-With the flag off, the managed controller, its SQL readiness checks, Widgets HTTP
-client and new credentials are absent from existing API paths. The four CRM apps
-remain independent; no new CRM service or shared database is introduced.
-
-### Public HTTP and permissions
-
-Base `/api/v1/crm/intake/widget-sources`, with current Identity Bearer session:
-
-- `GET /?workspaceId&page&pageSize` and `GET /:id?workspaceId`: OWNER/CRM_ADMIN
-  with `intake:read`, including READ_ONLY. Server pagination uses the existing
-  Intake bounds (page size at most 100).
-- `GET /candidates?workspaceId&page&pageSize`: writable OWNER/CRM_ADMIN with
-  `intake:manage-sources`; returns actual owned widgets even when Widgets billing
-  is ineligible, with a separate explicit eligibility result.
-- `POST /`: `{schemaVersion:1,workspaceId,commandId,name,widgetType,widgetId,teamId}`.
-  Name is at most 200 characters. `teamId` is a required nullable UUID and, when
-  present, must be in the actor's fresh authorized team IDs.
-- `POST /:id/configure`:
-  `{schemaVersion:1,workspaceId,commandId,expectedVersion,enabled}`.
-- `POST /:id/retry`: `{schemaVersion:1,workspaceId,commandId,expectedVersion}`;
-  only the current BLOCKED/ERROR command can be retried.
-
-All POSTs require writable OWNER/CRM_ADMIN and exact `Idempotency-Key=commandId`.
-They return **202**, `Cache-Control: no-store`, exactly
-`{schemaVersion:1,source,command:{id:commandId,state:'QUEUED'}}`. This is a durable
-queued acknowledgement, not proof that Widgets has applied it. The stored reply
-is historical: an exact public replay returns the original response; read the
-source again to observe convergence. A command UUID shares the existing global
-Intake namespace with manual/API/CSV commands, protected by the same actor,
-workspace, raw request hash and nonblocking UUID advisory lock. Cross-purpose or
-changed-body reuse is 409. The old sources DTO and endpoint are not reused.
-
-Source fields are exactly `id,workspaceId,kind:'WIDGET',name,widgetType,widgetId,
-teamId,createdBySubject,version,enabled,generation,controlVersion,
-appliedControlVersion,appliedGeneration,syncState,lastErrorCode,createdAt,
-updatedAt,syncedAt`. Applied fields/timestamp and error are nullable; sync state
-is PENDING/SYNCED/BLOCKED/ERROR. Dates are canonical ISO UTC. Name, routing team,
-widget binding and original actor are immutable in this phase. Version equals
-the monotonically increasing desired control version. A false-to-true transition
-increments generation; local disable sets `enabled=false` in the public command
-transaction immediately. Observed acknowledgement updates never change the
-desired version and cannot overwrite a newer command.
-
-Candidates envelope is `{schemaVersion:1,workspaceId,page,pageSize,total,
-eligibility,items}`. Eligibility fields are `eligible,reason,plan,startsAt,
-expiresAt,checkedAt,validUntil`. Each item is `widgetType,widgetId,name,isActive,
-publishedVersion,createdAt,connection,sourceId`; connection is NONE,
-THIS_WORKSPACE or OTHER_WORKSPACE. `sourceId` is only exposed for this workspace;
-other workspace IDs, connector IDs, billing IDs and canonical owner are omitted.
-Widget types are WHEEL, QUIZ, CALLBACK, TIMER, STOP_OFFER and CALCULATOR.
-
-Errors do not echo input or dependency bodies: 400 malformed DTO/key, 401 session,
-403 role/subscription/delegation restrictions, 404 unknown source, 409 command
-collision/CAS/already-connected/retry-state, 503 unavailable dependency/transaction.
-Asynchronous errors are the closed codes DELEGATION_REVOKED, OWNER_CHANGED,
-SUBSCRIPTION_REQUIRED, WIDGET_UNAVAILABLE, ALREADY_CONNECTED, CONTROL_CONFLICT,
-DEPENDENCY_UNAVAILABLE or INVALID_RESPONSE; never arbitrary provider text.
-
-### Fresh authority and cross-VPS boundary
-
-Intake obtains canonical ownership only from fresh scoped Access
-`POST /internal/v1/crm-access/authorize-widget-source`, body
-`{schemaVersion:1,workspaceId,subject}`. Response extends the existing exact
-authorization context with `ownerSubject`. Access obtains that owner from active
-Identity workspace/membership records; public input never chooses the owner.
-The worker reauthorizes the **original creator** before every enabling HTTP call,
-checks current owner equality and routing-team membership, and rechecks the local
-desired command/lease before sending. Demotion, disable, expiry or changed owner
-halts enabling; retry never substitutes the administrator requesting the retry.
-An already-authorized durable disabling command may converge technically after
-CRM expiry without obtaining permission to create business data.
-
-Scoped Widgets HTTP uses `WIDGETS_INTERNAL_BASE_URL`, distinct
-`WIDGETS_CRM_INTAKE_TOKEN` and `x-aerocrm-service: crm-intake`; no saved JWT.
-Only exact HTTPS origins or local loopback HTTP are valid. Redirects are rejected,
-JSON reads are bounded (candidates 256 KiB/configure 16 KiB), with 250–5000 ms total
-timeout (`CRM_INTAKE_WIDGETS_HTTP_TIMEOUT_MS`, default 3000). A separate VPS uses a
-private HTTPS ingress forwarding to the owning app's actual loopback socket;
-direct private-address HTTP and arbitrary forwarded-header trust are not allowed.
-Public Gateway must not publish these internal endpoints.
-
-Widgets configure uses its frozen monotonic controlVersion/generation contract.
-An exact downstream command UUID/body is reused after response loss; historical
-acknowledgement is validated against that exact binding, not mistaken for current
-remote state. A later local desired command wins over any late success or error.
-No compensating deletion, owner substitution or silent reconnection occurs.
-
-### Own transactions, processes and queues
-
-Migration `20260907020000_add_managed_widget_control` adds only
-`crm_intake.managed_widget_sources`, `widget_control_jobs`,
-`widget_control_receipts` and `widget_control_outbox`, and additively extends the
-existing command/activity kind allowlists. Runtime needs SELECT/INSERT/UPDATE on
-all four (no DELETE/TRUNCATE until a separate retention contract), and
-the existing SELECT/INSERT-only `intake_commands`/`intake_activities` grants.
-There are no sequence or foreign-schema privileges. Immutable binding/terminal
-proof triggers and deferred composite FKs are checked explicitly with SET
-CONSTRAINTS IMMEDIATE before returning from each command/consumer transaction.
-SQL lock/statement/transaction timeouts bound contention; network calls are outside
-database transactions.
-
-Source, immutable job, global command receipt, audit and Outbox commit atomically.
-The consumer claims `(eventId, consumer='crm-intake.widget-control.v1')` and job
-with a 30-second CAS lease before external calls, renewing every 10 seconds.
-Success/failed receipt and acknowledgement/retry Outbox update atomically before
-ack. Manual retry creates a new event ID and Outbox in the retry transaction but
-keeps the exact downstream command ID/body. Obsolete events cannot take over a
-new command. Retain commands, receipts and bindings until an explicit replay
-horizon/maintenance policy is agreed; do not auto-prune proof or active jobs.
-
-Independent `CRM_INTAKE_PROCESS_ROLE` values are `widget-control-worker` (5313)
-and `widget-control-publisher` (5314), requiring the feature flag. API remains
-5310, acceptance worker/publisher remain 5311/5312. Each background process uses
-its own scoped principal via its own `CRM_INTAKE_RABBITMQ_URL`; API-only needs no
-broker. `all` is for local checks. Consumer drain and publisher completion occur
-before Prisma disconnect. No new broker is required, only separate topology/ACL:
-
-- Main direct exchange `aerocrm.crm-intake.widget-control.events`, routing key
-  `crm.intake.widget-control.requested.v1`, queue
-  `aerocrm.crm-intake.widget-control.v1`.
-- Retries after 5/30/120 seconds remain in the transactional PostgreSQL Outbox
-  until `availableAt` (database clock), then publish directly to MAIN. No new
-  TTL retry exchange/queues or broker DLX relay.
-- Dead-letter direct exchange `aerocrm.crm-intake.widget-control.dead-letter`,
-  main routing key, queue main queue plus `.dead-letter`.
-
-Publisher write allowlist is only these two exchanges; worker read is only its
-main queue. Runtime `CRM_INTAKE_RABBITMQ_ASSERT_TOPOLOGY=false`; a separate
-provisioner owns configure/bind permissions for the exact two exchanges and
-main/DLQ queues. No acceptance or general Widgets queue wildcard.
-Main/retry/DLQ envelopes contain only schemaVersion/eventId/
-workspaceId/sourceId/commandId/controlVersion/generation, never JWT, canonical
-owner, widget contact payload or source secret. Publisher sends Buffer JSON with
-confirm **and** mandatory-return verification, and retries transient transport
-failures indefinitely with a bounded backoff; consumer uses basic.consume, not
-broker polling. Exhausted processing retries become visible ERROR with durable
-DLQ; public retry remains an explicit authorized command.
-
-### Delayed-retry compatibility and release gate
-
-Acceptance and widget-control publishers use PostgreSQL time for eligibility,
-claims, confirmation and transport backoff. New retry rows use `MAIN`; existing
-`RETRY_1`/`RETRY_2`/`RETRY_3` Outbox rows remain readable and publish directly to
-MAIN only after their stored availability plus the legacy delay. Eligibility
-is applied before the bounded batch limit, so future legacy rows cannot starve
-eligible MAIN messages. No immutable route or business payload is rewritten.
-
-Legacy broker retry queues are neither asserted nor deleted/purged by the new
-runtime. Before a rollout, fence old publishers/workers, inventory and drain
-existing TTL queues while their original targets are available, and reconcile
-all durable nonterminal workflows/jobs and Outbox. Do not run mixed versions or
-remove old broker resources until this evidence is complete. Disabling a feature
-flag does not prove that pending messages are safe to discard.
-Previously `PUBLISHED` Outbox rows are not reset automatically: if their legacy
-DLX delivery was already lost, use reviewed service-owned recovery based on
-durable evidence. The new publisher does not claim to reconstruct that result.
-
-A confirm for the initial retry-queue publish does not prove the later classic
-DLX republish; see the [RabbitMQ dead-letter safety documentation](https://www.rabbitmq.com/docs/dlx#safety).
-The new delayed Outbox removes this relay from these CRM workflows; it does not
-prove the reliability of every existing consumer elsewhere in the platform.
-
-### Verification gates
-
-`pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm build` cover default-off module
-isolation, strict scoped clients, actual ephemeral loopback controller HTTP,
-authority/revoke/CAS/replay, independent messaging and shutdown ordering.
-`pnpm test:integration:widget-control` uses the same guarded isolated PG18 env as
-the other Intake integration scripts. Apply migrations externally with the
-migration role, grant the four own tables, then run with restricted runtime.
-The script does not load .env or migrate; it cleans only its random workspace
-through the separate migration role. It checks six concurrent identical creates,
-shared namespace, late acknowledgement versus disable, original-actor recovery,
-response loss, lease recovery, reached-after-insert rollback and DB/ACL invariants.
-Access/Widgets responses are controlled stubs in this PG test, not claimed as a
-cross-service HTTP proof.
-
-Optional `CRM_INTAKE_WIDGET_CONTROL_TEST_RABBITMQ_URL` must reference an isolated,
-empty, authenticated loopback test/CI vhost. It adds real push/confirm/mandatory,
-duplicate receipt and drain checks; the script refuses nonempty/consumed queues,
-does not purge, and closes only its connections. The owner of the fixture removes
-its broker resources. Full Identity → Access → Intake → Widgets HTTP authority,
-restricted broker ACL, and coordinated native lead transfer remain separate
-local-stack/release gates. Existing production flag stays off; no VPS deployment
-is part of this phase.
-
-## Нативные Widgets → Inbox: отдельный opt-in transfer consumer
-
-Этот срез добавляет доставку только новых заявок явно подключённых виджетов в
-общую Inbox. Он не принимает их в работу автоматически, не создаёт контакт,
-сделку или задачу, не переносит историю и не меняет прежние внешние интеграции
-Widgets. CRM остаётся самостоятельным продуктом; новая передача требует
-действующей EASY/HARD-подписки Widgets и текущего writable-доступа в CRM.
-
-### Сохранение исходника и совместимость readers
-
-`WidgetLeadSnapshotV1` сохраняется целиком в собственной `widget_entry_snapshots`,
-отдельно от краткой Inbox-записи. Строгий parser допускает шесть вариантов:
-
-- WHEEL: выбранный бонус.
-- QUIZ: результат, вопросы и выбранные варианты ответов.
-- CALLBACK: время звонка и часовой пояс.
-- TIMER и STOP_OFFER: соответствующий тип обращения без выдуманных деталей.
-- CALCULATOR: цена, валюта и типизированные ответы полей калькулятора.
-
-Общий snapshot содержит `schemaVersion`, `widget`, `lead`, `details`: тип и ID
-виджета, его имя/версию, ID и время исходной заявки, nullable исходные контакты,
-нормализованный телефон, безопасный page URL и список redactions. Максимум —
-256 KiB сериализованного UTF-8; URL не содержит credentials/query/fragment,
-опасный текст, некорректный Unicode, неизвестные поля и несогласованные типы
-отклоняются. Исходные поля не подменяются предположениями о клиенте.
-
-Новая запись имеет `origin:WIDGET`, `status:NEW`, `name` из непустого trimmed
-`contactName` либо null, `phone` только из подтверждённого E.164-поля, `email`
-только из валидного адреса в нижнем регистре, `message:null`. Нестандартный
-исходный email/phone остаётся в snapshot, но не выдаётся за нормализованный
-контакт. `receivedAt` — время доставки по БД; время исходной заявки остаётся
-в snapshot. Заголовок — фиксированная метка типа виджета.
-
-`inbox_entries.widget_source_id` имеет составной workspace-bound FK на
-`managed_widget_sources`. Он не записывается в прежний `source_id`, чей FK
-принадлежит API-источникам. Публичный `sourceId` проецируется по origin:
-API → `source_id`, WIDGET → `widget_source_id`, MANUAL/CSV → null. Краткий DTO
-по-прежнему имеет ровно 20 полей; список и 20-колоночный экспорт не содержат
-snapshot. JSON-экспорт сохраняет `name:null`, CSV представляет null пустой
-кавыченной ячейкой; typed details не входят в этот бизнес-экспорт.
-
-`GET /api/v1/crm/intake/inbox/:entryId/widget-details?workspaceId` возвращает
-ровно `{schemaVersion:1,workspaceId,entryId,sourceId,payload}` с `no-store`.
-Требуются свежая пользовательская авторизация, `intake:read` и видимость
-конкретной записи в ALL/TEAM/OWN; READ_ONLY разрешён. Невидимая или не-WIDGET
-запись даёт 404. Чтение идёт только из собственного durable snapshot:
-отключённая связь, истёкшая Widgets-подписка или выключенный transfer flag не
-скрывают уже полученные данные и не требуют нового вызова Widgets/Billing.
-
-В `POST /inbox/:id/accept` поле `contact.name` требуется только для
-`contact.mode:CREATE_FROM_ENTRY`, `origin:WIDGET`, `entry.name:null`. Это явно
-подтверждённое trimmed непустое имя до 200 символов без недопустимых controls.
-В остальных случаях поле запрещено; EXISTING не переименовывает выбранный
-контакт. Имя входит в immutable acceptance payload/request hash и downstream
-Customers CREATE, но исходная Inbox-запись и snapshot не переписываются.
-Acceptance полученной заявки использует обычные CRM write/scope правила, а не
-повторную проверку права на новую Widgets-передачу.
-
-Порядок rollout обязателен: миграции и grants → совместимые backend/frontend
-readers, export и acceptance → проверка source control, Widgets publisher,
-broker ACL/binding и transfer consumer → явное включение доставки. Расширение
-origin/name при текущем schemaVersion 1 несовместимо со старым строгим reader.
-После первой WIDGET-записи выключение flag само по себе не разрешает откат
-reader. MANUAL/API/CSV сохраняют обязательное имя и прежние payloads.
-
-### Контракт доставки, авторизация и собственная транзакция
-
-Upstream topic `aerocrm.events`, routing key и event type
-`widgets.wincrm.lead-transfer.requested.v1`, `messageId=eventId`. Тело содержит
-только `schemaVersion:1,eventType,eventId,occurredAt,transferId,connectorId,
-generation,workspaceId,sourceId,originalSubscriptionId,
-originalSubscriptionVersion,originalPeriodStartsAt,originalDeadline`.
-Четыре поля исходного периода nullable; они не заменяются новым периодом при
-продлении. Envelope ограничен 16 KiB; контактного имени, телефона, snapshot,
-JWT и source secret в RabbitMQ нет. Это отдельная очередь consumer, не общая
-очередь с другой интеграцией.
-
-До внешнего HTTP consumer атомарно захватывает
-`(eventId, consumer='crm-intake.widget-transfer.v1')`: PROCESSING, 30-секундный
-lease, CAS; renewal каждые 10 секунд. Дополнительно уникален transferId/consumer.
-Другой event/binding для той же передачи не исполняется. DELIVERED/SKIPPED
-duplicates не повторяют HTTP; зависший PROCESSING восстанавливается по lease,
-а старый retry generation/attempt не захватывает новую попытку.
-
-Для новой записи worker вызывает свежий Access `authorize-widget-source` с
-сохранёнными workspace и **первоначальным создателем** источника. Проверяются
-текущий canonical owner, OWNER/CRM_ADMIN, manage-sources, writable entitlement
-и назначенная команда. Затем scoped POST Widgets
-`/internal/v1/crm-intake/widget-transfers/:transferId/context` получает ровно
-`{schemaVersion:1,eventId,connectorId,generation,workspaceId,sourceId}`.
-Ответ ограничен 272 KiB и связывает те же ID с `deliver,reason,checkedAt,
-validUntil,payload`; положительный proof свежий не более 5 секунд и не выходит
-за первоначальный период. После него CRM-авторизация проверяется ещё раз.
-
-Короткая SERIALIZABLE-транзакция блокирует собственный managed source,
-повторяет local enabled/epoch fence и проверку срока по времени БД и процесса,
-сохраняет NEW Inbox + immutable snapshot + CREATED audit + DELIVERED receipt
-атомарно. Deferred proof constraints вызываются явно IMMEDIATE до возврата
-из callback. Сеть не вызывается внутри транзакции, чужие таблицы не читаются.
-Поздний ответ не отменяет disable или новую generation; expiry не даёт создать
-новые бизнес-данные. Ручной retry не подставляет нового actor вместо создателя.
-
-SKIPPED — окончательное прекращение этой передачи (например, local disable,
-другая generation, окончание исходного периода или неподдерживаемый snapshot).
-BLOCKED сохраняет поправимое ограничение делегирования/владения/eligibility;
-временные dependency failures проходят ограниченные processing retries, затем
-ERROR. Причины — закрытые технические коды, без текста провайдера и PII.
-Snapshot, receipt, activity и outbox не очищаются произвольным TTL: отдельный
-retention/replay horizon нужен до удаления доказательств или персональных данных.
-
-### Наблюдение и явный повтор
-
-`GET /api/v1/crm/intake/widget-sources/:sourceId/transfers` принимает
-`workspaceId,page,pageSize` (максимум 100) и возвращает
-`{schemaVersion:1,items,page,pageSize,total}`. OWNER/CRM_ADMIN с `intake:read`
-могут читать метаданные, включая READ_ONLY. Каждый item имеет ровно
-`id,workspaceId,sourceId,state,version,reason,entryId,occurredAt,receivedAt,
-updatedAt,completedAt`; `id` — transferId, payload/credentials отсутствуют.
-States: PROCESSING, RETRY_PENDING, BLOCKED, ERROR, DELIVERED, SKIPPED.
-Только DELIVERED имеет entryId; completedAt задан для DELIVERED/SKIPPED.
-
-`POST /widget-sources/:sourceId/transfers/:transferId/retry` принимает
-`{schemaVersion:1,workspaceId,commandId,expectedVersion}` и точный
-`Idempotency-Key`. Требуются writable OWNER/CRM_ADMIN, `intake:manage-sources`,
-BLOCKED/ERROR, действующий исходный deadline, локально включённый источник с
-той же generation. Receipt, retry generation, audit и Outbox MAIN создаются
-одной транзакцией в прежнем общем UUID-пространстве Intake команд.
-Ответ 202: `{schemaVersion:1,transfer,command:{id:commandId,state:'QUEUED'}}`,
-версия равна expectedVersion + 1. Неизменный повтор возвращает первоначальный
-сохранённый ответ после свежей авторизации; текущее состояние нужно перечитать.
-409 различает command conflict, version conflict и
-`crm_widget_transfer_retry_not_available`; 503 не означает откат команды.
-
-### Таблицы, процессы и broker ACL
-
-Additive migration `20260907030000_add_widget_transfer_inbox` расширяет только
-собственную схему Inbox и создаёт следующие таблицы:
-
-| Таблица `crm_intake`       | Runtime grants         |
-| -------------------------- | ---------------------- |
-| `widget_transfer_receipts` | SELECT, INSERT, UPDATE |
-| `widget_entry_snapshots`   | SELECT, INSERT         |
-| `widget_transfer_outbox`   | SELECT, INSERT, UPDATE |
-
-Ни одной новой таблице runtime не получает DELETE/TRUNCATE; snapshot не имеет
-UPDATE. DDL, sequences и чужие схемы не нужны. Существующие global commands и
-activity остаются SELECT/INSERT-only. Immutable triggers и workspace FKs
-связывают источник, Inbox, receipt, snapshot и CREATED audit. Reader readiness
-проверяет новые snapshot/receipt/Inbox колонки даже при выключенной доставке,
-поскольку ранее полученные данные должны читаться; Outbox readiness нужен при
-включённом transfer flag.
-
-Оба флага по умолчанию false: `CRM_INTAKE_WIDGETS_ENABLED` и
-`CRM_INTAKE_WIDGET_TRANSFERS_ENABLED`. Transfer flag требует первый flag=true.
-Отдельные роли `widget-transfer-worker` (5315) и `widget-transfer-publisher`
-(5316) требуют оба flag. API остаётся 5310, acceptance 5311/5312, control
-5313/5314. Выключенная доставка не создаёт transfer worker/client/publisher и
-не требует новых Widgets credentials для старого API; scoped readers остаются.
-API-only не требует брокер. Shutdown отменяет push consumer и дожидается
-обработки, незавершённого renewal/publish до отключения Prisma.
-
-Повторы именно этого нового consumer ждут в PostgreSQL Outbox:
-`availableAt = clock_timestamp() + 5/30/120 секунд`. Издатель выбирает только
-due записи по **времени БД** и отправляет их непосредственно в MAIN; broker
-TTL/DLX relay и отдельные retry queues/exchange здесь отсутствуют. После
-перезапуска due time и expired publisher lease восстанавливаются из БД.
-Publisher требует Buffer JSON, persistent, confirm и отсутствие mandatory
-return до PUBLISHED. Transport errors оставляют durable PENDING с неограниченным
-числом повторов и bounded backoff; processing retry/DLQ фиксируются вместе с
-receipt до ack. Manual retry публикуется через ту же Outbox без задержки.
-Существующие acceptance/control queues в этой фазе не изменяются.
-
-Если claim занят или обработчик не смог сохранить durable результат, сообщение
-остаётся unacked ещё 5 секунд перед nack/requeue. Пауза ограничена prefetch5,
-не создаёт polling consumer и не заменяет processing retry. Cancel/закрытие
-канала прерывает ожидание и возвращает сообщение брокеру; shutdown дожидается
-активной работы и renewal без подтверждения неуспешных операций.
-
-Топология: direct/durable `aerocrm.crm-intake.widget-transfer.events` и
-`aerocrm.crm-intake.widget-transfer.dead-letter`; queue
-`aerocrm.crm-intake.widget-transfer.v1` и отдельная `.dead-letter` queue.
-Обе direct binding используют исходный Widgets event key; main queue также
-привязана к upstream topic `aerocrm.events` с точным тем же ключом.
-Consumer использует basic.consume/prefetch5; polling — только у PG Outbox.
-
-Три раздельных principal, без расширения прав на другие Intake consumers:
-
-- Worker: configure/write `^$`, read
-  `^winwidget\.crm-intake\.widget-transfer\.v1$`.
-- Publisher: configure/read `^$`, write
-  `^winwidget\.crm-intake\.widget-transfer\.(events|dead-letter)$`.
-- Provisioner: configure/read/write только
-  `^(winwidget\.events|winwidget\.crm-intake\.widget-transfer\.(events|dead-letter|v1(\.dead-letter)?))$`.
-  Для topic `aerocrm.events` read/write routing-key allowlist только
-  `^widgets\.wincrm\.lead-transfer\.requested\.v1$`.
-
-У runtime `CRM_INTAKE_RABBITMQ_ASSERT_TOPOLOGY=false`, отдельный provisioner
-создаёт/проверяет exact topology. У worker/publisher собственные значения
-`CRM_INTAKE_RABBITMQ_URL`, AMQPS вне loopback; не использовать общий admin URL.
-Widgets producer также требует отдельного разрешения на точный upstream key.
-Rabbit Management API не используется для ручных бизнес-публикаций.
-
-На другом VPS Access/Widgets вызываются через exact HTTPS private ingress к
-реальному loopback listener owning app, с проверкой TLS и без redirect.
-`CRM_ACCESS_INTERNAL_BASE_URL`/`CRM_ACCESS_CRM_INTAKE_TOKEN` и
-`WIDGETS_INTERNAL_BASE_URL`/`WIDGETS_CRM_INTAKE_TOKEN` — независимые scoped пары,
-без production localhost fallback и сохранённого JWT. Public Gateway не
-публикует internal routes; forwarded headers не являются авторизацией. Новые
-CRM VPS и production rollout в нынешнюю локальную фазу не входят.
-
-### Проверки Phase3 и текущий статус
-
-Из каталога сервиса: `pnpm prisma:generate`, `pnpm test`, `pnpm typecheck`,
-`pnpm lint`, `pnpm build`. Unit/actual HTTP проверяют strict snapshots шести
-типов, nullable имя только WIDGET, scope/revocation, защиту DTO, replay/CAS,
-эпохи/сроки, no-store/export projection, default-off и shutdown/renewal drain.
-Последний полный прогон после database-delayed retry всех трёх CRM workflows,
-cooldown и scalar currency regressions: 389 tests / 27 suites GREEN;
-type/lint/build и syntax-check интеграционных скриптов GREEN.
-
-Для opt-in PG18: отдельно применить миграции migration-role, выдать таблицам
-перечисленные grants, затем `pnpm test:integration:widget-transfer` с явными
-`CRM_INTAKE_TEST_DATABASE_URL`, `CRM_INTAKE_TEST_MIGRATION_DATABASE_URL`,
-`CRM_INTAKE_TEST_RUNTIME_ROLE`, `CRM_INTAKE_INTEGRATION_ALLOW_MUTATION=true`.
-Скрипт не читает `.env` и не запускает миграции, принимает только loopback
-БД с префиксом `winwidget_crm_intake_test` и `schema=crm_intake`, разные runtime/
-migration роли. Проверки включают реальные concurrent claims, атомарность
-Inbox/snapshot/audit/receipt, достигнутые fault injections/rollback, immutable
-FK/ACL, scope/export, revoke/disable/period, durable DB delay и publisher restart.
-Удаление ограничено собственным случайным workspace через migration role.
-Access/Widgets responses здесь контролируемые stubs, не межсервисный HTTP proof.
-
-Для отдельного настоящего RabbitMQ gate тот же скрипт требует все три env:
-`CRM_INTAKE_WIDGET_TRANSFER_TEST_RABBITMQ_URL` (provisioner),
-`CRM_INTAKE_WIDGET_TRANSFER_TEST_WORKER_RABBITMQ_URL`,
-`CRM_INTAKE_WIDGET_TRANSFER_TEST_PUBLISHER_RABBITMQ_URL`. Это три разные
-principal одного authenticated loopback vhost с суффиксом `_test`/`_ci`, с ACL
-выше. Очереди обязаны быть пустыми и без чужих consumers; скрипт ничего не
-purge и не удаляет общие broker resources. Он проверяет upstream push,
-confirm/mandatory return, duplicate proof, отложенный MAIN после перезапуска
-publisher, независимый DLQ/manual retry и drain; cleanup vhost выполняет
-владелец стенда.
-
-**Проверено root на локальном стенде:** свежие семь service-owned БД и все
-12 domain PG18 gates GREEN. Acceptance, widget-control и widget-transfer
-прошли с настоящим RabbitMQ: отложенный PG Outbox retry и публикация напрямую
-в MAIN после перезапуска publisher. Native transfer использует три отдельных
-least-privilege principals. На семи реальных API за
-Gateway отдельно прошёл control-plane HTTP сценарий: candidates/create →
-control claim → реальный Widgets configure → SYNCED и replay.
-
-Отдельный opt-in `local-wincrm-stack.mjs --activate-owner --with-widgets
---verify-native-widget-http` доказал настоящую цепочку публичного Quiz submit
-→ Widgets Outbox publisher (оба события PUBLISHED после confirm/mandatory)
-→ Rabbit push → Intake с реальными HTTP authorization/context. Проверены
-atomic Inbox/snapshot/activity/receipt, nullable имя, URL redaction, public
-details/metadata и повторная доставка того же события без второй заявки.
-Четвёртый principal передаётся только test driver через
-`CRM_INTAKE_WIDGET_TRANSFER_TEST_WIDGETS_PUBLISHER_RABBITMQ_URL`: configure/read
-запрещены (negative 403 probes), write только `aerocrm.events` и два точных
-native/reporting routing keys. Reporting принимает отдельная test sink queue;
-это не проверка рабочего Reporting consumer.
-
-На свежем локальном стенде также прошёл отдельный opt-in профиль
-`--activate-owner --with-widgets
---verify-native-widget-http-all`: тот же driver последовательно проверяет
-QUIZ, WHEEL, CALLBACK, TIMER, STOP_OFFER и CALCULATOR. Прежний
-`--verify-native-widget-http` и его Quiz fixture сохранены. Новые случаи
-создаются только в свежих собственных test DB для того же synthetic owner;
-для Timer/Calculator включается PHONE, Callback использует штатный OFF без
-OTP-отправки, внешние интеграции остаются пустыми. AI-консультант заявок не
-создаёт и в эту шестёрку не входит.
-All-six использует один настоящий Identity login и хранит его access token
-только в памяти test process: production rate limits не отключаются, токен
-не записывается в fixture. Общий HTTP smoke проверяет CUSTOMER403 и ADMIN200
-для изменения цен, CAS/version, idempotent replay и единственный durable
-audit; значения цен и лимитов остаются неизменными.
-
-Каждый случай имеет отдельные widget/source/connector/lead/event IDs. Driver
-требует ровно два новых Outbox события (native и Reporting), проверяет typed
-snapshot, quota increment, Inbox/detail/metadata, duplicate delivery без второй
-заявки и сохранность предыдущих PUBLISHED/receipt/snapshot evidence. Общая
-изолированная Reporting sink queue дренируется между случаями и проверяет
-точные event/lead/widget bindings. Она не заменяет настоящий Reporting
-consumer; отсутствие `lead.integration.requested.v2` доказывает только то, что
-этот профиль не вызывает внешние интеграции, не их функциональную совместимость.
-Итог всех шести проверок появляется в `widgets.allTypesNativeHttpBroker`
-приватной fixture только после успешного завершения. Проверены все шесть
-сценариев на семи отдельных PostgreSQL 18 БД, восьми настоящих API включая
-Gateway и четырёх scoped RabbitMQ principals. Собственные контейнер RabbitMQ,
-его anonymous volume, семь БД и четырнадцать ролей после прогона удалены;
-ранее существовавшие БД сохранены.
-
-Оба профиля используют реальные HTTP API, PostgreSQL/RabbitMQ и собранные
-`dist` классы publishers/workers внутри test process, **не release images**.
-Это также не доказательство transport control-plane, crash recovery, expiry/
-revocation на полном стеке или браузерного OWN/TEAM scope. Совместимый browser
-reader и согласованные rollout checks остаются обязательными gates перед
-включением flag. Local/PG/broker evidence не означает production rollout;
-CRM backend пока не развёрнут.

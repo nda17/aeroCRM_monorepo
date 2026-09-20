@@ -229,7 +229,6 @@ const InboxContent = ({
 									tab !== 'inbox'
 								}
 								onClick={() => {
-									toast('Открываем проверку CSV')
 									setImporting(true)
 								}}
 							>
@@ -263,7 +262,7 @@ const InboxContent = ({
 				</Button>
 				<Button
 					variant={tab === 'sources' ? 'primary' : 'secondary'}
-					tooltip="Настроить поступление заявок из форм, внешних API и подключённых виджетов."
+					tooltip="Настроить поступление заявок из форм сайта, Tilda и внешних API."
 					aria-pressed={tab === 'sources'}
 					onClick={() => setTab('sources')}
 				>

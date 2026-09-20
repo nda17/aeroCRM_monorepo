@@ -324,7 +324,7 @@ export class ReminderDeliveryService {
 									),
 									occurredAt: item.createdAt.toISOString(),
 									reference: {
-										type: 'wincrm-task-reminder',
+										type: 'crm-task-reminder',
 										id: item.id,
 										workspaceId: item.workspaceId
 									}

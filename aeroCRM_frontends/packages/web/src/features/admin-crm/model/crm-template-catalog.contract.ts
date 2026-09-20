@@ -67,7 +67,7 @@ const parseStage = (value: unknown): CrmPipelineTemplateStage => {
 		!isRecord(value) ||
 		!hasExactKeys(value, ['key', 'name', 'order', 'state'])
 	)
-		throw new Error('Invalid WinCRM template stage')
+		throw new Error('Invalid aeroCRM template stage')
 
 	const { key, name, order, state } = value
 	if (
@@ -78,7 +78,7 @@ const parseStage = (value: unknown): CrmPipelineTemplateStage => {
 		(order as number) < 1 ||
 		!STAGE_STATES.has(state as CrmPipelineStageState)
 	) {
-		throw new Error('Invalid WinCRM template stage')
+		throw new Error('Invalid aeroCRM template stage')
 	}
 
 	return {
@@ -96,13 +96,13 @@ const validateStageSequence = (stages: CrmPipelineTemplateStage[]) => {
 
 	stages.forEach((stage, index) => {
 		if (stageKeys.has(stage.key) || stage.order !== index + 1) {
-			throw new Error('Invalid WinCRM template stages')
+			throw new Error('Invalid aeroCRM template stages')
 		}
 		stageKeys.add(stage.key)
 		stateCounts[stage.state] += 1
 		if (stage.state !== 'OPEN') terminalStageStarted = true
 		if (terminalStageStarted && stage.state === 'OPEN') {
-			throw new Error('Invalid WinCRM template stages')
+			throw new Error('Invalid aeroCRM template stages')
 		}
 	})
 
@@ -113,7 +113,7 @@ const validateStageSequence = (stages: CrmPipelineTemplateStage[]) => {
 		stages.at(-2)?.state !== 'WON' ||
 		stages.at(-1)?.state !== 'LOST'
 	) {
-		throw new Error('Invalid WinCRM template stages')
+		throw new Error('Invalid aeroCRM template stages')
 	}
 }
 
@@ -130,7 +130,7 @@ const parseTemplate = (value: unknown): CrmPipelineTemplate => {
 			'stages'
 		])
 	)
-		throw new Error('Invalid WinCRM pipeline template')
+		throw new Error('Invalid aeroCRM pipeline template')
 
 	const {
 		key,
@@ -160,7 +160,7 @@ const parseTemplate = (value: unknown): CrmPipelineTemplate => {
 		stages.length < 3 ||
 		stages.length > MAX_STAGES
 	) {
-		throw new Error('Invalid WinCRM pipeline template')
+		throw new Error('Invalid aeroCRM pipeline template')
 	}
 
 	const parsedStages = stages.map(parseStage)
@@ -184,7 +184,7 @@ export const parseCrmPipelineTemplateCatalog = (
 		!isRecord(value) ||
 		!hasExactKeys(value, ['schemaVersion', 'catalogRevision', 'templates'])
 	)
-		throw new Error('Invalid WinCRM template catalog')
+		throw new Error('Invalid aeroCRM template catalog')
 
 	const { schemaVersion, catalogRevision, templates } = value
 	if (
@@ -195,7 +195,7 @@ export const parseCrmPipelineTemplateCatalog = (
 		templates.length === 0 ||
 		templates.length > MAX_TEMPLATES
 	) {
-		throw new Error('Unsupported WinCRM template catalog')
+		throw new Error('Unsupported aeroCRM template catalog')
 	}
 
 	const parsedTemplates = templates.map(parseTemplate)
@@ -203,7 +203,7 @@ export const parseCrmPipelineTemplateCatalog = (
 		parsedTemplates.map(template => `${template.key}@${template.version}`)
 	)
 	if (templateVersions.size !== parsedTemplates.length) {
-		throw new Error('Duplicate WinCRM template version')
+		throw new Error('Duplicate aeroCRM template version')
 	}
 
 	return {

@@ -31,9 +31,6 @@ vi.mock('@/entities/intake', () => ({
 vi.mock('@/shared/config/runtime', () => ({
 	getRuntimeConfig: () => ({ apiBaseUrl: 'http://localhost:4100/api/v1' })
 }))
-vi.mock('./WidgetSourcesPanel', () => ({
-	WidgetSourcesPanel: () => <div>Источники виджетов</div>
-}))
 vi.mock('react-hot-toast', () => ({
 	default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() })
 }))
@@ -131,7 +128,7 @@ describe('Tilda source setup', () => {
 		).toBe(
 			`http://localhost:4100/api/v1/crm/intake/ingest/${source.id}/tilda`
 		)
-		expect(setup.getByText('X-WinCRM-Source-Token')).toBeTruthy()
+		expect(setup.getByText('X-CRM-Source-Token')).toBeTruthy()
 		expect(setup.getByText('в заголовке')).toBeTruthy()
 		expect(
 			setup.getByText(/не подтверждают доставку реальной заявки/)

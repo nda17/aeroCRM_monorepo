@@ -101,9 +101,8 @@ export class BillingWorkerService
 			);
 			return;
 		}
-		let preflight: 'owned';
 		try {
-			preflight = this.preflightMessage(kind, payload, message);
+			this.preflightMessage(kind, payload, message);
 		} catch (error) {
 			await this.finalFailure(
 				kind,
@@ -131,7 +130,7 @@ export class BillingWorkerService
 			return;
 		}
 		try {
-			await this.deliver(kind, payload, eventId);
+			await this.deliver(kind, payload);
 			await this.prisma.integrationDeliveryReceipt.updateMany({
 				where: {
 					eventId,
@@ -170,8 +169,7 @@ export class BillingWorkerService
 
 	private async deliver(
 		kind: BillingConsumerKind,
-		payload: unknown,
-		eventId: string
+		payload: unknown
 	): Promise<void> {
 		if (kind === 'identity') {
 			const event = this.projections.parse(

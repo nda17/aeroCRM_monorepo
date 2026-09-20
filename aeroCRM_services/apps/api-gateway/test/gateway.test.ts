@@ -31,6 +31,66 @@ interface CapturedRequest {
 	body: string;
 }
 
+describe('API response cache privacy', () => {
+	const signing = createSigningFixture('cache-privacy');
+	const upstream = createServer((request, response) => {
+		response.setHeader('cache-control', 'public, max-age=3600');
+		if (request.url === '/api/v1/public/cookie')
+			response.setHeader('set-cookie', 'session=fixture; HttpOnly');
+		response.end('fixture');
+	});
+	let gateway: ReturnType<typeof createGateway>;
+	let base: URL;
+	before(async () => {
+		const upstreamUrl = await listenServer(upstream);
+		gateway = createGateway(
+			createTestConfig({
+				routes: [
+					createTestRoute({
+						id: 'crm', pathPrefix: '/api/v1/crm', upstreamUrl,
+						authPolicy: 'required'
+					}),
+					createTestRoute({
+						id: 'optional', pathPrefix: '/api/v1', upstreamUrl,
+						authPolicy: 'optional'
+					})
+				]
+			}),
+			{ fetch: createJwksFetch(() => [signing.publicJwk]), logger: silentLogger }
+		);
+		await gateway.initialize();
+		await gateway.listen(0, '127.0.0.1');
+		base = new URL(`http://127.0.0.1:${(gateway.server.address() as AddressInfo).port}`);
+	});
+	after(async () => {
+		await gateway.close();
+		await closeServer(upstream);
+	});
+	it('overrides cacheable upstream responses for authenticated, session and cookie responses', async () => {
+		for (const [pathname, authenticated] of [
+			['/api/v1/crm/contacts', true],
+			['/api/v1/public/profile', true],
+			['/api/v1/auth/login', false],
+			['/api/v1/auth/refresh', false],
+			['/api/v1/sessions', false],
+			['/api/v1/public/cookie', false]
+		] as const) {
+			const result = await makeRequest(new URL(pathname, base), {
+				headers: authenticated ? { authorization: `Bearer ${signAccessToken(signing)}` } : {}
+			});
+			assert.equal(result.statusCode, 200);
+			assert.equal(result.headers['cache-control'], 'no-store', pathname);
+		}
+	});
+	it('preserves the public cache contract for JWKS, avatars and assets', async () => {
+		for (const pathname of ['/api/v1/auth/.well-known/jwks.json', '/api/v1/avatars/public.png', '/api/v1/assets/logo.svg']) {
+			const result = await makeRequest(new URL(pathname, base));
+			assert.equal(result.statusCode, 200);
+			assert.equal(result.headers['cache-control'], 'public, max-age=3600', pathname);
+		}
+	});
+});
+
 describe('Widget event rate limiter', () => {
 	it('limits one source and resets its fixed window', () => {
 		let now = 1_000;

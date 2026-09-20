@@ -70,8 +70,8 @@ const TELEGRAM_KINDS = new Set<NotificationDeliveryKind>([
 	'daily-summary-delivery-telegram',
 	'operations-backup-report-telegram',
 	'subscription-expiry-telegram',
-	'wincrm-task-reminder-telegram',
-	'wincrm-intake-sla-telegram'
+	'crm-task-reminder-telegram',
+	'crm-intake-sla-telegram'
 ]);
 
 export function classifyIntegrationError(

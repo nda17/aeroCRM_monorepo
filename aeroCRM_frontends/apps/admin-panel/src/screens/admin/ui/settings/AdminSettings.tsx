@@ -29,31 +29,27 @@ const MANUAL_TASKS: Array<{
 	title: string
 	description: string
 	buttonLabel: string
-	loadingLabel: string
 }> = [
 	{
 		id: 'paymentCleanup',
 		title: 'Очистка зависших платежей',
 		description:
 			'Запускает внеплановую очистку старых платежей со статусом ожидания.',
-		buttonLabel: 'Запустить',
-		loadingLabel: 'Запускаем очистку платежей...'
+		buttonLabel: 'Запустить'
 	},
 	{
 		id: 'subscriptionExpiryCheck',
 		title: 'Проверка истёкших подписок',
 		description:
 			'Внепланово деактивирует подписки, срок действия которых уже истёк.',
-		buttonLabel: 'Запустить',
-		loadingLabel: 'Проверяем подписки...'
+		buttonLabel: 'Запустить'
 	},
 	{
 		id: 'verificationChallengeCleanup',
 		title: 'Очистка verification challenges',
 		description:
 			'Удаляет просроченные challenge-записи для подтверждения email и телефона.',
-		buttonLabel: 'Запустить',
-		loadingLabel: 'Очищаем verification challenges...'
+		buttonLabel: 'Запустить'
 	}
 ]
 
@@ -129,12 +125,11 @@ const AdminSettings: NextPage = () => {
 	})
 
 	const saveSiteSettingsWithToast = (
-		patch: Parameters<typeof siteSettingsService.update>[0],
-		label?: string
+		patch: Parameters<typeof siteSettingsService.update>[0]
 	) => {
 		const promise = siteSettingsMutation.mutateAsync(patch)
 		toast.promise(promise, {
-			loading: label ?? 'Сохранение...',
+			loading: 'Пожалуйста, подождите',
 			success: 'Сохранено',
 			error: 'Ошибка сохранения'
 		})
@@ -148,12 +143,11 @@ const AdminSettings: NextPage = () => {
 	})
 
 	const saveAuthWithToast = (
-		patch: Parameters<typeof authSettingsService.update>[0],
-		label?: string
+		patch: Parameters<typeof authSettingsService.update>[0]
 	) => {
 		const promise = authSettingsMutation.mutateAsync(patch)
 		toast.promise(promise, {
-			loading: label ?? 'Сохранение...',
+			loading: 'Пожалуйста, подождите',
 			success: 'Сохранено',
 			error: 'Ошибка сохранения'
 		})
@@ -180,7 +174,7 @@ const AdminSettings: NextPage = () => {
 		const promise = manualTaskMutation.mutateAsync(taskId)
 
 		toast.promise(promise, {
-			loading: task.loadingLabel,
+			loading: 'Пожалуйста, подождите',
 			success: result => result.message,
 			error: 'Ошибка запуска задачи'
 		})
@@ -195,7 +189,7 @@ const AdminSettings: NextPage = () => {
 		})
 
 		toast.promise(promise, {
-			loading: 'Повторно загружаем настройки...',
+			loading: 'Пожалуйста, подождите',
 			success: 'Настройки загружены',
 			error: 'Не удалось загрузить настройки'
 		})
@@ -212,7 +206,7 @@ const AdminSettings: NextPage = () => {
 		})
 
 		toast.promise(promise, {
-			loading: 'Повторно загружаем настройки авторизации...',
+			loading: 'Пожалуйста, подождите',
 			success: 'Настройки авторизации загружены',
 			error: 'Не удалось загрузить настройки авторизации'
 		})
@@ -260,12 +254,9 @@ const AdminSettings: NextPage = () => {
 							<button
 								className={`${styles.toggle} ${authSettings.turnstileEnabled ? styles.toggleOn : ''}`}
 								onClick={() =>
-									saveAuthWithToast(
-										{
-											turnstileEnabled: !authSettings.turnstileEnabled
-										},
-										'Применяем настройку...'
-									)
+									saveAuthWithToast({
+										turnstileEnabled: !authSettings.turnstileEnabled
+									})
 								}
 								disabled={authSettingsMutation.isPending}
 							>
@@ -284,12 +275,9 @@ const AdminSettings: NextPage = () => {
 							<button
 								className={`${styles.toggle} ${authSettings.googleAuthEnabled ? styles.toggleOn : ''}`}
 								onClick={() =>
-									saveAuthWithToast(
-										{
-											googleAuthEnabled: !authSettings.googleAuthEnabled
-										},
-										'Применяем настройку...'
-									)
+									saveAuthWithToast({
+										googleAuthEnabled: !authSettings.googleAuthEnabled
+									})
 								}
 								disabled={authSettingsMutation.isPending}
 							>
@@ -308,20 +296,15 @@ const AdminSettings: NextPage = () => {
 							<button
 								className={`${styles.toggle} ${authSettings.yandexAuthEnabled ? styles.toggleOn : ''}`}
 								onClick={() =>
-									saveAuthWithToast(
-										{
-											yandexAuthEnabled: !authSettings.yandexAuthEnabled
-										},
-										'Применяем настройку...'
-									)
+									saveAuthWithToast({
+										yandexAuthEnabled: !authSettings.yandexAuthEnabled
+									})
 								}
 								disabled={authSettingsMutation.isPending}
 							>
 								<span className={styles.toggleThumb} />
 							</button>
 						</div>
-
-
 
 						<div className={styles.toggleRow}>
 							<div>
@@ -334,20 +317,15 @@ const AdminSettings: NextPage = () => {
 							<button
 								className={`${styles.toggle} ${authSettings.vkAuthEnabled ? styles.toggleOn : ''}`}
 								onClick={() =>
-									saveAuthWithToast(
-										{
-											vkAuthEnabled: !authSettings.vkAuthEnabled
-										},
-										'Применяем настройку...'
-									)
+									saveAuthWithToast({
+										vkAuthEnabled: !authSettings.vkAuthEnabled
+									})
 								}
 								disabled={authSettingsMutation.isPending}
 							>
 								<span className={styles.toggleThumb} />
 							</button>
 						</div>
-
-
 					</>
 				) : (
 					<SettingsLoadError
@@ -391,10 +369,9 @@ const AdminSettings: NextPage = () => {
 							<button
 								className={`${styles.toggle} ${settings?.bannerEnabled ? styles.toggleOn : ''}`}
 								onClick={() =>
-									saveSiteSettingsWithToast(
-										{ bannerEnabled: !settings?.bannerEnabled },
-										'Применяем настройку...'
-									)
+									saveSiteSettingsWithToast({
+										bannerEnabled: !settings?.bannerEnabled
+									})
 								}
 								disabled={siteSettingsMutation.isPending}
 							>
@@ -515,10 +492,9 @@ const AdminSettings: NextPage = () => {
 						<button
 							className={`${styles.toggle} ${settings?.snowflakeEnabled ? styles.toggleOn : ''}`}
 							onClick={() =>
-								saveSiteSettingsWithToast(
-									{ snowflakeEnabled: !settings?.snowflakeEnabled },
-									'Применяем настройку...'
-								)
+								saveSiteSettingsWithToast({
+									snowflakeEnabled: !settings?.snowflakeEnabled
+								})
 							}
 							disabled={siteSettingsMutation.isPending}
 						>

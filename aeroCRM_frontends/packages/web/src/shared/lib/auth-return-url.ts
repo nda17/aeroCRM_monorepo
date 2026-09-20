@@ -1,16 +1,24 @@
 export const AUTH_RETURN_URL_PARAM = 'returnUrl'
-export const AUTH_RETURN_INTENT_STORAGE_KEY =
-	'aerocrm:auth-return-intent'
+export const AUTH_RETURN_INTENT_STORAGE_KEY = 'aerocrm:auth-return-intent'
 
-const WINCRM_ORIGIN = 'https://workspace.aerocrm.space'
-const LOCAL_WINCRM_ORIGIN = 'http://localhost:3001'
+const WORKSPACE_ORIGIN = 'https://workspace.aerocrm.space'
+const LOCAL_WORKSPACE_ORIGIN = 'http://localhost:3001'
 const ADMIN_ORIGIN = 'https://admin.aerocrm.space'
 const LOCAL_ADMIN_ORIGIN = 'http://localhost:3003'
 const ADMIN_RETURN_PATHS = new Set([
-	'/admin', '/admin/alerts', '/admin/content', '/admin/crm',
-	'/admin/databases', '/admin/event-log', '/admin/mailings',
-	'/admin/messaging', '/admin/settings', '/admin/support',
-	'/admin/system', '/admin/telegram-bot', '/admin/user-list'
+	'/admin',
+	'/admin/alerts',
+	'/admin/content',
+	'/admin/crm',
+	'/admin/databases',
+	'/admin/event-log',
+	'/admin/mailings',
+	'/admin/messaging',
+	'/admin/settings',
+	'/admin/support',
+	'/admin/system',
+	'/admin/telegram-bot',
+	'/admin/user-list'
 ])
 const AUTH_RETURN_URL_MAX_LENGTH = 2048
 const AUTH_RETURN_INTENT_TTL_MS = 15 * 60 * 1000
@@ -61,29 +69,35 @@ export const getSafeAuthReturnUrl = (
 		return null
 	}
 
-	const allowedOrigins = new Set([WINCRM_ORIGIN])
+	const allowedOrigins = new Set([WORKSPACE_ORIGIN])
 
 	if (isLocalhostAllowed(options)) {
-		allowedOrigins.add(LOCAL_WINCRM_ORIGIN)
+		allowedOrigins.add(LOCAL_WORKSPACE_ORIGIN)
 	}
 
 	if (allowedOrigins.has(url.origin)) return url.toString()
 	// Admin returns are limited to known routes on the separate admin origin.
 	const adminOrigins = new Set([ADMIN_ORIGIN])
-	if (isLocalhostAllowed(options))
-		adminOrigins.add(LOCAL_ADMIN_ORIGIN)
-	const allowedPath = ADMIN_RETURN_PATHS.has(url.pathname) ||
-		/^\/admin\/user\/edit\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(url.pathname)
+	if (isLocalhostAllowed(options)) adminOrigins.add(LOCAL_ADMIN_ORIGIN)
+	const allowedPath =
+		ADMIN_RETURN_PATHS.has(url.pathname) ||
+		/^\/admin\/user\/edit\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+			url.pathname
+		)
 	const conversations = url.searchParams.getAll('conversationId')
 	return adminOrigins.has(url.origin) &&
 		allowedPath &&
 		!url.hash &&
 		(url.pathname !== '/admin/support'
 			? !url.search
-			: Array.from(url.searchParams.keys()).every(key => key === 'conversationId') &&
+			: Array.from(url.searchParams.keys()).every(
+					key => key === 'conversationId'
+				) &&
 				(conversations.length === 0 ||
 					(conversations.length === 1 &&
-						/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(conversations[0]))))
+						/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+							conversations[0]
+						))))
 		? url.toString()
 		: null
 }

@@ -23,9 +23,11 @@ export {
 export {
 	CRM_PRICE_FIELDS,
 	CRM_SEAT_FIELDS,
+	annualCrmPriceMinor,
 	createCrmPricingCommand,
 	createCrmPricingDraft,
 	parseCrmPricingDraft,
+	parseCrmRublesInput,
 	type CrmPricingCommand,
 	type CrmPricingDraft,
 	type CrmPricingField,

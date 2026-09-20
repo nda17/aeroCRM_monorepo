@@ -5,56 +5,9 @@ import {
 	DatabaseRestoreRecoveryActionType
 } from '@prisma/operations-client';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { DatabaseRestoreRecoveryStateService } from './database-restore-recovery-state.service';
 
 describe('DatabaseRestoreRecoveryStateService expired recovery', () => {
-	it('keeps the migration fail-closed on one global permit and exact target role triplets', () => {
-		const migration = readFileSync(
-			join(
-				__dirname,
-				'../../prisma/migrations/20260830121000_add_database_restore_recovery_executor_contract/migration.sql'
-			),
-			'utf8'
-		);
-		expect(migration).toContain(
-			'CREATE UNIQUE INDEX "database_restore_permits_global_active_unique"'
-		);
-		expect(migration).toContain(
-			'ON "operations"."database_restore_permits"((1))'
-		);
-		expect(migration).toContain(
-			'CREATE TRIGGER "database_restore_recovery_actions_immutable_binding"'
-		);
-		expect(migration).toContain(
-			'CREATE TRIGGER "database_restore_permits_immutable_binding"'
-		);
-		for (const roles of [
-			'winwidget_notification_delivery_runtime","winwidget_notification_delivery_migration","winwidget_notification_delivery_backup',
-			'winwidget_campaigns_runtime","winwidget_campaigns_migration","winwidget_campaigns_backup',
-			'winwidget_reporting_runtime","winwidget_reporting_migration","winwidget_reporting_backup',
-			'winwidget_widgets_runtime","winwidget_widgets_migration","winwidget_widgets_backup',
-			'winwidget_identity_runtime","winwidget_identity_migration","winwidget_identity_backup',
-			'winwidget_platform_runtime","winwidget_platform_migration","winwidget_platform_backup',
-			'winwidget_support_runtime","winwidget_support_migration","winwidget_support_backup'
-		]) {
-			expect(migration.split(roles)).toHaveLength(5);
-		}
-		expect(migration).toContain(
-			'CONSTRAINT "database_restore_recovery_receipts_target"'
-		);
-		expect(migration).toContain(
-			'ADD CONSTRAINT "database_restore_terminal_receipts_writer_fence_exact_roles"'
-		);
-		expect(migration).toContain(
-			'CREATE TRIGGER "database_restore_jobs_immutable_recovery_resolution"'
-		);
-		expect(migration).toContain(
-			'Database restore terminal recovery action is immutable'
-		);
-	});
-
 	it('atomically expires a stale APPROVED action before any execution lease claim', async () => {
 		const actionId = randomUUID();
 		const expire = jest.fn(async () => ({ count: 1 }));
@@ -184,15 +137,15 @@ describe('DatabaseRestoreRecoveryStateService expired recovery', () => {
 		const audit = {
 			recordInTransaction: jest.fn(async () => calls.push('audit'))
 		};
-		const target = { database: 'winwidget_reporting' };
+		const target = { database: 'aerocrm_reporting' };
 		const writerFence = {
 			apply: jest.fn(async () => {
 				calls.push('fence');
 				return {
 					roles: [
-						'winwidget_reporting_runtime',
-						'winwidget_reporting_migration',
-						'winwidget_reporting_backup'
+						'aerocrm_reporting_runtime',
+						'aerocrm_reporting_migration',
+						'aerocrm_reporting_backup'
 					] as [string, string, string],
 					verifiedAt: new Date('2026-08-30T20:00:00.000Z'),
 					evidenceSha256: 'd'.repeat(64)

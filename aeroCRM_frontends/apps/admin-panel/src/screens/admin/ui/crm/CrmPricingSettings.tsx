@@ -5,9 +5,11 @@ import {
 	adminCrmService,
 	CRM_PRICE_FIELDS,
 	CRM_SEAT_FIELDS,
+	annualCrmPriceMinor,
 	createCrmPricingCommand,
 	createCrmPricingDraft,
 	parseCrmPricingDraft,
+	parseCrmRublesInput,
 	type CrmPricingCommand,
 	type CrmPricingDraft,
 	type CrmPricingField,
@@ -46,6 +48,7 @@ const ALL_FIELDS = [...CRM_PRICE_FIELDS, ...CRM_SEAT_FIELDS]
 const rubles = new Intl.NumberFormat('ru-RU', {
 	style: 'currency',
 	currency: 'RUB',
+	minimumFractionDigits: 0,
 	maximumFractionDigits: 2
 })
 const subscribeOnline = (callback: () => void) =>
@@ -95,7 +98,7 @@ export default function CrmPricingSettings() {
 			isSaving
 		)
 			return null
-		const toastId = toast.loading('Загружаем тариф aeroCRM...')
+		const toastId = toast.loading('Пожалуйста, подождите')
 		const result = await query.refetch()
 		if (result.isError || !result.data) {
 			toast.error('Не удалось загрузить тариф aeroCRM', { id: toastId })
@@ -137,9 +140,9 @@ export default function CrmPricingSettings() {
 
 			{!CRM_RELEASE.apiEnabled ? (
 				<p className={styles.accessNote}>
-					Настройки цен и мест подключатся после выпуска aeroCRM. Бесплатный
-					период — 10 дней, минимум два места с учётом владельца.
-					Неопубликованные цены здесь не показываются.
+					Настройки цен и мест подключатся после выпуска aeroCRM.
+					Бесплатный период — 10 дней, минимум два места с учётом
+					владельца. Неопубликованные цены здесь не показываются.
 				</p>
 			) : !isAuthResolved ||
 			  isUserLoading ||
@@ -254,7 +257,7 @@ function PricingEditor({
 		if (!canSave || inFlight.current) return
 
 		inFlight.current = true
-		const toastId = toast.loading('Сохраняем тариф aeroCRM...')
+		const toastId = toast.loading('Пожалуйста, подождите')
 		try {
 			const command = createCrmPricingCommand(
 				baseline,
@@ -344,7 +347,7 @@ function PricingEditor({
 					title="Изменение тарифа — для ADMIN и DEV"
 					description="ADMIN и DEV могут опубликовать новую версию цен и лимитов. Изменение фиксируется в Журнале событий. Включено минимум два места с учётом владельца."
 					risk="high"
-					riskText="Проверьте отдельно полную сумму за год и цену дополнительного места. Тарифы виджетов на этом экране не изменяются."
+					riskText="Проверьте полную сумму за год и цену дополнительного места."
 				/>
 			</div>
 
@@ -387,22 +390,41 @@ function PricingEditor({
 								<span>{FIELD_LABELS[field]}</span>
 								<input
 									type={isPrice ? 'text' : 'number'}
-									inputMode={isPrice ? 'decimal' : 'numeric'}
-									min={isPrice ? undefined : field === 'includedSeats' ? 1 : 2}
+									inputMode="numeric"
+									min={
+										isPrice ? undefined : field === 'includedSeats' ? 1 : 2
+									}
 									max={isPrice ? undefined : 10000}
 									step={isPrice ? undefined : 1}
 									maxLength={isPrice ? 16 : undefined}
 									required
 									readOnly={field === 'yearlyPriceMinor'}
-									value={field === 'includedSeats' ? String(Number(draft.includedSeats) - 1) : draft[field]}
+									value={
+										field === 'includedSeats'
+											? String(Number(draft.includedSeats) - 1)
+											: draft[field]
+									}
 									onChange={event =>
 										setDraft(current => {
 											const value = event.target.value
 											if (field === 'monthlyPriceMinor') {
-												const minor = Number(value.replace(',', '.')) * 100
-												return { ...current, monthlyPriceMinor: value, yearlyPriceMinor: Number.isFinite(minor) ? String(Math.round(minor * 108 / 10) / 100).replace('.', ',') : '' }
+												const minor = parseCrmRublesInput(value)
+												return {
+													...current,
+													monthlyPriceMinor: value,
+													yearlyPriceMinor:
+														minor === null
+															? ''
+															: String(annualCrmPriceMinor(minor) / 100)
+												}
 											}
-											return { ...current, [field]: field === 'includedSeats' ? String(Number(value) + 1) : value }
+											return {
+												...current,
+												[field]:
+													field === 'includedSeats'
+														? String(Number(value) + 1)
+														: value
+											}
 										})
 									}
 								/>
@@ -411,8 +433,9 @@ function PricingEditor({
 					})}
 				</fieldset>
 				<p className={styles.sectionHint}>
-					Цены: от 0,01 до 1 000 000 ₽, не более двух знаков после запятой.
-					Места: целое число от 2 до 10 000. Годовая базовая цена вычисляется автоматически со скидкой 10%.
+					Цены: целые рубли от 1 до 1 000 000 ₽. Места: целое число от 2 до
+					10 000. Годовая базовая цена вычисляется автоматически со скидкой
+					10% и округлением до рубля.
 				</p>
 				<div className={styles.pricingActions}>
 					<button

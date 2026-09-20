@@ -280,9 +280,9 @@ describe('Intake SLA receipt/CAS and stale cancellation', () => {
 						route: 'ND_EMAIL',
 						payload: expect.objectContaining({
 							eventType:
-								'notification.wincrm.intake-sla.email.requested.v1',
+								'notification.crm.intake-sla.email.requested.v1',
 							reference: expect.objectContaining({
-								type: 'wincrm-intake-sla',
+								type: 'crm-intake-sla',
 								workspaceId
 							})
 						})

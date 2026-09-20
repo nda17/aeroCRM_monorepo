@@ -7,12 +7,12 @@ import { DatabaseRestoreWriterFenceService } from './database-restore-writer-fen
 
 const target: DatabaseRestoreTargetConfiguration = {
 	environmentPrefix: 'REPORTING',
-	database: 'winwidget_reporting',
+	database: 'aerocrm_reporting',
 	schema: 'reporting',
-	adminRole: 'winwidget_reporting_admin',
-	migrationRole: 'winwidget_reporting_migration',
-	runtimeRole: 'winwidget_reporting_runtime',
-	backupRole: 'winwidget_reporting_backup',
+	adminRole: 'aerocrm_reporting_admin',
+	migrationRole: 'aerocrm_reporting_migration',
+	runtimeRole: 'aerocrm_reporting_runtime',
+	backupRole: 'aerocrm_reporting_backup',
 	acl: { profile: 'standard', routines: [], runtimeRoutines: [] }
 };
 const connection: DatabaseRestoreConnection = {

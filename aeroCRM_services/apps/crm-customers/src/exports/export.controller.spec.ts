@@ -75,17 +75,17 @@ describe('Customers export actual HTTP contract', () => {
 		expect(response.headers.get('content-length')).toBe(
 			String(body.byteLength)
 		);
-		expect(response.headers.get('x-wincrm-export-bytes')).toBe(
+		expect(response.headers.get('x-crm-export-bytes')).toBe(
 			String(body.byteLength)
 		);
 		expect(response.headers.get('content-disposition')).toBe(
-			'attachment; filename="wincrm-contacts.json"'
+			'attachment; filename="aerocrm-contacts.json"'
 		);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(response.headers.get('x-content-type-options')).toBe('nosniff');
 		expect(
 			response.headers.get('access-control-expose-headers')
-		).toContain('x-wincrm-export-actor-sha256');
+		).toContain('x-crm-export-actor-sha256');
 		expect(
 			response.headers.get('access-control-expose-headers')
 		).toContain('x-content-type-options');
@@ -140,7 +140,7 @@ describe('Customers export actual HTTP contract', () => {
 				headers: { authorization: 'Bearer user' }
 			});
 			expect(result.status).toBe(200);
-			expect(result.headers.get('x-wincrm-export-schema')).toBe('2');
+			expect(result.headers.get('x-crm-export-schema')).toBe('2');
 			expect(await result.json()).toMatchObject({
 				schemaVersion: 2,
 				entity

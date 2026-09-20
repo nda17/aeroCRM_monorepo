@@ -47,10 +47,10 @@ export const parseWorkdayExportHeaders = (
 	workspaceId: string,
 	actorHash: string
 ): WorkdayExportMetadata => {
-	const rows = headers.get('X-WinCRM-Export-Rows')
-	const bytes = headers.get('X-WinCRM-Export-Bytes')
-	const snapshotAt = headers.get('X-WinCRM-Export-Snapshot-At')
-	const filename = `wincrm-tasks-v2.${format}`
+	const rows = headers.get('X-CRM-Export-Rows')
+	const bytes = headers.get('X-CRM-Export-Bytes')
+	const snapshotAt = headers.get('X-CRM-Export-Snapshot-At')
+	const filename = `aerocrm-tasks-v2.${format}`
 	const mediaType =
 		format === 'csv'
 			? 'text/csv; charset=utf-8'
@@ -63,10 +63,10 @@ export const parseWorkdayExportHeaders = (
 		Number(bytes) < 1 ||
 		!isIsoDate(snapshotAt) ||
 		!/^[a-f0-9]{64}$/.test(actorHash) ||
-		headers.get('X-WinCRM-Export-Actor-SHA256') !== actorHash ||
-		headers.get('X-WinCRM-Workspace-Id') !== workspaceId ||
-		headers.get('X-WinCRM-Export-Entity') !== 'tasks' ||
-		headers.get('X-WinCRM-Export-Schema') !== '2' ||
+		headers.get('X-CRM-Export-Actor-SHA256') !== actorHash ||
+		headers.get('X-CRM-Workspace-Id') !== workspaceId ||
+		headers.get('X-CRM-Export-Entity') !== 'tasks' ||
+		headers.get('X-CRM-Export-Schema') !== '2' ||
 		headers.get('Content-Type')?.toLowerCase() !== mediaType ||
 		headers.get('Content-Disposition') !==
 			`attachment; filename="${filename}"` ||

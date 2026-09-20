@@ -1,3 +1,5 @@
+@use '@aerocrm/web/src/app/styles/select';
+
 .wrapper {
 	@apply relative flex w-full min-w-0 flex-col;
 }
@@ -248,9 +250,7 @@
 
 .select {
 	@apply box-border h-11 w-full appearance-none rounded-lg border border-[#e0d6f0] bg-[#f8f5ff] bg-no-repeat py-[10px] pl-[14px] pr-11 text-[0.9rem] text-[#1a1a1a] outline-none transition-[border-color] duration-200;
-	background-image: url("data:image/svg+xml,%3Csvg width='16' height='16' viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 6L8 10L12 6' stroke='%231A1A1A' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-	background-position: right 1rem center;
-	background-size: 16px 16px;
+	@include select.chevron;
 }
 
 .input:focus,

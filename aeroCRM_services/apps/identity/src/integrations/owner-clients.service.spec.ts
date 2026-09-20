@@ -3,7 +3,6 @@ import { OwnerClientsService } from './owner-clients.service';
 
 const values = {
 	BILLING_IDENTITY_TOKEN: `billing-${'b'.repeat(48)}`,
-	WIDGETS_IDENTITY_TOKEN: `widgets-${'w'.repeat(48)}`,
 	OPERATIONS_IDENTITY_TOKEN: `operations-${'o'.repeat(48)}`
 };
 
@@ -17,13 +16,11 @@ function config(overrides: Record<string, string> = {}) {
 describe('Identity narrow owner clients', () => {
 	const originalFetch = global.fetch;
 	const originalBillingOrigin = process.env.BILLING_INTERNAL_BASE_URL;
-	const originalWidgetsOrigin = process.env.WIDGETS_INTERNAL_BASE_URL;
 	const originalOperationsOrigin =
 		process.env.OPERATIONS_INTERNAL_BASE_URL;
 
 	beforeEach(() => {
 		delete process.env.BILLING_INTERNAL_BASE_URL;
-		delete process.env.WIDGETS_INTERNAL_BASE_URL;
 		delete process.env.OPERATIONS_INTERNAL_BASE_URL;
 	});
 
@@ -32,9 +29,6 @@ describe('Identity narrow owner clients', () => {
 		if (originalBillingOrigin === undefined) {
 			delete process.env.BILLING_INTERNAL_BASE_URL;
 		} else process.env.BILLING_INTERNAL_BASE_URL = originalBillingOrigin;
-		if (originalWidgetsOrigin === undefined) {
-			delete process.env.WIDGETS_INTERNAL_BASE_URL;
-		} else process.env.WIDGETS_INTERNAL_BASE_URL = originalWidgetsOrigin;
 		if (originalOperationsOrigin === undefined) {
 			delete process.env.OPERATIONS_INTERNAL_BASE_URL;
 		} else {
@@ -42,26 +36,19 @@ describe('Identity narrow owner clients', () => {
 		}
 	});
 
-	it('uses only narrow Billing/Widgets routes and explicit identity provenance', async () => {
+	it('uses only narrow Billing/Operations routes and explicit identity provenance', async () => {
 		global.fetch = jest.fn().mockResolvedValue({
 			ok: true,
 			json: () => Promise.resolve({})
 		} as unknown as globalThis.Response) as typeof fetch;
 		const clients = new OwnerClientsService(config());
-		await clients.ensureTrial(
-			'user-id',
-			new Date('2026-08-14T10:00:00.000Z')
-		);
-		await clients.widgetsOverview('user-id');
+		await clients.billingOverview('user-id');
 		await clients.adminOverview('user-id');
 		const calls = (global.fetch as jest.Mock).mock.calls;
 		expect(calls[0]?.[0]).toBe(
-			'http://127.0.0.1:4800/internal/v1/identity/billing/trials/ensure'
+			'http://127.0.0.1:4800/internal/v1/identity/billing/users/user-id/admin-overview'
 		);
 		expect(calls[1]?.[0]).toBe(
-			'http://127.0.0.1:4700/internal/v1/identity/widgets/admin-owner-overview'
-		);
-		expect(calls[2]?.[0]).toBe(
 			'http://127.0.0.1:5200/internal/v1/identity/users/user-id/admin-events/overview'
 		);
 		for (const [, options] of calls) {
@@ -93,7 +80,7 @@ describe('Identity narrow owner clients', () => {
 		expect(
 			() =>
 				new OwnerClientsService(
-					config({ WIDGETS_IDENTITY_TOKEN: values.BILLING_IDENTITY_TOKEN })
+					config({ OPERATIONS_IDENTITY_TOKEN: values.BILLING_IDENTITY_TOKEN })
 				)
 		).toThrow('pairwise distinct');
 	});

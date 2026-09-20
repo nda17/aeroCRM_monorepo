@@ -41,7 +41,7 @@ const useUserList = (
 		mutationKey: ['soft-delete-user'],
 		mutationFn: (userId: string) => UserService.deleteUser(userId),
 		onMutate() {
-			toast.loading('Удаляем пользователя...', {
+			toast.loading('Пожалуйста, подождите', {
 				id: USER_SOFT_DELETE_TOAST_ID
 			})
 		},
@@ -64,7 +64,7 @@ const useUserList = (
 		mutationKey: ['restore-user'],
 		mutationFn: (userId: string) => UserService.restoreUser(userId),
 		onMutate() {
-			toast.loading('Восстанавливаем пользователя...', {
+			toast.loading('Пожалуйста, подождите', {
 				id: USER_RESTORE_TOAST_ID
 			})
 		},

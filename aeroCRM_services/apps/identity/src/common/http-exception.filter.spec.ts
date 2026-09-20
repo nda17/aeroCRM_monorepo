@@ -11,7 +11,7 @@ import { AuthController } from '../auth/auth.controller';
 import { IdentityAuthGuard } from '../auth/auth.guard';
 import { AuthRateLimitGuard } from '../auth/auth-rate-limit.guard';
 import { AuthService } from '../auth/auth.service';
-import { RecaptchaGuard } from '../auth/recaptcha.guard';
+import { TurnstileGuard } from '../auth/turnstile.guard';
 import { RefreshTokenService } from '../auth/refresh-token.service';
 import { IdentityEventsService } from '../events/identity-events.service';
 import { IdentityPrismaService } from '../prisma/identity-prisma.service';
@@ -41,12 +41,12 @@ describe('Identity public auth HTTP exception contract', () => {
 				{ provide: IdentityPrismaService, useValue: {} },
 				{ provide: IdentityEventsService, useValue: {} },
 				{ provide: AuthRateLimitGuard, useValue: allow },
-				{ provide: RecaptchaGuard, useValue: allow },
+				{ provide: TurnstileGuard, useValue: allow },
 				{ provide: IdentityAuthGuard, useValue: allow }
 			]
 		});
 		builder.overrideGuard(AuthRateLimitGuard).useValue(allow);
-		builder.overrideGuard(RecaptchaGuard).useValue(allow);
+		builder.overrideGuard(TurnstileGuard).useValue(allow);
 		builder.overrideGuard(IdentityAuthGuard).useValue(allow);
 		const module = await builder.compile();
 

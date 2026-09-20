@@ -78,7 +78,7 @@ describe('SessionGate', () => {
 		expect(screen.getByText('Workspace')).toBeTruthy()
 	})
 
-	it('redirects an anonymous session to the exact main login URL', async () => {
+	it('redirects an anonymous session to the local login URL', async () => {
 		const redirectToLogin = vi.fn()
 		mockedUseSessionBootstrap.mockReturnValue({
 			status: 'anonymous',
@@ -95,7 +95,7 @@ describe('SessionGate', () => {
 
 		await waitFor(() => {
 			expect(redirectToLogin).toHaveBeenCalledWith(
-				'http://localhost:3000/login?returnUrl=http%3A%2F%2Flocalhost%3A3001%2Fdeals%3Fstage%3Dnew'
+				'http://localhost:3001/login?returnPath=%2Fdeals%3Fstage%3Dnew'
 			)
 		})
 	})

@@ -23,7 +23,12 @@ vi.mock('@/entities/crm-billing', async original => ({
 	getBillingQuote: vi.fn()
 }))
 vi.mock('react-hot-toast', () => ({
-	default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() })
+	default: Object.assign(vi.fn(), {
+		loading: vi.fn(() => 'billing-loading'),
+		dismiss: vi.fn(),
+		success: vi.fn(),
+		error: vi.fn()
+	})
 }))
 const workspaceId = 'b531b13e-3624-4ec5-b66d-f24373b0b374'
 const id = 'b1c1d3d9-dc5a-4a50-98ba-c79b3895db62'
@@ -52,7 +57,7 @@ const quote: BillingQuote = {
 	expiresAt: '2026-10-10T12:00:00.000Z',
 	period: null,
 	consent: {
-		version: 'wincrm-v1',
+		version: 'test-consent-v1',
 		text: '<script>not executable</script> exact server consent'
 	}
 }
@@ -72,7 +77,8 @@ beforeEach(() => {
 			session: { userId: 'owner', accessToken: 'token' },
 			current: () => current
 		},
-		authorize: vi.fn(async () => 'token')
+		authorize: vi.fn(async () => 'token'),
+		latestData: () => data
 	} as never
 	data = {
 		billing: {
@@ -115,6 +121,152 @@ const calculate = async () => {
 }
 
 describe('server-authoritative CRM checkout composer', () => {
+	it('uses the published included seats as checkout minimum and only quotes at three', async () => {
+		data = {
+			...data,
+			billing: {
+				...data.billing,
+				policy: { ...policy, includedSeats: 3 }
+			},
+			capacity: { ...data.capacity, usedSeats: 1 }
+		}
+		vi.mocked(getBillingQuote).mockResolvedValue({
+			...quote,
+			totalSeats: 3,
+			priceSnapshot: { ...policy, includedSeats: 3 }
+		})
+		render(view())
+		const seats = screen.getByLabelText('Всего мест')
+		const calculateButton = screen.getByRole('button', {
+			name: 'Рассчитать на сервере'
+		})
+		expect(seats).toHaveProperty('value', '3')
+		expect(seats).toHaveProperty('min', '3')
+		fireEvent.change(seats, { target: { value: '2' } })
+		expect(screen.getByRole('alert').textContent).toContain('не меньше 3')
+		expect(calculateButton).toHaveProperty('disabled', true)
+		fireEvent.click(calculateButton)
+		expect(getBillingQuote).not.toHaveBeenCalled()
+		fireEvent.change(seats, { target: { value: '3' } })
+		expect(calculateButton).toHaveProperty('disabled', false)
+		await calculate()
+		expect(getBillingQuote).toHaveBeenCalledExactlyOnceWith('token', {
+			schemaVersion: 1,
+			workspaceId,
+			intent: 'CHECKOUT',
+			cycle: 'MONTHLY',
+			totalSeats: 3
+		})
+	})
+
+	it('raises the checkout floor to occupied seats and prevents a lower quote', () => {
+		data = {
+			...data,
+			billing: {
+				...data.billing,
+				policy: { ...policy, includedSeats: 3 }
+			},
+			capacity: { ...data.capacity, usedSeats: 5 }
+		}
+		render(view())
+		const seats = screen.getByLabelText('Всего мест')
+		const calculateButton = screen.getByRole('button', {
+			name: 'Рассчитать на сервере'
+		})
+		expect(seats).toHaveProperty('value', '5')
+		expect(seats).toHaveProperty('min', '5')
+		fireEvent.change(seats, { target: { value: '4' } })
+		expect(screen.getByRole('alert').textContent).toContain('не меньше 5')
+		expect(calculateButton).toHaveProperty('disabled', true)
+		fireEvent.click(calculateButton)
+		expect(getBillingQuote).not.toHaveBeenCalled()
+	})
+
+	it('uses the paid period snapshot for seat changes despite a newer three-seat policy', async () => {
+		const paidSnapshot = { ...policy, policyVersion: 1, includedSeats: 2 }
+		data = {
+			...data,
+			billing: {
+				...data.billing,
+				policy: { ...policy, includedSeats: 3 },
+				period: {
+					id,
+					orderId: id,
+					version: 3,
+					cycle: 'MONTHLY' as const,
+					totalSeats: 2,
+					priceSnapshot: paidSnapshot,
+					startsAt: quote.startsAt,
+					expiresAt: quote.expiresAt,
+					graceUntil: quote.expiresAt,
+					state: 'ACTIVE' as const
+				}
+			},
+			capacity: { ...data.capacity, usedSeats: 1 }
+		}
+		vi.mocked(getBillingQuote).mockResolvedValue({
+			...quote,
+			intent: 'SEAT_CHANGE',
+			totalSeats: 2,
+			priceSnapshot: paidSnapshot,
+			period: {
+				id,
+				version: 3,
+				oldTotalSeats: 2,
+				oldExpiresAt: quote.expiresAt,
+				oldPeriodPriceMinor: quote.amountMinor,
+				newPeriodPriceMinor: quote.amountMinor
+			}
+		})
+		render(view('SEAT_CHANGE'))
+		const seats = screen.getByLabelText('Всего мест')
+		expect(seats).toHaveProperty('value', '2')
+		expect(seats).toHaveProperty('min', '2')
+		await calculate()
+		expect(getBillingQuote).toHaveBeenCalledExactlyOnceWith('token', {
+			schemaVersion: 1,
+			workspaceId,
+			intent: 'SEAT_CHANGE',
+			cycle: 'MONTHLY',
+			totalSeats: 2
+		})
+	})
+
+	it('blocks renewal confirmation when a fixed two-seat period meets a newer three-seat policy', () => {
+		data = {
+			...data,
+			billing: {
+				...data.billing,
+				policy: { ...policy, includedSeats: 3 },
+				period: {
+					id,
+					orderId: id,
+					version: 3,
+					cycle: 'MONTHLY' as const,
+					totalSeats: 2,
+					priceSnapshot: { ...policy, includedSeats: 2 },
+					startsAt: quote.startsAt,
+					expiresAt: quote.expiresAt,
+					graceUntil: quote.expiresAt,
+					state: 'ACTIVE' as const
+				}
+			},
+			capacity: { ...data.capacity, usedSeats: 1 }
+		}
+		render(view('RENEWAL'))
+		const seats = screen.getByLabelText('Всего мест')
+		const calculateButton = screen.getByRole('button', {
+			name: 'Рассчитать на сервере'
+		})
+		expect(seats).toHaveProperty('value', '2')
+		expect(seats).toHaveProperty('min', '3')
+		expect(seats).toHaveProperty('disabled', true)
+		expect(screen.getByRole('alert').textContent).toContain('минимум мест')
+		expect(calculateButton).toHaveProperty('disabled', true)
+		fireEvent.click(calculateButton)
+		expect(getBillingQuote).not.toHaveBeenCalled()
+	})
+
 	it('has no payment action before a real quote and leaves consent unchecked', async () => {
 		render(view())
 		expect(
@@ -125,6 +277,11 @@ describe('server-authoritative CRM checkout composer', () => {
 			'2'
 		)
 		await calculate()
+		expect(toast.loading).toHaveBeenCalledExactlyOnceWith('Пожалуйста, подождите')
+		expect(toast.success).toHaveBeenCalledExactlyOnceWith(
+			'Расчёт получен. Проверьте сумму, места и даты.',
+			{ id: 'billing-loading' }
+		)
 		expect(screen.getByRole('checkbox')).toHaveProperty('checked', false)
 		expect(screen.getByText(quote.consent.text)).toBeTruthy()
 		expect(document.querySelector('script')).toBeNull()
@@ -169,7 +326,7 @@ describe('server-authoritative CRM checkout composer', () => {
 			commandId: string
 		) => unknown
 		expect(build(id)).toMatchObject({
-			body: { autoRenew: true, consentVersion: 'wincrm-v1' }
+			body: { autoRenew: true, consentVersion: 'test-consent-v1' }
 		})
 		fireEvent.change(screen.getByLabelText('Период'), {
 			target: { value: 'YEARLY' }
@@ -313,6 +470,10 @@ describe('server-authoritative CRM checkout composer', () => {
 		expect(
 			screen.queryByRole('button', { name: 'Создать заказ на оплату' })
 		).toBeNull()
-		expect(toast.error).toHaveBeenCalledWith('Расчёт недоступен')
+		expect(toast.loading).toHaveBeenCalledExactlyOnceWith('Пожалуйста, подождите')
+		expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+			'Расчёт недоступен',
+			{ id: 'billing-loading' }
+		)
 	})
 })

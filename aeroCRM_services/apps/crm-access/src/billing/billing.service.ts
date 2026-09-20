@@ -21,10 +21,10 @@ import {
 import type {
 	CommerceCommandType,
 	CrmBillingContext,
-	WincrmCommerceSummary,
-	WincrmCommerceQuote,
-	WincrmOrderResponse,
-	WincrmHistoryResponse
+	CrmCommerceSummary,
+	CrmCommerceQuote,
+	CrmOrderResponse,
+	CrmHistoryResponse
 } from './billing.contract';
 
 @Injectable()
@@ -43,7 +43,7 @@ export class CrmBillingService {
 			authorization
 		);
 		await this.capacity.syncPending(workspaceId);
-		const billing = await this.billing.request<WincrmCommerceSummary>(
+		const billing = await this.billing.request<CrmCommerceSummary>(
 			'summary',
 			{ schemaVersion: 1, workspaceId, actorSubject } as Parameters<
 				BillingCommerceClient['request']
@@ -104,7 +104,7 @@ export class CrmBillingService {
 			body.workspaceId,
 			authorization
 		);
-		const result = await this.billing.request<WincrmCommerceQuote>(
+		const result = await this.billing.request<CrmCommerceQuote>(
 			'quote',
 			{ ...body, actorSubject },
 			'quote'
@@ -141,7 +141,7 @@ export class CrmBillingService {
 				where: { commandId: command.commandId }
 			}))
 		) {
-			const summary = await this.billing.request<WincrmCommerceSummary>(
+			const summary = await this.billing.request<CrmCommerceSummary>(
 				'summary',
 				{ schemaVersion: 1, workspaceId, actorSubject },
 				'summary'
@@ -189,7 +189,7 @@ export class CrmBillingService {
 			workspaceId,
 			authorization
 		);
-		const result = await this.billing.request<WincrmOrderResponse>(
+		const result = await this.billing.request<CrmOrderResponse>(
 			'orders/get',
 			{
 				schemaVersion: 1,
@@ -216,7 +216,7 @@ export class CrmBillingService {
 			workspaceId,
 			authorization
 		);
-		const result = await this.billing.request<WincrmHistoryResponse>(
+		const result = await this.billing.request<CrmHistoryResponse>(
 			'history',
 			{
 				schemaVersion: 1,

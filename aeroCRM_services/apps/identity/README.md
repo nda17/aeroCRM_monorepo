@@ -10,7 +10,7 @@ personal workspaces и memberships, проверочными challenge, OAuth, �
 
 | `IDENTITY_PROCESS_ROLE` | Порт по умолчанию | Ответственность                                        |
 | ----------------------- | ----------------: | ------------------------------------------------------ |
-| `api`                   |              4900 | HTTP-контракты Auth/users/OAuth/Telegram и JWKS        |
+| `api`                   |              4900 | HTTP-контракты Auth/users/OAuth/Telegram Info и JWKS   |
 | `worker`                |              4901 | Идемпотентные consumers жизненного цикла и направлений |
 | `outbox-publisher`      |              4902 | Публикация Outbox с confirms и mandatory               |
 
@@ -21,7 +21,7 @@ personal workspaces и memberships, проверочными challenge, OAuth, �
 ## HTTP- и внутренние контракты
 
 Публичные маршруты находятся под `/api/v1`: `/auth/**`, `/users/**`,
-`/telegram-auth/**` и webhook Telegram. JWKS доступен по
+`/telegram-info/admin/**` и `/telegram-bot/webhook`. JWKS доступен по
 `GET /api/v1/auth/.well-known/jwks.json`.
 
 Refresh token остаётся общим HttpOnly cookie для доверенных поддоменов.
@@ -35,25 +35,27 @@ Refresh token остаётся общим HttpOnly cookie для доверен�
 - `POST /internal/v1/auth/introspect`
 - `POST /internal/v1/crm-access/auth-context` — только валидная bearer-сессия
   и активные memberships активных workspaces
-- `POST /internal/v1/crm-access/widget-source-context` — только scoped caller
+- `POST /internal/v1/crm-access/source-context` — scoped caller `crm-access`
+  передаёт `schemaVersion:1`, `workspaceId`, `subject` без JWT. Возвращается
+  активное членство актора в активном workspace либо `membership:null`.
+- `POST /internal/v1/crm-access/owner-context` — только scoped caller
   `crm-access`: точные `schemaVersion:1`, `workspaceId`, `subject` без JWT.
   Возвращает membership актора и `ownerSubject` из одного read-only
   RepeatableRead snapshot. Неактивное workspace/членство/пользователь,
   отсутствующий или неоднозначный активный OWNER дают оба поля `null`.
   Для PERSONAL владелец также совпадает с `personalOwnerUserId`; профиль,
-  контакты и Widgets-подписка не раскрываются. Ответ `no-store`, ошибки БД
+  контакты и подписка не раскрываются. Ответ `no-store`, ошибки БД
   дают `503`, а не фиктивное отсутствие владельца.
-- `/internal/v1/widgets/owners/**`
 - `/internal/v1/operations/audit-snapshots` и
   `GET /internal/v1/operations/admin-health`
 - `POST /internal/v1/campaigns/eligible-contacts`
 - `POST /internal/v1/billing/lifecycle/complete`
 - `/internal/v1/identity/messaging/**`
 
-Campaigns, Reporting, Widgets, Billing, `crm-access`, Platform, Support и
-Operations имеют раздельные `IDENTITY_<CALLER>_TOKEN`; сервис отклоняет
+Campaigns, Reporting, Billing, `crm-access`, Notification Delivery, Platform,
+Support и Operations имеют раздельные `IDENTITY_<CALLER>_TOKEN`; сервис отклоняет
 отсутствующие, шаблонные, повторно используемые или короткие учётные данные.
-Сам Identity вызывает Billing, Widgets и Operations через отдельные токены с
+Сам Identity вызывает Billing и Operations через отдельные токены с
 областью Identity.
 
 ## Внешние провайдеры
@@ -61,10 +63,10 @@ Operations имеют раздельные `IDENTITY_<CALLER>_TOKEN`; серви
 ### Резервный вход по коду
 
 `IDENTITY_LOGIN_OTP_ENABLED=false` по умолчанию. Включать после миграции
-`20260910010000_add_login_otp`, проверки Identity/Gateway trusted-proxy boundary
+`20260920000000_init_aerocrm`, проверки Identity/Gateway trusted-proxy boundary
 и настроенных SMTP/SMS Aero credentials. Новые маршруты находятся внутри
 существующего optional-auth префикса Gateway `/api/v1/auth`; отдельная CRM
-подписка для входа не нужна. Старые пароль, регистрация, Telegram и OAuth
+подписка для входа не нужна. Пароль, регистрация и OAuth
 сохраняют свои контракты и CAPTCHA-защиту.
 
 - `GET /api/v1/auth/login-otp/capabilities` возвращает `available`, список
@@ -102,8 +104,8 @@ hour → channel day: отказ не расходует последующие 
 Ошибки: `401 login_otp_invalid`, `429 login_otp_rate_limited`,
 `503 login_otp_unavailable`. Клиентский признак недоступности CAPTCHA никогда
 не является разрешением сервера: это самостоятельный защищённый способ входа.
-Для старого входа отказ/low score остаётся `400`, а transport/HTTP/JSON outage
-siteverify получает прежний `503` и message с кодом `recaptcha_unavailable`.
+При проверке Turnstile отказ или несовпадение action/hostname дают `400`,
+а transport/HTTP/JSON outage siteverify — `503` с кодом `turnstile_unavailable`.
 
 OTP отправляется одной синхронной ограниченной попыткой без автоматического
 retry/RabbitMQ. SMTP использует отдельный abortable socket и обычную проверку
@@ -125,12 +127,11 @@ row lock, SELECT/INSERT user_sessions и CRUD двух OTP-таблиц. Driver 
 
 - Access JWT используют закрытый ключ RSA и публичный JWKS, переданные в
   base64.
-- Учётные данные и callback OAuth настраиваются отдельно для Google, GitHub,
-  Yandex и VK.
+- Учётные данные и callback OAuth настраиваются отдельно для Google, Yandex и VK.
 - Проверка email/SMS использует SMTP и SMS Aero.
-- Webhook Telegram использует учётные данные ботов Auth и Info. В production
+- Webhook Telegram использует учётные данные бота Info. В production
   `TELEGRAM_API_BASE_URL` должен быть равен
-  `https://tg.winwidget.ru/telegram-api`; прямой доступ к Telegram разрешён
+  `https://telegram.aerocrm.space/telegram-api`; прямой доступ к Telegram разрешён
   только вне production.
 - Хранилище аватаров требует отдельного пространства имён
   `IDENTITY_AVATAR_S3_*`.
@@ -152,7 +153,7 @@ pnpm run typecheck
 pnpm run lint
 pnpm test
 pnpm run build
-docker build --build-arg APP_REVISION="$(git rev-parse HEAD)" -t winwidget-identity .
+docker build --build-arg APP_REVISION="$(git rev-parse HEAD)" -t aerocrm-identity .
 ```
 
 Запустите API, worker и Outbox publisher из одного неизменяемого образа. До
@@ -161,7 +162,7 @@ docker build --build-arg APP_REVISION="$(git rev-parse HEAD)" -t winwidget-ident
 активации нет, поэтому включённые worker, housekeeping и Outbox publisher
 запускаются сразу после успешного применения миграций.
 
-## Приглашения WinCRM
+## Приглашения aeroCRM
 
 Identity владеет `workspace_invitations`, подтверждённым EMAIL и обычным
 workspace MEMBER, но не CRM-ролями или лимитом мест. Ссылка содержит только
@@ -171,10 +172,10 @@ EMAIL приглашения. Иной email/неизвестное пригла
 POST: `schemaVersion:1`, UUID `commandId`, `expectedVersion`, точный
 `Idempotency-Key`. Receipt связан с актором и payload, replay заново проверяет
 email. Неактивный MEMBER не реактивируется; активный MEMBER переиспользуется,
-новый MEMBER получает provenance `WINCRM` и invitation ID. OWNER не изменяется.
+новый MEMBER получает provenance `AEROCRM` и invitation ID. OWNER не изменяется.
 
 Acceptance, membership, receipt и identifiers-only Outbox
-`identity.wincrm.invitation-accepted.v1` коммитятся вместе. CRM Access отдельно
+`identity.crm.invitation-accepted.v1` коммитятся вместе. CRM Access отдельно
 выдаёт роль после свежей проверки Identity/Billing и квоты; до этого обычный
 MEMBER не предоставляет продуктовых прав. JWT нигде не сохраняется в saga.
 
@@ -201,17 +202,17 @@ Endpoint защищён существующим `crm-access` service guard и �
 Старый `member-directory` и его exact-ID семантика не изменяются.
 
 Email доставки включаются отдельно `CRM_INVITATION_EMAIL_ENABLED=true`
-**только вместе** с Notification Delivery consumer `wincrm-invitation-email`.
+**только вместе** с Notification Delivery consumer `crm-invitation-email`.
 По умолчанию false сохраняет прежний runtime без нового обязательного токена.
 При включении требуется отдельный pairwise-distinct
 `IDENTITY_NOTIFICATION_DELIVERY_TOKEN`. Создание приглашения атомарно
-публикует `notification.wincrm.invitation.email.requested.v1` через Outbox:
+публикует `notification.crm.invitation.email.requested.v1` через Outbox:
 immutable notification event ID, invitation/workspace IDs, нормализованный
 email и expiry; без URL, HTML или JWT. Шаблон и allowlisted CRM link строит
 Notification Delivery. Outcome event не создаётся без отдельного consumer.
 
 Перед отправкой Notification Delivery вызывает только
-`POST /internal/v1/notification-delivery/wincrm-invitations/:id/delivery-context`
+`POST /internal/v1/notification-delivery/crm-invitations/:id/delivery-context`
 с `x-aerocrm-service`, `x-aerocrm-internal-token` и body
 `{schemaVersion:1,eventId,workspaceId}`. Exact binding неизвестен — `404`;
 известное revoked/accepted/expired или выключенный email — `200 deliver:false`
@@ -222,4 +223,4 @@ Runtime дополнительно нужен `SELECT,INSERT,UPDATE` на
 `identity.workspace_invitations`; grants существующих `workspace_members`,
 `internal_command_receipts`, `outbox_events` остаются service-owned. Readiness
 проверяет migration columns. Для rollout применить migration до новой API;
-старые memberships и Widgets-права не меняются, compatibility adapter не нужен.
+существующие memberships сохраняются, CRM-права выдаёт отдельный сервис Access.

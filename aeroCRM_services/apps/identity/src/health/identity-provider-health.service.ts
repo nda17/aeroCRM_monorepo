@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuthSettingsService } from '../auth/auth-settings.service';
+import { expectedTurnstileHostnames } from '../auth/turnstile.guard';
 import { VerificationTransportService } from '../transports/verification-transport.service';
 
 type ProviderHealthStatus = 'ok' | 'warning' | 'down' | 'disabled';
@@ -94,12 +95,17 @@ export class IdentityProviderHealthService {
 			};
 		}
 		const secret = this.config.get<string>('TURNSTILE_SECRET_KEY')?.trim() || '';
-		const hostname = this.config.get<string>('TURNSTILE_EXPECTED_HOSTNAME')?.trim() || '';
+		let hostnames: Set<string>;
+		try {
+			hostnames = expectedTurnstileHostnames(this.config);
+		} catch {
+			hostnames = new Set();
+		}
 		return {
 			id: 'turnstile',
 			title: 'Cloudflare Turnstile',
-			status: secret && hostname ? 'ok' : 'warning',
-			message: secret && hostname ? 'Ключ и hostname настроены' : 'Ключ или hostname не настроен'
+			status: secret && hostnames.size > 0 ? 'ok' : 'warning',
+			message: secret && hostnames.size > 0 ? 'Ключ и hostname настроены' : 'Ключ или hostname не настроен'
 		};
 	}
 

@@ -4,9 +4,9 @@ import { RabbitMqService } from './rabbitmq.service';
 describe('RabbitMqService invitation topology opt-in', () => {
 	it.each([
 		undefined,
-		'email',
-		'wincrm-task-reminder-email',
-		'wincrm-task-reminder-telegram'
+		'campaign-email',
+		'crm-task-reminder-email',
+		'crm-task-reminder-telegram'
 	])(
 		'adds reminder topology only for its opted-in channel %s',
 		async configuredKinds => {
@@ -29,15 +29,15 @@ describe('RabbitMqService invitation topology opt-in', () => {
 			const queues = channel.assertQueue.mock.calls.map(
 				call => call[0] as string
 			);
-			for (const suffix of ['email', 'telegram'])
+			for (const suffix of ['campaign-email', 'telegram'])
 				expect(
 					queues.includes(
-						`aerocrm.notification.wincrm.task-reminder.${suffix}`
+						`aerocrm.notification.crm.task-reminder.${suffix}`
 					)
-				).toBe(configuredKinds === `wincrm-task-reminder-${suffix}`);
+				).toBe(configuredKinds === `crm-task-reminder-${suffix}`);
 		}
 	);
-	it.each([undefined, 'email', 'email,wincrm-invitation-email'])(
+	it.each([undefined, 'campaign-email', 'campaign-email,crm-invitation-email'])(
 		'asserts invitation queues only for explicit opt-in %s',
 		async configuredKinds => {
 			const service = new RabbitMqService({
@@ -59,16 +59,16 @@ describe('RabbitMqService invitation topology opt-in', () => {
 			const queues = channel.assertQueue.mock.calls.map(
 				call => call[0] as string
 			);
-			expect(queues).toContain('aerocrm.payment-notification.email');
+			expect(queues).toContain('aerocrm.notification.campaign.email.v2');
 			const invitationQueues = queues.filter(queue =>
-				queue.startsWith('aerocrm.notification.wincrm.invitation.email')
+				queue.startsWith('aerocrm.notification.crm.invitation.email')
 			);
-			if (configuredKinds?.includes('wincrm-invitation-email')) {
+			if (configuredKinds?.includes('crm-invitation-email')) {
 				expect(invitationQueues).toContain(
-					'aerocrm.notification.wincrm.invitation.email'
+					'aerocrm.notification.crm.invitation.email'
 				);
 				expect(invitationQueues).toContain(
-					'aerocrm.notification.wincrm.invitation.email.dead-letter'
+					'aerocrm.notification.crm.invitation.email.dead-letter'
 				);
 				expect(
 					invitationQueues.some(queue => queue.includes('.retry-v2.'))

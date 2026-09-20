@@ -135,7 +135,7 @@ const worker = (dependencies: {
 									(loaded.sourceSize as bigint | undefined) ?? 6n;
 								const sourceFileName =
 									(loaded.sourceFileName as string | undefined) ??
-									'winwidget-reporting-db-2026-08-31.dump';
+									'aerocrm-reporting-db-2026-08-31.dump';
 								const envelope = {
 									keyId: lease.event.backupProvenanceKeyId,
 									evidence: {
@@ -184,7 +184,7 @@ const worker = (dependencies: {
 	);
 
 describe('DatabaseRestoreService contract', () => {
-	it('exposes only the currently approved non-Operations, non-Billing targets', async () => {
+	it('exposes no restore targets while admission is disabled', async () => {
 		const authorization = {
 			getApprovedPermit: jest.fn().mockResolvedValue(null)
 		};
@@ -210,24 +210,11 @@ describe('DatabaseRestoreService contract', () => {
 				allowedFileExtension: '.dump',
 				maxFileSizeBytes: 49 * 1024 * 1024,
 				currentServicesSha: SERVICES_SHA,
-				targets: expect.arrayContaining([
-					expect.objectContaining({
-						id: 'reporting',
-						migrationManifestSha: MIGRATION_MANIFEST_SHA
-					})
-				])
+			targets: []
 			})
 		);
 		const settings = await service.getSettings();
-		expect(settings.targets.map(item => item.id)).toEqual([
-			'notification-delivery',
-			'campaigns',
-			'reporting',
-			'widgets',
-			'identity',
-			'platform',
-			'support'
-		]);
+		expect(settings.targets).toEqual([]);
 	});
 
 	it('fails settings closed without an exact running services SHA', async () => {

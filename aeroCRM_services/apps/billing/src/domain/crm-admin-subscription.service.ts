@@ -28,7 +28,7 @@ import {
 	lockBillingCommand
 } from './billing-command-idempotency';
 import { enqueueCrmEntitlementChanged } from './crm-entitlement-outbox';
-import { readWincrmPriceSnapshot } from './wincrm-commerce.helpers';
+import { readCrmPriceSnapshot } from './crm-commerce.helpers';
 
 const COMMAND_TYPE = 'ADMIN_EXTEND_AEROCRM_DAYS';
 const CANCEL_COMMAND_TYPE = 'CANCEL_ADMIN_EXTEND_AEROCRM_DAYS';
@@ -59,7 +59,7 @@ export class CrmAdminSubscriptionService {
 		if (actor.roles.includes('DEV')) return 'DEV';
 		if (actor.roles.includes('ADMIN')) return 'ADMIN';
 		throw new ForbiddenException(
-			'Подписками WinCRM управляют ADMIN и DEV сервиса'
+			'Подписками aeroCRM управляют ADMIN и DEV сервиса'
 		);
 	}
 
@@ -177,12 +177,12 @@ export class CrmAdminSubscriptionService {
 			const entitlement = entitlementByWorkspace.get(workspaceId);
 			const reference = referencesByWorkspace.get(workspaceId);
 			if (!entitlement || !reference)
-				throw new Error('WinCRM subscription snapshot is incomplete');
+				throw new Error('aeroCRM subscription snapshot is incomplete');
 			const resolvePeriod = (id: string | null) => {
 				if (id === null) return null;
 				const period = periodById.get(id);
 				if (!period || period.workspaceId !== workspaceId)
-					throw new Error('WinCRM period snapshot binding is invalid');
+					throw new Error('aeroCRM period snapshot binding is invalid');
 				return period;
 			};
 			return this.project({
@@ -284,7 +284,7 @@ export class CrmAdminSubscriptionService {
 					async tx => {
 						await tx.$executeRaw`SET LOCAL lock_timeout = '5s'`;
 						await lockBillingCommand(tx, commandId);
-						await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`billing-wincrm-entitlement:${workspaceId}`}, 0))`;
+						await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`billing-crm-entitlement:${workspaceId}`}, 0))`;
 						const prior = await tx.billingCommandReceipt.findUnique({
 							where: { commandId }
 						});
@@ -332,7 +332,7 @@ export class CrmAdminSubscriptionService {
 							},
 							section: 'SUBSCRIPTIONS',
 							action: 'SUBSCRIPTION_EXTEND_DAYS',
-							description: `WinCRM: отменена неподтверждённая команда начисления дней ${commandId}; подписка не изменена`,
+							description: `aeroCRM: отменена неподтверждённая команда начисления дней ${commandId}; подписка не изменена`,
 							entity: {
 								type: 'crm_subscription_command',
 								id: commandId,
@@ -495,7 +495,7 @@ export class CrmAdminSubscriptionService {
 								COMMAND_TYPE,
 								requestHash
 							);
-						await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`billing-wincrm-entitlement:${workspaceId}`}, 0))`;
+						await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`billing-crm-entitlement:${workspaceId}`}, 0))`;
 						const before = await this.read(tx, workspaceId);
 						if (
 							before.entitlementVersion !==
@@ -539,7 +539,7 @@ export class CrmAdminSubscriptionService {
 							const period = await tx.crmPaidPeriod.findUniqueOrThrow({
 								where: { id: before.period.id }
 							});
-							const graceDays = readWincrmPriceSnapshot(
+							const graceDays = readCrmPriceSnapshot(
 								period.priceSnapshot
 							).graceDays;
 							await tx.crmPaidPeriod.update({
@@ -635,7 +635,7 @@ export class CrmAdminSubscriptionService {
 							},
 							section: 'SUBSCRIPTIONS',
 							action: 'SUBSCRIPTION_EXTEND_DAYS',
-							description: `WinCRM: бесплатно начислено ${dto.days} дней пространству ${workspaceId}`,
+							description: `aeroCRM: бесплатно начислено ${dto.days} дней пространству ${workspaceId}`,
 							entity: {
 								type: 'crm_subscription',
 								id: workspaceId,

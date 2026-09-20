@@ -23,9 +23,9 @@ import type {
 	RevokeWorkspaceInvitationDto
 } from './workspace-invitation.dto';
 
-const ACCEPTED_EVENT = 'identity.wincrm.invitation-accepted.v1';
+const ACCEPTED_EVENT = 'identity.crm.invitation-accepted.v1';
 const MAX_TTL_MS = 7 * 86400000;
-const SCOPE = { client: 'wincrm', command: 'workspace-invitation' };
+const SCOPE = { client: 'crm', command: 'workspace-invitation' };
 
 @Injectable()
 export class WorkspaceInvitationService {
@@ -119,19 +119,19 @@ export class WorkspaceInvitationService {
 					await tx.outboxEvent.create({
 						data: {
 							messageId: invitation.notificationEventId,
-							deduplicationKey: `wincrm-invitation-email:${invitation.id}`,
+							deduplicationKey: `crm-invitation-email:${invitation.id}`,
 							eventType:
-								'notification.wincrm.invitation.email.requested.v1',
+								'notification.crm.invitation.email.requested.v1',
 							routingKey:
-								'notification.wincrm.invitation.email.requested.v1',
+								'notification.crm.invitation.email.requested.v1',
 							payload: {
 								schemaVersion: 1,
 								eventId: invitation.notificationEventId,
 								eventType:
-									'notification.wincrm.invitation.email.requested.v1',
+									'notification.crm.invitation.email.requested.v1',
 								occurredAt: now.toISOString(),
 								reference: {
-									type: 'wincrm-invitation',
+									type: 'crm-invitation',
 									id: invitation.id,
 									workspaceId: invitation.workspaceId
 								},
@@ -424,7 +424,7 @@ export class WorkspaceInvitationService {
 			try {
 				return await this.prisma.$transaction(
 					async tx => {
-						await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`wincrm-invitation:${commandId}`}, 0))`;
+						await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`crm-invitation:${commandId}`}, 0))`;
 						const key = { ...SCOPE, idempotencyKey: commandId };
 						const prior = await tx.internalCommandReceipt.findUnique({
 							where: { client_command_idempotencyKey: key }

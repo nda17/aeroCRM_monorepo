@@ -10,7 +10,7 @@ import {
 	SupportNotificationEvent
 } from '../messaging/support-notification.contract';
 import { TelegramSupportTransportService } from '../telegram/telegram-support-transport.service';
-import { validReminderToken } from './wincrm-task-reminder-context.service';
+import { validReminderToken } from './crm-task-reminder-context.service';
 
 @Injectable()
 export class SupportNotificationContextService implements OnModuleInit {

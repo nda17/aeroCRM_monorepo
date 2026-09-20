@@ -74,12 +74,17 @@ export const BillingFlow = ({
 			command.running
 		)
 			return
-		toast('Обновляем подписку aeroCRM')
+		const toastId = toast.loading('Пожалуйста, подождите')
 		const result = await query.refetch()
-		if (!actor.current()) return
+		if (!actor.current()) {
+			toast.dismiss(toastId)
+			return
+		}
 		if (result.isError)
-			toast.error('Актуальные условия доступа не подтверждены')
-		else toast.success('Состояние подписки обновлено')
+			toast.error('Актуальные условия доступа не подтверждены', {
+				id: toastId
+			})
+		else toast.success('Состояние подписки обновлено', { id: toastId })
 	}
 	const data = context.ready ? query.data : undefined
 	const commandId =
@@ -94,7 +99,6 @@ export const BillingFlow = ({
 			return
 		}
 		setDialog(null)
-		toast('Окно закрыто')
 	}
 	if (!data)
 		return (
@@ -150,10 +154,7 @@ export const BillingFlow = ({
 				tooltip="Запросить результат прежней операции по её идентификатору без создания нового заказа"
 				disabled={command.running || !actor.online}
 				isLoading={command.running}
-				onClick={() => {
-					toast('Восстанавливаем результат прежней операции')
-					void command.recoverReference(commandId)
-				}}
+				onClick={() => void command.recoverReference(commandId)}
 			>
 				Восстановить результат
 			</Button>
@@ -174,9 +175,6 @@ export const BillingFlow = ({
 				<a
 					className={styles.link}
 					href={`/inbox?workspaceId=${route.workspaceId}`}
-					onClick={() =>
-						toast('Проверяем доступ к рабочему пространству aeroCRM')
-					}
 				>
 					Открыть CRM
 				</a>
@@ -217,10 +215,7 @@ export const BillingFlow = ({
 							tooltip="Запросить результат прежней операции по её идентификатору без создания нового заказа"
 							disabled={command.running || !actor.online}
 							isLoading={command.running}
-							onClick={() => {
-								toast('Восстанавливаем результат прежней операции')
-								void command.recoverReference(commandId)
-							}}
+							onClick={() => void command.recoverReference(commandId)}
 						>
 							Восстановить результат
 						</Button>
@@ -231,9 +226,7 @@ export const BillingFlow = ({
 				<section className={styles.card}>
 					<div className={styles.sectionHeading}>
 						<h2>Ваша подписка</h2>
-						<span className={styles.tag}>
-							aeroCRM · независимо от Widgets
-						</span>
+						<span className={styles.tag}>aeroCRM</span>
 					</div>
 					{trial ? (
 						<>
@@ -285,12 +278,7 @@ export const BillingFlow = ({
 									variant="secondary"
 									tooltip="Рассчитать новое количество мест и срок подписки на основе стоимости оставшегося периода"
 									disabled={formLocked}
-									onClick={() => {
-										setDialog('SEAT_CHANGE')
-										toast(
-											'Изменяем места через перерасчёт оставшегося времени'
-										)
-									}}
+									onClick={() => setDialog('SEAT_CHANGE')}
 								>
 									Изменить количество мест
 								</Button>
@@ -328,8 +316,7 @@ export const BillingFlow = ({
 						) : null}
 					</dl>
 					<p className={styles.note}>
-						Управляет только подпиской aeroCRM. Настройки оплаты и
-						автопродления Widgets не изменяются.
+						Управление автопродлением подписки aeroCRM.
 					</p>
 					{renewal.dispatchPending ? (
 						<p className={styles.notice}>
@@ -343,10 +330,7 @@ export const BillingFlow = ({
 								variant="secondary"
 								tooltip="Открыть подтверждение отключения будущих автосписаний aeroCRM"
 								disabled={formLocked}
-								onClick={() => {
-									setDialog('DISABLE')
-									toast('Проверьте условия отключения автопродления')
-								}}
+								onClick={() => setDialog('DISABLE')}
 							>
 								Отключить автопродление
 							</Button>
@@ -355,10 +339,7 @@ export const BillingFlow = ({
 							<Button
 								tooltip="Получить новые условия следующего автопродления перед подтверждением согласия"
 								disabled={formLocked || !period}
-								onClick={() => {
-									setDialog('RENEWAL')
-									toast('Запрашиваем новые условия автопродления')
-								}}
+								onClick={() => setDialog('RENEWAL')}
 							>
 								Проверить новую цену
 							</Button>
@@ -474,10 +455,7 @@ export const BillingFlow = ({
 							создаются. Уже отправленный провайдеру платёж может
 							завершиться; его результат не отменяется этой командой.
 						</p>
-						<p>
-							Оплаченный период сохраняется. Подписка Widgets не
-							изменяется.
-						</p>
+						<p>Оплаченный период сохраняется.</p>
 						<Button
 							variant="danger"
 							disabled={

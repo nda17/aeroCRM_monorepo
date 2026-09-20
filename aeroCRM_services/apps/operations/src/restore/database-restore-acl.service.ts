@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseRestoreProcessService } from './database-restore-process.service';
-import { DATABASE_RESTORE_ACL_CONTRACTS } from './database-restore-acl.contract';
 import {
 	DatabaseRestoreConnection,
 	DatabaseRestoreTargetConfiguration

@@ -20,12 +20,12 @@ describe('Local validated Blob download', () => {
 			.mockImplementation(() => {})
 		downloadFile(
 			new Uint8Array([123, 125]),
-			'wincrm-contacts.json',
+			'aerocrm-contacts.json',
 			'application/json; charset=utf-8'
 		)
 		expect(click.mock.instances[0]).toHaveProperty(
 			'download',
-			'wincrm-contacts.json'
+			'aerocrm-contacts.json'
 		)
 		expect(document.querySelector('a[download]')).toBeNull()
 		await vi.runAllTimersAsync()
@@ -36,7 +36,7 @@ describe('Local validated Blob download', () => {
 		'../private.csv',
 		'person@example.com.csv',
 		'.hidden.json',
-		'wincrm-contacts.html'
+		'aerocrm-contacts.html'
 	])('rejects an unsafe filename %s', filename => {
 		expect(() =>
 			downloadFile(new Uint8Array(), filename, 'text/csv; charset=utf-8')

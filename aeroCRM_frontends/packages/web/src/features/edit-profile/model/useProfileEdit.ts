@@ -11,8 +11,7 @@ export const useProfileEdit = () => {
 		mutationKey: ['update-profile'],
 		mutationFn: (data: IProfileEditInput) =>
 			userService.updateProfile(data),
-		onMutate: () =>
-			toast.loading('Сохраняем профиль, пожалуйста подождите...'),
+		onMutate: () => toast.loading('Пожалуйста, подождите'),
 		onSuccess(_, __, toastId) {
 			toast.success('Изменения профиля сохранены', { id: toastId })
 			queryClient.invalidateQueries({ queryKey: ['get-profile'] })

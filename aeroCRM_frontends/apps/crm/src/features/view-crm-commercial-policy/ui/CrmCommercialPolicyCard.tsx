@@ -28,7 +28,7 @@ const readOnline = () => onlineManager.isOnline() && navigator.onLine
 const rubles = new Intl.NumberFormat('ru-RU', {
 	style: 'currency',
 	currency: 'RUB',
-	minimumFractionDigits: 2,
+	minimumFractionDigits: 0,
 	maximumFractionDigits: 2
 })
 

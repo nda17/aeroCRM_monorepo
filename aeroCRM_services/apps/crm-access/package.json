@@ -2,7 +2,7 @@
 	"name": "@aerocrm/crm-access",
 	"version": "1.0.0",
 	"private": true,
-	"description": "WinCRM workspace access and entitlement orchestration microservice",
+	"description": "aeroCRM workspace access and entitlement orchestration microservice",
 	"license": "UNLICENSED",
 	"packageManager": "pnpm@9.15.9",
 	"engines": {

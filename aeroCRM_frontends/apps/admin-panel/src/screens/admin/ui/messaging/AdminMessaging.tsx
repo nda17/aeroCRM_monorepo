@@ -196,7 +196,7 @@ export default function AdminMessaging() {
 		const failureId = retryTarget.id
 		setRetryTarget(null)
 		toast.promise(retryMutation.mutateAsync(failureId), {
-			loading: 'Ставим событие в очередь...',
+			loading: 'Пожалуйста, подождите',
 			success: 'Событие повторно поставлено в очередь',
 			error: error => `Ошибка повтора: ${errorCatch(error)}`
 		})
@@ -230,7 +230,7 @@ export default function AdminMessaging() {
 			comment
 		})
 		toast.promise(promise, {
-			loading: 'Закрываем ошибку без повторной доставки...',
+			loading: 'Пожалуйста, подождите',
 			success: 'Ошибка закрыта без повтора',
 			error: error => `Ошибка закрытия: ${errorCatch(error)}`
 		})

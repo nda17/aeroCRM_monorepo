@@ -30,8 +30,8 @@ RUN pnpm run prisma:generate \
 
 FROM base AS runtime
 
-RUN addgroup -S -g 1001 wincrm \
-	&& adduser -S -D -H -u 1001 -G wincrm wincrm
+RUN addgroup -S -g 1001 aerocrm \
+	&& adduser -S -D -H -u 1001 -G aerocrm aerocrm
 
 ARG APP_REVISION=unknown
 
@@ -42,15 +42,15 @@ ENV APP_REVISION=${APP_REVISION}
 LABEL org.opencontainers.image.title="aerocrm-crm-sales" \
 	org.opencontainers.image.revision=${APP_REVISION}
 
-COPY --from=builder --chown=wincrm:wincrm /app/node_modules ./node_modules
-COPY --from=builder --chown=wincrm:wincrm /app/dist ./dist
-COPY --from=builder --chown=wincrm:wincrm /app/prisma ./prisma
-COPY --from=builder --chown=wincrm:wincrm /app/package.json ./package.json
+COPY --from=builder --chown=aerocrm:aerocrm /app/node_modules ./node_modules
+COPY --from=builder --chown=aerocrm:aerocrm /app/dist ./dist
+COPY --from=builder --chown=aerocrm:aerocrm /app/prisma ./prisma
+COPY --from=builder --chown=aerocrm:aerocrm /app/package.json ./package.json
 
 # Public migration code must also be readable by the capability-free verifier.
 RUN chmod -R a+rX /app/prisma
 
-USER wincrm
+USER aerocrm
 
 EXPOSE 5330
 

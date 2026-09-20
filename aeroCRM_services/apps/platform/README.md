@@ -55,7 +55,7 @@ pnpm run typecheck
 pnpm run lint
 pnpm test
 pnpm run build
-docker build --build-arg APP_REVISION="$(git rev-parse HEAD)" -t winwidget-platform .
+docker build --build-arg APP_REVISION="$(git rev-parse HEAD)" -t aerocrm-platform .
 ```
 
 Запустите `api` и `outbox-publisher` из одной ревизии и проверьте readiness

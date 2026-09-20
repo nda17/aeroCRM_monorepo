@@ -16,6 +16,18 @@ import type { useBillingContext } from '../model/use-billing-context'
 import { BillingQuotePreview } from './BillingQuotePreview'
 import styles from './BillingFlow.module.scss'
 
+const minimumSeats = (
+	intent: BillingQuoteRequest['intent'],
+	data: BillingContext
+) =>
+	Math.max(
+		2,
+		intent === 'SEAT_CHANGE' && data.billing.period
+			? data.billing.period.priceSnapshot.includedSeats
+			: data.billing.policy.includedSeats,
+		data.capacity.usedSeats
+	)
+
 export const BillingComposer = ({
 	context,
 	data,
@@ -39,10 +51,7 @@ export const BillingComposer = ({
 	const [seats, setSeats] = useState(
 		String(
 			intent === 'CHECKOUT'
-				? Math.max(
-						data.billing.policy.includedSeats,
-						data.capacity.usedSeats
-					)
+				? minimumSeats(intent, data)
 				: (period?.totalSeats ?? data.billing.policy.includedSeats)
 		)
 	)
@@ -54,11 +63,13 @@ export const BillingComposer = ({
 	const [now, setNow] = useState(0)
 	const mounted = useRef(true)
 	const requestSequence = useRef(0)
+	const loadingToastId = useRef<string | null>(null)
 	useEffect(() => {
 		mounted.current = true
 		return () => {
 			mounted.current = false
 			requestSequence.current += 1
+			if (loadingToastId.current) toast.dismiss(loadingToastId.current)
 		}
 	}, [])
 	useEffect(() => {
@@ -80,23 +91,44 @@ export const BillingComposer = ({
 		permitted &&
 		!locked &&
 		!loading
+	const minSeats = minimumSeats(intent, data)
 	const validSeats =
 		/^[1-9][0-9]{0,4}$/.test(seats) &&
-		Number(seats) >= Math.max(2, data.capacity.usedSeats) &&
+		Number(seats) >= minSeats &&
 		Number(seats) <= 10000
+	const seatsError = validSeats
+		? undefined
+		: Number(seats) < minSeats && /^[1-9][0-9]{0,4}$/.test(seats)
+			? intent === 'RENEWAL'
+				? `В текущем тарифе минимум мест, включая владельца: ${minSeats}. Для изменения числа мест оформите новую оплату по этому тарифу.`
+				: `Количество мест вместе с владельцем должно быть не меньше ${minSeats}.`
+			: `Укажите целое количество мест от ${minSeats} до 10 000.`
 	const current = (sequence: number) =>
 		mounted.current &&
 		sequence === requestSequence.current &&
 		actor.current()
 	const quoteFresh =
 		!!quote &&
+		validSeats &&
 		quote.billingVersion === data.billing.billingVersion &&
+		quote.priceSnapshot.policyVersion ===
+			(intent === 'SEAT_CHANGE' && period
+				? period.priceSnapshot.policyVersion
+				: data.billing.policy.policyVersion) &&
+		quote.priceSnapshot.includedSeats ===
+			(intent === 'SEAT_CHANGE' && period
+				? period.priceSnapshot.includedSeats
+				: data.billing.policy.includedSeats) &&
 		quote.cycle === cycle &&
 		quote.totalSeats === Number(seats) &&
 		Math.max(0, now - quoteReceivedAt) <
 			Date.parse(quote.validUntil) - Date.parse(quote.serverTime)
 	const clearQuote = () => {
 		requestSequence.current += 1
+		if (loadingToastId.current) {
+			toast.dismiss(loadingToastId.current)
+			loadingToastId.current = null
+		}
 		setQuote(null)
 		setAutoRenew(false)
 		setFailure(null)
@@ -109,10 +141,33 @@ export const BillingComposer = ({
 		setFailure(null)
 		setQuote(null)
 		setAutoRenew(false)
-		toast('Запрашиваем актуальный расчёт aeroCRM')
+		const toastId = toast.loading('Пожалуйста, подождите')
+		loadingToastId.current = toastId
 		try {
 			const token = await context.authorize()
 			if (!current(sequence)) return
+			const fresh = context.latestData()
+			const freshPermitted =
+				fresh &&
+				(intent === 'CHECKOUT'
+					? fresh.capabilities.checkout
+					: intent === 'SEAT_CHANGE'
+						? fresh.capabilities.changeSeats
+						: fresh.capabilities.confirmRenewalPrice)
+			if (!fresh || !fresh.capabilities.quote || !freshPermitted) {
+				const message =
+					'Актуальный доступ к расчёту не подтверждён. Обновите подписку.'
+				setFailure(message)
+				toast.error(message, { id: toastId })
+				return
+			}
+			const freshMinimum = minimumSeats(intent, fresh)
+			if (Number(seats) < freshMinimum) {
+				const message = `Тариф обновился: минимум мест, включая владельца — ${freshMinimum}.`
+				setFailure(message)
+				toast.error(message, { id: toastId })
+				return
+			}
 			const result = await getBillingQuote(token, {
 				schemaVersion: 1,
 				workspaceId: actor.workspaceId,
@@ -124,16 +179,25 @@ export const BillingComposer = ({
 			setQuote(result)
 			setQuoteReceivedAt(performance.now())
 			setNow(performance.now())
-			toast.success('Расчёт получен. Проверьте сумму, места и даты.')
+			toast.success('Расчёт получен. Проверьте сумму, места и даты.', {
+				id: toastId
+			})
 		} catch (error) {
 			if (!current(sequence)) return
 			const message =
-				error instanceof AuthenticatedApiError
-					? error.message
-					: 'Расчёт сейчас недоступен. Оплата не создавалась.'
+				error instanceof AuthenticatedApiError &&
+				error.kind === 'validation'
+					? 'Проверьте число мест и актуальные условия тарифа перед новым расчётом.'
+					: error instanceof AuthenticatedApiError
+						? error.message
+						: 'Расчёт сейчас недоступен. Оплата не создавалась.'
 			setFailure(message)
-			toast.error(message)
+			toast.error(message, { id: toastId })
 		} finally {
+			if (loadingToastId.current === toastId) {
+				if (!current(sequence)) toast.dismiss(toastId)
+				loadingToastId.current = null
+			}
 			if (current(sequence)) setLoading(false)
 		}
 	}
@@ -205,7 +269,7 @@ export const BillingComposer = ({
 					label="Всего мест"
 					type="number"
 					inputMode="numeric"
-					min={Math.max(2, data.capacity.usedSeats)}
+					min={minSeats}
 					max={10000}
 					step={1}
 					value={seats}
@@ -214,12 +278,8 @@ export const BillingComposer = ({
 						setSeats(event.target.value)
 						clearQuote()
 					}}
-					hint={`Включая владельца. Сейчас занято: ${data.capacity.usedSeats}. Минимум 2 места.`}
-					error={
-						validSeats
-							? undefined
-							: 'Укажите целое количество от числа занятых мест (не менее 2) до 10 000.'
-					}
+					hint={`Сейчас занято: ${data.capacity.usedSeats}. Минимум мест, включая владельца: ${minSeats}.`}
+					error={seatsError}
 				/>
 			</div>
 			<Button

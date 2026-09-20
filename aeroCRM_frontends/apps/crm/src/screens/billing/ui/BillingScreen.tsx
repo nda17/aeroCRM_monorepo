@@ -31,7 +31,7 @@ const BillingReturnRedirect = ({ route }: { route: BillingRoute }) => {
 }
 
 const BillingRouteScreen = ({ returning }: { returning: boolean }) => {
-	const enabled = getRuntimeConfig().wincrmBillingEnabled
+	const enabled = getRuntimeConfig().crmBillingEnabled
 	const search = useSearchParams()
 	const { session, sessionRevision } = useSessionStore()
 	const route = parseBillingRoute(search, returning)
@@ -43,14 +43,14 @@ const BillingRouteScreen = ({ returning }: { returning: boolean }) => {
 					<h1>Подписка и оплата</h1>
 					<p>
 						Условия рабочего пространства, оплаченные места и управление
-						автопродлением — отдельно от Widgets.
+						автопродлением.
 					</p>
 				</header>
 				{!enabled ? (
 					<ScreenState
 						variant="empty"
 						title="Оплата aeroCRM скоро будет доступна"
-						description="Платёжные функции пока не выпущены. Здесь нельзя создать платёж или подключить автосписания; существующая подписка Widgets не изменяется."
+						description="Платёжные функции пока не выпущены. Здесь нельзя создать платёж или подключить автосписания."
 					/>
 				) : !route ? (
 					<ScreenState

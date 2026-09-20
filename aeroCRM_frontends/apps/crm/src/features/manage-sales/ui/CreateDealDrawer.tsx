@@ -255,7 +255,6 @@ export const CreateDealDrawer = ({
 														}
 														onClick={() => {
 															void contacts.refetch()
-															toast('Повторно проверяем контакты')
 														}}
 													>
 														Повторить

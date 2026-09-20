@@ -5,7 +5,7 @@ import { CrmAccessPrismaService } from '../prisma/crm-access-prisma.service';
 
 export const TEAM_EVENTS = {
 	provision: 'crm.access.invitation-provision.v1',
-	acceptance: 'identity.wincrm.invitation-accepted.v1',
+	acceptance: 'identity.crm.invitation-accepted.v1',
 	admission: 'crm.access.admission-wake.v1'
 } as const;
 export type TeamConsumer = keyof typeof TEAM_EVENTS;
@@ -95,7 +95,7 @@ export async function workspaceLock(
 	tx: Prisma.TransactionClient,
 	workspaceId: string
 ) {
-	await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`wincrm-team:${workspaceId}`}, 0))`;
+	await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`crm-team:${workspaceId}`}, 0))`;
 }
 export async function emitTeamEvent(
 	tx: Prisma.TransactionClient,
@@ -138,7 +138,7 @@ export async function command<T>(
 		body
 	});
 	return serializable(prisma, async tx => {
-		await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`wincrm-team-command:${commandId}`}, 0))`;
+		await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`crm-team-command:${commandId}`}, 0))`;
 		await workspaceLock(tx, actor.workspaceId);
 		if (actor.role !== 'OWNER') {
 			const currentActor = await tx.crmWorkspaceMember.findUnique({

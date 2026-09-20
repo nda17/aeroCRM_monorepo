@@ -115,7 +115,7 @@ describe('SourceEditor', () => {
 			teamId: null
 		})
 		expect(document.body.textContent).not.toContain(command.token)
-		expect(document.body.textContent).toContain('X-WinCRM-Source-Token')
+		expect(document.body.textContent).toContain('X-CRM-Source-Token')
 		expect(document.body.textContent).not.toContain('Idempotency-Key')
 		expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
 		fireEvent.click(

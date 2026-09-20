@@ -31,7 +31,7 @@ import {
 export interface AcceptedInvitationEvent {
 	schemaVersion: 1;
 	eventId: string;
-	eventType: 'identity.wincrm.invitation-accepted.v1';
+	eventType: 'identity.crm.invitation-accepted.v1';
 	invitationId: string;
 	invitationVersion: number;
 	workspaceId: string;

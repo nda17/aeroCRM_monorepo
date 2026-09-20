@@ -50,7 +50,7 @@ function commandIdFor(sourceId: string, tranid: string): string {
 	const bytes = createHash('sha256')
 		.update(
 			JSON.stringify([
-				'wincrm:tilda:lead:v1',
+				'crm:tilda:lead:v1',
 				sourceId.toLowerCase(),
 				tranid
 			])

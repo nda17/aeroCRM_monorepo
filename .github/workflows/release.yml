@@ -23,6 +23,25 @@ on:
       backend_env_hash:
         description: SHA-256 of sorted backend env-file hashes on VPS
         required: false
+      crm_contracts_cutover:
+        description: Backend target only; release frontend separately after a successful CRM contract cutover
+        type: boolean
+        default: false
+        required: true
+      crm_contracts_cutover_resume:
+        description: Resume the same reviewed cutover after a guarded rollback
+        type: boolean
+        default: false
+        required: true
+      crm_contracts_staged_env_dir:
+        description: Absolute private VPS directory containing backend/ and migrations/
+        required: false
+      crm_contracts_staged_env_hash:
+        description: SHA-256 of sorted staged backend env-file hashes on VPS
+        required: false
+      crm_contracts_definitions_file:
+        description: Absolute private VPS path to reviewed RabbitMQ definitions JSON
+        required: false
 permissions:
   contents: read
   actions: read
@@ -45,12 +64,26 @@ jobs:
           TARGET: ${{ inputs.target }}
           FRONT_HASH: ${{ inputs.frontend_env_hash }}
           BACK_HASH: ${{ inputs.backend_env_hash }}
+          CUTOVER: ${{ inputs.crm_contracts_cutover && 'true' || 'false' }}
+          RESUME: ${{ inputs.crm_contracts_cutover_resume && 'true' || 'false' }}
+          STAGED_DIR: ${{ inputs.crm_contracts_staged_env_dir }}
+          STAGED_HASH: ${{ inputs.crm_contracts_staged_env_hash }}
+          DEFINITIONS_FILE: ${{ inputs.crm_contracts_definitions_file }}
         run: |
           set -euo pipefail
           [[ "$SHA" =~ ^[a-f0-9]{40}$ ]]
           [[ "$RUN_ID" =~ ^[0-9]+$ ]]
           read -r conclusion head_sha branch workflow_path <<< "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '[.conclusion,.head_sha,.head_branch,.path] | join(" ")')"
           [[ "$conclusion" == success && "$head_sha" == "$SHA" && "$branch" == prod_0.1.0 && "$workflow_path" == .github/workflows/ci.yml ]]
+          if [[ "$CUTOVER" == true ]]; then
+            [[ "$TARGET" == backend ]]
+            [[ "$STAGED_HASH" =~ ^[a-f0-9]{64}$ ]]
+            [[ "$STAGED_DIR" =~ ^/[a-zA-Z0-9_./-]+$ && "$DEFINITIONS_FILE" =~ ^/[a-zA-Z0-9_./-]+$ ]]
+            [[ "/$STAGED_DIR/" != *'/../'* && "/$DEFINITIONS_FILE/" != *'/../'* ]]
+            [[ "$STAGED_DIR" != *'//'* && "$DEFINITIONS_FILE" != *'//'* ]]
+          else
+            [[ "$RESUME" == false && -z "$STAGED_DIR" && -z "$STAGED_HASH" && -z "$DEFINITIONS_FILE" ]]
+          fi
           case "$TARGET" in
             all)
               [[ "$FRONT_HASH" =~ ^[a-f0-9]{64}$ && "$BACK_HASH" =~ ^[a-f0-9]{64}$ ]]
@@ -109,6 +142,11 @@ jobs:
           FRONT_HASH: ${{ inputs.frontend_env_hash }}
           BACK_HASH: ${{ inputs.backend_env_hash }}
           KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          CUTOVER: ${{ inputs.crm_contracts_cutover && 'true' || 'false' }}
+          RESUME: ${{ inputs.crm_contracts_cutover_resume && 'true' || 'false' }}
+          STAGED_DIR: ${{ inputs.crm_contracts_staged_env_dir }}
+          STAGED_HASH: ${{ inputs.crm_contracts_staged_env_hash }}
+          DEFINITIONS_FILE: ${{ inputs.crm_contracts_definitions_file }}
         run: |
           set -euo pipefail
           umask 077
@@ -129,7 +167,19 @@ jobs:
             scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/compose/rabbitmq.conf "$dest:/opt/aerocrm/compose/"
           fi
           scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/release.sh "$dest:/opt/aerocrm/scripts/"
+          if [ "$ROLE" = backend ] && [ "$CUTOVER" = true ]; then
+            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/crm-contract-cutover.mjs infra/scripts/crm-contract-cutover-preflight.mjs infra/scripts/ensure-cutover-node.sh "$dest:/opt/aerocrm/scripts/"
+            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'bash /opt/aerocrm/scripts/ensure-cutover-node.sh')
+            [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "bash -c 'set -euo pipefail; cd /opt/aerocrm; actual=\$(cd env/backend && find . -maxdepth 1 -type f -name \"*.env\" -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d\" \" -f1); staged=\$(cd \"$STAGED_DIR/backend\" && find . -maxdepth 1 -type f -name \"*.env\" -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d\" \" -f1); test \"\$actual\" = \"$BACK_HASH\"; test \"\$staged\" = \"$STAGED_HASH\"; test -f \"$STAGED_DIR/migrations/identity.env\"; test -f \"$STAGED_DIR/migrations/notification-delivery.env\"; test -f \"$DEFINITIONS_FILE\"'"
+          fi
           for app in $APPS; do
             gzip -dc "images/$app/$app.tar.gz" | ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'docker load >/dev/null'
           done
-          ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash'"
+          if [ "$ROLE" = backend ] && [ "$CUTOVER" = true ]; then
+            resume_arg=
+            if [ "$RESUME" = true ]; then resume_arg=' --resume'; fi
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && '$node_bin' scripts/crm-contract-cutover.mjs '$SHA' '$STAGED_DIR' '$DEFINITIONS_FILE'$resume_arg"
+          else
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash'"
+          fi

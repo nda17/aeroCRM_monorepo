@@ -99,7 +99,7 @@ describe('CRM billing exact boundary contracts', () => {
 				{
 					...command,
 					autoRenew: true,
-					consentVersion: 'wincrm-auto-renewal-v1'
+					consentVersion: 'crm-auto-renewal-v1'
 				},
 				commandId,
 				'owner'
@@ -114,7 +114,7 @@ describe('CRM billing exact boundary contracts', () => {
 			expectedBillingVersion: '9',
 			expectedRenewalVersion: 2,
 			expectedPolicyVersion: 3,
-			consentVersion: 'wincrm-auto-renewal-v1'
+			consentVersion: 'crm-auto-renewal-v1'
 		};
 		expect(
 			parseCommand('AEROCRM_CONFIRM_RENEWAL', renewal, commandId, 'owner')

@@ -17,9 +17,9 @@ import { DatabaseRestoreWorkerService } from './database-restore-worker.service'
 
 const compensationEvidence = {
 	roles: [
-		'winwidget_reporting_runtime',
-		'winwidget_reporting_migration',
-		'winwidget_reporting_backup'
+		'aerocrm_reporting_runtime',
+		'aerocrm_reporting_migration',
+		'aerocrm_reporting_backup'
 	] as [string, string, string],
 	verifiedAt: new Date('2026-08-30T20:00:00.000Z'),
 	evidenceSha256: 'f'.repeat(64)
@@ -37,7 +37,7 @@ const claimedJob = (
 ) => {
 	const sourceSha256 = overrides.sourceSha256 ?? 'c'.repeat(64);
 	const sourceSize = overrides.sourceSize ?? 1024n;
-	const sourceFileName = 'winwidget-reporting-db-2026-08-31.dump';
+	const sourceFileName = 'aerocrm-reporting-db-2026-08-31.dump';
 	const envelope = {
 		keyId: lease.event.backupProvenanceKeyId,
 		evidence: {

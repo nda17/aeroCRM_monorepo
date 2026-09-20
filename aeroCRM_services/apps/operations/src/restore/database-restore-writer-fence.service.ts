@@ -459,7 +459,7 @@ $database_restore_verify_reapply_boundary$;`;
 		target: DatabaseRestoreTargetConfiguration
 	): [number, number] {
 		const digest = createHash('sha256')
-			.update(`winwidget:database-restore:${target.database}`)
+			.update(`aerocrm:database-restore:${target.database}`)
 			.digest();
 		return [digest.readInt32BE(0), digest.readInt32BE(4)];
 	}

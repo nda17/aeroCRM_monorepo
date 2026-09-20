@@ -38,19 +38,19 @@ const checkout = {
 	cycle: 'MONTHLY' as const,
 	totalSeats: 2,
 	autoRenew: true,
-	consentVersion: 'wincrm-v1'
+	consentVersion: 'test-consent-v1'
 }
 beforeEach(() => {
 	vi.resetAllMocks()
 	vi.mocked(getRuntimeConfig).mockReturnValue({
-		wincrmBillingEnabled: true
+		crmBillingEnabled: true
 	} as never)
 })
 
 describe('Access BFF-only Billing API', () => {
 	it('sends zero Billing BFF requests while the frontend release gate is off', async () => {
 		vi.mocked(getRuntimeConfig).mockReturnValue({
-			wincrmBillingEnabled: false
+			crmBillingEnabled: false
 		} as never)
 		for (const request of [
 			() => getBillingContext('token', workspaceId, 'owner'),
@@ -69,11 +69,11 @@ describe('Access BFF-only Billing API', () => {
 			() => recoverBillingOperation('token', workspaceId, commandId)
 		])
 			await expect(request()).rejects.toThrow(
-				'Оплата WinCRM скоро будет доступна'
+				'Оплата aeroCRM скоро будет доступна'
 			)
 		expect(authenticatedRequest).not.toHaveBeenCalled()
 	})
-	it('sends an exact stable checkout body/header without actor, price, provider or Widgets fields', async () => {
+	it('sends an exact stable checkout body/header without actor, price, provider or unrelated product fields', async () => {
 		vi.mocked(authenticatedRequest).mockResolvedValue(operation)
 		await expect(
 			mutateBilling('synthetic-token', {

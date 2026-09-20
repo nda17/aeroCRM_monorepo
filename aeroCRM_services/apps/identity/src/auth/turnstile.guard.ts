@@ -15,11 +15,25 @@ const ACTION = 'turnstile_action';
 export const TurnstileAction = (action: string) =>
 	SetMetadata(ACTION, action);
 
+export const expectedTurnstileHostnames = (config: ConfigService): Set<string> => {
+	const configured = config.get<string>('TURNSTILE_EXPECTED_HOSTNAMES');
+	const raw =
+		configured === undefined
+			? config.get<string>('TURNSTILE_EXPECTED_HOSTNAME') || ''
+			: configured;
+	if (!raw.trim()) return new Set();
+	const hosts = raw.split(',').map(value => value.trim().toLowerCase());
+	if (hosts.some(host => !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(host))) {
+		throw new Error('Turnstile expected hostnames are invalid');
+	}
+	return new Set(hosts);
+};
+
 @Injectable()
 export class TurnstileGuard implements CanActivate {
 	private readonly enabled: boolean;
 	private readonly secret: string;
-	private readonly hostname: string;
+	private readonly hostnames: Set<string>;
 
 	constructor(
 		config: ConfigService,
@@ -28,8 +42,8 @@ export class TurnstileGuard implements CanActivate {
 	) {
 		this.enabled = config.get<string>('TURNSTILE_ENABLED') === 'true';
 		this.secret = config.get<string>('TURNSTILE_SECRET_KEY')?.trim() || '';
-		this.hostname = config.get<string>('TURNSTILE_EXPECTED_HOSTNAME')?.trim().toLowerCase() || '';
-		if (this.enabled && (!this.secret || !this.hostname)) {
+		this.hostnames = expectedTurnstileHostnames(config);
+		if (this.enabled && (!this.secret || this.hostnames.size === 0)) {
 			throw new Error('Turnstile configuration is invalid');
 		}
 	}
@@ -83,7 +97,7 @@ export class TurnstileGuard implements CanActivate {
 		if (
 			result.success !== true ||
 			result.action !== action ||
-			result.hostname?.toLowerCase() !== this.hostname
+			!this.hostnames.has(result.hostname?.toLowerCase() || '')
 		) {
 			throw new BadRequestException(
 				'Проверка Turnstile не пройдена. Попробуйте ещё раз.'

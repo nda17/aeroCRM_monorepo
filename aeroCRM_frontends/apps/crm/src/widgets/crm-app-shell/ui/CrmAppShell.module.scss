@@ -175,3 +175,15 @@
 .mobileCaption {
 	@apply mt-auto rounded-xl border border-crm-border bg-crm-surface-muted px-3 py-3 text-xs leading-5 text-crm-muted;
 }
+.logoutLink {
+	flex: none;
+	padding: 8px 10px;
+	border-radius: 8px;
+	color: rgb(var(--crm-primary));
+	font-size: 13px;
+	font-weight: 700;
+
+	&:hover {
+		background: rgb(var(--crm-surface-muted));
+	}
+}

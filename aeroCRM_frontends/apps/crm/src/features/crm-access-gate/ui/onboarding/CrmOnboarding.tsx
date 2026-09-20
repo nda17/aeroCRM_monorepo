@@ -277,7 +277,6 @@ export const CrmOnboarding = ({
 					<Button
 						isLoading={accessRevalidating}
 						onClick={() => {
-							toast('Повторяем проверку доступа')
 							onRevalidateAccess()
 						}}
 					>
@@ -301,7 +300,6 @@ export const CrmOnboarding = ({
 				action={
 					<Button
 						onClick={() => {
-							toast('Повторяем загрузку каталога')
 							void templates.refetch()
 						}}
 					>
@@ -354,11 +352,7 @@ export const CrmOnboarding = ({
 						templateVersion: templateToInstall.version
 					}
 					setInlineError(undefined)
-					toastIdRef.current = toast.loading(
-						hasUnknownResult
-							? 'Повторяем установку выбранного шаблона'
-							: `Создаём воронку «${templateToInstall.name}»`
-					)
+					toastIdRef.current = toast.loading('Пожалуйста, подождите')
 					installation.mutate(
 						sessionOwnedRequest(
 							session,

@@ -60,7 +60,7 @@ describe('Tilda HTTP adapter', () => {
 			method: 'POST',
 			headers: {
 				'content-type': contentType,
-				'x-wincrm-source-token': token,
+				'x-crm-source-token': token,
 				...headers
 			},
 			body

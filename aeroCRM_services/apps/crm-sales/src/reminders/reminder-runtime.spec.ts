@@ -131,8 +131,8 @@ describe('Reminder push consumer durable claim/CAS and publisher', () => {
 		(h.service as any).readiness.transportReady = transportReady;
 		h.prisma.reminderRuntime = { upsert: jest.fn() };
 		const rows = [
-			'notification.wincrm.task-reminder.email.requested.v1',
-			'notification.wincrm.task-reminder.telegram.requested.v1',
+			'notification.crm.task-reminder.email.requested.v1',
+			'notification.crm.task-reminder.telegram.requested.v1',
 			REMINDER_TICK
 		].map(eventType => ({
 			id: randomUUID(),

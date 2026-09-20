@@ -7,7 +7,7 @@ import {
 const config = {
 	telegramApiBaseUrl: 'https://telegram.aerocrm.space/telegram-api',
 	botToken: `123456:${'A'.repeat(32)}`,
-	botUsername: 'WinWidgetSupportBot',
+	botUsername: 'AeroCrmSupportBot',
 	webhookPublicUrl:
 		'https://telegram.aerocrm.space/api/v1/telegram-bot/support-webhook',
 	webhookSecret: 'w'.repeat(48)

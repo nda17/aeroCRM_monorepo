@@ -17,7 +17,7 @@ Summary, своей схемой PostgreSQL, проекциями, transactional
   `operations.notification-routing.changed.v1` в `aerocrm.events`.
   Reporting хранит последний watermark `changedAt`, чтобы отложенный retry не
   мог перезаписать более новую маршрутизацию.
-- Актуальные изменения Identity, Billing и Widgets поступают через независимые
+- Актуальные изменения Identity и Billing поступают через независимые
   очереди RabbitMQ. Reporting публикует запросы доставки Daily Summary и
   события аудита администратора через transactional Outbox.
 

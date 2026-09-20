@@ -35,7 +35,7 @@ Operations читает `GET /internal/v1/support/messaging/overview` через
 Production-вызовы Telegram используют существующий публичный TLS reverse proxy:
 
 ```dotenv
-TELEGRAM_API_BASE_URL=https://tg.winwidget.ru/telegram-api
+TELEGRAM_API_BASE_URL=https://telegram.aerocrm.space/telegram-api
 TELEGRAM_API_PROXY_IP=185.184.122.62
 ```
 
@@ -52,7 +52,7 @@ API принимает webhook только после проверки секр
 Контейнер `outbox-publisher` не должен получать учётные данные Telegram,
 webhook, proxy или Identity; Compose должен передавать их только `api`/`worker`
 по необходимости. Для ролей RabbitMQ имя соединения должно быть строго
-`winwidget-support-<role>`.
+`aerocrm-support-<role>`.
 
 ## Настройка и развёртывание
 
@@ -70,7 +70,7 @@ pnpm run typecheck
 pnpm run lint
 pnpm test
 pnpm run build
-docker build --build-arg APP_REVISION="$(git rev-parse HEAD)" -t winwidget-support .
+docker build --build-arg APP_REVISION="$(git rev-parse HEAD)" -t aerocrm-support .
 ```
 
 После развёртывания проверьте readiness всех ролей и состояние webhook. Для

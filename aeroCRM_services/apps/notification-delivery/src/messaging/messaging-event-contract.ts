@@ -25,16 +25,16 @@ import {
 	SUBSCRIPTION_EXPIRY_EMAIL_NOTIFICATION_EVENT_TYPE,
 	SUBSCRIPTION_EXPIRY_TELEGRAM_NOTIFICATION_EVENT_TYPE,
 	TELEGRAM_DESTINATION_UNAVAILABLE_EVENT_TYPE,
-	WINCRM_INVITATION_EMAIL_EVENT_TYPE,
-	WINCRM_TASK_REMINDER_EMAIL_EVENT_TYPE,
-	WINCRM_TASK_REMINDER_TELEGRAM_EVENT_TYPE
+	CRM_INVITATION_EMAIL_EVENT_TYPE,
+	CRM_TASK_REMINDER_EMAIL_EVENT_TYPE,
+	CRM_TASK_REMINDER_TELEGRAM_EVENT_TYPE
 } from './messaging.constants';
-import { assertWincrmInvitationEvent } from './wincrm-invitation.contract';
-import { assertWincrmTaskReminderEvent } from './wincrm-task-reminder.contract';
-import { assertWincrmIntakeSlaEvent } from './wincrm-intake-sla.contract';
+import { assertCrmInvitationEvent } from './crm-invitation.contract';
+import { assertCrmTaskReminderEvent } from './crm-task-reminder.contract';
+import { assertCrmIntakeSlaEvent } from './crm-intake-sla.contract';
 import {
-	WINCRM_INTAKE_SLA_EMAIL_EVENT_TYPE,
-	WINCRM_INTAKE_SLA_TELEGRAM_EVENT_TYPE
+	CRM_INTAKE_SLA_EMAIL_EVENT_TYPE,
+	CRM_INTAKE_SLA_TELEGRAM_EVENT_TYPE
 } from './messaging.constants';
 
 const UUID_PATTERN =
@@ -637,21 +637,21 @@ const resolveExpectedKind = (
 		case SUPPORT_NOTIFICATION_OUTCOME_EVENT_TYPE:
 			assertSupportNotificationOutcome(payload);
 			return 'support-notification-outcome';
-		case WINCRM_TASK_REMINDER_EMAIL_EVENT_TYPE:
-		case WINCRM_TASK_REMINDER_TELEGRAM_EVENT_TYPE:
-			assertWincrmTaskReminderEvent(payload);
-			return payload.eventType === WINCRM_TASK_REMINDER_EMAIL_EVENT_TYPE
-				? 'wincrm-task-reminder-email'
-				: 'wincrm-task-reminder-telegram';
-		case WINCRM_INTAKE_SLA_EMAIL_EVENT_TYPE:
-		case WINCRM_INTAKE_SLA_TELEGRAM_EVENT_TYPE:
-			assertWincrmIntakeSlaEvent(payload);
-			return payload.eventType === WINCRM_INTAKE_SLA_EMAIL_EVENT_TYPE
-				? 'wincrm-intake-sla-email'
-				: 'wincrm-intake-sla-telegram';
-		case WINCRM_INVITATION_EMAIL_EVENT_TYPE:
-			assertWincrmInvitationEvent(payload);
-			return 'wincrm-invitation-email';
+		case CRM_TASK_REMINDER_EMAIL_EVENT_TYPE:
+		case CRM_TASK_REMINDER_TELEGRAM_EVENT_TYPE:
+			assertCrmTaskReminderEvent(payload);
+			return payload.eventType === CRM_TASK_REMINDER_EMAIL_EVENT_TYPE
+				? 'crm-task-reminder-email'
+				: 'crm-task-reminder-telegram';
+		case CRM_INTAKE_SLA_EMAIL_EVENT_TYPE:
+		case CRM_INTAKE_SLA_TELEGRAM_EVENT_TYPE:
+			assertCrmIntakeSlaEvent(payload);
+			return payload.eventType === CRM_INTAKE_SLA_EMAIL_EVENT_TYPE
+				? 'crm-intake-sla-email'
+				: 'crm-intake-sla-telegram';
+		case CRM_INVITATION_EMAIL_EVENT_TYPE:
+			assertCrmInvitationEvent(payload);
+			return 'crm-invitation-email';
 		case CAMPAIGN_EMAIL_NOTIFICATION_EVENT_TYPE:
 		case CAMPAIGN_TELEGRAM_NOTIFICATION_EVENT_TYPE:
 			return assertCampaignNotificationEvent(payload);
@@ -696,11 +696,11 @@ export function assertMessagingEventContract(
 	if (
 		(isSupportNotificationKind(expectedKind) ||
 			expectedKind === 'support-notification-outcome' ||
-			expectedKind === 'wincrm-invitation-email' ||
-			expectedKind === 'wincrm-task-reminder-email' ||
-			expectedKind === 'wincrm-task-reminder-telegram' ||
-			expectedKind === 'wincrm-intake-sla-email' ||
-			expectedKind === 'wincrm-intake-sla-telegram' ||
+			expectedKind === 'crm-invitation-email' ||
+			expectedKind === 'crm-task-reminder-email' ||
+			expectedKind === 'crm-task-reminder-telegram' ||
+			expectedKind === 'crm-intake-sla-email' ||
+			expectedKind === 'crm-intake-sla-telegram' ||
 			expectedKind === 'operations-backup-report-telegram') &&
 		payload.eventId !== metadata.messageId
 	) {

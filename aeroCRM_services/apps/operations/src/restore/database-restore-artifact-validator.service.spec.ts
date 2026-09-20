@@ -6,12 +6,12 @@ import { DatabaseRestoreTargetConfiguration } from './database-restore-target-re
 
 const target = (schema: string): DatabaseRestoreTargetConfiguration => ({
 	environmentPrefix: schema.toUpperCase(),
-	database: `winwidget_${schema}`,
+	database: `aerocrm_${schema}`,
 	schema,
-	adminRole: `winwidget_${schema}_admin`,
-	migrationRole: `winwidget_${schema}_migration`,
-	runtimeRole: `winwidget_${schema}_runtime`,
-	backupRole: `winwidget_${schema}_backup`,
+	adminRole: `aerocrm_${schema}_admin`,
+	migrationRole: `aerocrm_${schema}_migration`,
+	runtimeRole: `aerocrm_${schema}_runtime`,
+	backupRole: `aerocrm_${schema}_backup`,
 	acl: { profile: 'standard', routines: [], runtimeRoutines: [] }
 });
 
@@ -19,7 +19,6 @@ const SERVICE_SCHEMAS = [
 	'notification_delivery',
 	'campaigns',
 	'reporting',
-	'widgets',
 	'billing',
 	'identity',
 	'platform',
@@ -30,7 +29,7 @@ const SERVICE_SCHEMAS = [
 const schemaEntry = (
 	schema: string,
 	dumpId = 3,
-	owner = `winwidget_${schema}_migration`
+	owner = `aerocrm_${schema}_migration`
 ) => `${dumpId}; 2615 ${2_200 + dumpId} SCHEMA - ${schema} ${owner}`;
 
 describe('DatabaseRestoreArtifactValidatorService', () => {
@@ -62,7 +61,7 @@ describe('DatabaseRestoreArtifactValidatorService', () => {
 		schema => {
 			const tableOfContents = [
 				'; Archive created at 2026-08-30 12:00:00 UTC',
-				';     dbname: winwidget',
+				';     dbname: aerocrm',
 				schemaEntry(schema),
 				`4; 1259 3000 TABLE ${schema} jobs owner`,
 				`5; 0 0 COMMENT - SCHEMA ${schema} owner`,
@@ -99,8 +98,8 @@ describe('DatabaseRestoreArtifactValidatorService', () => {
 	});
 
 	it.each([
-		'3; 2615 2203 SCHEMA - operations shadow winwidget_operations_migration',
-		'3; 2615 2203 SCHEMA - "operations" winwidget_operations_migration',
+		'3; 2615 2203 SCHEMA - operations shadow aerocrm_operations_migration',
+		'3; 2615 2203 SCHEMA - "operations" aerocrm_operations_migration',
 		schemaEntry('operations', 3, 'unexpected_owner')
 	])(
 		'rejects an ambiguous schema name or unexpected owner fail-closed',
@@ -151,7 +150,7 @@ describe('DatabaseRestoreArtifactValidatorService', () => {
 	it('rejects a malformed active schema entry fail-closed', () => {
 		expect(() =>
 			service.assertTableOfContents(
-				'3; 2615 2203 SCHEMA operations winwidget_operations_migration',
+				'3; 2615 2203 SCHEMA operations aerocrm_operations_migration',
 				target('operations')
 			)
 		).toThrow('Restore dump schema TOC entry is invalid');

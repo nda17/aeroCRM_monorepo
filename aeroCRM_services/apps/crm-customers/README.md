@@ -1,6 +1,6 @@
-# WinCRM Customers
+# aeroCRM Customers
 
-Автономный сервис контактов и компаний WinCRM. Реализованы серверная
+Автономный сервис контактов и компаний aeroCRM. Реализованы серверная
 пагинация/поиск, создание и редактирование с проверкой версии, мягкий архив,
 история изменений и просмотр кандидатов в дубли по телефону/email.
 Автоматическое слияние не выполняется.
@@ -220,7 +220,7 @@ receipt; обычное подтверждённое сохранение ато
 явного решения пользователя.
 
 `GET /api/v1/crm/customers/exports/v2/companies` выдаёт JSON/CSV с пятью новыми
-полями и `X-WinCRM-Export-Schema: 2`. Действуют прежние OWNER/read/export,
+полями и `X-CRM-Export-Schema: 2`. Действуют прежние OWNER/read/export,
 READ_ONLY, ограничения объёма, snapshot и повторная авторизация. V1 export
 сохраняет прежний набор колонок для существующих потребителей.
 
@@ -299,8 +299,8 @@ scope, rollback при ошибке receipt и append-only grants. После п
 GET `/api/v1/crm/customers/exports/{entity}?workspaceId={uuid-v4}&format=json|csv`,
 where entity is `contacts` or `companies`. A current user Bearer session is required.
 Only OWNER with both `customers:read` and `customers:export` may export,
-including GRACE and READ_ONLY. This is an additive route: ordinary CRUD semantics,
-Widgets and existing source endpoints are unchanged.
+including GRACE and READ_ONLY. Export uses the existing workspace authorization
+and does not change ordinary CRUD or source endpoints.
 
 Each request reads only this service's business tables in one REPEATABLE READ,
 READ ONLY snapshot, ordered by immutable UUID with keyset pages of 500. Archived
@@ -341,11 +341,11 @@ re-import**. Column order is fixed:
 - contacts: `id, workspaceId, name, notes, createdBySubject, teamId, version, archivedAt, createdAt, updatedAt, phone, email, companyId`.
 - companies: `id, workspaceId, name, notes, createdBySubject, teamId, version, archivedAt, createdAt, updatedAt, inn, website`.
 
-Successful replies have a fixed attachment filename `wincrm-{entity}.{format}`,
+Successful replies have a fixed attachment filename `aerocrm-{entity}.{format}`,
 `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` and an exact origin
-`Content-Length`. Metadata headers are `X-WinCRM-Export-Entity`, `-Rows`,
+`Content-Length`. Metadata headers are `X-CRM-Export-Entity`, `-Rows`,
 `-Snapshot-At`, `-Schema`, `-Bytes`, `-Actor-SHA256` plus
-`X-WinCRM-Workspace-Id`. Actor SHA-256 is lowercase hexadecimal over the exact
+`X-CRM-Workspace-Id`. Actor SHA-256 is lowercase hexadecimal over the exact
 UTF-8 subject: it is pseudonymous, not anonymous. `-Bytes` is the logical UTF-8
 body length; proxies may compress/remove/change Content-Length and browsers
 decode automatically. Consumers must bound their decoded stream, not equate

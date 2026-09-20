@@ -5,9 +5,11 @@ const wholeRubles = new Intl.NumberFormat('ru-RU', {
 /** Display server minor units exactly. Never calculate a quote in the browser. */
 export const billingMoney = (minor: string) => {
 	if (!/^(0|[1-9][0-9]{0,30})$/.test(minor))
-		throw new Error('Некорректная сумма WinCRM.')
+		throw new Error('Некорректная сумма aeroCRM.')
 	const value = BigInt(minor)
-	return `${wholeRubles.format(value / 100n)},${String(value % 100n).padStart(2, '0')} ₽`
+	const kopecks = value % 100n
+	const fraction = kopecks === 0n ? '' : `,${String(kopecks).padStart(2, '0')}`
+	return `${wholeRubles.format(value / 100n)}${fraction} ₽`
 }
 
 export const billingDate = (iso: string) =>

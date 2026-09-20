@@ -156,7 +156,6 @@ const EVENT_SECTION_LABELS: Record<string, string> = {
 	TASKS: 'Задачи',
 	SUBSCRIPTIONS: 'Подписки',
 	USERS: 'Пользователи',
-	WIDGETS: 'Виджеты',
 	MESSAGING: 'Очереди'
 }
 
@@ -181,15 +180,6 @@ const EVENT_ACTION_LABELS: Record<string, string> = {
 	USER_DELETE: 'Удаление',
 	USER_SOFT_DELETE: 'Soft delete',
 	USER_RESTORE: 'Восстановление',
-	WIDGET_UPDATE: 'Редактирование виджета',
-	WIDGET_PUBLISH: 'Публикация виджета',
-	WIDGET_DRAFT_DISCARD: 'Отмена черновика виджета',
-	WIDGET_VERSION_RESTORE: 'Восстановление настроек виджета',
-	WIDGET_CLONE: 'Копирование виджета',
-	WIDGET_DELETE: 'Удаление виджета',
-	WIDGET_BUTTON_IMAGE_UPDATE: 'Изображение кнопки виджета',
-	WIDGET_DELIVERY_RETRY: 'Повтор доставки виджета',
-	WIDGET_DELIVERY_CLOSE: 'Закрытие доставки виджета без повтора',
 	MESSAGING_FAILURE_RETRY: 'Повтор интеграции'
 }
 
@@ -911,7 +901,7 @@ const UserEdit: NextPage<IParamsUrl> = ({ params }) => {
 		: 'Деактивировать пользователя?'
 	const activationConfirmMessage = isDeactivated
 		? 'Пользователь снова сможет входить в аккаунт. Повторная активация считается новым согласием на обработку персональных данных.'
-		: 'Пользователь не сможет входить в аккаунт, его refresh token будет сброшен, рассылки будут запрещены, а все его виджеты будут отключены.'
+		: 'Пользователь не сможет входить в аккаунт, его refresh token будет сброшен, рассылки будут запрещены.'
 	const revokedAtLabel = data?.personalDataConsentRevokedAt
 		? formatDateTime(data.personalDataConsentRevokedAt)
 		: null
@@ -1679,7 +1669,7 @@ const UserEdit: NextPage<IParamsUrl> = ({ params }) => {
 										<p className={styles.sectionTitle}>Статус аккаунта</p>
 										<AdminTooltip
 											title="Статус аккаунта"
-											description="Деактивация запрещает вход, исключает пользователя из рассылок и отключает его виджеты."
+											description="Деактивация запрещает вход и исключает пользователя из рассылок."
 											risk="high"
 											riskText="Активируйте аккаунт обратно только после обращения пользователя. Повторная активация означает новое согласие на обработку персональных данных."
 										/>
@@ -1704,7 +1694,7 @@ const UserEdit: NextPage<IParamsUrl> = ({ params }) => {
 										</p>
 										<p className={styles.activationText}>
 											{isDeactivated
-												? 'Пользователь не может войти, не попадает в рассылки, а его виджеты были отключены.'
+												? 'Пользователь не может войти и не попадает в рассылки.'
 												: 'Пользователь может входить в аккаунт и получать рассылки по выбранной аудитории.'}
 										</p>
 									</div>

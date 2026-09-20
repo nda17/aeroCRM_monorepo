@@ -48,16 +48,16 @@ const fields = async (
 				format === 'json'
 					? 'application/json; charset=utf-8'
 					: 'text/csv; charset=utf-8',
-			'Content-Disposition': `attachment; filename="wincrm-${entity}.${format}"`,
+			'Content-Disposition': `attachment; filename="aerocrm-${entity}.${format}"`,
 			'Cache-Control': 'no-store',
 			'X-Content-Type-Options': 'nosniff',
-			'X-WinCRM-Export-Schema': String(schemaVersion),
-			'X-WinCRM-Workspace-Id': workspace,
-			'X-WinCRM-Export-Entity': entity,
-			'X-WinCRM-Export-Rows': '0',
-			'X-WinCRM-Export-Bytes': String(bytes.length),
-			'X-WinCRM-Export-Snapshot-At': date,
-			'X-WinCRM-Export-Actor-SHA256': await exportActorHash('owner')
+			'X-CRM-Export-Schema': String(schemaVersion),
+			'X-CRM-Workspace-Id': workspace,
+			'X-CRM-Export-Entity': entity,
+			'X-CRM-Export-Rows': '0',
+			'X-CRM-Export-Bytes': String(bytes.length),
+			'X-CRM-Export-Snapshot-At': date,
+			'X-CRM-Export-Actor-SHA256': await exportActorHash('owner')
 		})
 	}
 }
@@ -165,11 +165,11 @@ describe('Domain-owned export routes', () => {
 				maxBytes: 16777216,
 				inspectHeaders: expect.any(Function)
 			})
-			expect(result.metadata.filename).toBe(`wincrm-${entity}.${format}`)
+			expect(result.metadata.filename).toBe(`aerocrm-${entity}.${format}`)
 			expect(result.metadata.rowCount).toBe(0)
 		}
 	)
-	it.each(['X-WinCRM-Workspace-Id', 'X-WinCRM-Export-Actor-SHA256'])(
+	it.each(['X-CRM-Workspace-Id', 'X-CRM-Export-Actor-SHA256'])(
 		'refuses a response for a foreign %s before receiving its bytes',
 		async name => {
 			vi.mocked(authenticatedDownload).mockImplementation(

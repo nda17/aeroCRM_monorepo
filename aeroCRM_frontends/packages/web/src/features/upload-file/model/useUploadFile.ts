@@ -64,7 +64,7 @@ export const useUploadFile = (
 			}
 
 			operationLockRef.current = true
-			const toastId = toast.loading('Загружаем фото...')
+			const toastId = toast.loading('Пожалуйста, подождите')
 			setIsProcessing(true)
 			try {
 				const fileUrl = await mutateAsync(file)

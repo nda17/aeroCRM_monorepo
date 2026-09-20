@@ -166,7 +166,7 @@ export class CrmAccessService {
 		const membership = this.requireMembership(context, dto.workspaceId);
 		if (membership.role !== 'OWNER') {
 			throw new ForbiddenException(
-				'Only the workspace owner can complete WinCRM onboarding'
+				'Only the workspace owner can complete aeroCRM onboarding'
 			);
 		}
 
@@ -179,7 +179,7 @@ export class CrmAccessService {
 		]);
 		if (!this.isWritableEntitlement(entitlement.status)) {
 			throw new ForbiddenException(
-				'An active WinCRM entitlement is required'
+				'An active aeroCRM entitlement is required'
 			);
 		}
 		const currentAccess = await this.reconcileAccessProfile(
@@ -192,7 +192,7 @@ export class CrmAccessService {
 			currentAccess.lifecycle !== CrmAccessLifecycle.ACTIVE
 		) {
 			throw new ForbiddenException(
-				'WinCRM workspace is not writable in its current state'
+				'aeroCRM workspace is not writable in its current state'
 			);
 		}
 		if (
@@ -201,7 +201,7 @@ export class CrmAccessService {
 				currentAccess.onboardingTemplateVersion !== dto.templateVersion)
 		) {
 			throw new ConflictException(
-				'WinCRM onboarding is already completed'
+				'aeroCRM onboarding is already completed'
 			);
 		}
 
@@ -222,7 +222,7 @@ export class CrmAccessService {
 		);
 		if (!this.isWritableEntitlement(confirmedEntitlement.status)) {
 			throw new ForbiddenException(
-				'WinCRM entitlement changed during onboarding'
+				'aeroCRM entitlement changed during onboarding'
 			);
 		}
 		await this.reconcileAccessProfile(
@@ -236,7 +236,7 @@ export class CrmAccessService {
 		);
 		if (completedLifecycle !== CrmAccessLifecycle.ACTIVE) {
 			throw new ConflictException(
-				'WinCRM access state changed while onboarding was completing'
+				'aeroCRM access state changed while onboarding was completing'
 			);
 		}
 
@@ -305,12 +305,12 @@ export class CrmAccessService {
 				return CrmAccessLifecycle.ACTIVE;
 			}
 			throw new ConflictException(
-				'WinCRM access state conflicts with the installed pipeline'
+				'aeroCRM access state conflicts with the installed pipeline'
 			);
 		}
 		if (current) return current.lifecycle;
 		throw new ConflictException(
-			'WinCRM onboarding access profile is missing'
+			'aeroCRM onboarding access profile is missing'
 		);
 	}
 
@@ -326,7 +326,7 @@ export class CrmAccessService {
 		const membership = this.requireMembership(context, dto.workspaceId);
 		if (membership.role !== 'OWNER') {
 			throw new ForbiddenException(
-				'Only the workspace owner can activate WinCRM trial'
+				'Only the workspace owner can activate aeroCRM trial'
 			);
 		}
 
@@ -363,7 +363,7 @@ export class CrmAccessService {
 	): Promise<CrmAccessProfile> {
 		if (!entitlement || entitlement.workspaceId !== workspaceId) {
 			throw new ServiceUnavailableException(
-				'Billing service returned incomplete WinCRM provisioning data'
+				'Billing service returned incomplete aeroCRM provisioning data'
 			);
 		}
 
@@ -391,7 +391,7 @@ export class CrmAccessService {
 					});
 				} catch {
 					throw new ServiceUnavailableException(
-						'WinCRM access provisioning state is unavailable'
+						'aeroCRM access provisioning state is unavailable'
 					);
 				}
 			}
@@ -399,7 +399,7 @@ export class CrmAccessService {
 
 		if (!access) {
 			throw new ServiceUnavailableException(
-				'WinCRM access provisioning state is unavailable'
+				'aeroCRM access provisioning state is unavailable'
 			);
 		}
 		if (
@@ -410,7 +410,7 @@ export class CrmAccessService {
 			access.activatedBySubject !== entitlement.activatedByUserId
 		) {
 			throw new ServiceUnavailableException(
-				'WinCRM access provisioning state is inconsistent'
+				'aeroCRM access provisioning state is inconsistent'
 			);
 		}
 		return access;

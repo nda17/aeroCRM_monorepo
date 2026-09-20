@@ -272,6 +272,8 @@ model OAuthAuthorization {
   provider     OAuthProvider
   codeVerifier String        @map("code_verifier")
   referrerId   String?       @map("referrer_id")
+  clientKind   String        @default("main") @map("client_kind") @db.VarChar(16)
+  returnPath   String?       @map("return_path") @db.VarChar(2048)
   expiresAt    DateTime      @map("expires_at")
   consumedAt   DateTime?     @map("consumed_at")
   createdAt    DateTime      @default(now()) @map("created_at")

@@ -8,19 +8,19 @@ import {
 const connection: DatabaseRestoreConnection = {
 	host: '127.0.0.1',
 	port: 55441,
-	user: 'winwidget_reporting_admin',
-	database: 'winwidget_reporting',
+	user: 'aerocrm_reporting_admin',
+	database: 'aerocrm_reporting',
 	password: 'test-restore-password'
 };
 
 const reportingTarget: DatabaseRestoreTargetConfiguration = {
 	environmentPrefix: 'REPORTING',
-	database: 'winwidget_reporting',
+	database: 'aerocrm_reporting',
 	schema: 'reporting',
-	adminRole: 'winwidget_reporting_admin',
-	migrationRole: 'winwidget_reporting_migration',
-	runtimeRole: 'winwidget_reporting_runtime',
-	backupRole: 'winwidget_reporting_backup',
+	adminRole: 'aerocrm_reporting_admin',
+	migrationRole: 'aerocrm_reporting_migration',
+	runtimeRole: 'aerocrm_reporting_runtime',
+	backupRole: 'aerocrm_reporting_backup',
 	acl: {
 		profile: 'standard',
 		routines: ['reject_report_run_snapshot_mutation()'],
@@ -30,12 +30,12 @@ const reportingTarget: DatabaseRestoreTargetConfiguration = {
 
 const platformTarget: DatabaseRestoreTargetConfiguration = {
 	environmentPrefix: 'PLATFORM',
-	database: 'winwidget_platform',
+	database: 'aerocrm_platform',
 	schema: 'platform',
-	adminRole: 'winwidget_platform_admin',
-	migrationRole: 'winwidget_platform_migration',
-	runtimeRole: 'winwidget_platform_runtime',
-	backupRole: 'winwidget_platform_backup',
+	adminRole: 'aerocrm_platform_admin',
+	migrationRole: 'aerocrm_platform_migration',
+	runtimeRole: 'aerocrm_platform_runtime',
+	backupRole: 'aerocrm_platform_backup',
 	acl: {
 		profile: 'platform',
 		routines: [
@@ -82,7 +82,7 @@ describe('DatabaseRestoreAclService', () => {
 		);
 		const sql = process.executeSql.mock.calls[0][1];
 		expect(sql).not.toContain('BEGIN;');
-		expect(sql).toContain("current_database() <> 'winwidget_reporting'");
+		expect(sql).toContain("current_database() <> 'aerocrm_reporting'");
 		expect(sql).toContain(
 			'membership.roleid IN (admin_oid, migration_oid, runtime_oid, backup_oid)'
 		);
@@ -97,7 +97,7 @@ describe('DatabaseRestoreAclService', () => {
 		expect(sql).toContain("acldefault('s', relation.relowner)");
 		expect(sql).toContain("defaults.defaclobjtype = 'S'");
 		expect(sql).toContain(
-			"'winwidget_reporting_backup'::TEXT, 'CONNECT'::TEXT"
+			"'aerocrm_reporting_backup'::TEXT, 'CONNECT'::TEXT"
 		);
 	});
 
@@ -115,28 +115,28 @@ describe('DatabaseRestoreAclService', () => {
 		expect(sql.startsWith('BEGIN;')).toBe(true);
 		expect(sql.trimEnd().endsWith('COMMIT;')).toBe(true);
 		expect(sql).toContain(
-			'SET LOCAL ROLE "winwidget_platform_migration";'
+			'SET LOCAL ROLE "aerocrm_platform_migration";'
 		);
 		expect(sql).toContain(
-			'GRANT SELECT ON TABLE "platform"."service_identity", "platform"."source_sequences", "platform"."site_settings", "platform"."legal_pages", "platform"."home_page_content", "platform"."billing_offer_producer_state", "platform"."outbox_events" TO "winwidget_platform_runtime";'
+			'GRANT SELECT ON TABLE "platform"."service_identity", "platform"."source_sequences", "platform"."site_settings", "platform"."legal_pages", "platform"."home_page_content", "platform"."billing_offer_producer_state", "platform"."outbox_events" TO "aerocrm_platform_runtime";'
 		);
 		expect(sql).toContain(
-			'GRANT UPDATE ("current_semantic_fingerprint", "updated_at") ON TABLE "platform"."service_identity" TO "winwidget_platform_runtime";'
+			'GRANT UPDATE ("current_semantic_fingerprint", "updated_at") ON TABLE "platform"."service_identity" TO "aerocrm_platform_runtime";'
 		);
 		expect(sql).toContain(
-			'GRANT EXECUTE ON FUNCTION "platform"."current_semantic_fingerprint"() TO "winwidget_platform_runtime";'
+			'GRANT EXECUTE ON FUNCTION "platform"."current_semantic_fingerprint"() TO "aerocrm_platform_runtime";'
 		);
 		expect(sql).toContain(
-			'GRANT EXECUTE ON FUNCTION "platform"."refresh_current_semantic_fingerprint"(TEXT) TO "winwidget_platform_runtime";'
+			'GRANT EXECUTE ON FUNCTION "platform"."refresh_current_semantic_fingerprint"(TEXT) TO "aerocrm_platform_runtime";'
 		);
 		expect(sql).toContain(
-			'GRANT SELECT ON TABLES TO "winwidget_platform_backup";'
+			'GRANT SELECT ON TABLES TO "aerocrm_platform_backup";'
 		);
 		expect(sql).not.toContain(
-			'GRANT SELECT ON TABLES TO "winwidget_platform_runtime";'
+			'GRANT SELECT ON TABLES TO "aerocrm_platform_runtime";'
 		);
 		expect(sql).not.toContain(
-			'GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA "platform" TO "winwidget_platform_runtime";'
+			'GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA "platform" TO "aerocrm_platform_runtime";'
 		);
 		expect(sql).not.toContain(
 			'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "platform"'

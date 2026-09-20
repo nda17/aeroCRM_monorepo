@@ -15,25 +15,6 @@ import { NextPage } from 'next'
 import toast from 'react-hot-toast'
 import styles from './AdminCrm.module.scss'
 
-const CRM_SERVICES = [
-	{
-		name: 'crm-access',
-		responsibility: 'доступ, membership-проекция и onboarding'
-	},
-	{
-		name: 'crm-intake',
-		responsibility: 'источники заявок, Inbox и импорт'
-	},
-	{
-		name: 'crm-customers',
-		responsibility: 'контакты, компании, deduplication и PII'
-	},
-	{
-		name: 'crm-sales',
-		responsibility: 'воронки, сделки, задачи и timeline'
-	}
-] as const
-
 const stageStateLabel = {
 	OPEN: 'Рабочий этап',
 	WON: 'Успех',
@@ -54,7 +35,7 @@ const AdminCrm: NextPage = () => {
 	const refreshCatalog = async () => {
 		if (!CRM_RELEASE.apiEnabled || !isAuthResolved || !auth || isFetching)
 			return
-		const toastId = toast.loading('Обновляем каталог aeroCRM...')
+		const toastId = toast.loading('Пожалуйста, подождите')
 		const result = await refetch()
 
 		if (result.isError) {
@@ -71,19 +52,16 @@ const AdminCrm: NextPage = () => {
 			<AdminNavigation />
 			<AdminSectionHeading
 				text="aeroCRM"
-				title="Каталог и устройство aeroCRM"
+				title="Каталог aeroCRM"
 				description="Операторский экран продукта. Клиентские воронки, контакты и сделки здесь не хранятся и управляются только на workspace.aerocrm.space."
 				risk="low"
-				riskText="Здесь доступен просмотр каталога шаблонов и операторская справка. Подписки, платежи и тарифы находятся в разделе «Финансы»."
+				riskText="Здесь доступен просмотр каталога шаблонов. Подписки, платежи и тарифы находятся в разделе «Финансы»."
 			/>
 
 			{!CRM_RELEASE.apiEnabled && (
 				<div className={styles.releaseNote} role="status">
 					<strong>aeroCRM · {CRM_RELEASE.unavailableLabel}</strong>
-					<p>
-						Справочная часть доступна. Каталог шаблонов подключится после
-						выпуска CRM-сервисов.
-					</p>
+					<p>Каталог шаблонов подключится после выпуска CRM-сервисов.</p>
 				</div>
 			)}
 
@@ -98,13 +76,6 @@ const AdminCrm: NextPage = () => {
 					<p className={styles.summaryValue}>10 дней</p>
 					<p className={styles.summaryHint}>
 						Только после явного нажатия «Попробовать бесплатно»
-					</p>
-				</article>
-				<article className={styles.summaryCard}>
-					<p className={styles.eyebrow}>Архитектура MVP</p>
-					<p className={styles.summaryValue}>4 сервиса</p>
-					<p className={styles.summaryHint}>
-						Независимые приложения и отдельное владение данными
 					</p>
 				</article>
 			</div>
@@ -189,26 +160,6 @@ const AdminCrm: NextPage = () => {
 					</>
 				)}
 			</div>
-
-			<details className={styles.architecture}>
-				<summary className={styles.architectureSummary}>
-					Техническая справка · 4 независимых сервиса
-				</summary>
-				<p className={styles.sectionHint}>
-					aeroCRM не использует общий монолит или общую базу данных.
-					Эксплуатационные показатели находятся в разделе «Эксплуатация».
-				</p>
-				<div className={styles.serviceGrid}>
-					{CRM_SERVICES.map(service => (
-						<article key={service.name} className={styles.serviceCard}>
-							<code className={styles.serviceName}>{service.name}</code>
-							<p className={styles.serviceDescription}>
-								{service.responsibility}
-							</p>
-						</article>
-					))}
-				</div>
-			</details>
 		</section>
 	)
 }

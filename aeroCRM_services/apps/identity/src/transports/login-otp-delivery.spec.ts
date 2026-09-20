@@ -9,6 +9,13 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { VerificationTransportService } from './verification-transport.service';
 
+function config(values: Record<string, string>): ConfigService {
+	return new ConfigService({
+		SMTP_FROM: '"aeroCRM" <info@aerocrm.space>',
+		...values
+	});
+}
+
 describe('isolated login OTP delivery', () => {
 	const originalFetch = global.fetch;
 	afterEach(() => {
@@ -23,7 +30,7 @@ describe('isolated login OTP delivery', () => {
 			return Response.json({ success: true });
 		}) as typeof fetch;
 		const transport = new VerificationTransportService(
-			new ConfigService({
+			config({
 				SMSAERO_EMAIL: 'synthetic@example.test',
 				SMSAERO_API_KEY: 'synthetic-only'
 			})
@@ -40,7 +47,7 @@ describe('isolated login OTP delivery', () => {
 		expect(calls[0].url).not.toContain('79990001122');
 		expect(JSON.parse(calls[0].init!.body as string)).toEqual({
 			number: 79990001122,
-			text: 'Код входа в WinWidget: 123456. Никому не сообщайте код.',
+			text: 'Код входа в aeroCRM: 123456. Никому не сообщайте код.',
 			sign: 'SMS Aero'
 		});
 		expect(calls[0].init).toMatchObject({
@@ -69,7 +76,7 @@ describe('isolated login OTP delivery', () => {
 				port
 			})) as typeof net.connect);
 		const transport = new VerificationTransportService(
-			new ConfigService({
+			config({
 				MODE: 'development',
 				SMTP_SERVER: '127.0.0.1',
 				SMTP_LOGIN: 'synthetic',
@@ -99,7 +106,7 @@ describe('isolated login OTP delivery', () => {
 	it('never begins an external attempt for an already aborted request', async () => {
 		global.fetch = jest.fn();
 		const transport = new VerificationTransportService(
-			new ConfigService({
+			config({
 				SMSAERO_EMAIL: 'synthetic@example.test',
 				SMSAERO_API_KEY: 'synthetic-only'
 			})
@@ -148,7 +155,7 @@ describe('isolated login OTP delivery', () => {
 			.spyOn(Logger.prototype, 'warn')
 			.mockImplementation(() => undefined);
 		const transport = new VerificationTransportService(
-			new ConfigService({
+			config({
 				MODE: 'development',
 				SMTP_SERVER: '127.0.0.1',
 				SMTP_LOGIN: 'synthetic',
@@ -231,7 +238,7 @@ describe('isolated login OTP delivery', () => {
 			.spyOn(Logger.prototype, 'warn')
 			.mockImplementation(() => undefined);
 		const transport = new VerificationTransportService(
-			new ConfigService({
+			config({
 				MODE: 'development',
 				SMTP_SERVER: '127.0.0.1',
 				SMTP_LOGIN: 'synthetic',
@@ -303,7 +310,7 @@ describe('isolated login OTP delivery', () => {
 					port
 				})) as typeof net.connect);
 			const transport = new VerificationTransportService(
-				new ConfigService({
+				config({
 					MODE: 'production',
 					SMTP_SERVER: 'localhost',
 					SMTP_LOGIN: 'synthetic',

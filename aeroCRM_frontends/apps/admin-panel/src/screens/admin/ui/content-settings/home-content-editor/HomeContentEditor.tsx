@@ -2,9 +2,7 @@
 
 import ConfirmDialog from '@/shared/ui/confirm-dialog/ConfirmDialog'
 import { revalidateHomePageContent } from '@/entities/home-page-content/actions'
-import {
-	normalizeHomePageContent
-} from '@/entities/home-page-content'
+import { normalizeHomePageContent } from '@/entities/home-page-content'
 import { homePageContentService } from '@/entities/home-page-content'
 import type {
 	HomePageCaseStudy,
@@ -75,7 +73,6 @@ const EDITOR_META: Record<
 		saveLabel: string
 		loadingText: string
 		successText: string
-		resetLoadingText?: string
 		resetSuccessText?: string
 	}
 > = {
@@ -102,7 +99,6 @@ const EDITOR_META: Record<
 		saveLabel: 'Сохранить footer',
 		loadingText: 'Загрузка footer...',
 		successText: 'Footer сохранён',
-		resetLoadingText: 'Сбрасываем footer...',
 		resetSuccessText: 'Footer сброшен к дефолту'
 	},
 	seo: {
@@ -116,7 +112,6 @@ const EDITOR_META: Record<
 		saveLabel: 'Сохранить SEO',
 		loadingText: 'Загрузка SEO-настроек...',
 		successText: 'SEO-настройки сохранены',
-		resetLoadingText: 'Сбрасываем SEO...',
 		resetSuccessText: 'SEO сброшен к дефолту'
 	},
 	body: {
@@ -130,7 +125,6 @@ const EDITOR_META: Record<
 		saveLabel: 'Сохранить Body',
 		loadingText: 'Загрузка Body...',
 		successText: 'Body сохранён',
-		resetLoadingText: 'Сбрасываем Body...',
 		resetSuccessText: 'Body сброшен к дефолту'
 	},
 	head: {
@@ -589,7 +583,7 @@ const HomeContentEditor = ({
 				)
 
 		toast.promise(promise, {
-			loading: 'Сохраняем...',
+			loading: 'Пожалуйста, подождите',
 			success: meta.successText,
 			error: 'Ошибка сохранения'
 		})
@@ -622,7 +616,7 @@ const HomeContentEditor = ({
 		)
 
 		toast.promise(promise, {
-			loading: 'Сбрасываем главную...',
+			loading: 'Пожалуйста, подождите',
 			success: 'Главная сброшена до заводских настроек',
 			error: 'Ошибка сброса главной'
 		})
@@ -642,7 +636,6 @@ const HomeContentEditor = ({
 			nextContent.seoText = defaultContent.seoText
 		}
 
-
 		setDraft(nextContent)
 
 		const promise = structuredMutation.mutateAsync(
@@ -650,7 +643,7 @@ const HomeContentEditor = ({
 		)
 
 		toast.promise(promise, {
-			loading: meta.resetLoadingText ?? 'Сбрасываем...',
+			loading: 'Пожалуйста, подождите',
 			success: meta.resetSuccessText ?? 'Сброшено к дефолту',
 			error: 'Ошибка сброса'
 		})
@@ -762,7 +755,7 @@ const HomeContentEditor = ({
 			{isHomeArea && showFactoryResetConfirm && (
 				<ConfirmDialog
 					title="Скинуть до заводских настроек?"
-					message="Основные блоки главной страницы будут перезаписаны текущим дефолтным контентом сайта. Footer, SEO и демо-виджеты останутся без изменений."
+					message="Основные блоки главной страницы будут перезаписаны текущим дефолтным контентом сайта. Footer и SEO останутся без изменений."
 					confirmLabel="Скинуть"
 					cancelLabel="Отмена"
 					onConfirm={factoryReset}
@@ -824,7 +817,7 @@ const HomeContentEditor = ({
 							title="Сброс главной"
 							description="Возвращает основные блоки главной страницы к текущему заводскому конфигу из кода."
 							risk="high"
-							riskText="После подтверждения основные блоки главной будут перезаписаны дефолтными значениями. Вынесенные Footer, SEO и демо-виджеты не затрагиваются."
+							riskText="После подтверждения основные блоки главной будут перезаписаны дефолтными значениями. Вынесенные Footer и SEO не затрагиваются."
 						>
 							Опасная зона
 						</SectionTitle>
@@ -851,7 +844,7 @@ const HomeContentEditor = ({
 							title="Общие SEO"
 							description="Управляет title, description, keywords и Open Graph-текстами, которые видят поисковики, браузерные вкладки и соцсети при шаринге ссылки."
 							risk="high"
-							riskText="Неудачные SEO-тексты могут ухудшить сниппет в поиске и отображение ссылки. Не удаляйте ключевые смыслы про виджеты, лиды и конверсию без проверки."
+							riskText="Неудачные SEO-тексты могут ухудшить сниппет в поиске и отображение ссылки. Не удаляйте ключевые смыслы про CRM, работу с клиентами и продажи без проверки."
 						>
 							Общие SEO
 						</SectionTitle>
@@ -999,7 +992,7 @@ const HomeContentEditor = ({
 									title="Robots и sitemap"
 									description="Формирует публичные файлы robots.txt и sitemap.xml из безопасных структурированных настроек."
 									risk="high"
-									riskText="Неверные пути могут открыть служебные страницы для индексации или убрать важные страницы из sitemap. Не добавляйте админку, кабинет, оплату и превью виджетов в sitemap."
+									riskText="Неверные пути могут открыть служебные страницы для индексации или убрать важные страницы из sitemap. Не добавляйте админку, кабинет, оплату и внутренние страницы CRM в sitemap."
 								>
 									SEO-файлы
 								</SectionTitle>
@@ -1329,7 +1322,6 @@ const HomeContentEditor = ({
 				</section>
 			)}
 
-
 			{isBodyArea && (
 				<section className={styles.panel}>
 					<div className={styles.panelHeader}>
@@ -1343,8 +1335,8 @@ const HomeContentEditor = ({
 								Body
 							</SectionTitle>
 							<p className={styles.fieldHint}>
-								Подходит для счётчиков, пикселей, виджетов чата и
-								интеграционных script/noscript блоков.
+								Подходит для счётчиков, пикселей и интеграционных
+								script/noscript блоков.
 							</p>
 						</div>
 						<ToggleField
@@ -1598,7 +1590,7 @@ const HomeContentEditor = ({
 						<div className={styles.panelHeader}>
 							<SectionTitle
 								title="Блок с проблемой"
-								description="Секция про уходящих посетителей и карточки кейсов, когда виджеты помогают удержать клиента."
+								description="Секция о задачах продаж и ситуациях, в которых CRM помогает организовать работу с клиентами."
 								risk="medium"
 								riskText="Если убрать боль клиента или сделать карточки слишком общими, блок станет менее убедительным. Количество карточек лучше держать умеренным."
 							>
@@ -1862,8 +1854,6 @@ const HomeContentEditor = ({
 						</button>
 					</section>
 
-
-
 					<section className={styles.panel}>
 						<div className={styles.panelHeader}>
 							<SectionTitle
@@ -1994,7 +1984,7 @@ const HomeContentEditor = ({
 						<div className={styles.panelHeader}>
 							<SectionTitle
 								title="Кейсы"
-								description="Мини-примеры использования виджетов: задача, кейс и ожидаемый результат для бизнеса."
+								description="Примеры использования CRM: задача, сценарий и ожидаемый результат для бизнеса."
 								risk="medium"
 								riskText="Если кейсы не подтверждены реальными цифрами, формулируйте их как кейсы, а не как гарантированный результат."
 							>
@@ -2132,13 +2122,11 @@ const HomeContentEditor = ({
 						</button>
 					</section>
 
-
-
 					<section className={styles.panel}>
 						<div className={styles.panelHeader}>
 							<SectionTitle
 								title="Путь заявки"
-								description="Объясняет, что происходит после того, как посетитель оставил контакт в виджете."
+								description="Объясняет путь обращения от формы на сайте до обработки в CRM."
 								risk="medium"
 								riskText="Не обещайте каналы обработки заявок, которые не включены в продукт или тарифы."
 							>
@@ -2477,12 +2465,12 @@ const HomeContentEditor = ({
 					<section className={styles.panel}>
 						<div className={styles.panelHeader}>
 							<SectionTitle
-								title="Шаги установки"
-								description="Короткая инструкция, которая объясняет посетителю, насколько просто подключить виджет."
+								title="Начало работы"
+								description="Короткая инструкция по началу работы с aeroCRM."
 								risk="low"
 								riskText="Риск небольшой, но слишком длинные шаги усложнят восприятие. Лучше оставлять 3-4 коротких действия."
 							>
-								Шаги установки
+								Начало работы
 							</SectionTitle>
 							<ToggleField
 								label="Показывать"
@@ -2880,8 +2868,6 @@ const HomeContentEditor = ({
 						</button>
 					</section>
 
-
-
 					<section className={styles.panel}>
 						<div className={styles.panelHeader}>
 							<SectionTitle
@@ -3008,10 +2994,6 @@ const HomeContentEditor = ({
 						</button>
 					</section>
 
-
-
-
-
 					<section className={styles.panel}>
 						<div className={styles.panelHeader}>
 							<div>
@@ -3106,7 +3088,6 @@ const HomeContentEditor = ({
 								}
 							/>
 						</div>
-
 					</section>
 
 					<section className={styles.panel}>

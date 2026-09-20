@@ -29,14 +29,14 @@ import { NotificationDeliveryPrismaService } from './prisma/notification-deliver
 import { TelegramInfoTransportService } from '../telegram/telegram-info-transport.service';
 import { Injectable, Optional } from '@nestjs/common';
 import { NotificationDeliveryReceiptStatus } from '@prisma/notification-delivery-client';
-import { WincrmInvitationContextService } from './wincrm-invitation-context.service';
-import { assertWincrmInvitationEvent } from '../messaging/wincrm-invitation.contract';
-import { assertWincrmTaskReminderEvent } from '../messaging/wincrm-task-reminder.contract';
-import { WincrmTaskReminderContextService } from './wincrm-task-reminder-context.service';
-import { WINCRM_TASK_REMINDER_EMAIL_EVENT_TYPE } from '../messaging/messaging.constants';
-import { WINCRM_INTAKE_SLA_EMAIL_EVENT_TYPE } from '../messaging/messaging.constants';
-import { assertWincrmIntakeSlaEvent } from '../messaging/wincrm-intake-sla.contract';
-import { WincrmIntakeSlaContextService } from './wincrm-intake-sla-context.service';
+import { CrmInvitationContextService } from './crm-invitation-context.service';
+import { assertCrmInvitationEvent } from '../messaging/crm-invitation.contract';
+import { assertCrmTaskReminderEvent } from '../messaging/crm-task-reminder.contract';
+import { CrmTaskReminderContextService } from './crm-task-reminder-context.service';
+import { CRM_TASK_REMINDER_EMAIL_EVENT_TYPE } from '../messaging/messaging.constants';
+import { CRM_INTAKE_SLA_EMAIL_EVENT_TYPE } from '../messaging/messaging.constants';
+import { assertCrmIntakeSlaEvent } from '../messaging/crm-intake-sla.contract';
+import { CrmIntakeSlaContextService } from './crm-intake-sla-context.service';
 
 export type NotificationDeliverySkipReason =
 	| SupportNotificationSkipReason
@@ -58,10 +58,10 @@ export class NotificationDeliveryAdapterService {
 		private readonly emailService: EmailService,
 		private readonly telegram: TelegramInfoTransportService,
 		private readonly prisma: NotificationDeliveryPrismaService,
-		private readonly invitationContext: WincrmInvitationContextService,
-		private readonly reminderContext: WincrmTaskReminderContextService,
+		private readonly invitationContext: CrmInvitationContextService,
+		private readonly reminderContext: CrmTaskReminderContextService,
 		@Optional()
-		private readonly slaContext?: WincrmIntakeSlaContextService,
+		private readonly slaContext?: CrmIntakeSlaContextService,
 		@Optional()
 		private readonly supportContext?: SupportNotificationContextService,
 		@Optional()
@@ -132,15 +132,15 @@ export class NotificationDeliveryAdapterService {
 				}
 				return;
 			}
-			case 'wincrm-intake-sla-email':
-			case 'wincrm-intake-sla-telegram': {
-				assertWincrmIntakeSlaEvent(event);
+			case 'crm-intake-sla-email':
+			case 'crm-intake-sla-telegram': {
+				assertCrmIntakeSlaEvent(event);
 				if (
 					!lockToken ||
 					event.eventId !== eventId ||
 					!this.slaContext ||
-					(kind === 'wincrm-intake-sla-email') !==
-						(event.eventType === WINCRM_INTAKE_SLA_EMAIL_EVENT_TYPE)
+					(kind === 'crm-intake-sla-email') !==
+						(event.eventType === CRM_INTAKE_SLA_EMAIL_EVENT_TYPE)
 				)
 					throw new Error(
 						'aeroCRM Intake SLA requires a matching active claim'
@@ -165,7 +165,7 @@ export class NotificationDeliveryAdapterService {
 				)
 					throw new Error('aeroCRM Intake SLA claim is no longer active');
 				if (context.channel === 'EMAIL')
-					await this.emailService.sendWincrmIntakeSla(
+					await this.emailService.sendCrmIntakeSla(
 						context.destination.email!,
 						context.content,
 						eventId
@@ -178,14 +178,14 @@ export class NotificationDeliveryAdapterService {
 					);
 				return;
 			}
-			case 'wincrm-task-reminder-email':
-			case 'wincrm-task-reminder-telegram': {
-				assertWincrmTaskReminderEvent(event);
+			case 'crm-task-reminder-email':
+			case 'crm-task-reminder-telegram': {
+				assertCrmTaskReminderEvent(event);
 				if (
 					!lockToken ||
 					event.eventId !== eventId ||
-					(kind === 'wincrm-task-reminder-email') !==
-						(event.eventType === WINCRM_TASK_REMINDER_EMAIL_EVENT_TYPE)
+					(kind === 'crm-task-reminder-email') !==
+						(event.eventType === CRM_TASK_REMINDER_EMAIL_EVENT_TYPE)
 				)
 					throw new Error(
 						'aeroCRM task reminder requires a matching active claim'
@@ -214,7 +214,7 @@ export class NotificationDeliveryAdapterService {
 						'aeroCRM task reminder claim is no longer active'
 					);
 				if (context.channel === 'EMAIL')
-					await this.emailService.sendWincrmTaskReminder(
+					await this.emailService.sendCrmTaskReminder(
 						context.destination.email!,
 						context.content,
 						eventId
@@ -227,8 +227,8 @@ export class NotificationDeliveryAdapterService {
 					);
 				return;
 			}
-			case 'wincrm-invitation-email': {
-				assertWincrmInvitationEvent(event);
+			case 'crm-invitation-email': {
+				assertCrmInvitationEvent(event);
 				if (!lockToken || event.eventId !== eventId)
 					throw new Error(
 						'aeroCRM invitation delivery requires a matching active claim'
@@ -240,7 +240,7 @@ export class NotificationDeliveryAdapterService {
 				// Eligibility can expire while its HTTP response is in flight.
 				if (Date.parse(event.content.expiresAt) <= Date.now())
 					return { status: 'SKIPPED', reason: 'INVITATION_EXPIRED' };
-				await this.emailService.sendWincrmInvitation(
+				await this.emailService.sendCrmInvitation(
 					event.destination.email,
 					event.reference.id,
 					event.content.expiresAt,

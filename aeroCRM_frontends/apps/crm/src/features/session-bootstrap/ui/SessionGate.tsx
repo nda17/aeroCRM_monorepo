@@ -6,7 +6,6 @@ import { buildLoginUrl } from '@/shared/lib/auth-return-url'
 import { Button, ScreenState } from '@/shared/ui'
 import type { PropsWithChildren } from 'react'
 import { useCallback, useEffect, useRef } from 'react'
-import toast from 'react-hot-toast'
 
 interface SessionGateProps extends PropsWithChildren {
 	redirectToLogin?: (url: string) => void
@@ -37,7 +36,6 @@ const SessionGate = ({
 
 	const handleRetry = useCallback(() => {
 		hasStartedRedirect.current = false
-		toast('Повторяем проверку сессии')
 		retry()
 	}, [retry])
 

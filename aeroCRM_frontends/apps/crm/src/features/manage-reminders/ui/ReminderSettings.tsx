@@ -146,7 +146,6 @@ export const ReminderSettingsBody = ({
 						change(() => {
 							void records.refetch()
 							void context.self.refetch()
-							toast('Обновляем правила')
 						})
 					}
 				>

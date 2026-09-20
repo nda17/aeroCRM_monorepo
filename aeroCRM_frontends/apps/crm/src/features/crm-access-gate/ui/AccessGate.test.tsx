@@ -211,11 +211,14 @@ describe('AccessGate', () => {
 		})
 		fireEvent.click(
 			screen.getByRole('button', {
-			name: 'Создать рабочее пространство'
-		})
+				name: 'Создать рабочее пространство'
+			})
 		)
 		await waitFor(() =>
-			expect(createPersonalCrmWorkspace).toHaveBeenCalledWith('token', null)
+			expect(createPersonalCrmWorkspace).toHaveBeenCalledWith(
+				'token',
+				null
+			)
 		)
 		expect(activateCrmTrial).not.toHaveBeenCalled()
 	})
@@ -241,7 +244,7 @@ describe('AccessGate', () => {
 		'gates the billing navigation without changing Trial activation (enabled=%s)',
 		async enabled => {
 			vi.mocked(getRuntimeConfig).mockReturnValue({
-				wincrmBillingEnabled: enabled
+				crmBillingEnabled: enabled
 			} as never)
 			vi.mocked(getCrmAccessBootstrap).mockResolvedValue({
 				...base,
@@ -272,7 +275,7 @@ describe('AccessGate', () => {
 	)
 	it('never exposes released billing navigation to a non-owner membership', async () => {
 		vi.mocked(getRuntimeConfig).mockReturnValue({
-			wincrmBillingEnabled: true
+			crmBillingEnabled: true
 		} as never)
 		vi.mocked(getCrmAccessBootstrap).mockResolvedValue({
 			...base,
@@ -606,8 +609,8 @@ describe('AccessGate', () => {
 			appOrigin: 'http://localhost:3001',
 			mainAppOrigin: 'http://localhost:3000',
 			apiBaseUrl: 'http://localhost:4100/api/v1',
-			wincrmEnabled: true,
-			wincrmBillingEnabled: false
+			crmEnabled: true,
+			crmBillingEnabled: false
 		})
 		window.history.replaceState({}, '', '/inbox')
 		Object.defineProperties(HTMLDialogElement.prototype, {
@@ -1106,12 +1109,12 @@ describe('AccessGate', () => {
 
 		fireEvent.click(
 			await screen.findByRole('button', {
-			name: 'Попробовать бесплатно 10 дней'
+				name: 'Попробовать бесплатно 10 дней'
 			})
 		)
 		fireEvent.click(
 			await screen.findByRole('button', {
-			name: 'Повторить запуск бесплатных 10 дней'
+				name: 'Повторить запуск бесплатных 10 дней'
 			})
 		)
 
@@ -1148,7 +1151,7 @@ describe('AccessGate', () => {
 
 		fireEvent.click(
 			await screen.findByRole('button', {
-			name: 'Попробовать бесплатно 10 дней'
+				name: 'Попробовать бесплатно 10 дней'
 			})
 		)
 
@@ -1157,7 +1160,7 @@ describe('AccessGate', () => {
 		)
 		expect(
 			screen.getByRole('button', {
-			name: 'Повторить запуск бесплатных 10 дней'
+				name: 'Повторить запуск бесплатных 10 дней'
 			})
 		).toHaveProperty('disabled', true)
 	})
@@ -1363,9 +1366,7 @@ describe('AccessGate', () => {
 			/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 		)
 		expect(await screen.findByText('workspace content')).toBeTruthy()
-		expect(toast.loading).toHaveBeenCalledWith(
-			`Создаём воронку «${template.name}»`
-		)
+		expect(toast.loading).toHaveBeenCalledWith('Пожалуйста, подождите')
 		expect(toast.success).toHaveBeenCalledWith(
 			`Воронка «${template.name}» создана`,
 			{ id: 'install-toast' }

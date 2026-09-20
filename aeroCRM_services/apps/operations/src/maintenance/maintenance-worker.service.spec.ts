@@ -250,7 +250,7 @@ describe('MaintenanceWorkerService durable backup outcomes', () => {
 		'invalid stored backup input also requires durable failure: %s → %s',
 		async (result, decision) => {
 			const f = fixture();
-			f.job.input = { schemaVersion: 1, target: 'widgets' };
+			f.job.input = { schemaVersion: 1, target: 'unknown' };
 			if (result === 'throw')
 				f.jobs.fail.mockRejectedValue(new Error('DB unavailable'));
 			else f.jobs.fail.mockResolvedValue(result === 'true');
@@ -303,7 +303,7 @@ describe('MaintenanceWorkerService durable backup outcomes', () => {
 				f.message.properties.messageId = randomUUID();
 			if (invalid === 'unknown-field')
 				f.message.content = Buffer.from(
-					JSON.stringify({ ...f.event, target: 'widgets' })
+					JSON.stringify({ ...f.event, target: 'unknown' })
 				);
 			if (invalid === 'invalid-json') f.message.content = Buffer.from('{');
 			await expect(f.service.handleScheduledJob(f.message)).resolves.toBe(

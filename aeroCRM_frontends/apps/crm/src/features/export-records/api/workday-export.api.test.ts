@@ -48,7 +48,7 @@ describe('Isolated Workday v2 export API', () => {
 			expect(result.metadata).toMatchObject({
 				schemaVersion: 2,
 				entity: 'tasks',
-				filename: `wincrm-tasks-v2.${format}`,
+				filename: `aerocrm-tasks-v2.${format}`,
 				rowCount: 1
 			})
 		}
@@ -64,10 +64,10 @@ describe('Isolated Workday v2 export API', () => {
 					)
 					selected.set(
 						field === 'actor'
-							? 'X-WinCRM-Export-Actor-SHA256'
+							? 'X-CRM-Export-Actor-SHA256'
 							: field === 'workspace'
-								? 'X-WinCRM-Workspace-Id'
-								: 'X-WinCRM-Export-Schema',
+								? 'X-CRM-Workspace-Id'
+								: 'X-CRM-Export-Schema',
 						field === 'schema' ? '1' : otherId
 					)
 					request.inspectHeaders(selected)

@@ -6,9 +6,9 @@ import {
 	getManualRetryRoutingKey,
 	MANUAL_RETRY_EXCHANGE,
 	DEFAULT_NOTIFICATION_DELIVERY_KINDS,
-	isWincrmInvitationDeliveryEnabled,
-	WINCRM_TASK_REMINDER_KINDS,
-	WINCRM_INTAKE_SLA_KINDS,
+	isCrmInvitationDeliveryEnabled,
+	CRM_TASK_REMINDER_KINDS,
+	CRM_INTAKE_SLA_KINDS,
 	MESSAGING_QUEUE_NAMES,
 	MESSAGING_ROUTING_KEYS,
 	MessagingKind,
@@ -615,11 +615,11 @@ export class RabbitMqService
 			...DEFAULT_NOTIFICATION_DELIVERY_KINDS
 		];
 		if (
-			isWincrmInvitationDeliveryEnabled(
+			isCrmInvitationDeliveryEnabled(
 				this.configService.get<string>('NOTIFICATION_DELIVERY_KINDS')
 			)
 		)
-			topologyKinds.push('wincrm-invitation-email');
+			topologyKinds.push('crm-invitation-email');
 		const configuredKinds =
 			this.configService
 				.get<string>('NOTIFICATION_DELIVERY_KINDS')
@@ -627,8 +627,8 @@ export class RabbitMqService
 				.map(kind => kind.trim()) ?? [];
 		for (const kind of [
 			...SUPPORT_NOTIFICATION_KINDS,
-			...WINCRM_TASK_REMINDER_KINDS,
-			...WINCRM_INTAKE_SLA_KINDS
+			...CRM_TASK_REMINDER_KINDS,
+			...CRM_INTAKE_SLA_KINDS
 		])
 			if (configuredKinds.includes(kind)) topologyKinds.push(kind);
 		for (const kind of topologyKinds) {

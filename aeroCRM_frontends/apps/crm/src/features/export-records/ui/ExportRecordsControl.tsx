@@ -164,16 +164,24 @@ const ExportPanel = ({
 	} | null>(null)
 	const mounted = useRef(false)
 	const active = useRef<AbortController | null>(null)
+	const loadingToastId = useRef<string | null>(null)
 	useLayoutEffect(() => {
 		mounted.current = true
 		return () => {
 			mounted.current = false
 			active.current?.abort()
 			active.current = null
+			if (loadingToastId.current) toast.dismiss(loadingToastId.current)
 		}
 	}, [])
 	useLayoutEffect(() => {
-		if (!available) active.current?.abort()
+		if (!available) {
+			active.current?.abort()
+			if (loadingToastId.current) {
+				toast.dismiss(loadingToastId.current)
+				loadingToastId.current = null
+			}
+		}
 	}, [available])
 	const current = (request: AbortController) => {
 		const state = useSessionStore.getState()
@@ -190,13 +198,14 @@ const ExportPanel = ({
 	const close = () => {
 		active.current?.abort()
 		active.current = null
+		if (loadingToastId.current) {
+			toast.dismiss(loadingToastId.current)
+			loadingToastId.current = null
+		}
 		setOpen(false)
 		setLoading(false)
 		setError(null)
 		setCompleted(null)
-		toast(
-			loading ? 'Подготовка выгрузки отменена' : 'Панель экспорта закрыта'
-		)
 	}
 	const authorize = async (request: AbortController) => {
 		if (!session || !current(request) || !navigator.onLine)
@@ -229,11 +238,8 @@ const ExportPanel = ({
 		setLoading(true)
 		setError(null)
 		setCompleted(null)
-		toast(
-			workday
-				? 'Подготавливаем выгрузку всех доступных задач'
-				: 'Подготавливаем выгрузку выбранного раздела'
-		)
+		const toastId = toast.loading('Пожалуйста, подождите')
+		loadingToastId.current = toastId
 		try {
 			await authorize(request)
 			if (!current(request)) return
@@ -269,7 +275,8 @@ const ExportPanel = ({
 				snapshotAt: result.metadata.snapshotAt
 			})
 			toast.success(
-				`Выгрузка проверена: ${result.metadata.rowCount} записей. Скачивание начато.`
+				`Выгрузка проверена: ${result.metadata.rowCount} записей. Скачивание начато.`,
+				{ id: toastId }
 			)
 		} catch (cause) {
 			if (!current(request)) return
@@ -278,8 +285,12 @@ const ExportPanel = ({
 					? cause.message
 					: 'Не удалось безопасно подготовить файл. Повторите экспорт.'
 			setError(message)
-			toast.error(message)
+			toast.error(message, { id: toastId })
 		} finally {
+			if (loadingToastId.current === toastId) {
+				if (!current(request)) toast.dismiss(toastId)
+				loadingToastId.current = null
+			}
 			if (mounted.current && active.current === request) {
 				active.current = null
 				setLoading(false)
@@ -302,10 +313,7 @@ const ExportPanel = ({
 						? `Экспорт ${exportNames[entity]}`
 						: 'Экспорт доступен только владельцу с подтверждёнными правами'
 				}
-				onClick={() => {
-					setOpen(true)
-					toast('Выберите формат выгрузки')
-				}}
+				onClick={() => setOpen(true)}
 			>
 				Экспорт
 			</Button>

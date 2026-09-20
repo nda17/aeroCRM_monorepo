@@ -12,12 +12,15 @@ describe('Turnstile outage classification', () => {
 	afterEach(() => {
 		global.fetch = originalFetch;
 	});
-	function guard() {
+	function guard(hostnames?: string) {
 		return new TurnstileGuard(
 			new ConfigService({
 				TURNSTILE_ENABLED: 'true',
 				TURNSTILE_SECRET_KEY: 'synthetic-only',
-				TURNSTILE_EXPECTED_HOSTNAME: 'aerocrm.space'
+				TURNSTILE_EXPECTED_HOSTNAME: 'aerocrm.space',
+				...(hostnames !== undefined
+					? { TURNSTILE_EXPECTED_HOSTNAMES: hostnames }
+					: {})
 			}),
 			{ getAllAndOverride: () => 'login' } as unknown as Reflector,
 			{ get: async () => ({ turnstileEnabled: true }) } as never
@@ -73,5 +76,25 @@ describe('Turnstile outage classification', () => {
 			Response.json({ success: true, action: 'login', hostname: 'aerocrm.space' })
 		) as typeof fetch;
 		await expect(guard().canActivate(context)).resolves.toBe(true);
+	});
+
+	it.each(['aerocrm.space', 'workspace.aerocrm.space'])(
+		'accepts configured hostname %s with the exact action', async hostname => {
+			global.fetch = jest.fn(async () =>
+				Response.json({ success: true, action: 'login', hostname })
+			) as typeof fetch;
+			await expect(
+				guard('aerocrm.space,workspace.aerocrm.space').canActivate(context)
+			).resolves.toBe(true);
+		}
+	);
+
+	it('does not fall back to the singular hostname when plural configuration is set', async () => {
+		global.fetch = jest.fn(async () =>
+			Response.json({ success: true, action: 'login', hostname: 'aerocrm.space' })
+		) as typeof fetch;
+		await expect(
+			guard('workspace.aerocrm.space').canActivate(context)
+		).rejects.toBeInstanceOf(BadRequestException);
 	});
 });

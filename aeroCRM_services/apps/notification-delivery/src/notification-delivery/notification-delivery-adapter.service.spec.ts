@@ -4,8 +4,8 @@ import type { NotificationDeliveryPrismaService } from './prisma/notification-de
 import type { TelegramInfoTransportService } from '../telegram/telegram-info-transport.service';
 import { render } from '@react-email/render';
 import type { Transporter } from 'nodemailer';
-import type { WincrmInvitationContextService } from './wincrm-invitation-context.service';
-import type { WincrmTaskReminderContextService } from './wincrm-task-reminder-context.service';
+import type { CrmInvitationContextService } from './crm-invitation-context.service';
+import type { CrmTaskReminderContextService } from './crm-task-reminder-context.service';
 
 describe('NotificationDeliveryAdapterService', () => {
 	const email = {
@@ -16,13 +16,13 @@ describe('NotificationDeliveryAdapterService', () => {
 		sendMessage: jest.fn().mockResolvedValue(undefined)
 	} as unknown as TelegramInfoTransportService;
 	const prisma = {} as NotificationDeliveryPrismaService;
-	const invitationContext = {} as WincrmInvitationContextService;
+	const invitationContext = {} as CrmInvitationContextService;
 	const service = new NotificationDeliveryAdapterService(
 		email,
 		telegram,
 		prisma,
 		invitationContext,
-		{} as WincrmTaskReminderContextService
+		{} as CrmTaskReminderContextService
 	);
 
 	beforeEach(() => {
@@ -83,7 +83,7 @@ describe('NotificationDeliveryAdapterService', () => {
 			telegram,
 			checkpointPrisma,
 			invitationContext,
-			{} as WincrmTaskReminderContextService
+			{} as CrmTaskReminderContextService
 		);
 
 		await checkpointService.deliver(

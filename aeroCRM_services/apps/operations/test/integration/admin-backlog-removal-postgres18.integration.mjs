@@ -48,8 +48,8 @@ assert.ok(
 );
 const info = JSON.parse(checked(['inspect', container]))[0];
 assert.ok(
-	info.Config.Labels?.['winwidget.operations-backlog-test'] === 'true' ||
-		info.Config.Labels?.['winwidget.test'] === 'crm-mvp'
+	info.Config.Labels?.['aerocrm.operations-backlog-test'] === 'true' ||
+		info.Config.Labels?.['aerocrm.test'] === 'crm-mvp'
 );
 assert.equal(info.State.Running, true);
 const sql = (statement, db = database) =>

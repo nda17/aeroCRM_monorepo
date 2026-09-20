@@ -26,8 +26,8 @@ import type {
 	CommerceCommandType,
 	CommerceUserCommand,
 	CrmBillingOperationView,
-	WincrmCapacityFence,
-	WincrmCommerceCommandProof
+	CrmCapacityFence,
+	CrmCommerceCommandProof
 } from './billing.contract';
 
 export function effectiveAdmissionCeiling(
@@ -58,7 +58,7 @@ export const operationView = (
 	commandId: op.commandId,
 	state: op.state as CrmBillingOperationView['state'],
 	requestHash: op.requestHash,
-	billing: op.proof as unknown as WincrmCommerceCommandProof | null
+	billing: op.proof as unknown as CrmCommerceCommandProof | null
 });
 
 @Injectable()
@@ -111,7 +111,7 @@ export class CrmBillingCapacityService {
 		await tx.$executeRawUnsafe("SET LOCAL lock_timeout = '2000ms'");
 		await tx.$executeRawUnsafe("SET LOCAL statement_timeout = '4000ms'");
 		if (commandId)
-			await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`wincrm-team-command:${commandId}`},0))`;
+			await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`crm-team-command:${commandId}`},0))`;
 		await workspaceLock(tx, workspaceId);
 	}
 	async prepare(
@@ -215,7 +215,7 @@ export class CrmBillingCapacityService {
 			return operation;
 		});
 	}
-	fence(op: CrmBillingOperation): WincrmCapacityFence {
+	fence(op: CrmBillingOperation): CrmCapacityFence {
 		if (
 			!op.requestHash ||
 			op.fenceRevision === null ||
@@ -240,7 +240,7 @@ export class CrmBillingCapacityService {
 			...request,
 			...(op.targetSeats !== null ? { capacityFence: this.fence(op) } : {})
 		};
-		const proof = await this.billing.request<WincrmCommerceCommandProof>(
+		const proof = await this.billing.request<CrmCommerceCommandProof>(
 			route[op.commandType as CommerceCommandType],
 			body,
 			'proof',
@@ -265,7 +265,7 @@ export class CrmBillingCapacityService {
 	): Promise<CrmBillingOperation> {
 		if (op.state === 'NOT_STARTED' || op.releaseFence) return op;
 		try {
-			const proof = await this.billing.request<WincrmCommerceCommandProof>(
+			const proof = await this.billing.request<CrmCommerceCommandProof>(
 				'operations/get',
 				{
 					schemaVersion: 1,
@@ -363,7 +363,7 @@ export class CrmBillingCapacityService {
 					);
 				return this.execute(op);
 			}
-			const proof = await this.billing.request<WincrmCommerceCommandProof>(
+			const proof = await this.billing.request<CrmCommerceCommandProof>(
 				'operations/close',
 				{
 					schemaVersion: 1,
@@ -382,7 +382,7 @@ export class CrmBillingCapacityService {
 	}
 	async applyProof(
 		binding: CrmBillingOperation,
-		proof: WincrmCommerceCommandProof
+		proof: CrmCommerceCommandProof
 	): Promise<CrmBillingOperation> {
 		if (
 			proof.workspaceId !== binding.workspaceId ||

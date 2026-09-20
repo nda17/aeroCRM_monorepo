@@ -151,7 +151,6 @@ export const ContactCallPanel = ({
 				return
 			}
 			if (!current()) return
-			toast('Открываем приложение для звонка')
 			openContactDialer(fresh.phone!)
 		} catch (error) {
 			if (current())

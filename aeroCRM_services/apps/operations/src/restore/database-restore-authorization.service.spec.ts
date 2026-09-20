@@ -25,9 +25,9 @@ const PROVENANCE = {
 		evidence: {
 			backupJobId: BACKUP_JOB_ID,
 			target: 'reporting',
-			databaseName: 'winwidget_reporting',
+			databaseName: 'aerocrm_reporting',
 			schema: 'reporting',
-			fileName: 'winwidget-reporting-db-2026-08-31.dump',
+			fileName: 'aerocrm-reporting-db-2026-08-31.dump',
 			fileSize: Number(SOURCE_SIZE),
 			artifactSha256: SOURCE_SHA,
 			artifactCreatedAt: '2026-08-31T10:00:00.000Z',
@@ -80,7 +80,7 @@ const completedBackupJob = () => ({
 	},
 	result: {
 		target: 'reporting',
-		databaseName: 'winwidget_reporting',
+		databaseName: 'aerocrm_reporting',
 		schema: 'reporting',
 		fileName: PROVENANCE.envelope.evidence.fileName,
 		fileSize: Number(SOURCE_SIZE),

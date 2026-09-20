@@ -73,17 +73,17 @@ describe('Intake export actual HTTP contract', () => {
 		expect(response.headers.get('content-length')).toBe(
 			String(body.byteLength)
 		);
-		expect(response.headers.get('x-wincrm-export-bytes')).toBe(
+		expect(response.headers.get('x-crm-export-bytes')).toBe(
 			String(body.byteLength)
 		);
 		expect(response.headers.get('content-disposition')).toBe(
-			'attachment; filename="wincrm-inbox.json"'
+			'attachment; filename="aerocrm-inbox.json"'
 		);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(response.headers.get('x-content-type-options')).toBe('nosniff');
 		expect(
 			response.headers.get('access-control-expose-headers')
-		).toContain('x-wincrm-export-actor-sha256');
+		).toContain('x-crm-export-actor-sha256');
 		expect(
 			response.headers.get('access-control-expose-headers')
 		).toContain('x-content-type-options');

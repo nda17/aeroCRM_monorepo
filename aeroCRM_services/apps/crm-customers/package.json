@@ -2,7 +2,7 @@
 	"name": "@aerocrm/crm-customers",
 	"version": "1.0.0",
 	"private": true,
-	"description": "WinCRM customer records microservice",
+	"description": "aeroCRM customer records microservice",
 	"license": "UNLICENSED",
 	"packageManager": "pnpm@9.15.9",
 	"engines": {

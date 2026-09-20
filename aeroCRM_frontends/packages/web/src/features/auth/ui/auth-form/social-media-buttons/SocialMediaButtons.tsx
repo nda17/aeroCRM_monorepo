@@ -29,9 +29,7 @@ const SocialMediaButtons = ({
 	const yandexAuthEnabled = Boolean(authSettings?.yandexAuthEnabled)
 	const vkAuthEnabled = Boolean(authSettings?.vkAuthEnabled)
 	const hasSocialAuthButtons =
-		googleAuthEnabled ||
-		yandexAuthEnabled ||
-		vkAuthEnabled
+		googleAuthEnabled || yandexAuthEnabled || vkAuthEnabled
 
 	const handleSocialAuth = (path: string) => {
 		if (authReturnUrl) {
@@ -50,7 +48,7 @@ const SocialMediaButtons = ({
 			? `${path}?${new URLSearchParams({ ref: referrerId })}`
 			: path
 
-		toast.loading('Загрузка...', { id: 'social-auth' })
+		toast.loading('Пожалуйста, подождите', { id: 'social-auth' })
 		window.location.assign(targetPath)
 	}
 
@@ -115,7 +113,6 @@ const SocialMediaButtons = ({
 						<span>VK</span>
 					</button>
 				)}
-
 			</div>
 		</>
 	)

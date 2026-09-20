@@ -20,11 +20,7 @@ import {
 } from '@/shared/ui'
 import clsx from 'clsx'
 import { usePathname } from 'next/navigation'
-import {
-	type PropsWithChildren,
-	useId,
-	useState
-} from 'react'
+import { type PropsWithChildren, useId, useState } from 'react'
 
 interface CrmNavigationProps {
 	ariaLabel: string
@@ -228,6 +224,9 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 					<CrmProductSwitch />
 					<ThemeSwitcher />
 					<TaskNotificationCenter />
+					<a className={styles.logoutLink} href="/logout">
+						Выйти
+					</a>
 
 					<div
 						className={styles.accessContext}

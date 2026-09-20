@@ -2,11 +2,15 @@
 	"schemaVersion": 1,
 	"targets": {
 		"notification-delivery": {
-			"manifestSha256": "6515080965fec8fc1575af21dd69a93d93ab9e591424a3dd5a0c23e89d4042e0",
+			"manifestSha256": "72749be0b6571041b84c5d2d337eecd5790ac7d0b77b97917ff0e7240225f7d1",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
 					"checksum": "33976a4478f5ba7f960f1afdcfba7d76caf80f9e3998ad6fd175ec4a4ce4bceb"
+				},
+				{
+					"name": "20260920010000_crm_runtime_contracts",
+					"checksum": "2ed176683aa3ba406e865df9b22b6fa31e880b45cef0cf7692bd3ecc57c4b3dc"
 				}
 			]
 		},
@@ -38,11 +42,15 @@
 			]
 		},
 		"identity": {
-			"manifestSha256": "0537b457fdbb5ba1e65278f4602871f30bd77fd062034718e715a0a25205ead3",
+			"manifestSha256": "29fb4057ee7cc413794be97173a3c4597b1dc3d34253f88b801ff3f613fc2c55",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
 					"checksum": "45bef30c1974a8abdb0928fe82eb1e6f446c6420f35bbea2c44cf32177b134d2"
+				},
+				{
+					"name": "20260920120000_oauth_workspace_client",
+					"checksum": "7c8768e78bd04d77a53a4ca5fe1bf3ab251e3bb879ccf1a8c9908af2a38b19a1"
 				}
 			]
 		},

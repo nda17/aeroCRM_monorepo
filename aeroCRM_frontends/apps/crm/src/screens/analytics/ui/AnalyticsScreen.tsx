@@ -179,14 +179,12 @@ const AnalyticsScreen = () => {
 		await client.invalidateQueries({
 			queryKey: ['sales', 'analytics', ...context.key]
 		})
-		toast('Данные отчёта запрошены заново')
 	}
 	const changePreset = (value: string) => {
 		setPreset(value)
 		if (value === 'custom') return
 		setPeriod(value === 'all' ? null : periodForDays(Number(value)))
 		setAssigneePage(1)
-		toast('Период отчёта изменён')
 	}
 	const applyRange = () => {
 		const start = new Date(`${from}T00:00:00+03:00`)
@@ -219,7 +217,6 @@ const AnalyticsScreen = () => {
 				className={styles.countLink}
 				href={dealsHref(filters)}
 				aria-label={`${title}: ${number.format(count)}, открыть сделки`}
-				onClick={() => toast('Открываем выбранные сделки')}
 			>
 				{number.format(count)} <span aria-hidden="true">→</span>
 			</Link>

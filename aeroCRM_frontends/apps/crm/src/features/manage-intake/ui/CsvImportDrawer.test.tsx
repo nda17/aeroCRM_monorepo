@@ -541,7 +541,7 @@ describe('CsvImportDrawer', () => {
 		expect(create).toHaveBeenCalledWith(expect.any(Blob))
 		expect(click.mock.instances[0]).toHaveProperty(
 			'download',
-			'wincrm-inbox-template.csv'
+			'aerocrm-inbox-template.csv'
 		)
 		await waitFor(() =>
 			expect(revoke).toHaveBeenCalledWith('blob:local-template')

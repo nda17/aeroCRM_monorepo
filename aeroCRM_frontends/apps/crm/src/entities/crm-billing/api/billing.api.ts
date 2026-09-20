@@ -23,10 +23,10 @@ import type { BillingMutation } from '../model/billing.types'
 
 const endpoint = '/crm/access/billing'
 const requireBillingUi = () => {
-	if (!getRuntimeConfig().wincrmBillingEnabled)
+	if (!getRuntimeConfig().crmBillingEnabled)
 		throw new AuthenticatedApiError(
 			'temporary',
-			'Оплата WinCRM скоро будет доступна'
+			'Оплата aeroCRM скоро будет доступна'
 		)
 }
 const validWorkspace = (workspaceId: string) => {

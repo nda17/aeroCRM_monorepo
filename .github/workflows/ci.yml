@@ -25,8 +25,146 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm typecheck:frontends
           pnpm build:frontends
+  contract-migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local-contract-only
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply isolated Identity and Notification Delivery migrations
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          psql_contract() {
+            docker exec -i -e PGPASSWORD=local-contract-only "$PG_CONTAINER" \
+              psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d "$1" "${@:2}"
+          }
+          psql_contract postgres -c 'CREATE DATABASE aerocrm_identity_contract'
+          psql_contract postgres -c 'CREATE DATABASE aerocrm_delivery_contract'
+          psql_contract aerocrm_identity_contract -c 'CREATE SCHEMA identity AUTHORIZATION postgres'
+          psql_contract aerocrm_delivery_contract -c 'CREATE SCHEMA notification_delivery AUTHORIZATION postgres'
+          identity_count=0
+          for migration in aeroCRM_services/apps/identity/prisma/migrations/*/migration.sql; do
+            test -f "$migration"
+            psql_contract aerocrm_identity_contract < "$migration"
+            identity_count=$((identity_count + 1))
+          done
+          test "$identity_count" -ge 2
+          for migration in \
+            aeroCRM_services/apps/notification-delivery/prisma/migrations/20260920000000_init_aerocrm/migration.sql \
+            aeroCRM_services/apps/notification-delivery/prisma/migrations/20260920010000_crm_runtime_contracts/migration.sql; do
+            test -f "$migration"
+            psql_contract aerocrm_delivery_contract < "$migration"
+          done
+          psql_contract aerocrm_identity_contract <<'SQL'
+          DO $contract$
+          DECLARE
+            kind_length integer;
+            kind_nullable text;
+            path_length integer;
+            path_nullable text;
+            kind text;
+            kind_check text;
+          BEGIN
+            SELECT character_maximum_length, is_nullable
+              INTO kind_length, kind_nullable
+              FROM information_schema.columns
+              WHERE table_schema = 'identity' AND table_name = 'oauth_authorizations'
+                AND column_name = 'client_kind';
+            SELECT character_maximum_length, is_nullable
+              INTO path_length, path_nullable
+              FROM information_schema.columns
+              WHERE table_schema = 'identity' AND table_name = 'oauth_authorizations'
+                AND column_name = 'return_path';
+            IF kind_length IS DISTINCT FROM 16 OR kind_nullable IS DISTINCT FROM 'NO'
+              OR path_length IS DISTINCT FROM 2048 OR path_nullable IS DISTINCT FROM 'YES' THEN
+              RAISE EXCEPTION 'Identity OAuth workspace column contract is invalid';
+            END IF;
+            SELECT pg_get_constraintdef(oid) INTO kind_check FROM pg_constraint
+              WHERE conrelid = 'identity.oauth_authorizations'::regclass
+                AND conname = 'oauth_authorizations_client_kind_check';
+            IF kind_check IS NULL OR position('main' IN kind_check) = 0
+              OR position('workspace' IN kind_check) = 0 THEN
+              RAISE EXCEPTION 'Identity OAuth client check is missing';
+            END IF;
+            INSERT INTO identity.oauth_authorizations(state_hash, provider, code_verifier, expires_at)
+              VALUES (repeat('a', 64), 'GOOGLE', 'synthetic-verifier', now() + interval '1 hour')
+              RETURNING client_kind INTO kind;
+            IF kind IS DISTINCT FROM 'main' THEN
+              RAISE EXCEPTION 'Identity OAuth default client is not main';
+            END IF;
+            INSERT INTO identity.oauth_authorizations(state_hash, provider, code_verifier, expires_at, client_kind, return_path)
+              VALUES (repeat('b', 64), 'GOOGLE', 'synthetic-verifier', now() + interval '1 hour', 'workspace', '/inbox');
+            BEGIN
+              INSERT INTO identity.oauth_authorizations(state_hash, provider, code_verifier, expires_at, client_kind)
+                VALUES (repeat('c', 64), 'GOOGLE', 'synthetic-verifier', now() + interval '1 hour', 'foreign');
+              RAISE EXCEPTION 'Identity OAuth accepted an invalid client';
+            EXCEPTION WHEN check_violation THEN NULL;
+            END;
+          END
+          $contract$;
+          SQL
+          psql_contract aerocrm_delivery_contract <<'SQL'
+          DO $contract$
+          DECLARE
+            names text[] := ARRAY[
+              'control_actions_identity_check',
+              'delivery_failures_classification_check',
+              'delivery_receipts_identity_check',
+              'notification_outbox_events_identity_check'
+            ];
+            kinds text[] := ARRAY[
+              'crm-invitation-email', 'crm-task-reminder-email',
+              'crm-task-reminder-telegram', 'crm-intake-sla-email',
+              'crm-intake-sla-telegram'
+            ];
+            name text;
+            kind text;
+            definition text;
+          BEGIN
+            FOREACH name IN ARRAY names LOOP
+              SELECT pg_get_constraintdef(c.oid) INTO definition
+                FROM pg_constraint c
+                WHERE c.conrelid IN (
+                  'notification_delivery.control_actions'::regclass,
+                  'notification_delivery.delivery_failures'::regclass,
+                  'notification_delivery.delivery_receipts'::regclass,
+                  'notification_delivery.outbox_events'::regclass
+                ) AND c.conname = name AND c.contype = 'c';
+              IF definition IS NULL OR position('wincrm' IN lower(definition)) > 0 THEN
+                RAISE EXCEPTION 'Notification Delivery canonical constraint missing: %', name;
+              END IF;
+              FOREACH kind IN ARRAY kinds LOOP
+                IF position(kind IN definition) = 0 THEN
+                  RAISE EXCEPTION 'Notification Delivery constraint % lacks %', name, kind;
+                END IF;
+              END LOOP;
+            END LOOP;
+            IF EXISTS (
+              SELECT 1 FROM pg_constraint c
+                JOIN pg_class t ON t.oid = c.conrelid
+                JOIN pg_namespace n ON n.oid = t.relnamespace
+                WHERE n.nspname = 'notification_delivery'
+                  AND position('wincrm' IN lower(pg_get_constraintdef(c.oid))) > 0
+            ) THEN
+              RAISE EXCEPTION 'Notification Delivery still has legacy constraints';
+            END IF;
+          END
+          $contract$;
+          SQL
   image:
-    needs: frontends
+    needs: [frontends, contract-migrations]
     if: github.ref == 'refs/heads/prod_0.1.0' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:

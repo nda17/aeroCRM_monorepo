@@ -2,6 +2,7 @@
 import styles from './AccountPage.module.scss'
 import { useCrmBillingWorkspaces } from '@/entities/crm-pricing/client'
 import { useAuthStore, useUser } from '@/entities/user'
+import SkeletonLoader from '@/shared/ui/skeleton-loader/SkeletonLoader'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
@@ -24,8 +25,17 @@ export default function PaymentPageClient() {
 
 	if (!isAuthResolved || !auth || isProfileLoading || isLoading)
 		return (
-			<main className={styles.page}>
-				<p>Загружаем данные аккаунта…</p>
+			<main className={styles.page} aria-busy="true">
+				<span className={styles.srOnly} role="status">
+					Загружаем данные аккаунта
+				</span>
+				<div className={styles.loading} aria-hidden="true">
+					<SkeletonLoader width={280} height={36} />
+					<SkeletonLoader width="80%" height={20} />
+					<div className={styles.card}>
+						<SkeletonLoader count={2} height={44} />
+					</div>
+				</div>
 			</main>
 		)
 

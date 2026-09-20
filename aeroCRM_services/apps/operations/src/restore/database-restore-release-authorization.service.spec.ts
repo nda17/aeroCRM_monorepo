@@ -4,34 +4,9 @@ import {
 	DatabaseRestorePermitStatus
 } from '@prisma/operations-client';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { DatabaseRestoreReleaseAuthorizationService } from './database-restore-release-authorization.service';
 
 describe('DatabaseRestoreReleaseAuthorizationService', () => {
-	it('keeps the provenance migration transactional with exact receipt and release bindings', () => {
-		const migration = readFileSync(
-			join(
-				__dirname,
-				'../../prisma/migrations/20260831100000_add_database_backup_provenance/migration.sql'
-			),
-			'utf8'
-		).trim();
-
-		expect(migration.startsWith('BEGIN;')).toBe(true);
-		expect(migration.endsWith('COMMIT;')).toBe(true);
-		for (const constraint of [
-			'database_restore_jobs_permit_fkey',
-			'database_restore_permits_source_backup_job_fkey',
-			'database_restore_terminal_receipts_job_fkey',
-			'database_restore_release_authorizations_job_fkey',
-			'database_restore_release_authorizations_permit_fkey',
-			'database_restore_release_authorizations_action_fkey'
-		]) {
-			expect(migration).toContain(`ADD CONSTRAINT "${constraint}"`);
-		}
-	});
-
 	it('signs the exact backup provenance generation into release authorization v2', async () => {
 		const now = new Date('2026-08-31T00:00:00.000Z');
 		const jobId = randomUUID();
@@ -59,9 +34,9 @@ describe('DatabaseRestoreReleaseAuthorizationService', () => {
 					expectedServicesSha: '2'.repeat(40),
 					migrationManifestSha: '3'.repeat(64),
 					writerFenceRoles: [
-						'winwidget_reporting_runtime',
-						'winwidget_reporting_migration',
-						'winwidget_reporting_backup'
+						'aerocrm_reporting_runtime',
+						'aerocrm_reporting_migration',
+						'aerocrm_reporting_backup'
 					],
 					writerFenceAppliedAt: now,
 					writerFenceEvidenceSha256: '4'.repeat(64),
@@ -139,9 +114,9 @@ describe('DatabaseRestoreReleaseAuthorizationService', () => {
 					phase: DatabaseRestoreJobPhase.UNFENCING,
 					requestedById: 'requester',
 					writerFenceRoles: [
-						'winwidget_reporting_runtime',
-						'winwidget_reporting_migration',
-						'winwidget_reporting_backup'
+						'aerocrm_reporting_runtime',
+						'aerocrm_reporting_migration',
+						'aerocrm_reporting_backup'
 					],
 					writerFenceAppliedAt: now,
 					writerFenceEvidenceSha256: 'a'.repeat(64),

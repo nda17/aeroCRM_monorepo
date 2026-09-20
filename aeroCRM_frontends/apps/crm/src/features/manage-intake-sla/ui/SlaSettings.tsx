@@ -300,7 +300,6 @@ const SlaForm = ({
 						onClick={() => {
 							command.reset()
 							onSaved()
-							toast('Загружаем актуальную версию SLA')
 						}}
 					>
 						Загрузить актуальную версию SLA
@@ -403,7 +402,6 @@ export const SlaSettingsBody = ({ context }: { context: SlaContext }) => {
 							variant="secondary"
 							onClick={() => {
 								void query.refetch()
-								toast('Проверяем доступность SLA')
 							}}
 						>
 							Проверить SLA

@@ -11,11 +11,11 @@ import {
 	validConsent
 } from './billing.validation';
 import type {
-	WincrmCommerceSummary,
-	WincrmCommerceCommandProof,
-	WincrmCommerceQuote,
-	WincrmOrderResponse,
-	WincrmHistoryResponse
+	CrmCommerceSummary,
+	CrmCommerceCommandProof,
+	CrmCommerceQuote,
+	CrmOrderResponse,
+	CrmHistoryResponse
 } from './billing.contract';
 
 type Check = (v: unknown) => boolean;
@@ -163,11 +163,11 @@ export type BillingResponseKind =
 	| 'order'
 	| 'history';
 export type BillingResponse =
-	| WincrmCommerceSummary
-	| WincrmCommerceCommandProof
-	| WincrmCommerceQuote
-	| WincrmOrderResponse
-	| WincrmHistoryResponse;
+	| CrmCommerceSummary
+	| CrmCommerceCommandProof
+	| CrmCommerceQuote
+	| CrmOrderResponse
+	| CrmHistoryResponse;
 export function parseBillingResponse(
 	kind: BillingResponseKind,
 	value: unknown,

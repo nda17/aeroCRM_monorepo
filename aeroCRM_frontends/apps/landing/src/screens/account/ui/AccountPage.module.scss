@@ -40,3 +40,9 @@
 .muted {
 	@apply text-sm text-slate-500;
 }
+.loading {
+	@apply flex flex-col gap-4;
+}
+.srOnly {
+	@apply sr-only;
+}

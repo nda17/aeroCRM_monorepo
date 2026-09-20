@@ -12,7 +12,7 @@ import {
 } from './workspace-directory.controller';
 import { IDENTITY_GLOBAL_PREFIX_EXCLUDES } from '../runtime/identity-http.config';
 
-describe('Scoped WinCRM member directory', () => {
+describe('Scoped aeroCRM member directory', () => {
 	const workspaceId = randomUUID();
 	const membershipId = randomUUID();
 	const setup = () => {

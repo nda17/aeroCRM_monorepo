@@ -1,10 +1,8 @@
 import {
-	IsBoolean,
 	IsDateString,
 	Equals,
 	IsIn,
 	IsInt,
-	IsOptional,
 	IsString,
 	IsUUID,
 	Max,

@@ -1,7 +1,7 @@
 {
-	"name": "winwidget-services",
+	"name": "aerocrm-services",
 	"version": "0.1.0",
-	"description": "WinWidget backend microservices repository tooling",
+	"description": "aeroCRM backend microservices repository tooling",
 	"author": "",
 	"private": true,
 	"license": "UNLICENSED",

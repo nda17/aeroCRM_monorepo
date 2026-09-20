@@ -1,3 +1,5 @@
+@use '@aerocrm/web/src/app/styles/select';
+
 .wrapper {
 	@apply relative flex w-full min-w-0 flex-col;
 }
@@ -286,4 +288,8 @@
 
 .lockedBadge {
 	@apply rounded-full border border-[#d7c4ee] bg-white px-4 py-2 text-sm font-semibold text-[#6b2d8f] shadow-sm;
+}
+
+.select {
+	@include select.chevron;
 }

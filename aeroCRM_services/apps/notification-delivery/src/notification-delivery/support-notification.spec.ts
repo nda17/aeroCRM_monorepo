@@ -25,8 +25,8 @@ import { TelegramSupportTransportService } from '../telegram/telegram-support-tr
 import { SupportNotificationContextService } from './support-notification-context.service';
 import { NotificationDeliveryAdapterService } from './notification-delivery-adapter.service';
 import type { NotificationDeliveryPrismaService } from './prisma/notification-delivery-prisma.service';
-import type { WincrmInvitationContextService } from './wincrm-invitation-context.service';
-import type { WincrmTaskReminderContextService } from './wincrm-task-reminder-context.service';
+import type { CrmInvitationContextService } from './crm-invitation-context.service';
+import type { CrmTaskReminderContextService } from './crm-task-reminder-context.service';
 import { NotificationDeliveryOutcomeService } from './notification-delivery-outcome.service';
 import { parseNotificationDeliveryKinds } from './notification-delivery-worker.service';
 
@@ -89,7 +89,7 @@ function configuration(extra: Record<string, unknown> = {}) {
 describe('Support notification broker/context contracts', () => {
 	afterEach(() => jest.restoreAllMocks());
 	it('keeps old defaults and binds each opt-in kind to its own request/retry/DLQ', async () => {
-		expect(parseNotificationDeliveryKinds(undefined)).toHaveLength(11);
+		expect(parseNotificationDeliveryKinds(undefined)).toHaveLength(6);
 		for (const kind of SUPPORT_NOTIFICATION_KINDS) {
 			const payload = event(kind);
 			for (const routingKey of [
@@ -319,7 +319,7 @@ describe('Support notification broker/context contracts', () => {
 		const sql = readFileSync(
 			join(
 				__dirname,
-				'../../prisma/migrations/20260909010000_add_support_notifications/migration.sql'
+				'../../prisma/migrations/20260920010000_crm_runtime_contracts/migration.sql'
 			),
 			'utf8'
 		);
@@ -358,8 +358,8 @@ describe('Support notification external delivery', () => {
 			{
 				notificationDeliveryReceipt: { findFirst }
 			} as unknown as NotificationDeliveryPrismaService,
-			{} as WincrmInvitationContextService,
-			{} as WincrmTaskReminderContextService,
+			{} as CrmInvitationContextService,
+			{} as CrmTaskReminderContextService,
 			undefined,
 			{ resolve } as unknown as SupportNotificationContextService,
 			support
@@ -387,7 +387,7 @@ describe('Support notification external delivery', () => {
 		expect(fixture.support.sendMessage).toHaveBeenCalledWith(
 			'-1001234567890',
 			expect.stringContaining(
-				'https://winwidget.ru/admin/support?conversationId='
+				'https://admin.aerocrm.space/admin/support?conversationId='
 			),
 			{ messageThreadId: 12, parseMode: null }
 		);
@@ -475,10 +475,10 @@ describe('Support notification external delivery', () => {
 		expect(sendMail.mock.calls[0][0]).toMatchObject({
 			to: 'verified@example.test',
 			subject: 'Вам ответила поддержка',
-			messageId: `<${event().eventId}.support-notification@winwidget.ru>`
+			messageId: `<${event().eventId}.support-notification@aerocrm.space>`
 		});
 		expect(sendMail.mock.calls[0][0].html).toContain(
-			`https://crm.winwidget.ru/inbox?supportConversation=${content.conversationId}`
+			`https://workspace.aerocrm.space/inbox?supportConversation=${content.conversationId}`
 		);
 		await email.sendSupportNotification(
 			'staff@example.test',
@@ -487,7 +487,7 @@ describe('Support notification external delivery', () => {
 			event().eventId
 		);
 		expect(sendMail.mock.calls[1][0].html).toContain(
-			`https://winwidget.ru/admin/support?conversationId=${content.conversationId}`
+			`https://admin.aerocrm.space/admin/support?conversationId=${content.conversationId}`
 		);
 	});
 });

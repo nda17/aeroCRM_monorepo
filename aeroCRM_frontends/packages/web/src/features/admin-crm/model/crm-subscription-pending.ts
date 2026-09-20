@@ -13,6 +13,10 @@ export interface PendingCrmAdminGrant {
 const pendingByActor = new Map<string, PendingCrmAdminGrant>()
 let boundActor: string | null = null
 const key = (actorSubject: string) =>
+	`aerocrm-admin-grant-v1:${actorSubject}`
+// Transitional adapter: existing browser pages must retain the same unresolved
+// command ID. Keep both keys until terminal proof clears them; never reset it.
+const legacyKey = (actorSubject: string) =>
 	`wincrm-admin-grant-v1:${actorSubject}`
 
 useAuthStore.subscribe((state, previous) => {
@@ -31,12 +35,9 @@ export function bindCrmAdminGrantActor(actorSubject: string) {
 	boundActor = actorSubject
 }
 
-export function readPendingCrmAdminGrant(
-	actorSubject: string
-): PendingCrmAdminGrant | null {
-	const memory = pendingByActor.get(actorSubject)
-	if (memory) return memory
-	const raw = window.sessionStorage.getItem(key(actorSubject))
+const parsePendingMarker = (
+	raw: string | null
+): PendingCrmAdminGrant | null => {
 	if (raw === null) return null
 	const marker: unknown = JSON.parse(raw)
 	if (!marker || typeof marker !== 'object' || Array.isArray(marker))
@@ -52,6 +53,37 @@ export function readPendingCrmAdminGrant(
 	)
 		throw new Error('Invalid CRM pending marker')
 	return { workspaceId: value.workspaceId, commandId: value.commandId }
+}
+
+const samePendingMarker = (
+	left: PendingCrmAdminGrant,
+	right: PendingCrmAdminGrant
+) =>
+	left.workspaceId === right.workspaceId &&
+	left.commandId === right.commandId
+
+export function readPendingCrmAdminGrant(
+	actorSubject: string
+): PendingCrmAdminGrant | null {
+	const memory = pendingByActor.get(actorSubject)
+	const current = parsePendingMarker(
+		window.sessionStorage.getItem(key(actorSubject))
+	)
+	const legacyRaw = window.sessionStorage.getItem(legacyKey(actorSubject))
+	const legacy = parsePendingMarker(legacyRaw)
+	if (current && legacy && !samePendingMarker(current, legacy))
+		throw new Error('CRM grant recovery pointers conflict')
+	const marker = current ?? legacy
+	if (memory && marker && !samePendingMarker(memory, marker))
+		throw new Error('CRM grant recovery pointer changed')
+	if (!current && legacy) {
+		try {
+			window.sessionStorage.setItem(key(actorSubject), legacyRaw!)
+		} catch {
+			// Retain the old recovery pointer; a failed migration cannot allow a new grant.
+		}
+	}
+	return memory ?? marker
 }
 
 export function retainPendingCrmAdminGrant(
@@ -80,14 +112,15 @@ export function retainPendingCrmAdminGrant(
 		return previous
 	}
 	// Only a recovery pointer is persisted: no free-form reason, email or request body.
-	window.sessionStorage.setItem(
-		key(actorSubject),
-		JSON.stringify({
-			schemaVersion: 1,
-			workspaceId,
-			commandId: command.commandId
-		})
-	)
+	const marker = JSON.stringify({
+		schemaVersion: 1,
+		workspaceId,
+		commandId: command.commandId
+	})
+	// Write the compatibility pointer before sending a command, including when
+	// an old page is restored from browser history. Either write failure blocks it.
+	window.sessionStorage.setItem(legacyKey(actorSubject), marker)
+	window.sessionStorage.setItem(key(actorSubject), marker)
 	const pending = {
 		workspaceId,
 		commandId: command.commandId,
@@ -108,5 +141,6 @@ export function clearResolvedCrmAdminGrant(
 	if (previous?.commandId !== commandId)
 		throw new Error('CRM grant recovery pointer changed')
 	window.sessionStorage.removeItem(key(actorSubject))
+	window.sessionStorage.removeItem(legacyKey(actorSubject))
 	pendingByActor.delete(actorSubject)
 }

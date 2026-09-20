@@ -52,7 +52,7 @@ const teamActionTooltips: Record<TeamEditorSelection['kind'], string> = {
 	role: 'Изменить роль сотрудника и доступные ему действия в CRM',
 	teams: 'Настроить отделы сотрудника и связанную с ними область доступа',
 	disable:
-		'Отключить доступ к CRM и освободить место. Аккаунт и права на виджеты сохранятся',
+		'Отключить доступ к рабочему пространству и освободить место сотрудника',
 	enable:
 		'Поставить сотрудника в очередь допуска: включение зависит от прав и свободного места',
 	retry:
@@ -336,7 +336,7 @@ const SettingsScreen = () => {
 			<PageHeader
 				eyebrow="Настройки CRM"
 				title="Команда и доступ"
-				description="Приглашайте сотрудников, распределяйте роли и отделы. Доступ к CRM не меняет права на виджеты."
+				description="Приглашайте сотрудников, распределяйте роли и отделы."
 				actions={
 					<div className={styles.actions}>
 						{session ? (
@@ -369,7 +369,7 @@ const SettingsScreen = () => {
 			<SlaSettings />
 			<CrmCommercialPolicyCard />
 			{workspace.membership.role === 'OWNER' &&
-			getRuntimeConfig().wincrmBillingEnabled ? (
+			getRuntimeConfig().crmBillingEnabled ? (
 				<BillingEntryCard
 					key={`${session?.userId}:${sessionRevision}:${workspace.workspaceId}`}
 					workspaceId={workspace.workspaceId}

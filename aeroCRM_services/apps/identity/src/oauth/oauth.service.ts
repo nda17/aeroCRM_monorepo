@@ -22,6 +22,39 @@ import { RefreshTokenService } from '../auth/refresh-token.service';
 import { WorkspaceProvisioningService } from '../workspaces/workspace-provisioning.service';
 
 type ProviderName = 'google' | 'yandex' | 'vk';
+type OAuthClientKind = 'main' | 'workspace';
+
+function clientKind(value: string | undefined): OAuthClientKind {
+	if (value === undefined || value === 'main') return 'main';
+	if (value === 'workspace') return 'workspace';
+	throw new BadRequestException('OAuth client is invalid');
+}
+
+const WORKSPACE_PATH = /^\/(?:inbox|deals|contacts|tasks|planner|analytics|settings|billing)(?:\/|$)/;
+const INVITATION_PATH = /^\/invitations\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?:\/)?$/i;
+
+export function workspaceReturnPath(value: string | undefined): string {
+	if (value === undefined) return '/inbox';
+	if (
+		value.length < 1 ||
+		value.length > 2_048 ||
+		!value.startsWith('/') ||
+		value.startsWith('//') ||
+		/[\\#\u0000-\u001f\u007f]/.test(value) ||
+		/%(?:2f|5c|23|0[0-9a-f]|1[0-9a-f]|7f)/i.test(value)
+	) {
+		throw new BadRequestException('OAuth return path is invalid');
+	}
+	const parsed = new URL(value, 'https://workspace.invalid');
+	if (
+		parsed.origin !== 'https://workspace.invalid' ||
+		parsed.hash ||
+		!(WORKSPACE_PATH.test(parsed.pathname) || INVITATION_PATH.test(parsed.pathname))
+	) {
+		throw new BadRequestException('OAuth return path is invalid');
+	}
+	return `${parsed.pathname}${parsed.search}`;
+}
 
 interface SocialProfile {
 	providerId: string;
@@ -40,6 +73,7 @@ const USER_INCLUDE = {
 @Injectable()
 export class OAuthService {
 	private readonly clientOrigin: string;
+	private readonly workspaceClientOrigin: string | null;
 
 	constructor(
 		private readonly config: ConfigService,
@@ -54,14 +88,29 @@ export class OAuthService {
 			config,
 			'TURNSTILE_CLIENT_URL'
 		).replace(/\/$/, '');
+		const workspaceUrl = config.get<string>('OAUTH_WORKSPACE_CLIENT_URL')?.trim();
+		this.workspaceClientOrigin = workspaceUrl
+			? exactOrigin(workspaceUrl, 'OAUTH_WORKSPACE_CLIENT_URL')
+			: null;
 	}
 
 	async start(
 		provider: ProviderName,
 		referrerId: string | undefined,
-		response: Response
+		response: Response,
+		client: string | undefined = undefined,
+		returnPath: string | undefined = undefined
 	) {
 		await this.settings.assertProviderEnabled(provider);
+		const kind = clientKind(client);
+		if (kind === 'main' && returnPath !== undefined) {
+			throw new BadRequestException('OAuth return path is invalid');
+		}
+		if (kind === 'workspace' && !this.workspaceClientOrigin) {
+			throw new Error('OAUTH_WORKSPACE_CLIENT_URL is required');
+		}
+		const safeReturnPath =
+			kind === 'workspace' ? workspaceReturnPath(returnPath) : null;
 		const state = randomToken(32);
 		const verifier = randomToken(48);
 		await this.prisma.oAuthAuthorization.create({
@@ -70,6 +119,8 @@ export class OAuthService {
 				provider: this.enum(provider),
 				codeVerifier: verifier,
 				referrerId: referrerId?.trim().slice(0, 128) || null,
+				clientKind: kind,
+				returnPath: safeReturnPath,
 				expiresAt: new Date(Date.now() + 10 * 60_000)
 			}
 		});
@@ -94,11 +145,10 @@ export class OAuthService {
 			error?: string;
 		}
 	) {
+		let clientKind: OAuthClientKind = 'main';
+		let returnPath: string | null = null;
 		try {
-			await this.settings.assertProviderEnabled(provider);
-			if (input.error || !input.code || !input.state) {
-				throw new Error('OAuth authorization was rejected');
-			}
+			if (!input.state) throw new Error('OAuth state is invalid');
 			const cookieState = request.cookies?.[this.cookie(provider)];
 			if (
 				typeof cookieState !== 'string' ||
@@ -107,6 +157,19 @@ export class OAuthService {
 				throw new Error('OAuth state is invalid');
 			}
 			const authorization = await this.consume(provider, input.state);
+			if (authorization.clientKind === 'workspace') {
+				if (!this.workspaceClientOrigin) {
+					throw new Error('OAUTH_WORKSPACE_CLIENT_URL is required');
+				}
+				clientKind = 'workspace';
+				returnPath = workspaceReturnPath(authorization.returnPath ?? undefined);
+			} else if (authorization.clientKind && authorization.clientKind !== 'main') {
+				throw new Error('OAuth client is invalid');
+			}
+			await this.settings.assertProviderEnabled(provider);
+			if (input.error || !input.code) {
+				throw new Error('OAuth authorization was rejected');
+			}
 			const profile = await this.profile(
 				provider,
 				input.code,
@@ -125,7 +188,11 @@ export class OAuthService {
 				this.clearCookieOptions(provider)
 			);
 			this.refreshTokens.add(response, refreshToken);
-			return response.redirect(`${this.clientOrigin}/social-auth`);
+			const origin = this.destination(clientKind);
+			const query = returnPath
+				? `?${new URLSearchParams({ returnPath })}`
+				: '';
+			return response.redirect(`${origin}/social-auth${query}`);
 		} catch (error) {
 			response.clearCookie(
 				this.cookie(provider),
@@ -136,7 +203,7 @@ export class OAuthService {
 				error instanceof OAuthAccountDeactivatedError
 					? 'account_deactivated'
 					: 'social_auth_failed';
-			return response.redirect(`${this.clientOrigin}/login?error=${code}`);
+			return response.redirect(`${this.destination(clientKind)}/login?error=${code}`);
 		}
 	}
 
@@ -166,6 +233,12 @@ export class OAuthService {
 				throw new BadRequestException('OAuth state is invalid');
 			return authorization;
 		});
+	}
+
+	private destination(clientKind: OAuthClientKind): string {
+		return clientKind === 'workspace' && this.workspaceClientOrigin
+			? this.workspaceClientOrigin
+			: this.clientOrigin;
 	}
 
 	private async upsertUser(
@@ -504,6 +577,26 @@ function requireValue(config: ConfigService, name: string): string {
 	const value = config.get<string>(name)?.trim();
 	if (!value) throw new Error(`${name} is required`);
 	return value;
+}
+
+function exactOrigin(value: string, name: string): string {
+	let parsed: URL;
+	try {
+		parsed = new URL(value);
+	} catch {
+		throw new Error(`${name} must be an exact HTTP origin`);
+	}
+	if (
+		!['http:', 'https:'].includes(parsed.protocol) ||
+		parsed.username ||
+		parsed.password ||
+		parsed.pathname !== '/' ||
+		parsed.search ||
+		parsed.hash
+	) {
+		throw new Error(`${name} must be an exact HTTP origin`);
+	}
+	return parsed.origin;
 }
 
 function record(value: unknown): value is Record<string, unknown> {

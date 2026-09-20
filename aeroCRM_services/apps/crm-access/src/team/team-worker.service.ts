@@ -132,7 +132,7 @@ export class CrmTeamWorkerService
 		message: ConsumeMessage
 	): Promise<CrmTeamDelivery | 'CONFLICT' | null> {
 		return serializable(this.prisma, async tx => {
-			await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`wincrm-team-delivery:${consumer}:${event.eventId}`}, 0))`;
+			await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`crm-team-delivery:${consumer}:${event.eventId}`}, 0))`;
 			const where = {
 				eventId_consumer: { eventId: event.eventId, consumer }
 			};
@@ -273,7 +273,7 @@ export class CrmTeamWorkerService
 			.digest('hex');
 		const eventId = `${raw.slice(0, 8)}-${raw.slice(8, 12)}-4${raw.slice(13, 16)}-a${raw.slice(17, 20)}-${raw.slice(20, 32)}`;
 		await serializable(this.prisma, async tx => {
-			await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`wincrm-team-poison:${consumer}:${eventId}`}, 0))`;
+			await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`crm-team-poison:${consumer}:${eventId}`}, 0))`;
 			if (
 				await tx.crmTeamDelivery.findUnique({
 					where: { eventId_consumer: { eventId, consumer } }

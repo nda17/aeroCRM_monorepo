@@ -24,7 +24,7 @@ beforeEach(() => {
 		.getState()
 		.setAuthenticated({ userId: 'owner', accessToken: 'synthetic-token' })
 	vi.mocked(getRuntimeConfig).mockReturnValue({
-		wincrmBillingEnabled: false
+		crmBillingEnabled: false
 	} as never)
 	vi.mocked(useSearchParams).mockReturnValue(
 		new URLSearchParams({ workspaceId }) as never
@@ -46,7 +46,7 @@ describe('paid billing route release gate', () => {
 			)
 			render(<BillingScreen returning={returning} />)
 			expect(
-				screen.getByText('Оплата WinCRM скоро будет доступна')
+				screen.getByText('Оплата aeroCRM скоро будет доступна')
 			).toBeTruthy()
 			expect(BillingFlow).not.toHaveBeenCalled()
 			expect(replace).not.toHaveBeenCalled()
@@ -57,7 +57,7 @@ describe('paid billing route release gate', () => {
 	)
 	it('mounts the backend-authoritative flow only on explicit enable and validated workspace', () => {
 		vi.mocked(getRuntimeConfig).mockReturnValue({
-			wincrmBillingEnabled: true
+			crmBillingEnabled: true
 		} as never)
 		render(<BillingScreen />)
 		expect(screen.getByText('Confirmed billing flow')).toBeTruthy()
@@ -69,7 +69,7 @@ describe('paid billing route release gate', () => {
 	})
 	it('validates a provider return then routes only to a local order-status reference', async () => {
 		vi.mocked(getRuntimeConfig).mockReturnValue({
-			wincrmBillingEnabled: true
+			crmBillingEnabled: true
 		} as never)
 		vi.mocked(useSearchParams).mockReturnValue(
 			new URLSearchParams({ workspaceId, orderId }) as never
@@ -88,7 +88,7 @@ describe('paid billing route release gate', () => {
 	})
 	it('does not use an enabled flag to bypass ambiguous workspace validation', () => {
 		vi.mocked(getRuntimeConfig).mockReturnValue({
-			wincrmBillingEnabled: true
+			crmBillingEnabled: true
 		} as never)
 		vi.mocked(useSearchParams).mockReturnValue(
 			new URLSearchParams(

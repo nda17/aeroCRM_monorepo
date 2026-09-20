@@ -8,7 +8,7 @@ import {
 	hasExactInvitationKeys as exact,
 	isCanonicalInvitationDate as iso,
 	isNormalizedInvitationEmail
-} from './wincrm-invitation.contract';
+} from './crm-invitation.contract';
 
 const uuid = (value: unknown): value is string =>
 	typeof value === 'string' &&

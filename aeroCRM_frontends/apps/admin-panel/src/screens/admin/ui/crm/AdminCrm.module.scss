@@ -1,9 +1,11 @@
+@use '@aerocrm/web/src/app/styles/select';
+
 .wrapper {
 	@apply relative flex w-full min-w-0 flex-col;
 }
 
 .summaryGrid {
-	@apply mx-auto mb-6 grid w-full min-w-0 grid-cols-3 gap-3;
+	@apply mx-auto mb-6 grid w-full min-w-0 grid-cols-2 gap-3;
 
 	@media (max-width: 760px) {
 		@apply grid-cols-1;
@@ -73,26 +75,6 @@
 
 .inlineCode {
 	@apply rounded bg-[#f1ebf7] px-1 py-0.5 text-[0.75rem] text-[#6b2d8f];
-}
-
-.serviceGrid {
-	@apply grid grid-cols-2 gap-3;
-
-	@media (max-width: 680px) {
-		@apply grid-cols-1;
-	}
-}
-
-.serviceCard {
-	@apply flex min-h-[92px] flex-col gap-2 rounded-xl border border-[#efe8fb] bg-[#faf8ff] p-4;
-}
-
-.serviceName {
-	@apply w-fit rounded-md bg-[#eee4f8] px-2 py-1 text-[0.78rem] font-semibold text-[#692a87];
-}
-
-.serviceDescription {
-	@apply text-[0.8rem] leading-[1.45] text-[#71637d];
 }
 
 .refreshButton {
@@ -275,14 +257,6 @@
 	@apply mx-auto mb-6 flex w-full min-w-0 flex-col gap-2 rounded-xl border border-[#ddd0ed] bg-[#f5effb] p-4 text-sm leading-relaxed text-[#655171];
 }
 
-.architecture {
-	@apply mx-auto mb-6 w-full min-w-0 rounded-xl border border-[#e0d6f0] bg-white p-4;
-
-	> p {
-		@apply mb-4;
-	}
-}
-
-.architectureSummary {
-	@apply min-h-[44px] cursor-pointer rounded-md py-3 text-sm font-semibold text-[#655171] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b44b6];
+.providerSelect {
+	@include select.chevron;
 }

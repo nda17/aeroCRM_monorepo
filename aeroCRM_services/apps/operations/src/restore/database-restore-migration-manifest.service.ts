@@ -1,7 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import {
 	DATABASE_RESTORE_SHA256_PATTERN,
 	DATABASE_RESTORE_TARGETS,
@@ -157,31 +155,10 @@ export const parseDatabaseRestoreMigrationManifests = (
 
 @Injectable()
 export class DatabaseRestoreMigrationManifestService {
-	private readonly manifests: Readonly<
-		Record<DatabaseRestoreTarget, DatabaseRestoreTargetMigrationManifest>
-	>;
-
-	constructor() {
-		const path = join(
-			process.cwd(),
-			'restore-manifests',
-			'database-restore-migrations.json'
-		);
-		let value: unknown;
-		try {
-			value = JSON.parse(readFileSync(path, 'utf8')) as unknown;
-		} catch {
-			throw new Error(
-				'Trusted database restore migration manifest is unavailable'
-			);
-		}
-		this.manifests = parseDatabaseRestoreMigrationManifests(value);
-	}
-
 	get(
 		target: DatabaseRestoreTarget
 	): DatabaseRestoreTargetMigrationManifest {
-		return this.manifests[target];
+		throw new Error(`Database restore migration manifest for ${target} is unsupported`);
 	}
 
 	sha256(target: DatabaseRestoreTarget): string {

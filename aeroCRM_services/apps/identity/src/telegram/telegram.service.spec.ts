@@ -1,16 +1,8 @@
 import { ConfigService } from '@nestjs/config';
-import { ForbiddenException, RequestMethod } from '@nestjs/common';
+import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
-import {
-	AuthIdentityType,
-	Role,
-	UserStatus,
-	VerificationChallengePurpose,
-	VerificationChallengeType
-} from '@prisma/identity-client';
-import { hash } from 'bcryptjs';
+import { VerificationChallengePurpose, VerificationChallengeType } from '@prisma/identity-client';
 import type { Request } from 'express';
-import { PASSWORD_SALT_ROUNDS } from '../common/identity.util';
 import { TelegramAdminController } from './telegram.controller';
 import { TelegramService } from './telegram.service';
 
@@ -74,30 +66,21 @@ function createService(
 			(callback: (transaction: typeof tx) => unknown) => callback(tx)
 		)
 	};
-	const auth = { startSession: jest.fn() };
-	const settings = { assertProviderEnabled: jest.fn() };
 	const events = {
 		emitUserChanged: jest.fn(),
 		emitBillingRequest: jest.fn(),
 		emitAudit: jest.fn()
 	};
-	const workspaces = { provisionPersonalWorkspace: jest.fn() };
 	const service = new TelegramService(
 		{ get: (key: string) => configValues[key] } as ConfigService,
 		prisma as any,
-		events as any,
-		settings as any,
-		auth as any,
-		workspaces as any
+		events as any
 	);
 	return {
 		service,
 		prisma,
 		tx,
-		auth,
-		settings,
-		events,
-		workspaces
+		events
 	};
 }
 
@@ -109,7 +92,7 @@ describe('Identity Telegram API routing', () => {
 	it('routes bot calls through the pinned HTTPS reverse proxy', async () => {
 		const value = createService(challenge(), {
 			MODE: 'production',
-			TELEGRAM_API_BASE_URL: 'https://tg.aerocrm.space/telegram-api'
+			TELEGRAM_API_BASE_URL: 'https://telegram.aerocrm.space/telegram-api'
 		});
 		const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
 			ok: true,
@@ -120,7 +103,7 @@ describe('Identity Telegram API routing', () => {
 		await (value.service as any).telegramApi('identity-token', 'getMe');
 
 		expect(fetchMock.mock.calls[0][0]).toBe(
-			'https://tg.aerocrm.space/telegram-api/botidentity-token/getMe'
+			'https://telegram.aerocrm.space/telegram-api/botidentity-token/getMe'
 		);
 	});
 
@@ -128,9 +111,9 @@ describe('Identity Telegram API routing', () => {
 		undefined,
 		'https://api.telegram.org',
 		'https://api.telegram.org:8443',
-		'https://tg.aerocrm.space/telegram-api/',
-		'https://tg.aerocrm.space/telegram-api?target=other',
-		'https://tg.aerocrm.space/telegram-api#fragment'
+		'https://telegram.aerocrm.space/telegram-api/',
+		'https://telegram.aerocrm.space/telegram-api?target=other',
+		'https://telegram.aerocrm.space/telegram-api#fragment'
 	])('rejects a direct production endpoint: %s', async apiBaseUrl => {
 		const value = createService(challenge(), {
 			MODE: 'production',
@@ -140,158 +123,6 @@ describe('Identity Telegram API routing', () => {
 		await expect(
 			(value.service as any).telegramApi('identity-token', 'getMe')
 		).rejects.toThrow('Telegram API configuration is invalid');
-	});
-});
-
-describe('Telegram Auth confirmation contract', () => {
-	it('does not create a session after /start until callback confirmation', async () => {
-		const value = createService(challenge());
-		await expect(
-			value.service.completeLogin('request-id', undefined, {} as Request)
-		).resolves.toEqual({ confirmed: false });
-		expect(value.auth.startSession).not.toHaveBeenCalled();
-		expect(value.tx.verificationChallenge.delete).not.toHaveBeenCalled();
-	});
-
-	it('keeps the explicit code verification path consumable without callback', async () => {
-		const codeHash = await hash('123456', PASSWORD_SALT_ROUNDS);
-		const value = createService(challenge({ codeHash }));
-		const existingUser = {
-			id: 'user',
-			name: 'User',
-			password: '',
-			avatarPath: null,
-			status: UserStatus.ACTIVE,
-			personalDataConsentRevokedAt: null,
-			deletedAt: null,
-			rights: [Role.USER],
-			createdAt: NOW,
-			updatedAt: NOW,
-			authIdentities: [
-				{
-					type: AuthIdentityType.TELEGRAM,
-					value: '777',
-					verifiedAt: NOW
-				}
-			],
-			telegramNotificationChannel: null
-		};
-		value.tx.authIdentity.findUnique.mockResolvedValue({
-			userId: 'user',
-			user: existingUser
-		});
-		value.auth.startSession.mockResolvedValue({ accessToken: 'access' });
-		await expect(
-			value.service.verifyLogin(
-				'request-id',
-				'123456',
-				undefined,
-				{} as Request
-			)
-		).resolves.toEqual({ accessToken: 'access' });
-		expect(value.tx.verificationChallenge.delete).toHaveBeenCalledWith({
-			where: { id: 'challenge' }
-		});
-	});
-
-	it('provisions a personal workspace in the new Telegram user transaction', async () => {
-		const value = createService(challenge({ telegramChatId: 'chat-id' }));
-		value.tx.authIdentity.findUnique.mockResolvedValue(null);
-		value.tx.user.create.mockResolvedValue({
-			id: 'new-user',
-			createdAt: NOW
-		});
-		value.auth.startSession.mockResolvedValue({ accessToken: 'access' });
-
-		await expect(
-			value.service.completeLogin('request-id', undefined, {} as Request)
-		).resolves.toEqual({ confirmed: true, accessToken: 'access' });
-		expect(
-			value.workspaces.provisionPersonalWorkspace
-		).toHaveBeenCalledWith(value.tx, 'new-user');
-	});
-
-	it('commits a failed code attempt before returning the 401 error', async () => {
-		const codeHash = await hash('123456', PASSWORD_SALT_ROUNDS);
-		const value = createService(challenge({ codeHash }));
-		await expect(
-			value.service.verifyLogin(
-				'request-id',
-				'654321',
-				undefined,
-				{} as Request
-			)
-		).rejects.toThrow('Telegram verification code invalid');
-		expect(value.tx.verificationChallenge.update).toHaveBeenCalledWith({
-			where: { id: 'challenge' },
-			data: { attempts: 1 }
-		});
-		expect(value.prisma.$transaction).toHaveBeenCalledTimes(1);
-	});
-
-	it('rejects verify and complete when disabled during the flow but leaves cancel available', async () => {
-		const value = createService(challenge());
-		value.settings.assertProviderEnabled.mockRejectedValue(
-			new ForbiddenException('Telegram auth is disabled')
-		);
-
-		await expect(
-			value.service.verifyLogin(
-				'request-id',
-				'123456',
-				undefined,
-				{} as Request
-			)
-		).rejects.toThrow('Telegram auth is disabled');
-		await expect(
-			value.service.completeLogin('request-id', undefined, {} as Request)
-		).rejects.toThrow('Telegram auth is disabled');
-		await expect(value.service.cancelLogin('request-id')).resolves.toEqual(
-			{
-				cancelled: true
-			}
-		);
-
-		expect(value.settings.assertProviderEnabled).toHaveBeenCalledTimes(2);
-		expect(value.prisma.$transaction).not.toHaveBeenCalled();
-		expect(
-			value.prisma.verificationChallenge.deleteMany
-		).toHaveBeenCalledWith({
-			where: {
-				type: VerificationChallengeType.TELEGRAM,
-				purpose: VerificationChallengePurpose.LOGIN,
-				value: 'request-id'
-			}
-		});
-	});
-
-	it('returns the frozen admin settings DTO and public start shape', async () => {
-		const previousToken = process.env.TELEGRAM_AUTH_BOT_TOKEN;
-		const previousUsername = process.env.TELEGRAM_AUTH_BOT_USERNAME;
-		process.env.TELEGRAM_AUTH_BOT_TOKEN = 'configured-token';
-		process.env.TELEGRAM_AUTH_BOT_USERNAME = '@Auth_bot';
-		try {
-			const value = createService(challenge());
-			expect(value.service.adminSettings()).toEqual({
-				authTelegramBotTokenConfigured: true,
-				authTelegramBotUsernameConfigured: true
-			});
-			const started = await value.service.startLogin();
-			expect(started).toEqual({
-				requestId: expect.any(String),
-				botUrl: expect.stringMatching(
-					/^https:\/\/t\.me\/Auth_bot\?start=/
-				),
-				expiresAt: expect.stringMatching(/Z$/)
-			});
-		} finally {
-			if (previousToken === undefined)
-				delete process.env.TELEGRAM_AUTH_BOT_TOKEN;
-			else process.env.TELEGRAM_AUTH_BOT_TOKEN = previousToken;
-			if (previousUsername === undefined)
-				delete process.env.TELEGRAM_AUTH_BOT_USERNAME;
-			else process.env.TELEGRAM_AUTH_BOT_USERNAME = previousUsername;
-		}
 	});
 });
 
@@ -309,7 +140,7 @@ describe('Telegram Info admin webhook contract', () => {
 			environmentKeys.map(key => [key, process.env[key]])
 		);
 		process.env.TELEGRAM_INFO_BOT_TOKEN = 'configured-info-token';
-		process.env.TELEGRAM_INFO_BOT_USERNAME = '@winwidget_info_bot';
+		process.env.TELEGRAM_INFO_BOT_USERNAME = '@aerocrm_info_bot';
 		process.env.TELEGRAM_INFO_BOT_WEBHOOK_SECRET =
 			'configured-info-webhook-secret';
 		process.env.TELEGRAM_WEBHOOK_HOST = 'https://telegram.aerocrm.space';
@@ -361,7 +192,7 @@ describe('Telegram Info admin webhook contract', () => {
 							pending_update_count: 0,
 							allowed_updates: ['message']
 						}
-					: { username: 'winwidget_info_bot' };
+					: { username: 'aerocrm_info_bot' };
 				return new Response(JSON.stringify({ ok: true, result }), {
 					status: 200,
 					headers: { 'content-type': 'application/json' }
@@ -379,8 +210,8 @@ describe('Telegram Info admin webhook contract', () => {
 					'https://telegram.aerocrm.space/api/v1/telegram-bot/webhook',
 				webhookMatchesExpected: true,
 				secretConfigured: true,
-				configuredUsername: 'winwidget_info_bot',
-				actualUsername: 'winwidget_info_bot',
+				configuredUsername: 'aerocrm_info_bot',
+				actualUsername: 'aerocrm_info_bot',
 				usernameMatchesConfigured: true,
 				allowedUpdates: ['message']
 			})
@@ -454,7 +285,7 @@ describe('Telegram Info admin route contract', () => {
 	it('keeps Info_bot admin operations under the routed Identity prefix', () => {
 		expect(
 			Reflect.getMetadata(PATH_METADATA, TelegramAdminController)
-		).toBe('telegram-auth/admin');
+		).toBe('telegram-info/admin');
 		expect(
 			Reflect.getMetadata(
 				PATH_METADATA,

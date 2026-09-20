@@ -14,7 +14,8 @@ jest.mock('nodemailer', () => ({
 }));
 
 function config(values: Record<string, string>): ConfigService {
-	return { get: (name: string) => values[name] } as ConfigService;
+	const all = { SMTP_FROM: '"aeroCRM" <info@aerocrm.space>', ...values };
+	return { get: (name: string) => all[name as keyof typeof all] } as ConfigService;
 }
 
 describe('VerificationTransportService frozen provider contract', () => {
@@ -88,7 +89,7 @@ describe('VerificationTransportService frozen provider contract', () => {
 			config({
 				SMSAERO_EMAIL: 'test@example.com',
 				SMSAERO_API_KEY: 'test-api-key',
-				SMSAERO_SIGN: 'WinWidget'
+				SMSAERO_SIGN: 'SMS Aero'
 			})
 		);
 		await service.smsCode('(999) 123-45-67', '123456');
@@ -96,7 +97,7 @@ describe('VerificationTransportService frozen provider contract', () => {
 			.calls[0] as [string, RequestInit];
 		expect(target).toContain('https://gate.smsaero.ru/v2/sms/send?');
 		expect(target).toContain('number=79991234567');
-		expect(target).toContain('sign=WinWidget');
+		expect(target).toContain('sign=SMS+Aero');
 		expect(options).toMatchObject({
 			method: 'GET',
 			headers: { Authorization: expect.stringMatching(/^Basic /) }
@@ -189,7 +190,7 @@ describe('VerificationTransportService frozen provider contract', () => {
 			text: expect.stringContaining('Прежний пароль заменится после входа')
 		});
 		expect(sendMail.mock.calls[0][0].messageId).toMatch(
-			/^<[0-9a-f-]{36}@winwidget\.ru>$/
+			/^<[0-9a-f-]{36}@aerocrm\.space>$/
 		);
 		expect(
 			log.mock.calls.every(

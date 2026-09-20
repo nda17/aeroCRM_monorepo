@@ -103,7 +103,6 @@ function createService(transaction?: Record<string, any>) {
 		subscriptionUserIds: jest.fn(),
 		revokeEntitlements: jest.fn(),
 		billingOverview: jest.fn(),
-		widgetsOverview: jest.fn(),
 		adminOverview: jest.fn()
 	};
 	const service = new UsersService(

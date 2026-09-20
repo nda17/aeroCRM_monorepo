@@ -64,7 +64,7 @@ const SOURCE_INTEGRATIONS: Record<
 		'campaign-telegram',
 		'subscription-expiry-email',
 		'subscription-expiry-telegram',
-		'wincrm-invitation-email',
+		'crm-invitation-email',
 		'daily-summary-delivery-telegram'
 	],
 	billing: [

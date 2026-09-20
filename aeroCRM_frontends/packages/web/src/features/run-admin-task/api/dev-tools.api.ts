@@ -4,7 +4,6 @@ export const DATABASE_RESTORE_TARGETS = [
 	'notification-delivery',
 	'campaigns',
 	'reporting',
-	'widgets',
 	'identity',
 	'platform',
 	'support'

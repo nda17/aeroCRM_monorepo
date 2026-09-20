@@ -1,5 +1,6 @@
 class PublicPages {
 	HOME = '/'
+	MOBILE_APP = '/mobile-app'
 	LOGIN = '/login'
 	REGISTER = '/register'
 	RESTORE_PASSWORD = '/restore-password'

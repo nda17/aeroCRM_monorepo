@@ -132,10 +132,10 @@ export const parseExportHeaders = (
 	actorHash: string,
 	schemaVersion: 1 | 2 = 1
 ): ExportMetadata => {
-	const rowCount = headers.get('X-WinCRM-Export-Rows')
-	const bytes = headers.get('X-WinCRM-Export-Bytes')
-	const snapshotAt = headers.get('X-WinCRM-Export-Snapshot-At')
-	const filename = `wincrm-${entity}.${format}`
+	const rowCount = headers.get('X-CRM-Export-Rows')
+	const bytes = headers.get('X-CRM-Export-Bytes')
+	const snapshotAt = headers.get('X-CRM-Export-Snapshot-At')
+	const filename = `aerocrm-${entity}.${format}`
 	const mediaType =
 		format === 'csv'
 			? 'text/csv; charset=utf-8'
@@ -153,10 +153,10 @@ export const parseExportHeaders = (
 		Number(bytes) < 1 ||
 		!isIsoDate(snapshotAt) ||
 		!/^[a-f0-9]{64}$/.test(actorHash) ||
-		headers.get('X-WinCRM-Export-Actor-SHA256') !== actorHash ||
-		headers.get('X-WinCRM-Workspace-Id') !== workspaceId ||
-		headers.get('X-WinCRM-Export-Entity') !== entity ||
-		headers.get('X-WinCRM-Export-Schema') !== String(schemaVersion) ||
+		headers.get('X-CRM-Export-Actor-SHA256') !== actorHash ||
+		headers.get('X-CRM-Workspace-Id') !== workspaceId ||
+		headers.get('X-CRM-Export-Entity') !== entity ||
+		headers.get('X-CRM-Export-Schema') !== String(schemaVersion) ||
 		headers.get('Content-Type')?.toLowerCase() !== mediaType ||
 		headers.get('Content-Disposition') !==
 			`attachment; filename="${filename}"` ||

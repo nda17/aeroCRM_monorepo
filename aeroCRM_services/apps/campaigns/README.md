@@ -48,7 +48,7 @@ pnpm run lint
 pnpm test
 pnpm run build
 pnpm run test:integration
-docker build --build-arg APP_REVISION="$(git rev-parse HEAD)" -t winwidget-campaigns .
+docker build --build-arg APP_REVISION="$(git rev-parse HEAD)" -t aerocrm-campaigns .
 ```
 
 Интеграционные тесты требуют одноразовой локальной базы PostgreSQL, RabbitMQ

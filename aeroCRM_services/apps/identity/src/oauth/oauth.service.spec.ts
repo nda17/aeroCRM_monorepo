@@ -11,15 +11,11 @@ import { OAuthController } from './oauth.controller';
 import { AuthRateLimitGuard } from '../auth/auth-rate-limit.guard';
 
 const configuration = {
-	RECAPTCHA_CLIENT_URL: 'https://aerocrm.space',
+	TURNSTILE_CLIENT_URL: 'https://aerocrm.space',
 	GOOGLE_CLIENT_ID: 'google-client',
 	GOOGLE_CLIENT_SECRET: 'google-secret',
 	GOOGLE_CALLBACK_URL:
 		'https://api.aerocrm.space/api/v1/auth/google/redirect',
-	GITHUB_CLIENT_ID: 'github-client',
-	GITHUB_CLIENT_SECRET: 'github-secret',
-	GITHUB_CALLBACK_URL:
-		'https://api.aerocrm.space/api/v1/auth/github/redirect',
 	YANDEX_CLIENT_ID: 'yandex-client',
 	YANDEX_CLIENT_SECRET: 'yandex-secret',
 	YANDEX_CALLBACK_URL:
@@ -94,55 +90,6 @@ describe('OAuth provider contracts', () => {
 		await expect(
 			(service as any).profile('google', 'code', 'verifier')
 		).rejects.toThrow('Google OAuth email is not verified');
-	});
-
-	it('uses the verified primary GitHub email endpoint and requires provider id', async () => {
-		global.fetch = jest
-			.fn()
-			.mockImplementationOnce(() =>
-				fetchResponse({ access_token: 'token' })
-			)
-			.mockImplementationOnce(() =>
-				fetchResponse({ id: 42, email: null, login: 'octocat' })
-			)
-			.mockImplementationOnce(() =>
-				fetchResponse([
-					{
-						email: 'fallback@example.com',
-						verified: true,
-						primary: false
-					},
-					{ email: 'PRIMARY@Example.COM', verified: true, primary: true }
-				])
-			) as typeof fetch;
-		const { service } = createService();
-		await expect(
-			(service as any).profile('github', 'code', 'verifier')
-		).resolves.toMatchObject({
-			providerId: '42',
-			email: 'primary@example.com',
-			name: 'octocat'
-		});
-		expect(global.fetch).toHaveBeenNthCalledWith(
-			3,
-			'https://api.github.com/user/emails',
-			expect.any(Object)
-		);
-
-		global.fetch = jest
-			.fn()
-			.mockImplementationOnce(() =>
-				fetchResponse({ access_token: 'token' })
-			)
-			.mockImplementationOnce(() => fetchResponse({ login: 'missing-id' }))
-			.mockImplementationOnce(() =>
-				fetchResponse([
-					{ email: 'user@example.com', verified: true, primary: true }
-				])
-			) as typeof fetch;
-		await expect(
-			(service as any).profile('github', 'code', 'verifier')
-		).rejects.toThrow('OAuth provider response has no id');
 	});
 
 	it('restores the Yandex avatar contract and fails closed without email', async () => {
@@ -345,9 +292,9 @@ describe('OAuth callback secret handling', () => {
 		const consume = jest.spyOn(service as any, 'consume');
 		const target = response();
 		await service.callback(
-			'github',
+			'google',
 			{
-				cookies: { identityOAuthState_github: 'cookie-state' }
+				cookies: { identityOAuthState_google: 'cookie-state' }
 			} as unknown as Request,
 			target,
 			{ code: 'provider-code', state: 'query-state' }
@@ -360,7 +307,6 @@ describe('OAuth callback secret handling', () => {
 
 	it.each([
 		['google', 'Google auth is disabled'],
-		['github', 'Github auth is disabled'],
 		['yandex', 'Yandex auth is disabled'],
 		['vk', 'VK auth is disabled']
 	] as const)(
@@ -370,7 +316,10 @@ describe('OAuth callback secret handling', () => {
 			settings.assertProviderEnabled.mockRejectedValue(
 				new ForbiddenException(message)
 			);
-			const consume = jest.spyOn(service as any, 'consume');
+			const consume = jest.spyOn(service as any, 'consume').mockResolvedValue({
+				clientKind: 'main',
+				returnPath: null
+			});
 			const target = response();
 
 			await expect(
@@ -389,7 +338,7 @@ describe('OAuth callback secret handling', () => {
 			expect(settings.assertProviderEnabled).toHaveBeenCalledWith(
 				provider
 			);
-			expect(consume).not.toHaveBeenCalled();
+			expect(consume).toHaveBeenCalledWith(provider, 'state');
 			expect(target.clearCookie).toHaveBeenCalledWith(
 				`identityOAuthState_${provider}`,
 				expect.any(Object)
@@ -492,7 +441,9 @@ describe('OAuth controller scalar query contract', () => {
 		expect(oauth.start).toHaveBeenCalledWith(
 			'google',
 			'single',
-			expect.anything()
+			expect.anything(),
+			undefined,
+			undefined
 		);
 	});
 });

@@ -123,7 +123,6 @@ const Panel = ({ onClose }: { onClose: () => void }) => {
 			setEditor(null)
 			setCancel(null)
 			void records.refetch()
-			toast('Список серий обновляется')
 		}
 	}
 	return (

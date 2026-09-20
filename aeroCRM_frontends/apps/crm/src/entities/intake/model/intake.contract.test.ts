@@ -51,12 +51,10 @@ describe('Intake exact workspace-bound contracts', () => {
 		expect(parseInboxEntry(entry, workspaceId)).toEqual(entry)
 		expect(parseIntakeSource(source, workspaceId)).toEqual(source)
 	})
-	it('permits nullable names only for native WIDGET with a managed source, preserving exact 20 keys', () => {
-		for (const name of [null, 'Клиент']) {
-			const value = { ...entry, origin: 'WIDGET', sourceId: id, name }
-			expect(parseInboxEntry(value, workspaceId)).toEqual(value)
-			expect(Object.keys(value)).toHaveLength(20)
-		}
+	it('requires a name for every supported origin and preserves exact 20 API keys', () => {
+		const value = { ...entry, origin: 'API', sourceId: id, name: 'Клиент' }
+		expect(parseInboxEntry(value, workspaceId)).toEqual(value)
+		expect(Object.keys(value)).toHaveLength(20)
 		for (const origin of ['MANUAL', 'API', 'CSV'])
 			expect(
 				parseInboxEntry(
@@ -72,7 +70,7 @@ describe('Intake exact workspace-bound contracts', () => {
 		for (const name of ['', ' ', 0, 'x'.repeat(201)])
 			expect(
 				parseInboxEntry(
-					{ ...entry, origin: 'WIDGET', sourceId: id, name },
+					{ ...entry, origin: 'API', sourceId: id, name },
 					workspaceId
 				)
 			).toBeNull()
@@ -80,9 +78,8 @@ describe('Intake exact workspace-bound contracts', () => {
 			parseInboxEntry(
 				{
 					...entry,
-					origin: 'WIDGET',
+					origin: 'API',
 					sourceId: id,
-					name: null,
 					payload: {}
 				},
 				workspaceId
@@ -110,7 +107,7 @@ describe('Intake exact workspace-bound contracts', () => {
 		{ ...entry, workspaceId: id },
 		{ ...entry, version: 0 },
 		{ ...entry, extra: true },
-		{ ...entry, origin: 'WIDGET' },
+		{ ...entry, origin: 'UNSUPPORTED' },
 		{ ...entry, origin: 'API', sourceId: null },
 		{ ...entry, sourceId: id },
 		{ ...entry, phone: '89991234567' },
@@ -152,7 +149,7 @@ describe('Intake exact workspace-bound contracts', () => {
 		{ ...source, tokenHash: 'unexpected-hash' },
 		{ ...source, workspaceId: id },
 		{ ...source, tokenVersion: 0 },
-		{ ...source, kind: 'WIDGET' }
+		{ ...source, kind: 'UNSUPPORTED' }
 	])('rejects credential-bearing or malformed source responses', value =>
 		expect(parseIntakeSource(value, workspaceId)).toBeNull()
 	)

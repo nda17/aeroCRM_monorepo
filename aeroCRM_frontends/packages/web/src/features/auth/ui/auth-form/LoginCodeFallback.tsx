@@ -210,8 +210,19 @@ const LoginCodeFallback = ({
 						className={styles['link-button']}
 						disabled={capabilities.isFetching}
 						onClick={() => {
-							toast('Проверяем резервный вход')
-							void capabilities.refetch()
+							const promise = capabilities.refetch().then(result => {
+								if (result.isError || result.data?.available !== true) {
+									throw (
+										result.error ?? new Error('Вход по коду недоступен')
+									)
+								}
+								return result.data
+							})
+							void toast.promise(promise, {
+								loading: 'Пожалуйста, подождите',
+								success: 'Резервный вход доступен',
+								error: 'Резервный вход пока недоступен'
+							})
 						}}
 					>
 						Проверить доступность
@@ -373,7 +384,6 @@ const LoginCodeFallback = ({
 					className={styles['link-button']}
 					disabled={pending}
 					onClick={() => {
-						toast('Повторно загружаем CAPTCHA')
 						onRetryCaptcha()
 					}}
 				>

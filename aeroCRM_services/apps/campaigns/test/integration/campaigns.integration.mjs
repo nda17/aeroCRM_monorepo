@@ -291,12 +291,12 @@ function assertLocalTestRabbit(url, variableName) {
 			parsed.hostname.toLowerCase()
 		) ||
 		decodeURIComponent(parsed.pathname.replace(/^\//, '')) !==
-			'winwidget' ||
+			'aerocrm' ||
 		!parsed.username ||
 		!parsed.password
 	) {
 		throw new Error(
-			`${variableName} must use authenticated local vhost winwidget`
+			`${variableName} must use authenticated local vhost aerocrm`
 		);
 	}
 	for (const [key, value] of Object.entries(process.env)) {

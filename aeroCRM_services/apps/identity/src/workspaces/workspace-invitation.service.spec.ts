@@ -120,7 +120,7 @@ const setup = (emailEnabled = false) => {
 	};
 };
 
-describe('WinCRM Identity workspace invitations', () => {
+describe('aeroCRM Identity workspace invitations', () => {
 	it('creates the optional notification intent atomically without JWT, HTML or supplied URL', async () => {
 		const { service, prisma } = setup(true);
 		prisma.workspaceInvitation.findUnique.mockResolvedValueOnce(
@@ -137,13 +137,13 @@ describe('WinCRM Identity workspace invitations', () => {
 		});
 		const event = prisma.outboxEvent.create.mock.calls[0][0].data;
 		expect(event.eventType).toBe(
-			'notification.wincrm.invitation.email.requested.v1'
+			'notification.crm.invitation.email.requested.v1'
 		);
 		expect(event.payload.destination).toEqual({
 			email: 'invitee@example.test'
 		});
 		expect(event.payload.reference).toEqual({
-			type: 'wincrm-invitation',
+			type: 'crm-invitation',
 			id: invitationId,
 			workspaceId
 		});
@@ -249,7 +249,7 @@ describe('WinCRM Identity workspace invitations', () => {
 		});
 		expect(prisma.outboxEvent.create).toHaveBeenCalledTimes(1);
 		const event = prisma.outboxEvent.create.mock.calls[0][0].data;
-		expect(event.eventType).toBe('identity.wincrm.invitation-accepted.v1');
+		expect(event.eventType).toBe('identity.crm.invitation-accepted.v1');
 		expect(event.payload).not.toHaveProperty('email');
 		expect(event.payload).not.toHaveProperty('accessToken');
 		expect(event.payload).not.toHaveProperty('authorization');

@@ -13,7 +13,7 @@ export const EXPORT_MAX_BYTES = 16 * 1024 * 1024;
 export const EXPORT_MAX_MS = 5_000;
 export const EXPORT_PAGE_SIZE = 500;
 export const EXPORT_EXPOSE_HEADERS =
-	'content-disposition, content-length, x-content-type-options, x-wincrm-export-entity, x-wincrm-export-rows, x-wincrm-export-snapshot-at, x-wincrm-export-schema, x-wincrm-workspace-id, x-wincrm-export-actor-sha256, x-wincrm-export-bytes';
+	'content-disposition, content-length, x-content-type-options, x-crm-export-entity, x-crm-export-rows, x-crm-export-snapshot-at, x-crm-export-schema, x-crm-workspace-id, x-crm-export-actor-sha256, x-crm-export-bytes';
 export type ExportFormat = 'json' | 'csv';
 export interface ExportAuthority {
 	workspaceId: string;
@@ -235,7 +235,7 @@ export function exportHeaders(file: ExportFile): Record<string, string> {
 				: 'text/csv; charset=utf-8',
 		'Content-Length': String(file.body.byteLength),
 		'Content-Disposition':
-			'attachment; filename="wincrm-' +
+			'attachment; filename="aerocrm-' +
 			file.entity +
 			(file.schemaVersion === 2 ? '-v2' : '') +
 			'.' +
@@ -243,13 +243,13 @@ export function exportHeaders(file: ExportFile): Record<string, string> {
 			'"',
 		'Cache-Control': 'no-store',
 		'X-Content-Type-Options': 'nosniff',
-		'X-WinCRM-Export-Entity': file.entity,
-		'X-WinCRM-Export-Rows': String(file.rowCount),
-		'X-WinCRM-Export-Snapshot-At': file.snapshotAt,
-		'X-WinCRM-Export-Schema': String(file.schemaVersion ?? 1),
-		'X-WinCRM-Workspace-Id': file.workspaceId,
-		'X-WinCRM-Export-Actor-SHA256': file.actorHash,
-		'X-WinCRM-Export-Bytes': String(file.body.byteLength)
+		'X-CRM-Export-Entity': file.entity,
+		'X-CRM-Export-Rows': String(file.rowCount),
+		'X-CRM-Export-Snapshot-At': file.snapshotAt,
+		'X-CRM-Export-Schema': String(file.schemaVersion ?? 1),
+		'X-CRM-Workspace-Id': file.workspaceId,
+		'X-CRM-Export-Actor-SHA256': file.actorHash,
+		'X-CRM-Export-Bytes': String(file.body.byteLength)
 	};
 }
 export class ExportConcurrency {

@@ -11,7 +11,7 @@ import type { OperationsOutboxService } from '../messaging/operations-outbox.ser
 import type { AdminEventLogService } from '../admin-event-log/admin-event-log.service';
 
 describe('MessagingAdminService notification kind routing', () => {
-	it('queries only Notification Delivery for WinCRM invitation failures', async () => {
+	it('queries only Notification Delivery for CRM invitation failures', async () => {
 		const getFailures = jest
 			.fn()
 			.mockResolvedValue({ items: [], total: 0 });
@@ -28,21 +28,21 @@ describe('MessagingAdminService notification kind routing', () => {
 			{} as AdminEventLogService
 		);
 		const result = await service.getFailures(1, 20, {
-			integration: 'wincrm-invitation-email'
+			integration: 'crm-invitation-email'
 		});
 		expect(getFailures).toHaveBeenCalledTimes(1);
 		expect(getFailures).toHaveBeenCalledWith(
 			'notificationDelivery',
 			1,
 			20,
-			{ integration: 'wincrm-invitation-email' }
+			{ integration: 'crm-invitation-email' }
 		);
 		expect(result.coverage.notificationDelivery).toBe('complete');
 		expect(result.coverage.identity).toBe('not_queried');
 	});
 });
 
-const SOURCES = ['notificationDelivery', 'widgets', 'billing', 'identity'];
+const SOURCES = ['notificationDelivery', 'billing', 'identity'];
 const now = new Date('2026-09-06T00:00:00.000Z');
 const failureId = (item: object) => {
 	expect('id' in item).toBe(true);
@@ -242,13 +242,13 @@ describe('Operations messaging failure read filters', () => {
 		const value = createService();
 		const result = await value.service.getFailures(2, 10, {
 			status: 'FAILED',
-			integration: 'webhook',
+			integration: 'crm-invitation-email',
 			category: 'TRANSIENT'
 		});
 		const where = {
 			resolvedAt: null,
 			retryingAt: null,
-			integration: 'webhook',
+			integration: 'crm-invitation-email',
 			category: 'TRANSIENT'
 		};
 		expect(
@@ -263,16 +263,15 @@ describe('Operations messaging failure read filters', () => {
 		).toHaveBeenCalledWith({ where });
 		expect(value.federation.getFailures.mock.calls).toEqual([
 			[
-				'widgets',
+				'notificationDelivery',
 				1,
 				20,
-				{ status: 'FAILED', integration: 'webhook', category: 'TRANSIENT' }
+				{ status: 'FAILED', integration: 'crm-invitation-email', category: 'TRANSIENT' }
 			]
 		]);
 		expect(result.coverage).toEqual({
 			operations: 'complete',
-			widgets: 'complete',
-			notificationDelivery: 'not_queried',
+			notificationDelivery: 'complete',
 			billing: 'not_queried',
 			identity: 'not_queried'
 		});
@@ -294,7 +293,6 @@ describe('Operations messaging failure read filters', () => {
 		expect(result.coverage).toEqual({
 			operations: 'complete',
 			notificationDelivery: 'unavailable',
-			widgets: 'complete',
 			billing: 'complete',
 			identity: 'complete'
 		});

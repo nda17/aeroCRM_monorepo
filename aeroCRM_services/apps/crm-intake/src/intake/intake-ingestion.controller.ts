@@ -24,7 +24,7 @@ export class IntakeIngestionController {
 	tilda(
 		@Param('sourceId', new ParseUUIDPipe({ version: '4' }))
 		sourceId: string,
-		@Headers('x-wincrm-source-token') token: string | undefined,
+		@Headers('x-crm-source-token') token: string | undefined,
 		@Body() body: unknown,
 		@Req() request: Request
 	) {
@@ -32,7 +32,7 @@ export class IntakeIngestionController {
 			throw new BadRequestException('Query parameters are not supported');
 		const tokenHeaders = request.rawHeaders
 			.filter((_, index) => index % 2 === 0)
-			.filter(name => name.toLowerCase() === 'x-wincrm-source-token');
+			.filter(name => name.toLowerCase() === 'x-crm-source-token');
 		if (
 			request.headers.authorization !== undefined ||
 			tokenHeaders.length !== 1

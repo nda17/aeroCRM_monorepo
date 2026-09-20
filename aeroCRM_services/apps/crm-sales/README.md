@@ -1,6 +1,6 @@
-# WinCRM Sales
+# aeroCRM Sales
 
-Автономная граница воронок, сделок, следующего действия и истории WinCRM.
+Автономная граница воронок, сделок, следующего действия и истории aeroCRM.
 Сервис хранит собственную PostgreSQL-схему, read-only каталог шаблонов,
 идемпотентную установку точной версии шаблона и рабочий цикл сделки.
 
@@ -66,8 +66,8 @@ unique key task/rule/version/index/exact recipient/channel. Access получа�
 контакты не сохраняются в Sales и не передаются через RabbitMQ.
 
 ND получает только opaque reference по новым opt-in events
-`notification.wincrm.task-reminder.email.requested.v1` и
-`notification.wincrm.task-reminder.telegram.requested.v1`. После собственного
+`notification.crm.task-reminder.email.requested.v1` и
+`notification.crm.task-reminder.telegram.requested.v1`. После собственного
 receipt claim ND вызывает private
 `POST /internal/v1/notification-delivery/task-reminders/:id/delivery-context`.
 Sales повторно проверяет текущие задачу/сделку/правило, active exact membership,
@@ -80,7 +80,7 @@ ND сохраняет durable defer перед ACK без расходовани
 `NOTIFICATION_DELIVERY_CRM_SALES_TOKEN` (Sales → ND readiness),
 `NOTIFICATION_DELIVERY_INTERNAL_BASE_URL`. Токены не совпадают с другими
 owner-парами. Брокерный процесс требует `RABBITMQ_CONNECTION_NAME=
-winwidget-crm-sales-reminders`; controller заранее создаёт durable очередь
+aerocrm-crm-sales-reminders`; controller заранее создаёт durable очередь
 `aerocrm.crm.sales.reminders` и binding `crm.sales.reminder.tick.v1` на
 `aerocrm.events`, её DLX `aerocrm.dead-letter` / route
 `crm-sales-reminders.dead-letter` / queue
@@ -272,7 +272,7 @@ Runtime получает только SELECT/INSERT/UPDATE на `deals`/`tasks`,
 сценарий после migrations: create → complete task → WON → reopen → archive,
 конкурентные CAS/replay, cross-workspace/OWN/ANALYST проверки, невозможность
 commit с некорректным next action и append-only ACL. Требуются loopback тестовая БД
-`winwidget_crm_sales_test` (либо её суффикс),
+`aerocrm_crm_sales_test` (либо её суффикс),
 `CRM_SALES_INTEGRATION_ALLOW_MUTATION=true`, `CRM_SALES_TEST_DATABASE_URL`,
 `CRM_SALES_TEST_RUNTIME_ROLE` и отдельный sentinel чужой схемы.
 
@@ -473,8 +473,8 @@ The existing append-only audit records `entity:"tasks"` and counts, never
 file content or historical assignments. Existing receipts/audits are not rewritten;
 no new database, migration, Prisma pool, Outbox or broker operation is required.
 
-Headers remain unchanged except `X-WinCRM-Export-Schema: 2` and attachment
-filename `wincrm-tasks-v2.json` / `wincrm-tasks-v2.csv`; entity remains `tasks`.
+Headers remain unchanged except `X-CRM-Export-Schema: 2` and attachment
+filename `aerocrm-tasks-v2.json` / `aerocrm-tasks-v2.csv`; entity remains `tasks`.
 Actor/workspace binding, CORS exposure, UTF-8 byte accounting, CSV formula
 escaping, null encoding and error semantics remain the same. Deploy a compatible
 schema-2 reader before exposing this UI action; do not send nullable rows through
@@ -485,8 +485,8 @@ the old strict reader or present the legacy export as all Workday tasks.
 GET `/api/v1/crm/sales/exports/{entity}?workspaceId={uuid-v4}&format=json|csv`,
 where entity is `deals` or `tasks`. A current user Bearer session is required.
 Only OWNER with both `sales:read` and `sales:export` may export,
-including GRACE and READ_ONLY. This is an additive route: ordinary CRUD semantics,
-Widgets and existing source endpoints are unchanged.
+including GRACE and READ_ONLY. Export uses the existing workspace authorization
+and does not change ordinary CRUD or source endpoints.
 
 Each request reads only this service's business tables in one REPEATABLE READ,
 READ ONLY snapshot, ordered by immutable UUID with keyset pages of 500. Archived
@@ -527,11 +527,11 @@ re-import**. Column order is fixed:
 - deals: `id, workspaceId, version, title, currency, amountMinor, pipelineId, stageId, status, contactId, contactName, assignedToSubject, teamId, nextTaskId, archivedAt, createdAt, updatedAt, pipelineName, templateKey, templateVersion, stageKey, stageName, stagePosition`.
 - tasks: `id, workspaceId, dealId, version, title, dueAt, status, assignedToSubject, completedAt, createdAt, updatedAt`.
 
-Successful replies have a fixed attachment filename `wincrm-{entity}.{format}`,
+Successful replies have a fixed attachment filename `aerocrm-{entity}.{format}`,
 `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` and an exact origin
-`Content-Length`. Metadata headers are `X-WinCRM-Export-Entity`, `-Rows`,
+`Content-Length`. Metadata headers are `X-CRM-Export-Entity`, `-Rows`,
 `-Snapshot-At`, `-Schema`, `-Bytes`, `-Actor-SHA256` plus
-`X-WinCRM-Workspace-Id`. Actor SHA-256 is lowercase hexadecimal over the exact
+`X-CRM-Workspace-Id`. Actor SHA-256 is lowercase hexadecimal over the exact
 UTF-8 subject: it is pseudonymous, not anonymous. `-Bytes` is the logical UTF-8
 body length; proxies may compress/remove/change Content-Length and browsers
 decode automatically. Consumers must bound their decoded stream, not equate

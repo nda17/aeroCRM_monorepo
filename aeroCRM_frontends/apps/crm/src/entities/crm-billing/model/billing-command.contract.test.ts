@@ -16,7 +16,7 @@ const checkout = {
 	consentVersion: null
 }
 
-describe('strict WinCRM billing command inputs', () => {
+describe('strict aeroCRM billing command inputs', () => {
 	it('requires an exact explicit consent version only when auto-renew is selected', () => {
 		expect(
 			validBillingMutation({ action: 'checkout', body: checkout })
@@ -24,12 +24,12 @@ describe('strict WinCRM billing command inputs', () => {
 		expect(
 			validBillingMutation({
 				action: 'checkout',
-				body: { ...checkout, autoRenew: true, consentVersion: 'wincrm-v1' }
+				body: { ...checkout, autoRenew: true, consentVersion: 'test-consent-v1' }
 			})
 		).toBe(true)
 		for (const patch of [
 			{ autoRenew: true },
-			{ consentVersion: 'wincrm-v1' },
+			{ consentVersion: 'test-consent-v1' },
 			{ autoRenew: true, consentVersion: '' },
 			{ autoRenew: 'true' }
 		])
@@ -101,14 +101,14 @@ describe('strict WinCRM billing command inputs', () => {
 				body: {
 					...body,
 					expectedPolicyVersion: 3,
-					consentVersion: 'wincrm-v2'
+					consentVersion: 'test-consent-v2'
 				}
 			})
 		).toBe(true)
 		expect(
 			validBillingMutation({
 				action: 'renewal/disable',
-				body: { ...body, consentVersion: 'wincrm-v2' }
+				body: { ...body, consentVersion: 'test-consent-v2' }
 			})
 		).toBe(false)
 	})

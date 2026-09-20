@@ -35,38 +35,32 @@ export type AdminAutoRenewalActionInput =
 const AUTO_RENEWAL_ACTION_COPY: Record<
 	AdminAutoRenewalAction,
 	{
-		loading: string
 		fallbackSuccess: string
 		fallbackError: string
 		toastId: string
 	}
 > = {
 	pause: {
-		loading: 'Приостанавливаем автопродление...',
 		fallbackSuccess: 'Автопродление приостановлено',
 		fallbackError: 'Не удалось приостановить автопродление',
 		toastId: 'admin-user-auto-renewal-pause'
 	},
 	resume: {
-		loading: 'Возобновляем автопродление...',
 		fallbackSuccess: 'Автопродление возобновлено',
 		fallbackError: 'Не удалось возобновить автопродление',
 		toastId: 'admin-user-auto-renewal-resume'
 	},
 	revoke: {
-		loading: 'Фиксируем отзыв согласия...',
 		fallbackSuccess: 'Отзыв согласия зафиксирован',
 		fallbackError: 'Не удалось зафиксировать отзыв согласия',
 		toastId: 'admin-user-auto-renewal-revoke'
 	},
 	reconcile: {
-		loading: 'Сверяем состояние автопродления...',
 		fallbackSuccess: 'Состояние автопродления сверено',
 		fallbackError: 'Не удалось сверить состояние автопродления',
 		toastId: 'dev-user-auto-renewal-reconcile'
 	},
 	resumeTechnical: {
-		loading: 'Снимаем техническую паузу...',
 		fallbackSuccess: 'Техническая пауза снята',
 		fallbackError: 'Не удалось снять техническую паузу',
 		toastId: 'dev-user-auto-renewal-resume-technical'
@@ -257,7 +251,7 @@ export const useUserEdit = (params: { id: string }) => {
 		},
 		onMutate(input) {
 			const copy = AUTO_RENEWAL_ACTION_COPY[input.action]
-			toast.loading(copy.loading, { id: copy.toastId })
+			toast.loading('Пожалуйста, подождите', { id: copy.toastId })
 
 			return { toastId: copy.toastId }
 		},

@@ -272,7 +272,7 @@ function SubscriptionManager({
 
 	const refresh = async () => {
 		if (!online || busy) return
-		const id = toast.loading('Обновляем подписки aeroCRM...')
+		const id = toast.loading('Пожалуйста, подождите')
 		const results = await Promise.all([
 			list.refetch(),
 			...(workspaceId ? [detail.refetch(), history.refetch()] : [])
@@ -332,11 +332,7 @@ function SubscriptionManager({
 			)
 			setRecovery({ pending: retained, storageError: false })
 			setConfirmation(null)
-			id = toast.loading(
-				replay
-					? 'Проверяем ту же попытку начисления...'
-					: 'Начисляем дни aeroCRM...'
-			)
+			id = toast.loading('Пожалуйста, подождите')
 			sent = true
 			const result = await mutation.mutateAsync({
 				target,
@@ -422,7 +418,7 @@ function SubscriptionManager({
 		if (!pending || !online || inFlight.current || forbidden) return
 		inFlight.current = true
 		setChecking(true)
-		const id = toast.loading('Проверяем результат начисления...')
+		const id = toast.loading('Пожалуйста, подождите')
 		try {
 			const result = await adminCrmSubscriptionsService.command(
 				pending.workspaceId,
@@ -456,9 +452,7 @@ function SubscriptionManager({
 		inFlight.current = true
 		setChecking(true)
 		setCancelConfirmation(false)
-		const id = toast.loading(
-			'Проверяем и отменяем неподтверждённую команду...'
-		)
+		const id = toast.loading('Пожалуйста, подождите')
 		try {
 			const proof = await adminCrmSubscriptionsService.cancelCommand(
 				pending.workspaceId,

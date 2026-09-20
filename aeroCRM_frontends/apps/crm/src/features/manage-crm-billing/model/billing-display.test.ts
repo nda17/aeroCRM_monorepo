@@ -7,9 +7,10 @@ import {
 
 describe('server-authoritative billing presentation', () => {
 	it.each([
-		['0', '0,00 ₽'],
+		['0', '0 ₽'],
 		['1', '0,01 ₽'],
 		['105', '1,05 ₽'],
+		['1068100', '10\u00a0681 ₽'],
 		['199999', '1\u00a0999,99 ₽'],
 		['9007199254740993', '90\u00a0071\u00a0992\u00a0547\u00a0409,93 ₽']
 	])(
@@ -28,7 +29,7 @@ describe('server-authoritative billing presentation', () => {
 		'NaN',
 		'9'.repeat(32)
 	])('never silently coerces an invalid monetary value', value => {
-		expect(() => billingMoney(value)).toThrow('Некорректная сумма WinCRM.')
+		expect(() => billingMoney(value)).toThrow('Некорректная сумма aeroCRM.')
 	})
 	it('keeps payment confirmation distinct from scheduled subscription fulfillment', () => {
 		expect(billingOrderLabel('SUCCEEDED')).toBe('Оплата подтверждена')

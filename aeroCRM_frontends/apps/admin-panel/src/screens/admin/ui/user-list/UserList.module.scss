@@ -1,3 +1,5 @@
+@use '@aerocrm/web/src/app/styles/select';
+
 .wrapper {
 	@apply relative flex w-full min-w-0 flex-col;
 
@@ -363,4 +365,8 @@
 			@apply col-start-2 row-start-1;
 		}
 	}
+}
+
+.wrapper select.filter-input {
+	@include select.chevron;
 }

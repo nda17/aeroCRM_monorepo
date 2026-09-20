@@ -19,17 +19,17 @@ import { NotificationDeliveryPrismaService } from './prisma/notification-deliver
 import { TelegramInfoTransportModule } from '../telegram/telegram-info-transport.module';
 import { Module, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { WincrmInvitationContextService } from './wincrm-invitation-context.service';
-import { WincrmTaskReminderContextService } from './wincrm-task-reminder-context.service';
-import { WincrmIntakeSlaContextService } from './wincrm-intake-sla-context.service';
+import { CrmInvitationContextService } from './crm-invitation-context.service';
+import { CrmTaskReminderContextService } from './crm-task-reminder-context.service';
+import { CrmIntakeSlaContextService } from './crm-intake-sla-context.service';
 import {
-	WincrmIntakeSlaReadinessController,
-	WincrmIntakeSlaReadinessGuard
-} from './wincrm-intake-sla-readiness.controller';
+	CrmIntakeSlaReadinessController,
+	CrmIntakeSlaReadinessGuard
+} from './crm-intake-sla-readiness.controller';
 import {
-	WincrmTaskReminderReadinessController,
-	WincrmTaskReminderReadinessGuard
-} from './wincrm-task-reminder-readiness.controller';
+	CrmTaskReminderReadinessController,
+	CrmTaskReminderReadinessGuard
+} from './crm-task-reminder-readiness.controller';
 
 @Module({
 	imports: [
@@ -42,17 +42,17 @@ import {
 	],
 	controllers: [
 		NotificationDeliveryHealthController,
-		WincrmIntakeSlaReadinessController,
-		WincrmTaskReminderReadinessController
+		CrmIntakeSlaReadinessController,
+		CrmTaskReminderReadinessController
 	],
 	providers: [
 		SupportNotificationContextService,
 		TelegramSupportTransportService,
-		WincrmInvitationContextService,
-		WincrmIntakeSlaContextService,
-		WincrmIntakeSlaReadinessGuard,
-		WincrmTaskReminderContextService,
-		WincrmTaskReminderReadinessGuard,
+		CrmInvitationContextService,
+		CrmIntakeSlaContextService,
+		CrmIntakeSlaReadinessGuard,
+		CrmTaskReminderContextService,
+		CrmTaskReminderReadinessGuard,
 		NotificationDeliveryAdapterService,
 		NotificationDeliveryHeartbeatService,
 		NotificationDeliveryMessageMetadataService,

@@ -6,7 +6,7 @@ export const REMINDER_TICK = 'crm.sales.reminder.tick.v1';
 export const REMINDER_QUEUE = 'aerocrm.crm.sales.reminders';
 export const REMINDER_EXCHANGE = 'aerocrm.events';
 export const reminderEventType = (channel: 'EMAIL' | 'TELEGRAM') =>
-	`notification.wincrm.task-reminder.${channel.toLowerCase()}.requested.v1`;
+	`notification.crm.task-reminder.${channel.toLowerCase()}.requested.v1`;
 export const sameBinding = (
 	left: ReminderBinding,
 	right: ReminderBinding

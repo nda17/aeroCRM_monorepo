@@ -1,3 +1,5 @@
+@use '@aerocrm/web/src/app/styles/select';
+
 .wrapper {
 	@apply relative flex w-full min-w-0 flex-col;
 }
@@ -181,4 +183,8 @@
 
 .description {
 	@apply block text-sm text-gray-700;
+}
+
+select.filterInput {
+	@include select.chevron;
 }

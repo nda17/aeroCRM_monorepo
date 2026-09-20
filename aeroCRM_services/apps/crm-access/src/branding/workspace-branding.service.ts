@@ -81,7 +81,7 @@ export class CrmWorkspaceBrandingService {
 					async tx => {
 						await tx.$executeRaw`SET LOCAL lock_timeout = '2s'`;
 						await tx.$executeRaw`SET LOCAL statement_timeout = '4s'`;
-						await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`wincrm-team-command:${dto.commandId}`}, 0))`;
+						await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`crm-team-command:${dto.commandId}`}, 0))`;
 						await workspaceLock(tx, dto.workspaceId);
 						// Revalidate after lock acquisition, including receipt replays. Reuse
 						// this connection for local reads instead of nesting a pool checkout.

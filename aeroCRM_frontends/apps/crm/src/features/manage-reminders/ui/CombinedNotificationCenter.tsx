@@ -365,7 +365,6 @@ export function CombinedNotificationCenter({
 									disabled={busy || query.isFetching}
 									onClick={() => {
 										void query.refetch()
-										toast('Обновляем уведомления')
 									}}
 								>
 									Обновить

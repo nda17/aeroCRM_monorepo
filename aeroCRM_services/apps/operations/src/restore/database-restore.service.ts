@@ -69,10 +69,7 @@ export class DatabaseRestoreService {
 			permitRequired: true,
 			maxFileSizeBytes: DATABASE_RESTORE_MAX_FILE_SIZE_BYTES,
 			allowedFileExtension: '.dump',
-			targets: DATABASE_RESTORE_SETTINGS.map(target => ({
-				...target,
-				migrationManifestSha: this.manifests.sha256(target.id)
-			}))
+			targets: []
 		};
 	}
 

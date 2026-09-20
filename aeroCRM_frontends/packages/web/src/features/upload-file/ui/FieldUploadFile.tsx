@@ -60,7 +60,7 @@ const FieldUploadFile: NextPage<IUploadField> = ({
 	const handleDelete = async () => {
 		if (!onDelete || operationLockRef.current) return
 		operationLockRef.current = true
-		const toastId = toast.loading('Удаляем фото...')
+		const toastId = toast.loading('Пожалуйста, подождите')
 		setIsDeleting(true)
 		try {
 			await onDelete()

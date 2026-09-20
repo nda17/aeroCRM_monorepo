@@ -3,6 +3,7 @@ import styles from './AccountPage.module.scss'
 import { useUser, useAuthStore } from '@/entities/user'
 import { useProfileEdit } from '@/features/edit-profile'
 import { useProfileIdentityBinding } from '@/features/bind-profile-identity'
+import SkeletonLoader from '@/shared/ui/skeleton-loader/SkeletonLoader'
 import authService, {
 	type IUserSession
 } from '@/features/auth/api/auth.api'
@@ -74,8 +75,20 @@ export default function CabinetPageClient() {
 
 	if (!isAuthResolved || !auth || isProfileLoading)
 		return (
-			<main className={styles.page}>
-				<p>Загружаем личный кабинет…</p>
+			<main className={styles.page} aria-busy="true">
+				<span className={styles.srOnly} role="status">
+					Загружаем личный кабинет
+				</span>
+				<div className={styles.loading} aria-hidden="true">
+					<SkeletonLoader width={230} height={36} />
+					<SkeletonLoader width="75%" height={20} />
+					<div className={styles.card}>
+						<SkeletonLoader count={3} height={36} />
+					</div>
+					<div className={styles.card}>
+						<SkeletonLoader count={2} height={36} />
+					</div>
+				</div>
 			</main>
 		)
 	if (!userId)
@@ -244,7 +257,16 @@ export default function CabinetPageClient() {
 
 			<section className={styles.card}>
 				<h2>Сессии</h2>
-				{sessions.isLoading && <p>Загружаем сессии…</p>}
+				{sessions.isLoading && (
+					<div aria-busy="true">
+						<span className={styles.srOnly} role="status">
+							Загружаем сессии
+						</span>
+						<div className={styles.loading} aria-hidden="true">
+							<SkeletonLoader count={2} height={48} />
+						</div>
+					</div>
+				)}
 				{sessions.isError && (
 					<p role="alert">Не удалось загрузить сессии.</p>
 				)}

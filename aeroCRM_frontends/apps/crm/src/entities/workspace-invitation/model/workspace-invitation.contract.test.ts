@@ -44,7 +44,7 @@ describe('workspace invitation contracts', () => {
 	it.each([
 		{ id: workspaceId },
 		{ workspaceId: 'not-uuid' },
-		{ productCode: 'WIDGETS' },
+		{ productCode: 'OTHER_PRODUCT' },
 		{ status: 'ACTIVE' },
 		{ version: 0 },
 		{ version: 2147483648 },

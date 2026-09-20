@@ -454,9 +454,9 @@ describe('DatabaseRestoreStateService', () => {
 					status: DatabaseRestoreJobStatus.SUCCEEDED,
 					phase: DatabaseRestoreJobPhase.UNFENCED,
 					writerFenceRoles: [
-						'winwidget_reporting_runtime',
-						'winwidget_reporting_migration',
-						'winwidget_reporting_backup'
+						'aerocrm_reporting_runtime',
+						'aerocrm_reporting_migration',
+						'aerocrm_reporting_backup'
 					],
 					writerFenceRequestedAt: completedAt,
 					writerFenceAppliedAt: completedAt,

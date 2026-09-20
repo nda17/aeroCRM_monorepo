@@ -273,7 +273,7 @@ describe('BillingEntitlementClient', () => {
 		},
 		{
 			field: 'provisioningCommandType',
-			value: 'activate_wincrm_trial'
+			value: 'activate_crm_trial'
 		},
 		{
 			field: 'provisioningCommandType',

@@ -10,13 +10,13 @@ import {
 	SUBSCRIPTION_EXPIRY_EMAIL_NOTIFICATION_EVENT_TYPE,
 	SUBSCRIPTION_EXPIRY_TELEGRAM_NOTIFICATION_EVENT_TYPE,
 	TELEGRAM_DESTINATION_UNAVAILABLE_EVENT_TYPE,
-	WINCRM_INVITATION_EMAIL_EVENT_TYPE,
-	WINCRM_TASK_REMINDER_EMAIL_EVENT_TYPE,
-	WINCRM_TASK_REMINDER_TELEGRAM_EVENT_TYPE
+	CRM_INVITATION_EMAIL_EVENT_TYPE,
+	CRM_TASK_REMINDER_EMAIL_EVENT_TYPE,
+	CRM_TASK_REMINDER_TELEGRAM_EVENT_TYPE
 } from './messaging.constants';
 import {
-	WINCRM_INTAKE_SLA_EMAIL_EVENT_TYPE,
-	WINCRM_INTAKE_SLA_TELEGRAM_EVENT_TYPE
+	CRM_INTAKE_SLA_EMAIL_EVENT_TYPE,
+	CRM_INTAKE_SLA_TELEGRAM_EVENT_TYPE
 } from './messaging.constants';
 
 export interface TelegramDestinationUnavailableEventPayload {
@@ -201,13 +201,13 @@ export interface CampaignNotificationDeliveryOutcomeEventPayload {
 	} | null;
 }
 
-export interface WincrmInvitationEmailRequestedEventPayload {
+export interface CrmInvitationEmailRequestedEventPayload {
 	schemaVersion: 1;
 	eventId: string;
-	eventType: typeof WINCRM_INVITATION_EMAIL_EVENT_TYPE;
+	eventType: typeof CRM_INVITATION_EMAIL_EVENT_TYPE;
 	occurredAt: string;
 	reference: {
-		type: 'wincrm-invitation';
+		type: 'crm-invitation';
 		id: string;
 		workspaceId: string;
 	};
@@ -217,9 +217,9 @@ export interface WincrmInvitationEmailRequestedEventPayload {
 
 export type NotificationDeliveryEventPayload =
 	| SupportNotificationEvent
-	| WincrmIntakeSlaEventPayload
-	| WincrmTaskReminderEventPayload
-	| WincrmInvitationEmailRequestedEventPayload
+	| CrmIntakeSlaEventPayload
+	| CrmTaskReminderEventPayload
+	| CrmInvitationEmailRequestedEventPayload
 	| CampaignEmailNotificationRequestedEventPayload
 	| CampaignTelegramNotificationRequestedEventPayload
 	| DailySummaryTelegramNotificationRequestedEventPayload
@@ -228,28 +228,28 @@ export type NotificationDeliveryEventPayload =
 	| SubscriptionExpiryTelegramNotificationRequestedEventPayload
 	| TelegramDestinationUnavailableEventPayload;
 
-export interface WincrmTaskReminderEventPayload {
+export interface CrmTaskReminderEventPayload {
 	schemaVersion: 1;
 	eventId: string;
 	eventType:
-		| typeof WINCRM_TASK_REMINDER_EMAIL_EVENT_TYPE
-		| typeof WINCRM_TASK_REMINDER_TELEGRAM_EVENT_TYPE;
+		| typeof CRM_TASK_REMINDER_EMAIL_EVENT_TYPE
+		| typeof CRM_TASK_REMINDER_TELEGRAM_EVENT_TYPE;
 	occurredAt: string;
 	reference: {
-		type: 'wincrm-task-reminder';
+		type: 'crm-task-reminder';
 		id: string;
 		workspaceId: string;
 	};
 }
-export interface WincrmIntakeSlaEventPayload {
+export interface CrmIntakeSlaEventPayload {
 	schemaVersion: 1;
 	eventId: string;
 	eventType:
-		| typeof WINCRM_INTAKE_SLA_EMAIL_EVENT_TYPE
-		| typeof WINCRM_INTAKE_SLA_TELEGRAM_EVENT_TYPE;
+		| typeof CRM_INTAKE_SLA_EMAIL_EVENT_TYPE
+		| typeof CRM_INTAKE_SLA_TELEGRAM_EVENT_TYPE;
 	occurredAt: string;
 	reference: {
-		type: 'wincrm-intake-sla';
+		type: 'crm-intake-sla';
 		id: string;
 		workspaceId: string;
 	};

@@ -16,7 +16,7 @@ import SettingsScreen from './SettingsScreen'
 vi.mock('@/shared/config/runtime', () => ({ getRuntimeConfig: vi.fn() }))
 
 vi.mock('@/features/view-crm-commercial-policy', () => ({
-	CrmCommercialPolicyCard: () => <div>Опубликованные условия WinCRM</div>
+	CrmCommercialPolicyCard: () => <div>Опубликованные условия aeroCRM</div>
 }))
 vi.mock('@/features/manage-workspace-branding', () => ({
 	WorkspaceBrandingSettings: () => <div>Название компании в CRM</div>
@@ -100,7 +100,7 @@ const roster = (page = 1, pageSize = 20): TeamPage => ({
 beforeEach(() => {
 	vi.clearAllMocks()
 	vi.mocked(getRuntimeConfig).mockReturnValue({
-		wincrmBillingEnabled: false
+		crmBillingEnabled: false
 	} as never)
 	context = makeContext()
 	vi.mocked(useTeamSession).mockImplementation(() => context as never)
@@ -128,12 +128,12 @@ describe('Real CRM team settings', () => {
 		'gates the owner billing card independently of the read-only commercial card (enabled=%s)',
 		async enabled => {
 			vi.mocked(getRuntimeConfig).mockReturnValue({
-				wincrmBillingEnabled: enabled
+				crmBillingEnabled: enabled
 			} as never)
 			render(view())
 			await screen.findByText('Анна')
 			expect(
-				screen.getByText('Опубликованные условия WinCRM')
+				screen.getByText('Опубликованные условия aeroCRM')
 			).toBeTruthy()
 			expect(!!screen.queryByText('Управление оплатой владельца')).toBe(
 				enabled
@@ -142,7 +142,7 @@ describe('Real CRM team settings', () => {
 	)
 	it('does not mount owner billing UI for a CRM administrator even when released', async () => {
 		vi.mocked(getRuntimeConfig).mockReturnValue({
-			wincrmBillingEnabled: true
+			crmBillingEnabled: true
 		} as never)
 		context.workspace.membership.role = 'MEMBER'
 		context.permissions.data.role = 'CRM_ADMIN'
@@ -190,7 +190,7 @@ describe('Real CRM team settings', () => {
 		)
 		expect(listTeamRecords).not.toHaveBeenCalled()
 		expect(screen.queryByText('Анна')).toBeNull()
-		expect(screen.getByText('Опубликованные условия WinCRM')).toBeTruthy()
+		expect(screen.getByText('Опубликованные условия aeroCRM')).toBeTruthy()
 	})
 	it('hides previously loaded employees during fresh permission verification', async () => {
 		const mounted = render(view())

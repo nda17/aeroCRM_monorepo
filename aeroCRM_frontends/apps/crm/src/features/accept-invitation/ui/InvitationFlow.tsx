@@ -73,7 +73,6 @@ export const InvitationFlow = ({
 	if (preview.isPending)
 		return <ScreenState variant="loading" title="Проверяем приглашение" />
 	const reload = () => {
-		toast('Обновляем приглашение')
 		void preview.refetch()
 	}
 	if (!preview.data)
@@ -173,7 +172,7 @@ const InvitationActions = ({
 			return
 		setCheckingAccess(true)
 		setAccessMessage(null)
-		toast('Проверяем допуск к рабочему пространству')
+		const toastId = toast.loading('Пожалуйста, подождите')
 		try {
 			const result = await checkInvitationCrmAccess(
 				session.accessToken,
@@ -184,7 +183,8 @@ const InvitationActions = ({
 			toast.success(
 				result.state === 'READ_ONLY'
 					? 'Подтверждён доступ только для чтения'
-					: 'Доступ к aeroCRM подтверждён'
+					: 'Доступ к aeroCRM подтверждён',
+				{ id: toastId }
 			)
 			window.location.assign(result.destination)
 		} catch (error) {
@@ -193,6 +193,7 @@ const InvitationActions = ({
 				error instanceof AuthenticatedApiError &&
 				error.kind === 'unauthorized'
 			) {
+				toast.dismiss(toastId)
 				useSessionStore.getState().setAnonymous()
 				return
 			}
@@ -202,8 +203,9 @@ const InvitationActions = ({
 					? 'Доступ к CRM пока не подтверждён. Возможны ожидание свободного места или ограничения рабочего пространства. Обратитесь к владельцу и повторите проверку позже.'
 					: 'Проверить доступ сейчас не удалось. Приглашение принято, но готовность CRM не подтверждена.'
 			setAccessMessage(message)
-			toast.error(message)
+			toast.error(message, { id: toastId })
 		} finally {
+			if (!current()) toast.dismiss(toastId)
 			if (current()) setCheckingAccess(false)
 		}
 	}
@@ -235,8 +237,7 @@ const InvitationActions = ({
 			) : (
 				<p>
 					Принять приглашение может только аккаунт с подтверждённым
-					адресом, на который пришло письмо. Подписка на виджеты не
-					требуется; личный Trial не запускается.
+					адресом, на который пришло письмо.
 				</p>
 			)}
 			{!online && (
@@ -275,7 +276,6 @@ const InvitationActions = ({
 						<Button
 							disabled={!online || revalidating || failed}
 							onClick={() => {
-								toast('Отправляем принятие приглашения')
 								void command.execute(() => ({
 									schemaVersion: 1,
 									commandId: crypto.randomUUID(),
@@ -308,9 +308,6 @@ const InvitationActions = ({
 			<a
 				href={getRuntimeConfig().mainAppOrigin}
 				className={styles.accountLink}
-				onClick={() =>
-					toast('Переходим на основной сайт для управления аккаунтом')
-				}
 			>
 				Перейти на основной сайт
 			</a>

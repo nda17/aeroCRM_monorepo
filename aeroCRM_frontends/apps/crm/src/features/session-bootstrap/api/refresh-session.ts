@@ -20,7 +20,9 @@ export class SessionBootstrapError extends Error {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === 'object' && value !== null && !Array.isArray(value)
 
-const parseRefreshResponse = (value: unknown): AuthenticatedSession => {
+export const parseRefreshResponse = (
+	value: unknown
+): AuthenticatedSession => {
 	if (!isRecord(value) || !isRecord(value.user)) {
 		throw new SessionBootstrapError(
 			'temporary',

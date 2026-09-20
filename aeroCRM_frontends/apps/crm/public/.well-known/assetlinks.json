@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "space.aerocrm.workspace",
+      "sha256_cert_fingerprints": [
+        "C3:95:81:79:C3:44:1E:00:AD:D7:CD:CC:EC:C5:A1:1B:D3:B7:8F:B6:D3:AD:D2:D5:5B:83:0E:19:50:C0:FA:87"
+      ]
+    }
+  }
+]

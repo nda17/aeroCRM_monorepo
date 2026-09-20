@@ -468,7 +468,7 @@ describe('Operations backup lease recovery', () => {
 			const f = fixture();
 			if (kind === 'unknown-type') f.event.jobType = 'DATABASE_RESTORE';
 			if (kind === 'wrong-backup-type')
-				f.event.jobType = 'WIDGETS_DATABASE_BACKUP';
+				f.event.jobType = 'UNKNOWN_DATABASE_BACKUP';
 			if (kind === 'missing-job') f.state.job = null;
 			await expect(
 				f.service.claimBackup(f.event, 'worker', 60_000)

@@ -813,6 +813,6 @@ describe('CRM administrative subscription list batching', () => {
 		]);
 		await expect(
 			f.service.list({ page: 1, pageSize: 20 }, actor())
-		).rejects.toThrow('WinCRM period snapshot binding is invalid');
+		).rejects.toThrow('aeroCRM period snapshot binding is invalid');
 	});
 });

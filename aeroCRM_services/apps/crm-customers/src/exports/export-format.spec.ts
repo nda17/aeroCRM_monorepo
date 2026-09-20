@@ -244,12 +244,12 @@ describe('bounded service-owned export encoding', () => {
 		};
 		const headers = exportHeaders(file);
 		expect(headers['Content-Length']).toBe('4');
-		expect(headers['X-WinCRM-Export-Bytes']).toBe('4');
-		expect(headers['X-WinCRM-Export-Actor-SHA256']).toMatch(
+		expect(headers['X-CRM-Export-Bytes']).toBe('4');
+		expect(headers['X-CRM-Export-Actor-SHA256']).toMatch(
 			/^[a-f0-9]{64}$/
 		);
 		expect(headers['Content-Disposition']).toBe(
-			'attachment; filename="wincrm-contacts.json"'
+			'attachment; filename="aerocrm-contacts.json"'
 		);
 		expect(headers['Cache-Control']).toBe('no-store');
 		expect(headers['X-Content-Type-Options']).toBe('nosniff');

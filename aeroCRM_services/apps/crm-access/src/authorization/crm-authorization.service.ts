@@ -204,7 +204,7 @@ export class CrmAuthorizationService {
 			) ||
 			!['ACTIVE', 'GRACE', 'READ_ONLY'].includes(billing.status)
 		) {
-			throw new ForbiddenException('WinCRM workspace is not available');
+			throw new ForbiddenException('aeroCRM workspace is not available');
 		}
 		if (
 			membership.role !== 'OWNER' &&

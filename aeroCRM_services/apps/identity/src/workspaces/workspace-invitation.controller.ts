@@ -69,7 +69,7 @@ export class WorkspaceInvitationController {
 	}
 }
 
-@Controller('internal/v1/notification-delivery/wincrm-invitations')
+@Controller('internal/v1/notification-delivery/crm-invitations')
 @UseGuards(IdentityInternalGuard)
 @InternalServices('notification-delivery')
 @UsePipes(exact)

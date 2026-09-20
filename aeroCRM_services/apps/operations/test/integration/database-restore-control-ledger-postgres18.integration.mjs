@@ -23,7 +23,7 @@ const EXPECTED_DATABASE = 'operations_control_ledger';
 const CONTAINER_ID = /^[a-f0-9]{12,64}$/;
 const PORT =
 	/^(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$/;
-const REHEARSAL_LABEL = 'winwidget.operations-control-ledger';
+const REHEARSAL_LABEL = 'aerocrm.operations-control-ledger';
 const REHEARSAL_LABEL_VALUE = 'true';
 const SHA256 = /^[a-f0-9]{64}$/;
 let negativeSqlCases = 0;
@@ -55,9 +55,9 @@ const fixture = Object.freeze({
 	artifactSha256: 'e'.repeat(64),
 	receiptPayloadSha256: 'f'.repeat(64),
 	writerFenceRoles: JSON.stringify([
-		'winwidget_reporting_runtime',
-		'winwidget_reporting_migration',
-		'winwidget_reporting_backup'
+		'aerocrm_reporting_runtime',
+		'aerocrm_reporting_migration',
+		'aerocrm_reporting_backup'
 	])
 });
 

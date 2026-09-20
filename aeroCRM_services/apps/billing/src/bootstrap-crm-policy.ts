@@ -23,10 +23,6 @@ function count(name: string): number {
 async function bootstrapCrmPolicy() {
 	const monthlyPriceMinor = minor('CRM_MONTHLY_PRICE_RUB')!;
 	const yearlyConfigured = minor('CRM_YEARLY_PRICE_RUB', false);
-	const yearlyPriceMinor = yearlyConfigured ?? Math.round(monthlyPriceMinor * 108 / 10);
-	if (yearlyPriceMinor !== Math.round(monthlyPriceMinor * 108 / 10)) {
-		throw new Error('CRM yearly base price must include exactly 10% discount');
-	}
 	const additionalSeatMonthlyPriceMinor = minor('CRM_ADDITIONAL_SEAT_MONTHLY_PRICE_RUB')!;
 	const additionalSeatYearlyPriceMinor = minor('CRM_ADDITIONAL_SEAT_YEARLY_PRICE_RUB')!;
 	const trialDays = count('CRM_TRIAL_DAYS');
@@ -41,7 +37,7 @@ async function bootstrapCrmPolicy() {
 		if (current) {
 			if (
 				current.monthlyPriceMinor !== monthlyPriceMinor ||
-				current.yearlyPriceMinor !== yearlyPriceMinor ||
+				current.yearlyPriceMinor !== (yearlyConfigured ?? current.yearlyPriceMinor) ||
 				current.additionalSeatMonthlyPriceMinor !== additionalSeatMonthlyPriceMinor ||
 				current.additionalSeatYearlyPriceMinor !== additionalSeatYearlyPriceMinor ||
 				current.includedSeats !== includedSeats ||
@@ -49,6 +45,14 @@ async function bootstrapCrmPolicy() {
 				current.trialDays !== trialDays
 			) throw new Error('Existing CRM policy differs from bootstrap values');
 			return;
+		}
+		const yearlyPriceMinor = yearlyConfigured ?? Math.round(monthlyPriceMinor * 108 / 1000) * 100;
+		const prices = [monthlyPriceMinor, yearlyPriceMinor, additionalSeatMonthlyPriceMinor, additionalSeatYearlyPriceMinor];
+		if (prices.some(price => price < 100 || price > 100_000_000 || price % 100 !== 0)) {
+			throw new Error('CRM prices must be whole ruble amounts within the supported range');
+		}
+		if (yearlyPriceMinor !== Math.round(monthlyPriceMinor * 108 / 1000) * 100) {
+			throw new Error('CRM yearly base price must include a rounded 10% discount');
 		}
 		await prisma.crmCommercialPolicy.create({
 			data: {

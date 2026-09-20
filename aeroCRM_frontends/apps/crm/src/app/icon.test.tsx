@@ -18,7 +18,7 @@ import AppleIcon, {
 } from './apple-icon'
 import brand from '../../../../brand/aerocrm-wing.json'
 
-describe('WinCRM browser icons', () => {
+describe('aeroCRM browser icons', () => {
 	it.each([
 		{ render: Icon, dimensions: size, type: contentType, pixels: 32 },
 		{

@@ -180,7 +180,6 @@ const MyDayContent = ({
 									<Link
 										href="/analytics"
 										className={styles.overviewLink}
-										onClick={() => toast('Открываем обзор команды')}
 									>
 										Обзор команды
 									</Link>

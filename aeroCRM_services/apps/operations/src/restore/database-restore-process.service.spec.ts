@@ -16,12 +16,12 @@ jest.mock('node:child_process', () => ({
 
 const target: DatabaseRestoreTargetConfiguration = {
 	environmentPrefix: 'OPERATIONS',
-	database: 'winwidget_operations',
+	database: 'aerocrm_operations',
 	schema: 'operations',
-	adminRole: 'winwidget_operations_admin',
-	migrationRole: 'winwidget_operations_migration',
-	runtimeRole: 'winwidget_operations_runtime',
-	backupRole: 'winwidget_operations_backup',
+	adminRole: 'aerocrm_operations_admin',
+	migrationRole: 'aerocrm_operations_migration',
+	runtimeRole: 'aerocrm_operations_runtime',
+	backupRole: 'aerocrm_operations_backup',
 	acl: { profile: 'standard', routines: [], runtimeRoutines: [] }
 };
 const connection: DatabaseRestoreConnection = {
@@ -37,9 +37,9 @@ const connectionArguments = [
 	'--port',
 	'55441',
 	'--username',
-	'winwidget_operations_admin',
+	'aerocrm_operations_admin',
 	'--dbname',
-	'winwidget_operations'
+	'aerocrm_operations'
 ];
 
 interface ProcessInternals {
@@ -128,7 +128,7 @@ describe('DatabaseRestoreProcessService command plans', () => {
 				'ON_ERROR_STOP=1',
 				...connectionArguments,
 				'--command',
-				'DROP SCHEMA "operations" CASCADE; CREATE SCHEMA "operations" AUTHORIZATION "winwidget_operations_migration";'
+				'DROP SCHEMA "operations" CASCADE; CREATE SCHEMA "operations" AUTHORIZATION "aerocrm_operations_migration";'
 			],
 			connection.password,
 			{ signal: undefined }
@@ -149,7 +149,7 @@ describe('DatabaseRestoreProcessService command plans', () => {
 				'--no-owner',
 				'--no-privileges',
 				'--role',
-				'winwidget_operations_migration',
+				'aerocrm_operations_migration',
 				'--schema',
 				'operations',
 				...connectionArguments,

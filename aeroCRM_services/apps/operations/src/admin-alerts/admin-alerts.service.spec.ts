@@ -8,9 +8,9 @@ describe('AdminAlertsService', () => {
 		const federation = {
 			getBillingAlerts: jest.fn().mockResolvedValue(
 				[
-					'PAYMENT_RECEIPT_CANCELLED',
-					'PAYMENT_RECEIPT_SYNC_FAILED',
-					'PAYMENT_RECEIPT_STALE'
+					'EXPIRED_ACTIVE_CRM_ENTITLEMENT',
+					'CRM_ENTITLEMENT_EXPIRES_SOON',
+					'CRM_RECEIPT_PENDING'
 				].map((type, index) => ({
 					type,
 					severity: 'HIGH',
@@ -21,7 +21,6 @@ describe('AdminAlertsService', () => {
 					alertAt: `2026-08-27T1${index}:00:00.000Z`
 				}))
 			),
-			getWidgetsAlerts: jest.fn().mockResolvedValue([]),
 			getMessagingOverviews: jest.fn().mockResolvedValue([]),
 			getIdentitySnapshots: jest
 				.fn()
@@ -38,7 +37,7 @@ describe('AdminAlertsService', () => {
 			total: 3,
 			items: [
 				{
-					type: 'PAYMENT_RECEIPT_CANCELLED',
+						type: 'EXPIRED_ACTIVE_CRM_ENTITLEMENT',
 					referenceId: 'receipt-1',
 					targetUser: {
 						id: 'user-1',
@@ -47,11 +46,11 @@ describe('AdminAlertsService', () => {
 					}
 				},
 				{
-					type: 'PAYMENT_RECEIPT_SYNC_FAILED',
+						type: 'CRM_ENTITLEMENT_EXPIRES_SOON',
 					referenceId: 'receipt-2'
 				},
 				{
-					type: 'PAYMENT_RECEIPT_STALE',
+						type: 'CRM_RECEIPT_PENDING',
 					referenceId: 'receipt-3'
 				}
 			]
@@ -64,10 +63,8 @@ describe('AdminAlertsService', () => {
 		};
 		const federation = {
 			getBillingAlerts: jest.fn().mockRejectedValue(new Error('down')),
-			getWidgetsAlerts: jest.fn().mockResolvedValue([]),
 			getMessagingOverviews: jest.fn().mockResolvedValue([
-				{ source: 'billing', value: null, error: 'down' },
-				{ source: 'widgets', value: {}, error: null }
+				{ source: 'billing', value: null, error: 'down' }
 			]),
 			getIdentitySnapshots: jest.fn()
 		};

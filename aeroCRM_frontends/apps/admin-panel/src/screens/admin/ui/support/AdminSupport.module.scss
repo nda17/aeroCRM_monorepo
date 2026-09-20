@@ -1,3 +1,5 @@
+@use '@aerocrm/web/src/app/styles/select';
+
 .wrapper {
 	@apply relative flex w-full min-w-0 flex-col;
 }
@@ -22,7 +24,7 @@
 	@apply resize-y;
 }
 .wrapper select {
-	@apply pr-8;
+	@include select.chevron;
 }
 .checkbox {
 	@apply flex min-h-10 items-center gap-2 text-sm text-[#51405f];

@@ -62,7 +62,12 @@ vi.mock('../api/workday-export.api', () => ({
 }))
 vi.mock('@/shared/lib/download-file', () => ({ downloadFile: vi.fn() }))
 vi.mock('react-hot-toast', () => ({
-	default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() })
+	default: Object.assign(vi.fn(), {
+		loading: vi.fn(() => 'export-loading'),
+		dismiss: vi.fn(),
+		success: vi.fn(),
+		error: vi.fn()
+	})
 }))
 const result = {
 	bytes: new Uint8Array([123, 125]),
@@ -71,7 +76,7 @@ const result = {
 		entity: 'tasks' as const,
 		format: 'json' as const,
 		workspaceId,
-		filename: 'wincrm-tasks-v2.json',
+		filename: 'aerocrm-tasks-v2.json',
 		mediaType: 'application/json; charset=utf-8',
 		bytes: 2,
 		rowCount: 0,
@@ -176,7 +181,7 @@ describe('Workday v2 export UI', () => {
 			JSON.stringify(
 				client.getQueryData(['crm-permissions', workspaceId, 'owner', 1])
 			)
-		).not.toContain('wincrm-tasks')
+		).not.toContain('aerocrm-tasks')
 	})
 	it.each(['CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'ANALYST'] as const)(
 		'does not offer export to %s',
