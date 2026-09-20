@@ -41,7 +41,7 @@
 	}
 }
 .accountNav {
-	@apply grid grid-cols-2 gap-2 border-t border-slate-200 bg-slate-50 p-3 sm:flex sm:flex-wrap;
+	@apply grid auto-rows-fr grid-cols-2 gap-2 border-t border-slate-200 bg-slate-50 p-3 sm:flex sm:flex-wrap;
 }
 .accountNavItem {
 	@apply inline-flex min-h-11 items-center justify-center rounded-lg px-3 py-2 text-center text-sm font-medium text-slate-700 hover:bg-white;
