@@ -178,7 +178,9 @@ export default function CrmPricingSettings() {
 								<dd>
 									{CRM_PRICE_FIELDS.some(price => price === field)
 										? rubles.format(query.data[field] / 100)
-										: query.data[field]}
+										: field === 'includedSeats'
+											? query.data[field] - 1
+											: query.data[field]}
 								</dd>
 							</div>
 						))}
