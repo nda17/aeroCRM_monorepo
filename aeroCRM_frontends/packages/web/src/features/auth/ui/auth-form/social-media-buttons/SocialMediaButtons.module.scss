@@ -1,5 +1,5 @@
 .sectionDivider {
-	@apply relative mb-4 text-center text-[0.76rem] uppercase tracking-[0.16em] text-[#bbb];
+	@apply relative mb-[var(--auth-section-gap,1rem)] text-center text-[0.76rem] uppercase tracking-[0.16em] text-[#bbb];
 
 	&::before {
 		content: '';
@@ -23,7 +23,7 @@
 	}
 
 	.button {
-		@apply w-[47%] sm:w-[48%] flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-[0.92rem] font-medium transition-all text-[#7b3fa0] bg-[#f3eeff] border-[#e0d6f0];
+		@apply w-[47%] sm:w-[48%] flex items-center justify-center gap-2 rounded-2xl border min-h-11 px-4 py-[var(--auth-control-py,0.75rem)] text-[0.92rem] font-medium transition-all text-[#7b3fa0] bg-[#f3eeff] border-[#e0d6f0];
 
 		&:hover {
 			@apply bg-[#e0d6f0] -translate-y-px;

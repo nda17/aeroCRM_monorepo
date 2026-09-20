@@ -1,5 +1,5 @@
 .wrapper {
-	@apply mt-5 border-t pt-4 text-center text-[0.9rem] border-[#e0d6f0];
+	@apply mt-[var(--auth-section-gap,1.25rem)] border-t pt-[var(--auth-section-gap,1rem)] text-center text-[0.9rem] border-[#e0d6f0];
 
 	.toggle-link-block {
 		@apply mb-2 text-[#888];

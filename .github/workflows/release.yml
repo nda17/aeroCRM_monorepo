@@ -2,6 +2,12 @@ name: aeroCRM release
 on:
   workflow_dispatch:
     inputs:
+      target:
+        description: Deployment target
+        type: choice
+        options: [all, frontend, backend]
+        default: all
+        required: true
       ci_run_id:
         description: Green CI run ID for this exact commit
         required: true
@@ -10,13 +16,13 @@ on:
         required: true
       frontend_env_hash:
         description: SHA-256 of sorted frontend env-file hashes on VPS
-        required: true
+        required: false
       infra_sha:
         description: Full commit SHA of reviewed private infra repo
         required: true
       backend_env_hash:
         description: SHA-256 of sorted backend env-file hashes on VPS
-        required: true
+        required: false
 permissions:
   contents: read
   actions: read
@@ -28,6 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.check.outputs.sha }}
+      matrix: ${{ steps.check.outputs.matrix }}
     steps:
       - name: Require green exact-SHA CI on production branch
         id: check
@@ -35,22 +42,37 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ inputs.ci_run_id }}
           SHA: ${{ inputs.sha }}
+          TARGET: ${{ inputs.target }}
+          FRONT_HASH: ${{ inputs.frontend_env_hash }}
+          BACK_HASH: ${{ inputs.backend_env_hash }}
         run: |
           set -euo pipefail
           [[ "$SHA" =~ ^[a-f0-9]{40}$ ]]
           [[ "$RUN_ID" =~ ^[0-9]+$ ]]
           read -r conclusion head_sha branch workflow_path <<< "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '[.conclusion,.head_sha,.head_branch,.path] | join(" ")')"
           [[ "$conclusion" == success && "$head_sha" == "$SHA" && "$branch" == prod_0.1.0 && "$workflow_path" == .github/workflows/ci.yml ]]
+          case "$TARGET" in
+            all)
+              [[ "$FRONT_HASH" =~ ^[a-f0-9]{64}$ && "$BACK_HASH" =~ ^[a-f0-9]{64}$ ]]
+              echo 'matrix={"include":[{"role":"frontend","apps":"landing crm admin-panel"},{"role":"backend","apps":"api-gateway notification-delivery campaigns reporting billing identity platform support operations crm-access crm-intake crm-customers crm-sales"}]}' >> "$GITHUB_OUTPUT"
+              ;;
+            frontend)
+              [[ "$FRONT_HASH" =~ ^[a-f0-9]{64}$ ]]
+              echo 'matrix={"include":[{"role":"frontend","apps":"landing crm admin-panel"}]}' >> "$GITHUB_OUTPUT"
+              ;;
+            backend)
+              [[ "$BACK_HASH" =~ ^[a-f0-9]{64}$ ]]
+              echo 'matrix={"include":[{"role":"backend","apps":"api-gateway notification-delivery campaigns reporting billing identity platform support operations crm-access crm-intake crm-customers crm-sales"}]}' >> "$GITHUB_OUTPUT"
+              ;;
+            *) exit 1 ;;
+          esac
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
   deploy:
     needs: verify
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - { role: frontend, apps: 'landing crm admin-panel' }
-          - { role: backend, apps: 'api-gateway notification-delivery campaigns reporting billing identity platform support operations crm-access crm-intake crm-customers crm-sales' }
+      matrix: ${{ fromJSON(needs.verify.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
         with:

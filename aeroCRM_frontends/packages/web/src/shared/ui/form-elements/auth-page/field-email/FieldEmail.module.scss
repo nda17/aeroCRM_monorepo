@@ -1,11 +1,11 @@
 .wrapper-input {
-	@apply mb-4;
+	@apply mb-[var(--auth-field-gap,1rem)];
 
 	.label-input {
 		@apply block text-[0.82rem] font-medium text-[#666];
 
 		.input-field {
-			@apply mt-2 w-full rounded-2xl border border-[#e0d6f0] px-4 py-3 outline-none transition-all bg-[#f8f5ff] text-[#1a1a1a];
+			@apply mt-[var(--auth-field-top,0.5rem)] min-h-11 w-full rounded-2xl border border-[#e0d6f0] px-4 py-[var(--auth-control-py,0.75rem)] outline-none transition-all bg-[#f8f5ff] text-[#1a1a1a];
 
 			&::placeholder {
 				@apply text-[#ccc];
