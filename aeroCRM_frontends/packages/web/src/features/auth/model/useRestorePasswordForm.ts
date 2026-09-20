@@ -26,8 +26,12 @@ const useRestorePasswordForm = (authReturnUrl?: string | null) => {
 	const [isPending, startTransition] = useTransition()
 	const requestInFlightRef = useRef(false)
 	const [isRequestPending, setIsRequestPending] = useState(false)
-	const { executeTurnstile, isTurnstileEnabled, isTurnstileReady } =
-		useTurnstile()
+	const {
+		containerRef: turnstileContainerRef,
+		executeTurnstile,
+		isTurnstileEnabled,
+		isTurnstileReady
+	} = useTurnstile('restore_password')
 
 	const {
 		mutateAsync: mutateRestorePassword,
@@ -144,6 +148,7 @@ const useRestorePasswordForm = (authReturnUrl?: string | null) => {
 	const isLoading = isPending || isRestorePending || isRequestPending
 
 	return {
+		turnstileContainerRef,
 		register,
 		handleSubmit,
 		onSubmit,

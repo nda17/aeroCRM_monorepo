@@ -237,7 +237,7 @@ export const BillingFlow = ({
 					</div>
 					{trial ? (
 						<>
-							<h3>Бесплатный период — 5 дней</h3>
+							<h3>Бесплатный период — 10 дней</h3>
 							<dl className={styles.facts}>
 								<div>
 									<dt>До</dt>

@@ -5,17 +5,21 @@ export class TurnstileUnavailableError extends Error {
 	}
 }
 
-type TurnstileWidget = {
-	render: (container: HTMLElement, options: {
-		sitekey: string
-		action: string
-		execution: 'execute'
-		appearance: 'interaction-only'
-		callback: (token: string) => void
-		'error-callback': () => void
-		'expired-callback': () => void
-	}) => string
-	execute: (widgetId: string) => void
+export type TurnstileWidget = {
+	render: (
+		container: HTMLElement,
+		options: {
+			sitekey: string
+			action: string
+			execution: 'render'
+			appearance: 'always'
+			size: 'flexible' | 'compact'
+			callback: (token: string) => void
+			'error-callback': () => void
+			'expired-callback': () => void
+		}
+	) => string
+	reset: (widgetId: string) => void
 	remove: (widgetId: string) => void
 }
 
@@ -27,8 +31,9 @@ declare global {
 
 let scriptPromise: Promise<void> | null = null
 
-export const loadTurnstileScript = (_siteKey: string) => {
-	if (typeof window === 'undefined' || window.turnstile) return Promise.resolve()
+export const loadTurnstileScript = () => {
+	if (typeof window === 'undefined' || window.turnstile)
+		return Promise.resolve()
 	if (scriptPromise) return scriptPromise
 	const pending = new Promise<void>((resolve, reject) => {
 		const script = document.createElement('script')
@@ -41,47 +46,16 @@ export const loadTurnstileScript = (_siteKey: string) => {
 				reject(new TurnstileUnavailableError())
 			}
 		}
-		script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+		script.src =
+			'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
 		script.async = true
 		script.addEventListener('load', () => finish(true), { once: true })
 		script.addEventListener('error', () => finish(false), { once: true })
 		document.head.appendChild(script)
 	})
 	scriptPromise = pending
-	void pending.catch(() => { if (scriptPromise === pending) scriptPromise = null })
+	void pending.catch(() => {
+		if (scriptPromise === pending) scriptPromise = null
+	})
 	return pending
-}
-
-export const waitForTurnstileReady = async () => {
-	if (!window.turnstile) throw new TurnstileUnavailableError()
-}
-
-export const executeTurnstileToken = async (siteKey: string, action: string) => {
-	const turnstile = window.turnstile
-	if (!turnstile) throw new TurnstileUnavailableError()
-	const container = document.createElement('div')
-	container.setAttribute('aria-hidden', 'true')
-	document.body.appendChild(container)
-	let widgetId: string | undefined
-	let timeout: number | undefined
-	try {
-		return await new Promise<string>((resolve, reject) => {
-			const fail = () => reject(new TurnstileUnavailableError())
-			timeout = window.setTimeout(fail, 15000)
-			widgetId = turnstile.render(container, {
-				sitekey: siteKey,
-				action,
-				execution: 'execute',
-				appearance: 'interaction-only',
-				callback: token => token ? resolve(token) : fail(),
-				'error-callback': fail,
-				'expired-callback': fail
-			})
-			turnstile.execute(widgetId)
-		})
-	} finally {
-		if (timeout) window.clearTimeout(timeout)
-		if (widgetId) turnstile.remove(widgetId)
-		container.remove()
-	}
 }

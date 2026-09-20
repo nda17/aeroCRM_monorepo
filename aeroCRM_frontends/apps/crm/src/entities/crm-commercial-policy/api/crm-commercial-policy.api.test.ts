@@ -22,7 +22,7 @@ const policy = {
 	additionalSeatYearlyPriceMinor: 200_000,
 	includedSeats: 2,
 	trialSeatLimit: 5,
-	trialDays: 5,
+	trialDays: 10,
 	graceDays: 3,
 	createdAt: '2026-09-05T12:00:00.000Z'
 }

@@ -138,7 +138,7 @@ export default function CrmPricingSettings() {
 			{!CRM_RELEASE.apiEnabled ? (
 				<p className={styles.accessNote}>
 					Настройки цен и мест подключатся после выпуска aeroCRM. Бесплатный
-					период — 5 дней, минимум два места с учётом владельца.
+					период — 10 дней, минимум два места с учётом владельца.
 					Неопубликованные цены здесь не показываются.
 				</p>
 			) : !isAuthResolved ||

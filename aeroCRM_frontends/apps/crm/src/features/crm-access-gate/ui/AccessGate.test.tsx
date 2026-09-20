@@ -208,10 +208,10 @@ describe('AccessGate', () => {
 				{ wrapper: Wrapper }
 			)
 			await screen.findByRole('button', {
-				name: 'Попробовать бесплатно 5 дней'
+				name: 'Попробовать бесплатно 10 дней'
 			})
 			const link = screen.queryByRole('link', {
-				name: 'Подписка и оплата WinCRM'
+				name: 'Подписка и оплата aeroCRM'
 			})
 			expect(!!link).toBe(enabled)
 			if (link)
@@ -240,10 +240,10 @@ describe('AccessGate', () => {
 			{ wrapper: Wrapper }
 		)
 		await screen.findByRole('button', {
-			name: 'Попробовать бесплатно 5 дней'
+			name: 'Попробовать бесплатно 10 дней'
 		})
 		expect(
-			screen.queryByRole('link', { name: 'Подписка и оплата WinCRM' })
+			screen.queryByRole('link', { name: 'Подписка и оплата aeroCRM' })
 		).toBeNull()
 	})
 	it.each([
@@ -301,7 +301,7 @@ describe('AccessGate', () => {
 			)
 			fireEvent.click(
 				await screen.findByRole('button', {
-					name: 'Попробовать бесплатно 5 дней'
+					name: 'Попробовать бесплатно 10 дней'
 				})
 			)
 			await waitFor(() =>
@@ -318,12 +318,12 @@ describe('AccessGate', () => {
 					window.dispatchEvent(new PopStateEvent('popstate'))
 				})
 				const nextTrial = await screen.findByRole('button', {
-					name: 'Попробовать бесплатно 5 дней'
+					name: 'Попробовать бесплатно 10 дней'
 				})
 				expect(nextTrial).toHaveProperty('disabled', false)
 				fireEvent.click(nextTrial)
 				await screen.findByRole('button', {
-					name: 'Повторить запуск бесплатных 5 дней'
+					name: 'Повторить запуск бесплатных 10 дней'
 				})
 			}
 			vi.mocked(toast.success).mockClear()
@@ -348,7 +348,7 @@ describe('AccessGate', () => {
 				).toEqual(inactive(nextWorkspace))
 				fireEvent.click(
 					screen.getByRole('button', {
-						name: 'Повторить запуск бесплатных 5 дней'
+						name: 'Повторить запуск бесплатных 10 дней'
 					})
 				)
 				await waitFor(() =>
@@ -422,7 +422,7 @@ describe('AccessGate', () => {
 			if (flow === 'trial')
 				fireEvent.click(
 					await screen.findByRole('button', {
-						name: 'Попробовать бесплатно 5 дней'
+						name: 'Попробовать бесплатно 10 дней'
 					})
 				)
 			else {
@@ -851,7 +851,7 @@ describe('AccessGate', () => {
 			{ wrapper: Wrapper }
 		)
 		expect(
-			await screen.findByText('WinCRM доступна только для чтения')
+			await screen.findByText('aeroCRM доступна только для чтения')
 		).toBeTruthy()
 		expect(screen.getByText('workspace data')).toBeTruthy()
 	})
@@ -887,7 +887,7 @@ describe('AccessGate', () => {
 			</AccessGate>,
 			{ wrapper: Wrapper }
 		)
-		expect(await screen.findByText('Настройка WinCRM')).toBeTruthy()
+		expect(await screen.findByText('Настройка aeroCRM')).toBeTruthy()
 		expect(screen.queryByText('hidden')).toBeNull()
 		expect(activateCrmTrial).not.toHaveBeenCalled()
 		expect(installCrmTemplate).not.toHaveBeenCalled()
@@ -1016,16 +1016,16 @@ describe('AccessGate', () => {
 			{ wrapper: Wrapper }
 		)
 		const start = await screen.findByRole('button', {
-			name: 'Попробовать бесплатно 5 дней'
+			name: 'Попробовать бесплатно 10 дней'
 		})
 		expect(activateCrmTrial).not.toHaveBeenCalled()
 		fireEvent.click(start)
 		await screen.findByRole('button', {
-			name: 'Повторить запуск бесплатных 5 дней'
+			name: 'Повторить запуск бесплатных 10 дней'
 		})
 		fireEvent.click(
 			screen.getByRole('button', {
-				name: 'Повторить запуск бесплатных 5 дней'
+				name: 'Повторить запуск бесплатных 10 дней'
 			})
 		)
 		await waitFor(() => expect(activateCrmTrial).toHaveBeenCalledTimes(2))
@@ -1057,12 +1057,12 @@ describe('AccessGate', () => {
 
 		fireEvent.click(
 			await screen.findByRole('button', {
-				name: 'Попробовать бесплатно 5 дней'
+			name: 'Попробовать бесплатно 10 дней'
 			})
 		)
 		fireEvent.click(
 			await screen.findByRole('button', {
-				name: 'Повторить запуск бесплатных 5 дней'
+			name: 'Повторить запуск бесплатных 10 дней'
 			})
 		)
 
@@ -1099,7 +1099,7 @@ describe('AccessGate', () => {
 
 		fireEvent.click(
 			await screen.findByRole('button', {
-				name: 'Попробовать бесплатно 5 дней'
+			name: 'Попробовать бесплатно 10 дней'
 			})
 		)
 
@@ -1108,7 +1108,7 @@ describe('AccessGate', () => {
 		)
 		expect(
 			screen.getByRole('button', {
-				name: 'Повторить запуск бесплатных 5 дней'
+			name: 'Повторить запуск бесплатных 10 дней'
 			})
 		).toHaveProperty('disabled', true)
 	})
@@ -1122,7 +1122,7 @@ describe('AccessGate', () => {
 			</AccessGate>,
 			{ wrapper: Wrapper }
 		)
-		expect(await screen.findByText('Настройка WinCRM')).toBeTruthy()
+		expect(await screen.findByText('Настройка aeroCRM')).toBeTruthy()
 		expect(getPipelineTemplates).toHaveBeenCalledWith('token')
 		expect(screen.queryByText('hidden')).toBeNull()
 		expect(
@@ -1577,7 +1577,7 @@ describe('AccessGate', () => {
 		expect(installCrmTemplate).toHaveBeenCalledTimes(1)
 		expect(getCrmAccessBootstrap).toHaveBeenCalledTimes(2)
 		expect(toast.error).toHaveBeenCalledWith(
-			'Настройка WinCRM уже изменилась',
+			'Настройка aeroCRM уже изменилась',
 			{ id: 'install-toast' }
 		)
 	})

@@ -28,6 +28,7 @@ const AuthForm: NextPage<IAuthFormProps> = ({
 }) => {
 	const authReturnUrl = useAuthReturnUrl(initialAuthReturnUrl)
 	const {
+		turnstileContainerRef,
 		isTurnstileUnavailable,
 		retryTurnstile,
 		completeCodeLogin,
@@ -249,6 +250,11 @@ const AuthForm: NextPage<IAuthFormProps> = ({
 				disabled={
 					!isLogin && authMethod === 'email' && isEmailCodeRequested
 				}
+			/>
+
+			<div
+				className={styles['turnstile-container']}
+				ref={turnstileContainerRef}
 			/>
 
 			<div className={clsx(styles['wrapper-button'])}>

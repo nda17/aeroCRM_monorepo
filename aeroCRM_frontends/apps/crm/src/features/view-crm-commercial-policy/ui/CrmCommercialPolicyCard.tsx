@@ -241,7 +241,7 @@ function PolicyCard({
 							Бесплатный период — <strong>{policy.trialDays} дней</strong>,
 							мест на Trial: <strong>{policy.trialSeatLimit}</strong>,
 							вместе с владельцем. Начинается только по кнопке «Попробовать
-							бесплатно 5 дней», не при просмотре этой карточки.
+							бесплатно 10 дней», не при просмотре этой карточки.
 						</p>
 						<p>
 							Льготный период после Trial — {policy.graceDays} дня.

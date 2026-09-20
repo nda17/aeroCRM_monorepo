@@ -1,5 +1,8 @@
 .form {
 	@apply w-full mx-auto overflow-hidden min-h-[22.699rem] z-10;
+	.turnstile-container {
+		@apply mb-4 w-full min-w-0;
+	}
 	&.otp-form .link-button {
 		@apply min-h-11;
 	}

@@ -232,7 +232,7 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 			commandIdRef.current = undefined
 			toast.success(
 				result.activated
-					? 'Бесплатный период на 5 дней запущен'
+					? 'Бесплатный период на 10 дней запущен'
 					: 'Доступ уже активирован'
 			)
 		},
@@ -453,8 +453,8 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 								}}
 							>
 								{trialFailed
-									? 'Повторить запуск бесплатных 5 дней'
-									: 'Попробовать бесплатно 5 дней'}
+									? 'Повторить запуск бесплатных 10 дней'
+									: 'Попробовать бесплатно 10 дней'}
 							</Button>
 							{billingLink}
 						</div>

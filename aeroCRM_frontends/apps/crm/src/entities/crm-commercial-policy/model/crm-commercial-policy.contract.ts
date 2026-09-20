@@ -11,7 +11,7 @@ export interface CrmCommercialPolicy {
 	additionalSeatYearlyPriceMinor: number
 	includedSeats: number
 	trialSeatLimit: number
-	trialDays: 5
+	trialDays: 10
 	graceDays: 3
 	createdAt: string
 }
@@ -52,7 +52,7 @@ export const parseCrmCommercialPolicy = (
 		!prices.every(key => integer(value[key], 1, 100_000_000)) ||
 		!integer(value.includedSeats, 2, 10_000) ||
 		!integer(value.trialSeatLimit, 2, 10_000) ||
-		value.trialDays !== 5 ||
+		value.trialDays !== 10 ||
 		value.graceDays !== 3 ||
 		!isIsoDate(value.createdAt)
 	)

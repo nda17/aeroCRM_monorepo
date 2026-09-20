@@ -50,7 +50,7 @@ const policy: CrmCommercialPolicy = {
 	additionalSeatYearlyPriceMinor: 250_005,
 	includedSeats: 2,
 	trialSeatLimit: 5,
-	trialDays: 5,
+	trialDays: 10,
 	graceDays: 3,
 	createdAt: '2026-09-05T12:00:00.000Z'
 }
@@ -112,7 +112,7 @@ describe('published commercial policy card', () => {
 			render(view())
 			await screen.findByText('Месячная стоимость')
 			const card = screen.getByRole('region', {
-				name: 'Опубликованные условия WinCRM'
+				name: 'Опубликованные условия aeroCRM'
 			})
 			const text = card.textContent!.replace(/\s+/g, ' ')
 			for (const amount of [
@@ -126,7 +126,7 @@ describe('published commercial policy card', () => {
 				'В стоимость включено мест: 2, вместе с владельцем'
 			)
 			expect(text).toContain(
-				'Бесплатный период — 5 дней, мест на Trial: 5'
+				'Бесплатный период — 10 дней, мест на Trial: 5'
 			)
 			expect(text).toContain('не условия вашей действующей подписки')
 			expect(within(card).getAllByRole('button')).toHaveLength(1)
@@ -188,7 +188,7 @@ describe('published commercial policy card', () => {
 			screen.getByRole('button', { name: 'Повторить загрузку условий' })
 		)
 		await screen.findByText('Месячная стоимость')
-		expect(toast.success).toHaveBeenCalledWith('Условия WinCRM обновлены')
+		expect(toast.success).toHaveBeenCalledWith('Условия aeroCRM обновлены')
 	})
 	it('hides formerly loaded prices on refresh failure rather than inventing or presenting stale current conditions', async () => {
 		render(view())
@@ -202,7 +202,7 @@ describe('published commercial policy card', () => {
 		await screen.findByText('Условия пока недоступны')
 		expect(price()).toBeNull()
 		expect(toast.error).toHaveBeenCalledWith(
-			'Не удалось обновить условия WinCRM'
+			'Не удалось обновить условия aeroCRM'
 		)
 	})
 	it('does not start manual retry while offline', async () => {

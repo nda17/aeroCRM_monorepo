@@ -17,6 +17,7 @@ const RestorePasswordForm: NextPage<IRestorePasswordFormProps> = ({
 }) => {
 	const authReturnUrl = useAuthReturnUrl(initialAuthReturnUrl)
 	const {
+		turnstileContainerRef,
 		handleSubmit,
 		isLoading,
 		onSubmit,
@@ -108,6 +109,11 @@ const RestorePasswordForm: NextPage<IRestorePasswordFormProps> = ({
 					)
 				})()
 			)}
+
+			<div
+				className={styles['turnstile-container']}
+				ref={turnstileContainerRef}
+			/>
 
 			<div className={clsx(styles['wrapper-button'])}>
 				<button

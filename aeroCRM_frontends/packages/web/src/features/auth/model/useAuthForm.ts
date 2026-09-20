@@ -154,13 +154,26 @@ const useAuthForm = (
 	const router = useRouter()
 	const [isPending, startTransition] = useTransition()
 	const queryClient = useQueryClient()
+	const turnstileAction =
+		authMethod === 'phone'
+			? isLogin
+				? 'phone_login'
+				: isPhoneCodeRequested
+					? 'phone_register'
+					: 'phone_send_code'
+			: isLogin
+				? 'login'
+				: isEmailCodeRequested
+					? 'email_register'
+					: 'register'
 	const {
+		containerRef: turnstileContainerRef,
 		executeTurnstile,
 		isTurnstileEnabled,
 		isTurnstileUnavailable,
 		markTurnstileUnavailable,
 		retryTurnstile
-	} = useTurnstile()
+	} = useTurnstile(turnstileAction)
 	const emailValue = watch('email')
 	const phoneValue = watch('phone')
 	const loginDestination =
@@ -580,19 +593,6 @@ const useAuthForm = (
 		try {
 			setAuthMessage('')
 			let token: string | null = null
-			const turnstileAction =
-				authMethod === 'phone'
-					? isLogin
-						? 'phone_login'
-						: isPhoneCodeRequested
-							? 'phone_register'
-							: 'phone_send_code'
-					: isLogin
-						? 'login'
-						: isEmailCodeRequested
-							? 'email_register'
-							: 'register'
-
 			try {
 				token = await executeTurnstile(turnstileAction)
 			} catch {
@@ -709,6 +709,7 @@ const useAuthForm = (
 		isPhoneLoginPending
 
 	return {
+		turnstileContainerRef,
 		isTurnstileUnavailable,
 		retryTurnstile,
 		completeCodeLogin: () => {
