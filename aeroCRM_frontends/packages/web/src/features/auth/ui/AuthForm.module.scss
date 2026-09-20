@@ -2,9 +2,6 @@
 	@apply w-full mx-auto overflow-hidden min-h-[22.699rem] z-10;
 	.turnstile-container {
 		@apply mb-4 w-full min-w-0 leading-[0];
-		> div {
-			@apply overflow-hidden rounded-2xl;
-		}
 		&[data-turnstile-size='compact'] > div {
 			@apply max-w-[150px];
 		}

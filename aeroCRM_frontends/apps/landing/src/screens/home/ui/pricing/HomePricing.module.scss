@@ -88,18 +88,10 @@
 }
 
 .gridLayout {
-	@apply grid grid-cols-3 gap-5 items-stretch;
-
-	@media (max-width: 1100px) {
-		@apply grid-cols-2 max-w-[780px] mx-auto gap-5;
-	}
+	@apply mx-auto grid w-full max-w-[680px] grid-cols-1 items-stretch;
 
 	@media (max-width: 768px) {
-		@apply grid-cols-1 max-w-[440px] gap-9;
-	}
-
-	@media (max-width: 480px) {
-		@apply gap-8;
+		@apply max-w-[440px];
 	}
 }
 
@@ -339,14 +331,6 @@
 	transition:
 		background 0.35s ease,
 		color 0.35s ease;
-}
-
-@media (min-width: 769px) and (max-width: 1100px) {
-	.card:nth-child(3) {
-		@apply w-full max-w-[380px];
-		grid-column: 1 / -1;
-		justify-self: center;
-	}
 }
 
 @media (max-height: 880px) and (min-width: 1101px) {
