@@ -19,9 +19,11 @@ export const useTurnstile = (action: string) => {
 	const widgetIdRef = useRef<string | null>(null)
 	const widgetActionRef = useRef<string | null>(null)
 	const tokenRef = useRef<string | null>(null)
+	const needsResetRef = useRef(false)
+	const executingRef = useRef(false)
 	const waiterRef = useRef<TokenWaiter | null>(null)
 	const generationRef = useRef(0)
-	const actionRef = useRef(action)
+	const lifecycleRef = useRef(0)
 	const [size, setSize] = useState<'flexible' | 'compact'>('flexible')
 	const [isReady, setIsReady] = useState(false)
 	const [isUnavailable, setIsUnavailable] = useState(false)
@@ -33,7 +35,6 @@ export const useTurnstile = (action: string) => {
 	})
 	const isTurnstileEnabled =
 		isProductionMode && (authSettings?.turnstileEnabled ?? true)
-	actionRef.current = action
 
 	useEffect(() => {
 		if (!container || !isTurnstileEnabled) return
@@ -50,6 +51,7 @@ export const useTurnstile = (action: string) => {
 		widgetIdRef.current = null
 		widgetActionRef.current = null
 		tokenRef.current = null
+		needsResetRef.current = false
 		waiterRef.current?.reject(new TurnstileUnavailableError())
 		waiterRef.current = null
 	}, [])
@@ -73,26 +75,36 @@ export const useTurnstile = (action: string) => {
 				callback: token => {
 					if (generation !== generationRef.current) return
 					if (!token) {
+						tokenRef.current = null
+						needsResetRef.current = false
 						setIsUnavailable(true)
+						setIsReady(false)
 						waiterRef.current?.reject(new TurnstileUnavailableError())
-						waiterRef.current = null
 						return
 					}
-					tokenRef.current = token
-					waiterRef.current?.resolve(token)
-					waiterRef.current = null
+					if (waiterRef.current) {
+						tokenRef.current = null
+						needsResetRef.current = true
+						waiterRef.current.resolve(token)
+					} else {
+						tokenRef.current = token
+						needsResetRef.current = false
+					}
+					setIsReady(true)
+					setIsUnavailable(false)
 				},
 				'error-callback': () => {
 					if (generation !== generationRef.current) return
 					tokenRef.current = null
+					needsResetRef.current = false
 					setIsUnavailable(true)
+					setIsReady(false)
 					waiterRef.current?.reject(new TurnstileUnavailableError())
-					waiterRef.current = null
 				},
 				'expired-callback': () => {
 					if (generation !== generationRef.current) return
 					tokenRef.current = null
-					if (widgetIdRef.current) turnstile.reset(widgetIdRef.current)
+					needsResetRef.current = false
 				}
 			})
 			setIsReady(true)
@@ -103,17 +115,21 @@ export const useTurnstile = (action: string) => {
 	useEffect(() => {
 		if (!isTurnstileEnabled || !container) return
 		let cancelled = false
+		const lifecycle = ++lifecycleRef.current
 		setIsReady(false)
 		setIsUnavailable(false)
 		void loadTurnstileScript()
 			.then(() => {
-				if (!cancelled) renderWidget(action)
+				if (!cancelled && lifecycle === lifecycleRef.current)
+					renderWidget(action)
 			})
 			.catch(() => {
-				if (!cancelled) setIsUnavailable(true)
+				if (!cancelled && lifecycle === lifecycleRef.current)
+					setIsUnavailable(true)
 			})
 		return () => {
 			cancelled = true
+			lifecycleRef.current += 1
 			removeWidget()
 		}
 	}, [
@@ -127,39 +143,77 @@ export const useTurnstile = (action: string) => {
 
 	const executeTurnstile = async (requestedAction: string) => {
 		if (!isTurnstileEnabled) return null
+		if (executingRef.current) throw new TurnstileUnavailableError()
+		executingRef.current = true
+		const lifecycle = lifecycleRef.current
+		let generation = generationRef.current
 		try {
 			if (!siteKey) throw new TurnstileUnavailableError()
 			await loadTurnstileScript()
+			if (lifecycle !== lifecycleRef.current)
+				throw new TurnstileUnavailableError()
 			if (widgetActionRef.current !== requestedAction)
 				renderWidget(requestedAction)
-			const token =
-				tokenRef.current ||
-				(await new Promise<string>((resolve, reject) => {
+			generation = generationRef.current
+			let token = tokenRef.current
+			if (token) {
+				tokenRef.current = null
+				needsResetRef.current = true
+			} else {
+				token = await new Promise<string>((resolve, reject) => {
 					const timeout = window.setTimeout(() => {
-						waiterRef.current = null
-						reject(new TurnstileUnavailableError())
+						if (waiterRef.current === waiter)
+							waiter.reject(new TurnstileUnavailableError())
 					}, 120000)
-					waiterRef.current = {
+					const finish = () => {
+						window.clearTimeout(timeout)
+						if (waiterRef.current === waiter) waiterRef.current = null
+					}
+					const waiter: TokenWaiter = {
 						resolve: value => {
-							window.clearTimeout(timeout)
+							finish()
 							resolve(value)
 						},
 						reject: error => {
-							window.clearTimeout(timeout)
+							finish()
 							reject(error)
 						}
 					}
-				}))
-			tokenRef.current = null
-			if (widgetIdRef.current) window.turnstile?.reset(widgetIdRef.current)
-			if (requestedAction !== actionRef.current)
-				renderWidget(actionRef.current)
+					waiterRef.current = waiter
+					if (needsResetRef.current) {
+						const widgetId = widgetIdRef.current
+						if (!widgetId || !window.turnstile) {
+							waiter.reject(new TurnstileUnavailableError())
+							return
+						}
+						needsResetRef.current = false
+						try {
+							window.turnstile.reset(widgetId)
+						} catch {
+							waiter.reject(new TurnstileUnavailableError())
+						}
+					}
+				})
+			}
+			if (
+				lifecycle !== lifecycleRef.current ||
+				generation !== generationRef.current
+			)
+				throw new TurnstileUnavailableError()
 			setIsUnavailable(false)
+			setIsReady(true)
 			return token
 		} catch (error) {
-			setIsUnavailable(true)
-			setIsReady(false)
+			if (
+				lifecycle === lifecycleRef.current &&
+				generation === generationRef.current
+			) {
+				setIsUnavailable(true)
+				setIsReady(false)
+			}
 			throw error
+		} finally {
+			executingRef.current = false
 		}
 	}
 

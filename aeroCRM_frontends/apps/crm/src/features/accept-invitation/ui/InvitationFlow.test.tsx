@@ -30,7 +30,12 @@ vi.mock('../api/invitation-access.api', () => ({
 	checkInvitationCrmAccess: vi.fn()
 }))
 vi.mock('react-hot-toast', () => ({
-	default: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }),
+	default: Object.assign(vi.fn(), {
+		dismiss: vi.fn(),
+		error: vi.fn(),
+		loading: vi.fn(() => 'toast-id'),
+		success: vi.fn()
+	}),
 	Toaster: () => null
 }))
 const id = '11111111-1111-4111-8111-111111111111'

@@ -23,6 +23,7 @@ jobs:
         working-directory: aeroCRM_frontends
         run: |
           pnpm install --frozen-lockfile
+          pnpm --filter @aerocrm/crm test
           pnpm typecheck:frontends
           pnpm build:frontends
   contract-migrations:

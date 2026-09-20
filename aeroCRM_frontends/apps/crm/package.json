@@ -12,7 +12,7 @@
 		"build": "next build --webpack",
 		"start": "next start",
 		"lint": "eslint . --max-warnings=0",
-		"test": "vitest run",
+		"test": "vitest run && vitest run --config vitest.turnstile.config.mjs",
 		"typecheck": "next typegen && tsc --noEmit",
 		"format": "prettier --write --no-error-on-unmatched-pattern \"src/**/*.{ts,tsx,scss}\" \"*.{js,mjs,ts,json,md}\" ",
 		"format:check": "prettier --check --no-error-on-unmatched-pattern \"src/**/*.{ts,tsx,scss}\" \"*.{js,mjs,ts,json,md}\" ",

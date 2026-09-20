@@ -443,7 +443,7 @@ describe('aeroCRM application shell', () => {
 			'[aria-label="Текущий раздел"]'
 		)!
 		expect(context.querySelector('svg')?.getAttribute('viewBox')).toBe(
-			'0 0 278 66'
+			'0 0 286 66'
 		)
 		expect(
 			within(context as HTMLElement).getByText('Входящие')
@@ -553,5 +553,4 @@ describe('aeroCRM application shell', () => {
 		expect(screen.queryByRole('dialog')).toBeNull()
 		expect(toast).not.toHaveBeenCalled()
 	})
-
 })
