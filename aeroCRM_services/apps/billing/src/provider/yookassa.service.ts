@@ -95,10 +95,16 @@ export class YooKassaService {
 		}
 		const productName =
 			input.productCode === 'AEROCRM' ? 'aeroCRM' : 'aeroCRM';
+		const description =
+			input.billingPeriod === 'MONTHLY'
+				? 'Подписка aeroCRM на 1 месяц'
+				: input.billingPeriod === 'YEARLY'
+					? 'Подписка aeroCRM на 1 год'
+					: `${productName} ${input.plan} ${input.billingPeriod}`;
 		const body: Record<string, unknown> = {
 			amount: { value: input.amount, currency: input.currency },
 			capture: true,
-			description: `${productName} ${input.plan} ${input.billingPeriod}`,
+			description,
 			metadata: {
 				...(input.productCode === 'AEROCRM'
 					? { productCode: 'AEROCRM' }

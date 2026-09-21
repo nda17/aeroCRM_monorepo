@@ -154,13 +154,58 @@ describe('YooKassaService safe readiness', () => {
 		});
 		expect(body.save_payment_method).toBe(true);
 		expect(body).not.toHaveProperty('payment_method_id');
-		expect(body.description).toBe('aeroCRM EASY MONTHLY');
+		expect(body.description).toBe('Подписка aeroCRM на 1 месяц');
 		expect(options).not.toHaveProperty('redirect');
 		expect(body.metadata).toEqual({
 			paymentId: 'payment-1',
 			kind: 'ONE_TIME',
 			plan: 'EASY',
 			billingPeriod: 'MONTHLY'
+		});
+	});
+
+	it('uses a human yearly subscription description without changing receipt metadata', async () => {
+		process.env.CRM_PAYMENT_LAUNCH_MODE = 'test';
+		process.env.YOOKASSA_TEST_SHOP_ID = 'test-shop-id';
+		process.env.YOOKASSA_TEST_SECRET_KEY = 'test-secret';
+		const fetchMock = jest.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			json: jest.fn().mockResolvedValue({
+				id: 'provider-payment-yearly',
+				status: 'pending'
+			})
+		});
+		global.fetch = fetchMock as unknown as typeof fetch;
+
+		await new YooKassaService().createPayment(
+			{
+				paymentId: 'payment-yearly',
+				amount: '990.00',
+				currency: 'RUB',
+				plan: 'EASY',
+				billingPeriod: 'YEARLY',
+				autoRenew: false,
+				customerEmail: 'payer@example.test',
+				customerPhone: null,
+				returnUrl: 'https://aerocrm.space/payment/success',
+				kind: 'ONE_TIME'
+			},
+			'provider-command-yearly'
+		);
+
+		const [, options] = fetchMock.mock.calls[0] as [
+			string,
+			{ body: string; headers: Record<string, string> }
+		];
+		const body = JSON.parse(options.body) as Record<string, any>;
+		expect(body.description).toBe('Подписка aeroCRM на 1 год');
+		expect(body.receipt.items[0].description).toBe(
+			'Подписка aeroCRM EASY'
+		);
+		expect(body.metadata).toMatchObject({
+			paymentId: 'payment-yearly',
+			billingPeriod: 'YEARLY'
 		});
 	});
 
@@ -203,7 +248,7 @@ describe('YooKassaService safe readiness', () => {
 			];
 			const body = JSON.parse(options.body) as Record<string, any>;
 			expect(options).toMatchObject({ redirect: 'error' });
-			expect(body.description).toBe('aeroCRM PAID MONTHLY');
+			expect(body.description).toBe('Подписка aeroCRM на 1 месяц');
 			expect(body.metadata).toEqual({
 				productCode: 'AEROCRM',
 				paymentId: 'crm-payment-1',

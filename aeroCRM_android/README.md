@@ -41,6 +41,10 @@ node scripts/build-release.mjs
 совпадение SHA-256 сертификата APK с Digital Asset Links.
 
 APK размещается отдельным объектом `content-files/aerocrm/android/<version>/aeroCRM.apk`.
+Кнопка на сайте скачивает его через фиксированный адрес
+`https://aerocrm.space/downloads/aeroCRM.apk`. Для новой версии сначала обновите
+точный S3-объект в Nginx-конфигурации frontend VPS, затем опубликуйте APK и
+проверьте ответ без редиректа, SHA-256, HEAD и Range после `nginx -t`/reload.
 После проверки скачивания обновляются фактические метаданные
 `../aeroCRM_frontends/brand/android-release.json`. Публикация в Google Play — отдельная задача.
 

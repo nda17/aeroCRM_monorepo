@@ -42,21 +42,9 @@ const isAvailable = (release: AndroidReleaseMetadata) => {
 		return false
 	}
 
-	try {
-		const url = new URL(release.downloadUrl)
-		return (
-			url.protocol === 'https:' &&
-			!url.username &&
-			!url.password &&
-			!url.search &&
-			!url.hash &&
-			url.pathname.endsWith(
-				`/aerocrm/android/${release.versionName}/aeroCRM.apk`
-			)
-		)
-	} catch {
-		return false
-	}
+	return (
+		release.downloadUrl === 'https://aerocrm.space/downloads/aeroCRM.apk'
+	)
 }
 
 const MobileApps = ({ release }: { release: AndroidReleaseMetadata }) => {

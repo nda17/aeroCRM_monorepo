@@ -14,11 +14,19 @@ import {
 	formatCrmPhoneInput,
 	parseCrmPhoneInput
 } from '@/shared/lib/phone'
-import { Button, TextField } from '@/shared/ui'
+import { useAndroidAppContext } from '@/shared/lib/pwa/app-context'
+import {
+	AppIcon,
+	BrandLogo,
+	Button,
+	ScreenState,
+	TextField
+} from '@/shared/ui'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 import Link from 'next/link'
-import { useState, type FormEvent } from 'react'
+import { useRouter } from 'next/navigation'
+import { useEffect, useState, type FormEvent } from 'react'
 import toast from 'react-hot-toast'
 import styles from './WorkspaceAuthForm.module.scss'
 
@@ -191,7 +199,7 @@ const OtpFallback = ({
 }
 
 export const WorkspaceAuthForm = ({
-	mode,
+	mode: requestedMode,
 	returnPath,
 	errorCode
 }: {
@@ -199,6 +207,16 @@ export const WorkspaceAuthForm = ({
 	returnPath: string
 	errorCode?: string
 }) => {
+	const router = useRouter()
+	const androidApp = useAndroidAppContext()
+	const mode =
+		androidApp && requestedMode === 'register' ? 'login' : requestedMode
+	const [passwordVisible, setPasswordVisible] = useState(false)
+	useEffect(() => {
+		if (androidApp && requestedMode === 'register') {
+			router.replace(linkWithReturn('/login', returnPath))
+		}
+	}, [androidApp, requestedMode, returnPath, router])
 	const [method, setMethod] = useState<ContactMethod>('email')
 	const [stage, setStage] = useState<'credentials' | 'code'>('credentials')
 	const [email, setEmail] = useState('')
@@ -248,7 +266,8 @@ export const WorkspaceAuthForm = ({
 
 	const submit = async (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault()
-		if (pending) return
+		if (pending || (requestedMode === 'register' && androidApp !== false))
+			return
 		setError('')
 		setNotice('')
 		const contact =
@@ -323,7 +342,7 @@ export const WorkspaceAuthForm = ({
 
 	const title =
 		mode === 'login'
-			? 'Вход в aeroCRM'
+			? 'Вход'
 			: mode === 'register'
 				? 'Регистрация'
 				: 'Восстановление пароля'
@@ -340,16 +359,24 @@ export const WorkspaceAuthForm = ({
 		['yandex', 'Яндекс', settings.data?.yandexAuthEnabled],
 		['vk', 'VK', settings.data?.vkAuthEnabled]
 	] as const
+	const enabledProviders = providers.filter(([, , enabled]) => enabled)
+	if (requestedMode === 'register' && androidApp !== false) {
+		return <ScreenState variant="loading" title="Пожалуйста, подождите" />
+	}
 
 	return (
 		<main className={styles.viewport}>
 			<section className={styles.card} aria-labelledby="auth-title">
 				<div className={styles.brand}>
-					aeroCRM <span>Рабочее пространство</span>
+					<BrandLogo />
 				</div>
 				<h1 id="auth-title">{title}</h1>
 				<p className={styles.intro}>
-					Один аккаунт для работы с клиентами и командой.
+					{mode === 'login'
+						? 'Войдите в единый аккаунт aeroCRM.'
+						: mode === 'register'
+							? 'Создайте единый аккаунт aeroCRM.'
+							: 'Получите инструкцию для восстановления доступа.'}
 				</p>
 				{mode === 'login' && isTurnstileUnavailable ? (
 					<OtpFallback onAuthenticated={authenticated} />
@@ -379,6 +406,9 @@ export const WorkspaceAuthForm = ({
 						{method === 'email' ? (
 							<TextField
 								label="Email"
+								labelHidden
+								placeholder="Email:"
+								className={styles.authInput}
 								type="email"
 								autoComplete="email"
 								value={email}
@@ -389,6 +419,9 @@ export const WorkspaceAuthForm = ({
 						) : (
 							<TextField
 								label="Телефон"
+								labelHidden
+								placeholder="Телефон:"
+								className={styles.authInput}
 								type="tel"
 								autoComplete="tel"
 								value={phone}
@@ -400,21 +433,42 @@ export const WorkspaceAuthForm = ({
 							/>
 						)}
 						{mode !== 'restore' ? (
-							<TextField
-								label="Пароль"
-								type="password"
-								autoComplete={
-									mode === 'login' ? 'current-password' : 'new-password'
-								}
-								value={password}
-								onChange={event => setPassword(event.target.value)}
-								disabled={stage === 'code'}
-								required
-							/>
+							<div className={styles.passwordField}>
+								<TextField
+									label="Пароль"
+									labelHidden
+									placeholder="Пароль:"
+									className={`${styles.authInput} ${styles.passwordInput}`}
+									type={passwordVisible ? 'text' : 'password'}
+									autoComplete={
+										mode === 'login' ? 'current-password' : 'new-password'
+									}
+									value={password}
+									onChange={event => setPassword(event.target.value)}
+									disabled={stage === 'code'}
+									required
+								/>
+								<button
+									type="button"
+									className={styles.passwordToggle}
+									aria-label={
+										passwordVisible ? 'Скрыть пароль' : 'Показать пароль'
+									}
+									aria-pressed={passwordVisible}
+									disabled={stage === 'code'}
+									onClick={() => setPasswordVisible(value => !value)}
+								>
+									<AppIcon
+										name={passwordVisible ? 'eyeOff' : 'eye'}
+										size={23}
+									/>
+								</button>
+							</div>
 						) : null}
 						{stage === 'code' ? (
 							<TextField
 								label="Код подтверждения"
+								className={styles.authInput}
 								inputMode="numeric"
 								autoComplete="one-time-code"
 								value={code}
@@ -450,6 +504,7 @@ export const WorkspaceAuthForm = ({
 						) : null}
 						<Button
 							type="submit"
+							className={styles.primaryButton}
 							fullWidth
 							isLoading={pending}
 							disabled={!isTurnstileReady}
@@ -482,28 +537,36 @@ export const WorkspaceAuthForm = ({
 				)}
 				{mode === 'login' ? (
 					<>
-						<div
-							className={styles.social}
-							aria-label="Другие способы входа"
-						>
-							{providers
-								.filter(([, , enabled]) => enabled)
-								.map(([provider, label]) => (
-									<a
-										key={provider}
-										href={workspaceAuthApi.providerUrl(
-											provider,
-											returnPath
-										)}
-									>
-										{label}
-									</a>
-								))}
-						</div>
+						{enabledProviders.length ? (
+							<>
+								<div className={styles.divider}>
+									<span>или продолжить через</span>
+								</div>
+								<div
+									className={styles.social}
+									aria-label="Другие способы входа"
+								>
+									{enabledProviders.map(([provider, label]) => (
+										<a
+											key={provider}
+											href={workspaceAuthApi.providerUrl(
+												provider,
+												returnPath
+											)}
+										>
+											<AppIcon name={provider} size={18} />
+											{label}
+										</a>
+									))}
+								</div>
+							</>
+						) : null}
 						<nav className={styles.links}>
-							<Link href={linkWithReturn('/register', returnPath)}>
-								Создать аккаунт
-							</Link>
+							{androidApp === false ? (
+								<Link href={linkWithReturn('/register', returnPath)}>
+									Создать аккаунт
+								</Link>
+							) : null}
 							<Link href={linkWithReturn('/restore-password', returnPath)}>
 								Забыли пароль?
 							</Link>

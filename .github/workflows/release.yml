@@ -131,6 +131,10 @@ jobs:
           ssh-key: ${{ secrets.INFRA_DEPLOY_KEY }}
           path: infra
           persist-credentials: false
+      - name: Validate reviewed release scripts
+        run: |
+          bash -n infra/scripts/release.sh
+          bash -n infra/scripts/aerocrm-nginx-release.sh
       - name: Download exact CI artifacts
         env:
           GH_TOKEN: ${{ github.token }}
@@ -182,6 +186,10 @@ jobs:
           dest="$user@$host"
           ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'mkdir -p /opt/aerocrm/compose /opt/aerocrm/scripts'
           scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes "infra/compose/$ROLE.yml" "$dest:/opt/aerocrm/compose/"
+          if [ "$ROLE" = frontend ]; then
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'mkdir -p /opt/aerocrm/nginx'
+            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/nginx/frontends.conf "$dest:/opt/aerocrm/nginx/"
+          fi
           if [ "$ROLE" = backend ]; then
             scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/compose/rabbitmq.conf "$dest:/opt/aerocrm/compose/"
           fi

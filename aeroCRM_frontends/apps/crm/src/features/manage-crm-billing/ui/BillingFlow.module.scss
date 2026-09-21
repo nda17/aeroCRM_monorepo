@@ -7,6 +7,23 @@
 .card {
 	@apply min-w-0 rounded-2xl border border-crm-border bg-crm-surface p-4 sm:p-6;
 }
+
+.orderCard {
+	@apply grid gap-4;
+
+	> .sectionHeading,
+	> .note {
+		margin: 0;
+	}
+
+	.actions:empty {
+		display: none;
+	}
+
+	.actions > button {
+		@apply w-full sm:w-auto;
+	}
+}
 .sectionHeading {
 	@apply mb-4 flex flex-wrap items-center justify-between gap-3;
 

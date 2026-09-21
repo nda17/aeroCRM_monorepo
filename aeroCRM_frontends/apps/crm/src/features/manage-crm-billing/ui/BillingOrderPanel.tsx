@@ -154,7 +154,10 @@ export const BillingOrderPanel = ({
 		}
 	}
 	return (
-		<section className={styles.card} aria-label="Текущий заказ aeroCRM">
+		<section
+			className={`${styles.card} ${styles.orderCard}`}
+			aria-label="Текущий заказ aeroCRM"
+		>
 			<div className={styles.sectionHeading}>
 				<h2>Статус оплаты</h2>
 				<Button
@@ -205,39 +208,43 @@ export const BillingOrderPanel = ({
 							</div>
 						) : null}
 					</dl>
-					{row.kind === 'ONE_TIME' &&
-					row.state === 'PENDING' &&
-					row.confirmationUrl &&
-					isBillingConfirmationUrl(row.confirmationUrl) &&
-					order.data &&
-					Date.parse(order.data.serverTime) <
-						Date.parse(row.checkoutExpiresAt) ? (
-						<Button
-							tooltip="Открыть страницу оплаты существующего заказа в YooKassa"
-							disabled={navigationBusy || !actor.online || order.isFetching}
-							isLoading={opening}
-							onClick={() => void openPayment()}
-						>
-							Перейти к оплате в YooKassa
-						</Button>
-					) : null}
-					{row.canVerify ? (
-						<Button
-							variant="secondary"
-							tooltip="Проверить существующий платёж у YooKassa, не создавая новый заказ"
-							disabled={
-								locked || opening || order.isFetching || !context.ready
-							}
-							onClick={() => {
-								toast(
-									'Запрашиваем проверку существующего платежа у провайдера'
-								)
-								void onVerify(row)
-							}}
-						>
-							Запросить проверку у провайдера
-						</Button>
-					) : null}
+					<div className={styles.actions}>
+						{row.kind === 'ONE_TIME' &&
+						row.state === 'PENDING' &&
+						row.confirmationUrl &&
+						isBillingConfirmationUrl(row.confirmationUrl) &&
+						order.data &&
+						Date.parse(order.data.serverTime) <
+							Date.parse(row.checkoutExpiresAt) ? (
+							<Button
+								tooltip="Открыть страницу оплаты существующего заказа в YooKassa"
+								disabled={
+									navigationBusy || !actor.online || order.isFetching
+								}
+								isLoading={opening}
+								onClick={() => void openPayment()}
+							>
+								Перейти к оплате в YooKassa
+							</Button>
+						) : null}
+						{row.canVerify ? (
+							<Button
+								variant="secondary"
+								tooltip="Проверить существующий платёж у YooKassa, не создавая новый заказ"
+								disabled={
+									locked || opening || order.isFetching || !context.ready
+								}
+								onClick={() => {
+									toast(
+										'Запрашиваем проверку существующего платежа у провайдера'
+									)
+									void onVerify(row)
+								}}
+							>
+								Запросить проверку у провайдера
+							</Button>
+						) : null}
+					</div>
 					{row.state === 'UNKNOWN' ? (
 						<p className={styles.notice}>
 							Провайдер ещё не подтвердил окончательный результат. Не

@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect } from 'react'
+import { captureAndroidAppContext } from './app-context'
 
 export const PwaRegistration = () => {
 	useEffect(() => {
+		captureAndroidAppContext()
 		if (
 			process.env.NODE_ENV !== 'production' ||
 			!('serviceWorker' in navigator)
