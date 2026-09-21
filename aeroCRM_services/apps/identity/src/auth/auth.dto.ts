@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
 	Equals,
 	IsBoolean,
@@ -8,9 +9,8 @@ import {
 	IsString,
 	IsUUID,
 	Matches,
-	Max,
 	MaxLength,
-	Min,
+	MinLength,
 	ValidateIf
 } from 'class-validator';
 
@@ -125,8 +125,15 @@ export class BindPhoneVerifyDto extends PhoneDto {
 
 export class UpdateProfileDto {
 	@IsOptional()
+	@Transform(({ value }) =>
+		typeof value === 'string' ? value.trim().normalize('NFC') : value
+	)
 	@IsString()
-	@Matches(/^[a-zA-Z][a-zA-Z0-9-]+$/)
+	@MinLength(1, { message: 'Имя должно содержать от 1 до 120 символов.' })
+	@MaxLength(120, { message: 'Имя должно содержать от 1 до 120 символов.' })
+	@Matches(/^[\p{L}][\p{L}\p{M}\p{N} .’'-]*$/u, {
+		message: 'Введите корректное имя.'
+	})
 	name?: string;
 
 	@IsOptional()

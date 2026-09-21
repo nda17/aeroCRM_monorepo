@@ -1,4 +1,5 @@
 import { errorCatch } from '@/shared/api'
+import { validName } from '@/shared/regex'
 import { userService, IProfileEditInput } from '@/entities/user'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { SubmitHandler } from 'react-hook-form'
@@ -24,9 +25,16 @@ export const useProfileEdit = () => {
 	})
 
 	const onSubmit: SubmitHandler<IProfileEditInput> = async data => {
+		const name = data.name?.trim().normalize('NFC')
+		if (name && (name.length > 120 || !validName.test(name))) {
+			toast.error(
+				'Имя должно начинаться с буквы и содержать не более 120 символов. Можно использовать буквы, цифры, пробелы, дефис, апостроф и точку.'
+			)
+			return false
+		}
 		try {
 			await mutateAsync({
-				name: data.name || undefined,
+				name: name || undefined,
 				password: data.password || undefined
 			})
 

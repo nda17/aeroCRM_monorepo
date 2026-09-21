@@ -13,7 +13,7 @@ import { hash } from 'bcryptjs';
 import type { Request, Response } from 'express';
 import { PASSWORD_SALT_ROUNDS } from '../common/identity.util';
 import { AuthController } from './auth.controller';
-import { AuthDto, UpdateUserDto } from './auth.dto';
+import { AuthDto, UpdateProfileDto, UpdateUserDto } from './auth.dto';
 import { IdentityAuthGuard } from './auth.guard';
 import {
 	AuthService,
@@ -287,6 +287,83 @@ describe('public auth frozen contracts', () => {
 			pipe.transform(
 				{ password: 'Secure1' },
 				{ type: 'body', metatype: UpdateUserDto }
+			)
+		).resolves.toEqual({ password: 'Secure1' });
+	});
+
+	it.each([
+		['Елизавета', 'Елизавета'],
+		['Дмитрий Нефёдов', 'Дмитрий Нефёдов'],
+		['Анна-Мария', 'Анна-Мария'],
+		['O’Connor', 'O’Connor'],
+		['A', 'A'],
+		['Admin1', 'Admin1'],
+		['alice-', 'alice-'],
+		['  Cafe\u0301  ', 'Café']
+	] as const)('accepts and normalizes display name %s', async (input, expected) => {
+		const pipe = new ValidationPipe({ whitelist: true, transform: true });
+
+		await expect(
+			pipe.transform(
+				{ name: input },
+				{ type: 'body', metatype: UpdateProfileDto }
+			)
+		).resolves.toEqual({ name: expected });
+	});
+
+	it.each([
+		['control characters', 'Anna\nMaria'],
+		['markup', '<script>alert(1)</script>'],
+		['overlong value', 'A'.repeat(121)]
+	] as const)('rejects unsafe display name: %s', async (_case, name) => {
+		const pipe = new ValidationPipe({ whitelist: true, transform: true });
+
+		await expect(
+			pipe.transform(
+				{ name },
+				{ type: 'body', metatype: UpdateProfileDto }
+			)
+		).rejects.toThrow();
+	});
+
+	it('returns Russian display-name validation messages without exposing the regex', async () => {
+		const pipe = new ValidationPipe({ whitelist: true, transform: true });
+
+		await expect(
+			pipe.transform(
+				{ name: '<invalid>' },
+				{ type: 'body', metatype: UpdateProfileDto }
+			)
+		).rejects.toMatchObject({
+			response: {
+				message: expect.arrayContaining([
+					expect.stringContaining('Введите корректное имя.')
+				])
+			}
+		});
+		await expect(
+			pipe.transform(
+				{ name: 'A'.repeat(121) },
+				{ type: 'body', metatype: UpdateProfileDto }
+			)
+		).rejects.toMatchObject({
+			response: {
+				message: expect.arrayContaining([
+					expect.stringContaining(
+						'Имя должно содержать от 1 до 120 символов.'
+					)
+				])
+			}
+		});
+	});
+
+	it('keeps password-only profile updates on the existing password contract', async () => {
+		const pipe = new ValidationPipe({ whitelist: true, transform: true });
+
+		await expect(
+			pipe.transform(
+				{ password: 'Secure1' },
+				{ type: 'body', metatype: UpdateProfileDto }
 			)
 		).resolves.toEqual({ password: 'Secure1' });
 	});

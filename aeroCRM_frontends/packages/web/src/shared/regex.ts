@@ -3,7 +3,10 @@ export const validEmail =
 
 export const validPassword = /(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])\S{6,}/g
 
-export const validName = /^[a-zA-Z][a-zA-Z0-9-]+$/
+export const validName = new RegExp(
+	"^[\\p{L}][\\p{L}\\p{M}\\p{N} .’'-]*$",
+	'u'
+)
 
 export const validPhone = /^[0-9+()\-\s]{10,20}$/
 
