@@ -89,6 +89,16 @@
 		@apply grid grid-cols-1 gap-4 rounded-xl border border-crm-border bg-crm-surface p-4 min-[360px]:grid-cols-2;
 	}
 
+	.cards .interactiveRow:hover,
+	.cards .interactiveRow:focus-within {
+		@apply bg-crm-surface-muted;
+	}
+
+	.cards .interactiveRow:hover .cell,
+	.cards .interactiveRow:focus-within .cell {
+		@apply bg-transparent;
+	}
+
 	.cards .cell {
 		@apply flex min-w-0 flex-col items-start gap-1.5 whitespace-normal border-0 p-0 text-left [overflow-wrap:anywhere];
 	}

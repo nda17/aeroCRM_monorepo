@@ -33,8 +33,12 @@ import {
 	TextField,
 	TextareaField
 } from '@/shared/ui'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { useState, type FormEvent } from 'react'
+import {
+	useMutation,
+	useQuery,
+	useQueryClient
+} from '@tanstack/react-query'
+import { useId, useState, type FormEvent } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import styles from './CustomerEditor.module.scss'
@@ -186,10 +190,17 @@ const CustomerForm = ({
 }) => {
 	const session = useSessionStore(state => state.session)
 	const revision = useSessionStore(state => state.sessionRevision)
+	const queryClient = useQueryClient()
+	const formId = useId()
 	const [archiveConfirm, setArchiveConfirm] = useState(false)
 	const [companySearch, setCompanySearch] = useState('')
 	const [companyTerm, setCompanyTerm] = useState('')
 	const [companyPage, setCompanyPage] = useState(1)
+	const [creatingCompany, setCreatingCompany] = useState(false)
+	const [createdCompany, setCreatedCompany] = useState<Extract<
+		Customer,
+		{ kind: 'companies' }
+	> | null>(null)
 	const form = useForm<Draft>({
 		defaultValues: {
 			name: record?.name ?? initialName ?? '',
@@ -442,7 +453,7 @@ const CustomerForm = ({
 		control: form.control,
 		name: ['timeZone', 'preferredCallStart', 'preferredCallEnd']
 	})
-	return (
+	const editor = (
 		<Drawer
 			isOpen
 			onClose={close}
@@ -459,7 +470,7 @@ const CustomerForm = ({
 					</Button>
 					{canWrite ? (
 						<Button
-							form="customer-editor"
+							form={formId}
 							type="submit"
 							tooltip={
 								command
@@ -476,7 +487,7 @@ const CustomerForm = ({
 			}
 		>
 			<form
-				id="customer-editor"
+				id={formId}
 				className={styles.form}
 				onSubmit={submit}
 				noValidate
@@ -651,6 +662,7 @@ const CustomerForm = ({
 						<SelectField
 							label="Компания"
 							disabled={!editable}
+							value={selectedCompanyId}
 							{...form.register('companyId')}
 						>
 							<option value="">Без компании</option>
@@ -659,9 +671,11 @@ const CustomerForm = ({
 								item => item.id === selectedCompanyId
 							) ? (
 								<option value={selectedCompanyId}>
-									{linkedCompany.data?.id === selectedCompanyId
-										? linkedCompany.data.name
-										: 'Выбранная компания'}
+									{createdCompany?.id === selectedCompanyId
+										? createdCompany.name
+										: linkedCompany.data?.id === selectedCompanyId
+											? linkedCompany.data.name
+											: 'Выбранная компания'}
 								</option>
 							) : null}
 							{!companies.isError
@@ -672,6 +686,21 @@ const CustomerForm = ({
 									))
 								: null}
 						</SelectField>
+						{canWrite ? (
+							<div className={styles.secondarySection}>
+								<Button
+									variant="secondary"
+									disabled={!editable || conflict}
+									onClick={() => setCreatingCompany(true)}
+								>
+									Создать компанию
+								</Button>
+								<p className={styles.hint}>
+									Новая компания будет выбрана для этого контакта.
+									Заполненные данные сохранятся.
+								</p>
+							</div>
+						) : null}
 						{canWrite ? (
 							<div className={styles.pickerNavigation}>
 								{companies.isError ? (
@@ -932,5 +961,31 @@ const CustomerForm = ({
 				) : null}
 			</form>
 		</Drawer>
+	)
+	return (
+		<>
+			{editor}
+			{creatingCompany && kind === 'contacts' ? (
+				<CustomerEditor
+					workspaceId={workspaceId}
+					kind="companies"
+					initialName={companySearch.trim()}
+					canWrite={editable && !conflict}
+					scopeKey={scopeKey}
+					onClose={() => setCreatingCompany(false)}
+					onSaved={company => {
+						if (company.kind !== 'companies') return
+						setCreatedCompany(company)
+						form.setValue('companyId', company.id, { shouldDirty: true })
+						void queryClient.invalidateQueries({
+							queryKey: ['crm-company-picker', workspaceId]
+						})
+						void queryClient.invalidateQueries({
+							queryKey: ['crm-customers', workspaceId]
+						})
+					}}
+				/>
+			) : null}
+		</>
 	)
 }

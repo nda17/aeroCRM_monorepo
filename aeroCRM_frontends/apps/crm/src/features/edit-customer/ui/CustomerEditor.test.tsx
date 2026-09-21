@@ -4,6 +4,7 @@ import {
 	fireEvent,
 	render,
 	screen,
+	within,
 	waitFor
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -56,7 +57,32 @@ const contact: Customer = {
 	email: null,
 	companyId: null
 }
+const company: Customer = {
+	kind: 'companies',
+	id: '66666666-6666-4666-8666-666666666666',
+	workspaceId,
+	name: 'ООО Ромашка',
+	notes: null,
+	createdBySubject: 'user-1',
+	teamId: null,
+	version: 1,
+	archivedAt: null,
+	createdAt: contact.createdAt,
+	updatedAt: contact.updatedAt,
+	inn: null,
+	website: null,
+	legalName: null,
+	kpp: null,
+	ogrn: null,
+	legalAddress: null,
+	entityType: null
+}
 let client: QueryClient
+const submitEditor = (label = 'Сохранить') =>
+	fireEvent.submit(
+		(screen.getByRole('button', { name: label }) as HTMLButtonElement).form!
+	)
+
 beforeEach(() => {
 	vi.clearAllMocks()
 	Object.defineProperties(HTMLDialogElement.prototype, {
@@ -202,7 +228,7 @@ describe('CompanyEditor explicit requisites workflow', () => {
 		).toHaveProperty('value', 'LEGAL')
 		expect(mutateCustomer).not.toHaveBeenCalled()
 		expect(callbacks.onClose).not.toHaveBeenCalled()
-		fireEvent.submit(document.getElementById('customer-editor')!)
+		submitEditor()
 		await waitFor(() => expect(mutateCustomer).toHaveBeenCalledTimes(1))
 		expect(vi.mocked(mutateCustomer).mock.calls[0][1]).toMatchObject({
 			schemaVersion: 2,
@@ -245,7 +271,7 @@ describe('CompanyEditor explicit requisites workflow', () => {
 		fireEvent.change(screen.getByRole('textbox', { name: 'ИНН' }), {
 			target: { value: '1234567890' }
 		})
-		fireEvent.submit(document.getElementById('customer-editor')!)
+		submitEditor()
 		await waitFor(() => expect(mutateCustomer).toHaveBeenCalledTimes(1))
 		expect(vi.mocked(mutateCustomer).mock.calls[0][1]).toMatchObject({
 			schemaVersion: 2,
@@ -273,7 +299,7 @@ describe('CompanyEditor explicit requisites workflow', () => {
 			screen.getByRole('textbox', { name: 'Полное наименование' }),
 			{ target: { value: 'Введено вручную' } }
 		)
-		fireEvent.submit(document.getElementById('customer-editor')!)
+		submitEditor()
 		await waitFor(() => expect(mutateCustomer).toHaveBeenCalledTimes(1))
 		expect(vi.mocked(mutateCustomer).mock.calls[0][1]).toMatchObject({
 			schemaVersion: 2,
@@ -291,7 +317,7 @@ describe('CompanyEditor explicit requisites workflow', () => {
 			await screen.findByRole('textbox', { name: 'Полное наименование' }),
 			{ target: { value: 'Зафиксированный черновик' } }
 		)
-		fireEvent.submit(document.getElementById('customer-editor')!)
+		submitEditor()
 		await screen.findByRole('button', { name: 'Повторить запрос' })
 		expect(
 			screen.queryByRole('button', { name: 'Найти реквизиты' })
@@ -301,7 +327,7 @@ describe('CompanyEditor explicit requisites workflow', () => {
 		).toHaveProperty('readOnly', true)
 		const original = vi.mocked(mutateCustomer).mock.calls[0][1]
 		expect(original.schemaVersion).toBe(2)
-		fireEvent.submit(document.getElementById('customer-editor')!)
+		submitEditor('Повторить запрос')
 		await waitFor(() => expect(mutateCustomer).toHaveBeenCalledTimes(2))
 		expect(vi.mocked(mutateCustomer).mock.calls[1][1]).toEqual(original)
 		expect(lookupCompany).not.toHaveBeenCalled()
@@ -377,7 +403,7 @@ describe('CustomerEditor', () => {
 		const phone = screen.getByRole('textbox', { name: 'Телефон' })
 		fireEvent.change(phone, { target: { value: '8 (999) 123-45-67' } })
 		expect(phone).toHaveProperty('value', '+7 999 123 45 67')
-		fireEvent.submit(document.getElementById('customer-editor')!)
+		submitEditor()
 		await waitFor(() => expect(mutateCustomer).toHaveBeenCalledOnce())
 		expect(
 			vi.mocked(mutateCustomer).mock.calls[0][1].fields
@@ -422,7 +448,7 @@ describe('CustomerEditor', () => {
 					target: { value: 'Новое имя' }
 				}
 			)
-			fireEvent.submit(document.getElementById('customer-editor')!)
+			submitEditor()
 			await waitFor(() => expect(mutateCustomer).toHaveBeenCalledOnce())
 			expect(
 				vi.mocked(mutateCustomer).mock.calls[0][1].fields
@@ -433,7 +459,7 @@ describe('CustomerEditor', () => {
 		mount(true, undefined, 'Клиент')
 		const phone = screen.getByRole('textbox', { name: 'Телефон' })
 		fireEvent.change(phone, { target: { value: '+1234567890123456' } })
-		fireEvent.submit(document.getElementById('customer-editor')!)
+		submitEditor()
 		await screen.findByText('Проверьте правильность ввода номера телефона')
 		expect(phone).toHaveProperty('value', '+1234567890123456')
 		expect(mutateCustomer).not.toHaveBeenCalled()
@@ -473,7 +499,7 @@ describe('CustomerEditor', () => {
 			target: { value: '06:00' }
 		})
 		expect(mutateCustomer).not.toHaveBeenCalled()
-		fireEvent.submit(document.getElementById('customer-editor')!)
+		submitEditor()
 		await waitFor(() =>
 			expect(mutateCustomer).toHaveBeenCalledWith(
 				'token',
@@ -503,6 +529,119 @@ describe('CustomerEditor', () => {
 			2
 		])
 	})
+	it('saves an inline company without submitting the contact and keeps the contact draft selected', async () => {
+		const callbacks = mount(true, undefined, 'Новый контакт')
+		vi.mocked(mutateCustomer).mockResolvedValueOnce(company)
+		fireEvent.change(screen.getByRole('textbox', { name: 'Имя' }), {
+			target: { value: 'Черновик контакта' }
+		})
+		fireEvent.change(screen.getByRole('textbox', { name: 'Найти компанию' }), {
+			target: { value: 'ООО Ромашка' }
+		})
+		fireEvent.click(screen.getByRole('button', { name: 'Создать компанию' }))
+		const child = await screen.findByRole('dialog', { name: 'Новая компания' })
+		const childName = within(child).getByRole('textbox', {
+			name: 'Название компании'
+		})
+		expect(childName).toHaveProperty('value', 'ООО Ромашка')
+		fireEvent.click(within(child).getByRole('button', { name: 'Сохранить' }))
+		await waitFor(() => expect(mutateCustomer).toHaveBeenCalledTimes(1))
+		expect(vi.mocked(mutateCustomer).mock.calls[0][1]).toMatchObject({
+			kind: 'companies',
+			fields: { name: 'ООО Ромашка' }
+		})
+		expect(callbacks.onSaved).not.toHaveBeenCalled()
+		expect(callbacks.onClose).not.toHaveBeenCalled()
+		await waitFor(() =>
+			expect(screen.queryByRole('dialog', { name: 'Новая компания' })).toBeNull()
+		)
+		expect(screen.getByRole('textbox', { name: 'Имя' })).toHaveProperty(
+			'value',
+			'Черновик контакта'
+		)
+		await waitFor(() =>
+			expect(
+				screen.getByRole('combobox', { name: 'Компания' })
+			).toHaveProperty('value', company.id)
+		)
+		expect(screen.getByRole('option', { name: company.name })).toBeTruthy()
+	})
+	it('cancelling inline company creation preserves the contact draft and previous company', async () => {
+		vi.mocked(listCustomers).mockResolvedValue({
+			schemaVersion: 1,
+			items: [company],
+			page: 1,
+			pageSize: 25,
+			total: 1
+		})
+		mount(true, undefined, 'Исходный контакт')
+		const name = screen.getByRole('textbox', { name: 'Имя' })
+		fireEvent.change(name, { target: { value: 'Черновик контакта' } })
+		const companySelect = screen.getByRole('combobox', { name: 'Компания' })
+		await waitFor(() => expect(companySelect).toHaveProperty('value', ''))
+		await screen.findByRole('option', { name: company.name })
+		fireEvent.change(companySelect, { target: { value: company.id } })
+		fireEvent.click(screen.getByRole('button', { name: 'Создать компанию' }))
+		const child = await screen.findByRole('dialog', { name: 'Новая компания' })
+		fireEvent.click(within(child).getByRole('button', { name: 'Закрыть' }))
+		await waitFor(() =>
+			expect(screen.queryByRole('dialog', { name: 'Новая компания' })).toBeNull()
+		)
+		expect(screen.getByRole('textbox', { name: 'Имя' })).toHaveProperty(
+			'value',
+			'Черновик контакта'
+		)
+		expect(companySelect).toHaveProperty('value', company.id)
+	})
+	it('retries an uncertain inline company command with the same payload and does not create a duplicate', async () => {
+		const callbacks = mount(true, undefined, 'Новый контакт')
+		vi.mocked(mutateCustomer)
+			.mockRejectedValueOnce(
+				new AuthenticatedApiError('temporary', 'Ответ потерян')
+			)
+			.mockResolvedValueOnce(company)
+		fireEvent.change(screen.getByRole('textbox', { name: 'Имя' }), {
+			target: { value: 'Черновик контакта' }
+		})
+		fireEvent.change(screen.getByRole('textbox', { name: 'Найти компанию' }), {
+			target: { value: 'ООО Ромашка' }
+		})
+		fireEvent.click(screen.getByRole('button', { name: 'Создать компанию' }))
+		const child = await screen.findByRole('dialog', { name: 'Новая компания' })
+		fireEvent.click(within(child).getByRole('button', { name: 'Сохранить' }))
+		const retry = await within(child).findByRole('button', {
+			name: 'Повторить запрос'
+		})
+		const firstCommand = vi.mocked(mutateCustomer).mock.calls[0][1]
+		expect(
+			within(child).getByRole('textbox', { name: 'Название компании' })
+		).toHaveProperty('readOnly', true)
+		fireEvent.click(retry)
+		await waitFor(() => expect(mutateCustomer).toHaveBeenCalledTimes(2))
+		expect(vi.mocked(mutateCustomer).mock.calls[1][1]).toEqual(firstCommand)
+		await waitFor(() =>
+			expect(screen.queryByRole('dialog', { name: 'Новая компания' })).toBeNull()
+		)
+		expect(callbacks.onSaved).not.toHaveBeenCalled()
+		expect(screen.getByRole('textbox', { name: 'Имя' })).toHaveProperty(
+			'value',
+			'Черновик контакта'
+		)
+		expect(screen.getByRole('combobox', { name: 'Компания' })).toHaveProperty(
+			'value',
+			company.id
+		)
+	})
+	it('hides inline company creation when contact writing is unavailable', async () => {
+		mount(false, undefined, 'Только просмотр')
+		expect(
+			screen.queryByRole('button', { name: 'Создать компанию' })
+		).toBeNull()
+		expect(screen.getByRole('combobox', { name: 'Компания' })).toHaveProperty(
+			'disabled',
+			true
+		)
+	})
 	it('loads real records and keeps read-only fields viewable without mutation controls', async () => {
 		mount(false, contact.id)
 		expect(
@@ -520,7 +659,7 @@ describe('CustomerEditor', () => {
 		fireEvent.change(await screen.findByRole('textbox', { name: 'Имя' }), {
 			target: { value: 'Изменённое имя' }
 		})
-		fireEvent.submit(document.getElementById('customer-editor')!)
+		submitEditor()
 		await waitFor(() => expect(mutateCustomer).toHaveBeenCalledTimes(1))
 		expect(vi.mocked(mutateCustomer).mock.calls[0][1]).toMatchObject({
 			workspaceId,
@@ -545,13 +684,13 @@ describe('CustomerEditor', () => {
 		fireEvent.change(screen.getByRole('textbox', { name: 'Имя' }), {
 			target: { value: 'Новый клиент' }
 		})
-		fireEvent.submit(document.getElementById('customer-editor')!)
+		submitEditor()
 		await screen.findByRole('button', { name: 'Повторить запрос' })
 		expect(screen.getByRole('textbox', { name: 'Имя' })).toHaveProperty(
 			'readOnly',
 			true
 		)
-		fireEvent.submit(document.getElementById('customer-editor')!)
+		submitEditor('Повторить запрос')
 		await waitFor(() => expect(mutateCustomer).toHaveBeenCalledTimes(2))
 		expect(vi.mocked(mutateCustomer).mock.calls[1][1]).toEqual(
 			vi.mocked(mutateCustomer).mock.calls[0][1]
@@ -579,7 +718,7 @@ describe('CustomerEditor', () => {
 		)
 		mount(true, contact.id)
 		await screen.findByRole('textbox', { name: 'Имя' })
-		fireEvent.submit(document.getElementById('customer-editor')!)
+		submitEditor()
 		await screen.findByRole('button', {
 			name: 'Загрузить актуальную версию'
 		})
