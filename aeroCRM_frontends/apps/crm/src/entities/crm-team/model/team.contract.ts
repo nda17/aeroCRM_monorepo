@@ -265,6 +265,7 @@ export const parseTeamPage = (
 	pageSize: number
 ): TeamPage | null => {
 	const roster = collection === 'members'
+	const workspaceScopedPage = roster || collection === 'roles'
 	if (
 		!isRecord(value) ||
 		!hasExactKeys(value, [
@@ -273,7 +274,8 @@ export const parseTeamPage = (
 			'pageSize',
 			'total',
 			'items',
-			...(roster ? ['workspaceId', 'ownerSubject', 'quota'] : [])
+			...(workspaceScopedPage ? ['workspaceId'] : []),
+			...(roster ? ['ownerSubject', 'quota'] : [])
 		]) ||
 		value.schemaVersion !== 1 ||
 		value.page !== page ||
@@ -284,10 +286,10 @@ export const parseTeamPage = (
 		value.items.length > Number(value.total)
 	)
 		return null
+	if (workspaceScopedPage && value.workspaceId !== workspaceId) return null
 	if (
 		roster &&
-		(value.workspaceId !== workspaceId ||
-			!isNonEmptyString(value.ownerSubject, 256) ||
+		(!isNonEmptyString(value.ownerSubject, 256) ||
 			!isRecord(value.quota) ||
 			!hasExactKeys(value.quota, [
 				'seatLimit',

@@ -42,6 +42,27 @@ const page = () => ({
 		}
 	]
 })
+const customRoleRow = {
+	id: '55555555-5555-4555-8555-555555555555',
+	workspaceId,
+	name: 'Продажи',
+	permissions: ['sales:read'],
+	dataScope: 'TEAM',
+	version: 2,
+	archivedAt: null,
+	createdAt: now,
+	updatedAt: now,
+	memberCount: 1,
+	invitationCount: 0
+}
+const rolesPage = (items = [customRoleRow]) => ({
+	schemaVersion: 1,
+	workspaceId,
+	page: 1,
+	pageSize: 20,
+	total: items.length,
+	items
+})
 describe('CRM team exact trust boundary', () => {
 	it('preserves the owner-inclusive quota and nullable verified directory fields', () => {
 		expect(
@@ -125,6 +146,86 @@ describe('CRM team exact trust boundary', () => {
 		expect(
 			parseTeamPage({ ...page(), ...patch }, workspaceId, 'members', 1, 20)
 		).toBeNull()
+	})
+	it('accepts the backend roles envelope with either an empty or populated page', () => {
+		expect(
+			parseTeamPage(rolesPage([]), workspaceId, 'roles', 1, 20)
+		).toMatchObject({ page: 1, items: [] })
+		expect(
+			parseTeamPage(rolesPage(), workspaceId, 'roles', 1, 20)
+		).toMatchObject({
+			items: [{ kind: 'role', id: customRoleRow.id }]
+		})
+	})
+	it.each([
+		(() => {
+			const missing = { ...rolesPage() }
+			Reflect.deleteProperty(missing, 'workspaceId')
+			return missing
+		})(),
+		{ ...rolesPage(), workspaceId: id }
+	])(
+		'rejects roles pages without the requested workspace binding',
+		value => {
+			expect(parseTeamPage(value, workspaceId, 'roles', 1, 20)).toBeNull()
+		}
+	)
+	it('keeps non-roster collection envelopes independent from the roles binding', () => {
+		const team = {
+			id,
+			workspaceId,
+			name: 'Продажи',
+			version: 1,
+			archivedAt: null,
+			createdAt: now,
+			updatedAt: now
+		}
+		const invitation = {
+			id,
+			workspaceId,
+			email: 'invite@example.test',
+			role: 'MANAGER',
+			teamIds: [],
+			status: 'INVITED',
+			version: 1,
+			expiresAt: now,
+			createdAt: now,
+			updatedAt: now
+		}
+		const delivery = {
+			id,
+			workspaceId,
+			eventId: id,
+			consumer: 'admission',
+			status: 'DEAD_LETTERED',
+			version: 1,
+			retryAttempt: 1,
+			manualRetryCycle: 0,
+			lastError: 'TEAM_OPERATION_FAILED',
+			createdAt: now,
+			updatedAt: now
+		}
+		for (const [collection, item] of [
+			['teams', team],
+			['invitations', invitation],
+			['deliveries', delivery]
+		] as const) {
+			expect(
+				parseTeamPage(
+					{
+						schemaVersion: 1,
+						page: 1,
+						pageSize: 20,
+						total: 1,
+						items: [item]
+					},
+					workspaceId,
+					collection,
+					1,
+					20
+				)
+			).not.toBeNull()
+		}
 	})
 	it('does not accept unnormalized email or arbitrary identity profiles', () => {
 		expect(

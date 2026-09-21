@@ -260,4 +260,47 @@ describe('CRM team commands', () => {
 			})
 		)
 	})
+	it('accepts the backend roles envelope for empty and populated pages', async () => {
+		const role = {
+			id: '44444444-4444-4444-8444-444444444444',
+			workspaceId,
+			name: 'Продажи',
+			permissions: ['sales:read'],
+			dataScope: 'TEAM',
+			version: 2,
+			archivedAt: null,
+			createdAt: now,
+			updatedAt: now,
+			memberCount: 1,
+			invitationCount: 0
+		}
+		vi.mocked(authenticatedRequest).mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId,
+			page: 1,
+			pageSize: 20,
+			total: 1,
+			items: [role]
+		})
+		await expect(
+			listTeamRecords('token', workspaceId, 'roles', 1)
+		).resolves.toMatchObject({ items: [{ kind: 'role', id: role.id }] })
+		expect(authenticatedRequest).toHaveBeenLastCalledWith({
+			accessToken: 'token',
+			method: 'GET',
+			url: '/crm/access/team/roles',
+			params: { workspaceId, page: '1', pageSize: '20' }
+		})
+		vi.mocked(authenticatedRequest).mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId,
+			page: 1,
+			pageSize: 20,
+			total: 0,
+			items: []
+		})
+		await expect(
+			listTeamRecords('token', workspaceId, 'roles', 1)
+		).resolves.toMatchObject({ items: [] })
+	})
 })
