@@ -55,6 +55,18 @@ async function bootstrap(): Promise<void> {
 				method: RequestMethod.POST
 			},
 			{
+				path: 'internal/v1/crm-access/billing/admin-seats/context',
+				method: RequestMethod.POST
+			},
+			{
+				path: 'internal/v1/crm-access/billing/admin-seats/prepare',
+				method: RequestMethod.POST
+			},
+			{
+				path: 'internal/v1/crm-access/billing/admin-seats/synchronize',
+				method: RequestMethod.POST
+			},
+			{
 				path: 'internal/v1/crm-access/authorize',
 				method: RequestMethod.POST
 			},

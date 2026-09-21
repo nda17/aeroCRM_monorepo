@@ -25,7 +25,8 @@ import {
 	CrmAdminSubscriptionListDto,
 	CrmAdminSubscriptionPageDto,
 	CancelCrmSubscriptionGrantDto,
-	ExtendCrmSubscriptionDaysDto
+	ExtendCrmSubscriptionDaysDto,
+	SetCrmSubscriptionSeatsDto
 } from './crm-admin-subscription.dto';
 
 @Controller('subscriptions/admin/crm')
@@ -71,6 +72,87 @@ export class CrmAdminSubscriptionController {
 		@CurrentBillingActor() actor: BillingActor
 	) {
 		return this.subscriptions.history(workspaceId, query, actor);
+	}
+
+	@Get(':workspaceId/seats')
+	@Header('Cache-Control', 'no-store')
+	seatsDetail(
+		@Param('workspaceId', new ParseUUIDPipe({ version: '4' }))
+		workspaceId: string,
+		@CurrentBillingActor() actor: BillingActor
+	) {
+		return this.subscriptions.seatDetail(workspaceId, actor);
+	}
+
+	@Get(':workspaceId/seats/history')
+	@Header('Cache-Control', 'no-store')
+	seatsHistory(
+		@Param('workspaceId', new ParseUUIDPipe({ version: '4' }))
+		workspaceId: string,
+		@Query() query: CrmAdminSubscriptionPageDto,
+		@CurrentBillingActor() actor: BillingActor
+	) {
+		return this.subscriptions.seatHistory(workspaceId, query, actor);
+	}
+
+	@Get(':workspaceId/seats/commands/:commandId')
+	@Header('Cache-Control', 'no-store')
+	seatCommand(
+		@Param('workspaceId', new ParseUUIDPipe({ version: '4' }))
+		workspaceId: string,
+		@Param('commandId', new ParseUUIDPipe({ version: '4' }))
+		commandId: string,
+		@CurrentBillingActor() actor: BillingActor
+	) {
+		return this.subscriptions.seatCommand(workspaceId, commandId, actor);
+	}
+
+	@Post(':workspaceId/seats')
+	@HttpCode(200)
+	@Header('Cache-Control', 'no-store')
+	setSeats(
+		@Param('workspaceId', new ParseUUIDPipe({ version: '4' }))
+		workspaceId: string,
+		@Body() dto: SetCrmSubscriptionSeatsDto,
+		@CurrentBillingActor() actor: BillingActor,
+		@Req() request: Request,
+		@Headers('idempotency-key') key?: string,
+		@Headers('authorization') authorization?: string
+	) {
+		if (key !== dto.commandId)
+			throw new BadRequestException({
+				code: 'crm_admin_subscription_idempotency_key_mismatch',
+				message: 'Idempotency-Key must match commandId'
+			});
+		return this.subscriptions.setSeats(workspaceId, dto, {
+			actor,
+			authorization,
+			...getBillingClientContext(request)
+		});
+	}
+
+	@Post(':workspaceId/seats/commands/:commandId/cancel')
+	@HttpCode(200)
+	@Header('Cache-Control', 'no-store')
+	cancelSeats(
+		@Param('workspaceId', new ParseUUIDPipe({ version: '4' }))
+		workspaceId: string,
+		@Param('commandId', new ParseUUIDPipe({ version: '4' }))
+		commandId: string,
+		@Body() dto: CancelCrmSubscriptionGrantDto,
+		@CurrentBillingActor() actor: BillingActor,
+		@Req() request: Request,
+		@Headers('idempotency-key') key?: string
+	) {
+		if (key !== commandId)
+			throw new BadRequestException({
+				code: 'crm_admin_subscription_idempotency_key_mismatch',
+				message: 'Idempotency-Key must match original commandId'
+			});
+		return this.subscriptions.cancelSeats(workspaceId, commandId, dto, {
+			actor,
+			...getBillingClientContext(request)
+		});
 	}
 
 	@Get(':workspaceId/commands/:commandId')

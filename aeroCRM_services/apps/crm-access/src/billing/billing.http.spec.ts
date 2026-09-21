@@ -1,6 +1,7 @@
 import {
 	ForbiddenException,
 	type INestApplication,
+	NotFoundException,
 	RequestMethod,
 	ServiceUnavailableException,
 	UnauthorizedException,
@@ -53,6 +54,8 @@ describe('CRM billing actual HTTP boundaries', () => {
 	let app: INestApplication, origin: string;
 	const capacity = {
 		owner: jest.fn(),
+		known: jest.fn(),
+		synchronize: jest.fn(),
 		prepare: jest.fn(),
 		execute: jest.fn(),
 		authorizeOperation: jest.fn(),
@@ -129,6 +132,7 @@ describe('CRM billing actual HTTP boundaries', () => {
 			state: 'NOT_STARTED',
 			requestHash: null
 		});
+		capacity.known.mockResolvedValue(null);
 	});
 	const post = (
 		path: string,
@@ -140,6 +144,8 @@ describe('CRM billing actual HTTP boundaries', () => {
 			headers: { 'content-type': 'application/json', ...headers },
 			body: JSON.stringify(body)
 		});
+	const get = (path: string, headers: Record<string, string> = {}) =>
+		fetch(origin + path, { method: 'GET', headers });
 	const publicHeaders = () => ({
 		authorization: 'Bearer owner-session',
 		'idempotency-key': commandId
@@ -239,6 +245,36 @@ describe('CRM billing actual HTTP boundaries', () => {
 			state: 'NOT_STARTED',
 			requestHash: null
 		});
+		expect(capacity.recover).toHaveBeenCalledWith(
+			workspaceId,
+			commandId,
+			actorSubject
+		);
+	});
+	it('hides a known admin-seat operation from the workspace owner', async () => {
+		capacity.known.mockResolvedValue({
+			workspaceId,
+			commandId,
+			commandType: 'ADMIN_SET_AEROCRM_SEATS'
+		});
+
+		const response = await get(
+			`/api/v1/crm/access/billing/operations/${commandId}?workspaceId=${workspaceId}`,
+			{ authorization: 'Bearer owner-session' }
+		);
+		expect(response.status).toBe(404);
+		expect(capacity.synchronize).not.toHaveBeenCalled();
+	});
+	it('keeps the owner recovery race fail-closed when an admin-seat operation appears', async () => {
+		capacity.known.mockRejectedValueOnce(new NotFoundException());
+		capacity.recover.mockRejectedValueOnce(new NotFoundException());
+
+		const response = await post(
+			`/api/v1/crm/access/billing/operations/${commandId}/recover`,
+			{ schemaVersion: 1, workspaceId },
+			publicHeaders()
+		);
+		expect(response.status).toBe(404);
 		expect(capacity.recover).toHaveBeenCalledWith(
 			workspaceId,
 			commandId,

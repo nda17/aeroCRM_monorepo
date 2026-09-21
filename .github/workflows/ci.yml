@@ -190,7 +190,7 @@ jobs:
           node-version: '20'
           cache: pnpm
           cache-dependency-path: aeroCRM_services/apps/billing/pnpm-lock.yaml
-      - name: Apply isolated Billing baseline and capacity FK migration
+      - name: Apply isolated Billing migrations and administrative seat ACL
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}
         run: |
@@ -201,22 +201,148 @@ jobs:
           }
           psql_admin postgres -c "CREATE ROLE aerocrm_billing_migration LOGIN PASSWORD 'local-migration-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
           psql_admin postgres -c "CREATE ROLE aerocrm_billing_runtime LOGIN PASSWORD 'local-runtime-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+          psql_admin postgres -c "CREATE ROLE aerocrm_billing_backup LOGIN PASSWORD 'local-backup-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
           psql_admin postgres -c 'CREATE DATABASE aerocrm_billing_test OWNER aerocrm_billing_migration'
           psql_admin aerocrm_billing_test -c 'CREATE SCHEMA billing AUTHORIZATION aerocrm_billing_migration'
           for migration in \
             aeroCRM_services/apps/billing/prisma/migrations/20260920000000_init_aerocrm/migration.sql \
-            aeroCRM_services/apps/billing/prisma/migrations/20260921010000_defer_crm_capacity_bindings/migration.sql; do
+            aeroCRM_services/apps/billing/prisma/migrations/20260921010000_defer_crm_capacity_bindings/migration.sql \
+            aeroCRM_services/apps/billing/prisma/migrations/20260921030000_crm_admin_seat_adjustments/migration.sql; do
             test -f "$migration"
             docker exec -i -e PGPASSWORD=local-migration-only "$PG_CONTAINER" \
               psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U aerocrm_billing_migration \
               -d aerocrm_billing_test < "$migration"
           done
           psql_admin aerocrm_billing_test <<'SQL'
-          GRANT CONNECT ON DATABASE aerocrm_billing_test TO aerocrm_billing_runtime;
-          GRANT USAGE ON SCHEMA billing TO aerocrm_billing_runtime;
+          GRANT CONNECT ON DATABASE aerocrm_billing_test TO aerocrm_billing_runtime, aerocrm_billing_backup;
+          GRANT USAGE ON SCHEMA billing TO aerocrm_billing_runtime, aerocrm_billing_backup;
           GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA billing TO aerocrm_billing_runtime;
           GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA billing TO aerocrm_billing_runtime;
           GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA billing TO aerocrm_billing_runtime;
+          REVOKE UPDATE, DELETE ON TABLE billing.crm_admin_seat_adjustments FROM aerocrm_billing_runtime;
+          GRANT SELECT ON TABLE billing.crm_admin_seat_adjustments TO aerocrm_billing_backup;
+          SQL
+          psql_admin aerocrm_billing_test <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT (
+              (SELECT count(*) = 11 FROM pg_constraint
+                WHERE conrelid = 'billing.crm_admin_seat_adjustments'::regclass
+                  AND contype <> 'n')
+              AND has_table_privilege('aerocrm_billing_runtime', 'billing.crm_admin_seat_adjustments', 'SELECT')
+              AND has_table_privilege('aerocrm_billing_runtime', 'billing.crm_admin_seat_adjustments', 'INSERT')
+              AND NOT has_table_privilege('aerocrm_billing_runtime', 'billing.crm_admin_seat_adjustments', 'UPDATE,DELETE')
+              AND has_table_privilege('aerocrm_billing_backup', 'billing.crm_admin_seat_adjustments', 'SELECT')
+            ) THEN
+              RAISE EXCEPTION 'Billing administrative seat schema or grants incomplete';
+            END IF;
+          END;
+          $$;
+          SQL
+          docker exec -i -e PGPASSWORD=local-runtime-only "$PG_CONTAINER" \
+            psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U aerocrm_billing_runtime \
+            -d aerocrm_billing_test <<'SQL'
+          INSERT INTO billing.crm_entitlements
+            (id, workspace_id, plan_code, seat_limit, trial_started_at, effective_from,
+             effective_until, provisioning_command_id, provisioning_command_type,
+             activated_by_user_id, source_sequence, updated_at)
+          VALUES
+            ('10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001',
+             'TRIAL', 2, '2026-01-01', '2026-01-01', '2026-01-11',
+             '30000000-0000-4000-8000-000000000001', 'CI_FIXTURE', 'fixture-owner', 1, clock_timestamp());
+
+          INSERT INTO billing.crm_admin_seat_adjustments
+            (command_id, workspace_id, actor_subject, actor_role, reason, target,
+             old_total_seats, new_total_seats, effective_until, request_hash, capacity_fence)
+          VALUES
+            ('40000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001',
+             'fixture-admin', 'ADMIN', 'Valid administrative seat fixture', 'ENTITLEMENT',
+             2, 3, '2026-01-11', repeat('a', 64),
+             '{"operationId":"40000000-0000-4000-8000-000000000001","requestHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","fenceRevision":1,"targetSeats":3}');
+
+          DO $contract$
+          BEGIN
+            BEGIN
+              UPDATE billing.crm_admin_seat_adjustments SET reason='Mutation must fail'
+                WHERE command_id='40000000-0000-4000-8000-000000000001';
+              RAISE EXCEPTION 'runtime update unexpectedly succeeded';
+            EXCEPTION WHEN insufficient_privilege THEN NULL;
+            END;
+            BEGIN
+              INSERT INTO billing.crm_admin_seat_adjustments
+                (command_id, workspace_id, actor_subject, actor_role, reason, target,
+                 old_total_seats, new_total_seats, effective_until, request_hash, capacity_fence)
+              VALUES ('40000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000001',
+                NULL, 'ADMIN', 'Null actor must fail', 'ENTITLEMENT', 2, 3, '2026-01-11', repeat('b', 64),
+                '{"operationId":"40000000-0000-4000-8000-000000000002","requestHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","fenceRevision":1,"targetSeats":3}');
+              RAISE EXCEPTION 'null actor unexpectedly succeeded';
+            EXCEPTION WHEN not_null_violation THEN NULL;
+            END;
+            BEGIN
+              INSERT INTO billing.crm_admin_seat_adjustments
+                (command_id, workspace_id, actor_subject, actor_role, reason, target,
+                 old_total_seats, new_total_seats, effective_until, request_hash, capacity_fence)
+              VALUES ('40000000-0000-4000-8000-000000000003', '20000000-0000-4000-8000-000000000001',
+                'fixture-admin', 'ROOT', 'Invalid actor role must fail', 'ENTITLEMENT', 2, 3, '2026-01-11', repeat('c', 64),
+                '{"operationId":"40000000-0000-4000-8000-000000000003","requestHash":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","fenceRevision":1,"targetSeats":3}');
+              RAISE EXCEPTION 'invalid actor role unexpectedly succeeded';
+            EXCEPTION WHEN check_violation THEN NULL;
+            END;
+            BEGIN
+              INSERT INTO billing.crm_admin_seat_adjustments
+                (command_id, workspace_id, actor_subject, actor_role, reason, target,
+                 old_total_seats, new_total_seats, effective_until, request_hash, capacity_fence)
+              VALUES ('40000000-0000-4000-8000-000000000004', '20000000-0000-4000-8000-000000000001',
+                'fixture-admin', 'DEV', 'Paid target binding must fail', 'PAID_PERIOD', 2, 3, '2026-01-11', repeat('d', 64),
+                '{"operationId":"40000000-0000-4000-8000-000000000004","requestHash":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","fenceRevision":1,"targetSeats":3}');
+              RAISE EXCEPTION 'unbound paid target unexpectedly succeeded';
+            EXCEPTION WHEN check_violation THEN NULL;
+            END;
+            BEGIN
+              INSERT INTO billing.crm_admin_seat_adjustments
+                (command_id, workspace_id, actor_subject, actor_role, reason, target,
+                 old_total_seats, new_total_seats, effective_until, request_hash, capacity_fence)
+              VALUES ('40000000-0000-4000-8000-000000000005', '20000000-0000-4000-8000-000000000001',
+                'fixture-admin', 'ADMIN', 'Unchanged seats must fail', 'ENTITLEMENT', 2, 2, '2026-01-11', repeat('e', 64),
+                '{"operationId":"40000000-0000-4000-8000-000000000005","requestHash":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","fenceRevision":1,"targetSeats":2}');
+              RAISE EXCEPTION 'unchanged seats unexpectedly succeeded';
+            EXCEPTION WHEN check_violation THEN NULL;
+            END;
+            BEGIN
+              INSERT INTO billing.crm_admin_seat_adjustments
+                (command_id, workspace_id, actor_subject, actor_role, reason, target,
+                 old_total_seats, new_total_seats, effective_until, request_hash, capacity_fence)
+              VALUES ('40000000-0000-4000-8000-000000000006', '20000000-0000-4000-8000-000000000001',
+                'fixture-admin', 'ADMIN', 'Seat bounds must fail', 'ENTITLEMENT', 1, 10001, '2026-01-11', repeat('f', 64),
+                '{"operationId":"40000000-0000-4000-8000-000000000006","requestHash":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","fenceRevision":1,"targetSeats":10001}');
+              RAISE EXCEPTION 'out-of-range seats unexpectedly succeeded';
+            EXCEPTION WHEN check_violation THEN NULL;
+            END;
+            BEGIN
+              INSERT INTO billing.crm_admin_seat_adjustments
+                (command_id, workspace_id, actor_subject, actor_role, reason, target,
+                 old_total_seats, new_total_seats, effective_until, request_hash, capacity_fence)
+              VALUES ('40000000-0000-4000-8000-000000000007', '20000000-0000-4000-8000-000000000001',
+                'fixture-admin', 'ADMIN', 'Fence mismatch must fail', 'ENTITLEMENT', 2, 3, '2026-01-11', repeat('0', 64),
+                '{"operationId":"40000000-0000-4000-8000-000000000007","requestHash":"0000000000000000000000000000000000000000000000000000000000000000","fenceRevision":0,"targetSeats":4}');
+              RAISE EXCEPTION 'invalid capacity fence unexpectedly succeeded';
+            EXCEPTION WHEN check_violation THEN NULL;
+            END;
+          END;
+          $contract$;
+          SQL
+          psql_admin aerocrm_billing_test <<'SQL'
+          DO $contract$
+          BEGIN
+            BEGIN
+              UPDATE billing.crm_admin_seat_adjustments SET reason='Trigger must reject mutation'
+                WHERE command_id='40000000-0000-4000-8000-000000000001';
+              RAISE EXCEPTION 'append-only trigger unexpectedly allowed update';
+            EXCEPTION WHEN raise_exception THEN
+              IF SQLERRM <> 'aeroCRM administrative seat adjustments are append-only' THEN RAISE; END IF;
+            END;
+          END;
+          $contract$;
           SQL
       - name: Build Billing service and Prisma client
         working-directory: aeroCRM_services/apps/billing
@@ -272,7 +398,8 @@ jobs:
           for migration in \
             aeroCRM_services/apps/crm-access/prisma/migrations/20260920000000_init_aerocrm/migration.sql \
             aeroCRM_services/apps/crm-access/prisma/migrations/20260921020000_add_crm_custom_member_role/migration.sql \
-            aeroCRM_services/apps/crm-access/prisma/migrations/20260921020100_crm_custom_roles/migration.sql; do
+            aeroCRM_services/apps/crm-access/prisma/migrations/20260921020100_crm_custom_roles/migration.sql \
+            aeroCRM_services/apps/crm-access/prisma/migrations/20260921030100_crm_admin_seat_capacity/migration.sql; do
             test -f "$migration"
             psql_migration < "$migration"
           done
@@ -304,6 +431,18 @@ jobs:
               JOIN pg_namespace n ON n.oid=t.typnamespace
               WHERE n.nspname='crm_access' AND t.typname='CrmMemberRole' AND e.enumlabel='CUSTOM'
             ) THEN RAISE EXCEPTION 'CUSTOM enum value missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conrelid='crm_access.crm_billing_operations'::regclass
+                AND conname='crm_billing_operations_command_type_check'
+                AND pg_get_constraintdef(oid) LIKE '%ADMIN_SET_AEROCRM_SEATS%'
+            ) THEN RAISE EXCEPTION 'Administrative seat capacity command missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conrelid='crm_access.crm_billing_operations'::regclass
+                AND conname='crm_billing_operations_condition_2_check'
+                AND pg_get_constraintdef(oid) LIKE '%ADMIN_SET_AEROCRM_SEATS%'
+            ) THEN RAISE EXCEPTION 'Administrative seat capacity fence binding missing'; END IF;
             INSERT INTO crm_access.crm_workspace_access
               (id, workspace_id, activated_by_subject, billing_entitlement_id,
                provisioning_command_id, provisioning_command_type, updated_at)

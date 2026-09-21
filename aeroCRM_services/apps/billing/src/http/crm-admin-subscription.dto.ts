@@ -83,6 +83,50 @@ export class ExtendCrmSubscriptionDaysDto {
 	reason!: string;
 }
 
+export class SetCrmSubscriptionSeatsDto {
+	@Equals(1)
+	schemaVersion!: 1;
+
+	@IsUUID('4')
+	commandId!: string;
+
+	@IsString()
+	@Matches(/^\S+$/)
+	@MaxLength(256)
+	expectedActorSubject!: string;
+
+	@IsString()
+	@Matches(/^[1-9][0-9]{0,18}$/)
+	expectedEntitlementVersion!: string;
+
+	@IsString()
+	@Matches(/^(0|[1-9][0-9]{0,18})$/)
+	expectedBillingVersion!: string;
+
+	@ValidateIf((_object, value) => value !== null)
+	@IsUUID('4')
+	expectedPeriodId!: string | null;
+
+	@ValidateIf((_object, value) => value !== null)
+	@IsInt()
+	@Min(1)
+	@Max(2_147_483_646)
+	expectedPeriodVersion!: number | null;
+
+	@IsInt()
+	@Min(2)
+	@Max(10_000)
+	totalSeats!: number;
+
+	@Transform(({ value }) =>
+		typeof value === 'string' ? value.trim() : value
+	)
+	@IsString()
+	@MinLength(3)
+	@MaxLength(1000)
+	reason!: string;
+}
+
 export class CancelCrmSubscriptionGrantDto {
 	@Equals(1)
 	schemaVersion!: 1;

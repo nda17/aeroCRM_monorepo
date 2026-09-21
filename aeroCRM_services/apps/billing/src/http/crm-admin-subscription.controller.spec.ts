@@ -14,7 +14,8 @@ import {
 	CrmAdminSubscriptionListDto,
 	CrmAdminSubscriptionPageDto,
 	CancelCrmSubscriptionGrantDto,
-	ExtendCrmSubscriptionDaysDto
+	ExtendCrmSubscriptionDaysDto,
+	SetCrmSubscriptionSeatsDto
 } from './crm-admin-subscription.dto';
 
 const command = {
@@ -33,6 +34,18 @@ const pipe = new ValidationPipe({
 	forbidNonWhitelisted: true,
 	transform: true
 });
+
+const seatsCommand = {
+	schemaVersion: 1,
+	commandId: '44444444-4444-4444-8444-444444444444',
+	expectedActorSubject: 'operator',
+	expectedEntitlementVersion: '7',
+	expectedBillingVersion: '12',
+	expectedPeriodId: null,
+	expectedPeriodVersion: null,
+	totalSeats: 6,
+	reason: '  Увеличение команды  '
+};
 
 describe('CRM administrative subscription HTTP contract', () => {
 	it('guards every endpoint by actual service ADMIN or DEV, not CRM workspace roles', () => {
@@ -64,6 +77,69 @@ describe('CRM administrative subscription HTTP contract', () => {
 			expectedPeriodVersion: null,
 			days: 7
 		});
+	});
+
+	it('accepts bounded target seat counts and normalizes the admin command', async () => {
+		for (const totalSeats of [2, 10_000, 6, 3]) {
+			const value = await pipe.transform(
+				{ ...seatsCommand, totalSeats },
+				{ type: 'body', metatype: SetCrmSubscriptionSeatsDto }
+			);
+			expect(value).toMatchObject({
+				totalSeats,
+				reason: 'Увеличение команды',
+				expectedEntitlementVersion: '7',
+				expectedBillingVersion: '12',
+				expectedPeriodId: null,
+				expectedPeriodVersion: null
+			});
+		}
+		await expect(
+			pipe.transform(
+				{
+					...seatsCommand,
+					expectedPeriodId: '33333333-3333-4333-8333-333333333333',
+					expectedPeriodVersion: 4
+				},
+				{ type: 'body', metatype: SetCrmSubscriptionSeatsDto }
+			)
+		).resolves.toMatchObject({
+			expectedPeriodId: '33333333-3333-4333-8333-333333333333',
+			expectedPeriodVersion: 4
+		});
+	});
+
+	it.each([
+		['missing command id', { commandId: undefined }],
+		['invalid command id', { commandId: 'not-a-uuid' }],
+		['wrong schema version', { schemaVersion: 2 }],
+		['missing actor subject', { expectedActorSubject: undefined }],
+		['actor with whitespace', { expectedActorSubject: 'admin operator' }],
+		['number entitlement version', { expectedEntitlementVersion: 7 }],
+		['zero entitlement version', { expectedEntitlementVersion: '0' }],
+		['negative billing version', { expectedBillingVersion: '-1' }],
+		['number billing version', { expectedBillingVersion: 12 }],
+		[
+			'invalid expected period id',
+			{ expectedPeriodId: 'not-a-uuid' }
+		],
+		['invalid expected period version', { expectedPeriodVersion: 0 }],
+		['missing expected period id', { expectedPeriodId: undefined }],
+		['missing expected period version', { expectedPeriodVersion: undefined }],
+		['fractional seats', { totalSeats: 2.5 }],
+		['below minimum seats', { totalSeats: 1 }],
+		['above maximum seats', { totalSeats: 10_001 }],
+		['blank reason', { reason: '   ' }],
+		['short reason', { reason: 'ab' }],
+		['oversize reason', { reason: 'x'.repeat(1001) }],
+		['unknown field', { billingStatus: 'SUCCEEDED' }]
+	])('rejects seat command with %s', async (_label, patch) => {
+		await expect(
+			pipe.transform(
+				{ ...seatsCommand, ...patch },
+				{ type: 'body', metatype: SetCrmSubscriptionSeatsDto }
+			)
+		).rejects.toMatchObject({ status: 400 });
 	});
 
 	it.each([
@@ -133,6 +209,49 @@ describe('CRM administrative subscription HTTP contract', () => {
 			)
 		).toThrow('Idempotency-Key must match commandId');
 		expect(service.extend).not.toHaveBeenCalled();
+	});
+
+	it('forwards seat commands only with the matching idempotency key and request actor context', () => {
+		const service = { setSeats: jest.fn() };
+		const controller = new CrmAdminSubscriptionController(
+			service as never
+		);
+		const request = {
+			ip: '127.0.0.1',
+			socket: { remoteAddress: '::1' },
+			get: jest.fn().mockReturnValue('seat-test-agent')
+		};
+		const billingActor = {
+			subject: 'operator',
+			active: true,
+			sessionId: 'session',
+			roles: ['ADMIN']
+		};
+
+		controller.setSeats(
+			'11111111-1111-4111-8111-111111111111',
+			seatsCommand as never,
+			billingActor as never,
+			request as never,
+			seatsCommand.commandId
+		);
+		expect(service.setSeats).toHaveBeenCalledWith(
+			'11111111-1111-4111-8111-111111111111',
+			seatsCommand,
+			expect.objectContaining({ actor: billingActor, ip: '127.0.0.1' })
+		);
+
+		service.setSeats.mockClear();
+		expect(() =>
+			controller.setSeats(
+				'11111111-1111-4111-8111-111111111111',
+				seatsCommand as never,
+				billingActor as never,
+				request as never,
+				'different-command'
+			)
+		).toThrow('Idempotency-Key must match commandId');
+		expect(service.setSeats).not.toHaveBeenCalled();
 	});
 
 	it('accepts only captured actor cancellation input without new grant fields or a replacement command ID', async () => {

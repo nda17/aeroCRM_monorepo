@@ -60,6 +60,10 @@ async function bootstrap(): Promise<void> {
 				method: RequestMethod.POST
 			},
 			{
+				path: 'internal/v1/crm-access/billing/commerce/summary-with-seat-control',
+				method: RequestMethod.POST
+			},
+			{
 				path: 'internal/v1/crm-access/billing/commerce/quote',
 				method: RequestMethod.POST
 			},
@@ -97,6 +101,14 @@ async function bootstrap(): Promise<void> {
 			},
 			{
 				path: 'internal/v1/crm-access/billing/commerce/operations/close',
+				method: RequestMethod.POST
+			},
+			{
+				path: 'internal/v1/crm-access/billing/commerce/admin-seats/operations/get',
+				method: RequestMethod.POST
+			},
+			{
+				path: 'internal/v1/crm-access/billing/commerce/admin-seats/operations/close',
 				method: RequestMethod.POST
 			},
 			{

@@ -1,6 +1,7 @@
 import {
 	ForbiddenException,
 	Injectable,
+	NotFoundException,
 	ServiceUnavailableException
 } from '@nestjs/common';
 import { CrmAccessPrismaService } from '../prisma/crm-access-prisma.service';
@@ -22,6 +23,7 @@ import type {
 	CommerceCommandType,
 	CrmBillingContext,
 	CrmCommerceSummary,
+	CrmCommerceSummaryWithSeatControl,
 	CrmCommerceQuote,
 	CrmOrderResponse,
 	CrmHistoryResponse
@@ -43,13 +45,15 @@ export class CrmBillingService {
 			authorization
 		);
 		await this.capacity.syncPending(workspaceId);
-		const billing = await this.billing.request<CrmCommerceSummary>(
-			'summary',
+		const controlled =
+			await this.billing.request<CrmCommerceSummaryWithSeatControl>(
+			'summary-with-seat-control',
 			{ schemaVersion: 1, workspaceId, actorSubject } as Parameters<
 				BillingCommerceClient['request']
 			>[1],
-			'summary'
-		);
+			'summaryWithSeatControl'
+			);
+		const billing = controlled.summary;
 		const [state, members] = await Promise.all([
 			this.prisma.crmBillingCapacity.findUnique({
 				where: { workspaceId }
@@ -58,6 +62,15 @@ export class CrmBillingService {
 				where: { workspaceId, disabledAt: null }
 			})
 		]);
+		const pendingOperation = state?.pendingOperationId
+			? await this.prisma.crmBillingOperation.findUnique({
+					where: { commandId: state.pendingOperationId }
+				})
+			: null;
+		const publicPendingOperationId =
+			pendingOperation?.commandType === 'ADMIN_SET_AEROCRM_SEATS'
+				? null
+				: (state?.pendingOperationId ?? null);
 		await this.revalidate(workspaceId, authorization, actorSubject);
 		const period = billing.period;
 		const periodBlocks =
@@ -79,7 +92,7 @@ export class CrmBillingService {
 							state?.pendingTargetSeats ??
 							null)
 						: effectiveAdmissionCeiling(seatLimit, state),
-				pendingOperationId: state?.pendingOperationId ?? null
+				pendingOperationId: publicPendingOperationId
 			},
 			capabilities: {
 				quote: true,
@@ -90,7 +103,8 @@ export class CrmBillingService {
 				changeSeats:
 					period?.state === 'ACTIVE' &&
 					!state?.pendingOperationId &&
-					!billing.pendingOrder,
+					!billing.pendingOrder &&
+					controlled.seatChangeBlockedReason === null,
 				disableAutoRenew: billing.renewal.canDisable,
 				confirmRenewalPrice:
 					billing.renewal.state === 'PRICE_CONFIRMATION_REQUIRED'
@@ -170,11 +184,19 @@ export class CrmBillingService {
 			workspaceId,
 			authorization
 		);
+		let known = null;
+		try {
+			known = await this.capacity.known(workspaceId, commandId);
+		} catch (error) {
+			if (!(error instanceof NotFoundException) || !recover) throw error;
+		}
+		if (known?.commandType === 'ADMIN_SET_AEROCRM_SEATS')
+			throw new NotFoundException('CRM billing operation not found');
 		const result = recover
 			? await this.capacity.recover(workspaceId, commandId, actorSubject)
 			: operationView(
 					await this.capacity.synchronize(
-						await this.capacity.known(workspaceId, commandId)
+						known!
 					)
 				);
 		await this.revalidate(workspaceId, authorization, actorSubject);

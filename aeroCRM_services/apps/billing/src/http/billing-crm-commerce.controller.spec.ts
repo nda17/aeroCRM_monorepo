@@ -123,7 +123,7 @@ describe('aeroCRM commerce isolated HTTP contracts', () => {
 				];
 			})
 			.sort((left, right) => left.path.localeCompare(right.path));
-		expect(expected).toHaveLength(11);
+		expect(expected).toHaveLength(14);
 		expect(
 			exclusions
 				.filter(item => item.path.startsWith(prefix))

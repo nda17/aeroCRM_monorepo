@@ -61,9 +61,21 @@ export class BillingHealthService {
 				select: { id: true, startsAt: true, activationNotifiedAt: true }
 			});
 			if (this.runtime.apiEnabled) {
-				await this.prisma.crmAdminDayGrant.findFirst({
-					select: { commandId: true }
-				});
+				await Promise.all([
+					this.prisma.crmAdminDayGrant.findFirst({
+						select: { commandId: true }
+					}),
+					this.prisma.crmAdminSeatAdjustment.findFirst({
+						select: {
+							commandId: true,
+							workspaceId: true,
+							requestHash: true,
+							capacityFence: true,
+							oldTotalSeats: true,
+							newTotalSeats: true
+						}
+					})
+				]);
 			}
 			if (crmProviderMessagingEnabled()) {
 				await Promise.all([

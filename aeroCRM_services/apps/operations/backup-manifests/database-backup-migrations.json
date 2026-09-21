@@ -33,7 +33,7 @@
 			]
 		},
 		"billing": {
-			"manifestSha256": "cd4191bed8dea349740769c7877d74df98c93aed8211aba13a05a7fd1f902d56",
+			"manifestSha256": "2ddb57c06eaed170231b6ea20988dd42537944a78893db903041f81bdc06561c",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -42,6 +42,10 @@
 				{
 					"name": "20260921010000_defer_crm_capacity_bindings",
 					"checksum": "9318239e1b2e2926102f643faacd852782bb64901028f9950eb586fc2d498307"
+				},
+				{
+					"name": "20260921030000_crm_admin_seat_adjustments",
+					"checksum": "8deb754f74e6a495ad1c42774f1e7ccb27243358ff6452c62d52037d5cd81201"
 				}
 			]
 		},
@@ -90,7 +94,7 @@
 			]
 		},
 		"crm-access": {
-			"manifestSha256": "2e0dc020f539990fa24e4d2e6e3d897f14d6708fe81951c4fa003576c25cf552",
+			"manifestSha256": "02d2f73e087e297f95c9cad5b0bfe2f0344f7d55dec3f841b91c02521d036403",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -103,6 +107,10 @@
 				{
 					"name": "20260921020100_crm_custom_roles",
 					"checksum": "5658f47ff4673c0d45ce61abd3e5fe5459dff9645d02dba9382224bb4234b876"
+				},
+				{
+					"name": "20260921030100_crm_admin_seat_capacity",
+					"checksum": "56fa9cdd16e74655bc3fe058713ad76f07563638977a286e843729a2c5f2059d"
 				}
 			]
 		},

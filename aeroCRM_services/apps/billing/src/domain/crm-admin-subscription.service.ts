@@ -3,11 +3,14 @@ import {
 	ConflictException,
 	ForbiddenException,
 	Injectable,
-	NotFoundException
+	NotFoundException,
+	Optional,
+	ServiceUnavailableException
 } from '@nestjs/common';
 import {
 	Prisma,
 	type CrmAdminDayGrant,
+	type CrmAdminSeatAdjustment,
 	type CrmEntitlement,
 	type CrmCommerceAccount,
 	type CrmPaidPeriod,
@@ -19,8 +22,15 @@ import type {
 	CrmAdminSubscriptionListDto,
 	CrmAdminSubscriptionPageDto,
 	CancelCrmSubscriptionGrantDto,
-	ExtendCrmSubscriptionDaysDto
+	ExtendCrmSubscriptionDaysDto,
+	SetCrmSubscriptionSeatsDto
 } from '../http/crm-admin-subscription.dto';
+import type { CrmAdminSeatOperationDto } from '../http/billing-crm-commerce.dto';
+import {
+	CrmAccessAdminSeatsClient,
+	type AdminSeatFence
+} from '../internal/crm-access-admin-seats.client';
+import { IdentityInternalClient } from '../internal/identity-internal.client';
 import { enqueueBillingAdminAudit } from './billing-admin-audit';
 import {
 	assertBillingCommandReceipt,
@@ -32,10 +42,13 @@ import { readCrmPriceSnapshot } from './crm-commerce.helpers';
 
 const COMMAND_TYPE = 'ADMIN_EXTEND_AEROCRM_DAYS';
 const CANCEL_COMMAND_TYPE = 'CANCEL_ADMIN_EXTEND_AEROCRM_DAYS';
+const SEAT_COMMAND_TYPE = 'ADMIN_SET_AEROCRM_SEATS';
+const CANCEL_SEAT_COMMAND_TYPE = 'CANCEL_ADMIN_SET_AEROCRM_SEATS';
 const DAY_MS = 86_400_000;
 type Tx = Prisma.TransactionClient;
 type Context = {
 	actor: BillingActor;
+	authorization?: string;
 	ip?: string | null;
 	userAgent?: string | null;
 };
@@ -53,7 +66,36 @@ type SubscriptionProjection = {
 
 @Injectable()
 export class CrmAdminSubscriptionService {
-	constructor(private readonly prisma: BillingPrismaService) {}
+	constructor(
+		private readonly prisma: BillingPrismaService,
+		@Optional()
+		private readonly accessSeats?: CrmAccessAdminSeatsClient,
+		@Optional()
+		private readonly identity?: IdentityInternalClient
+	) {}
+	private access() {
+		if (!this.accessSeats)
+			throw new ServiceUnavailableException(
+				'CRM Access seat coordination is unavailable'
+			);
+		return this.accessSeats;
+	}
+	private async freshAdmin(context: Context, expectedRole: 'ADMIN' | 'DEV') {
+		if (!this.identity || !context.authorization)
+			throw new ForbiddenException(
+				'Не удалось повторно подтвердить сессию администратора'
+			);
+		const actor = await this.identity.introspect(context.authorization);
+		const role = this.role(actor);
+		if (
+			actor.subject !== context.actor.subject ||
+			!actor.active ||
+			role !== expectedRole
+		)
+			throw new ForbiddenException(
+				'Сессия администратора изменилась. Повторите операцию.'
+			);
+	}
 
 	private role(actor: BillingActor): 'ADMIN' | 'DEV' {
 		if (actor.roles.includes('DEV')) return 'DEV';
@@ -672,6 +714,741 @@ export class CrmAdminSubscriptionService {
 					throw error;
 			}
 		}
+	}
+
+	async seatDetail(workspaceId: string, actor: BillingActor) {
+		this.role(actor);
+		const access = (await this.access().context(workspaceId)) as {
+			usedSeats: number;
+			pendingOperationId: string | null;
+		};
+		return this.prisma.$transaction(
+			async tx => {
+				const state = await this.seatState(tx, workspaceId, access);
+				return {
+					schemaVersion: 1 as const,
+					subscription: state.subscription,
+					capacity: {
+						usedSeats: access.usedSeats,
+						minimumSeats: state.minimumSeats,
+						maximumSeats: 10_000 as const
+					},
+					canSetSeats: state.blockedReason === null,
+					blockedReason: state.blockedReason
+				};
+			},
+			{ isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }
+		);
+	}
+
+	async seatHistory(
+		workspaceId: string,
+		query: CrmAdminSubscriptionPageDto,
+		actor: BillingActor
+	) {
+		this.role(actor);
+		return this.prisma.$transaction(
+			async tx => {
+				await this.requireEntitlement(tx, workspaceId);
+				const where = { workspaceId };
+				const [total, items] = await Promise.all([
+					tx.crmAdminSeatAdjustment.count({ where }),
+					tx.crmAdminSeatAdjustment.findMany({
+						where,
+						orderBy: [{ createdAt: 'desc' }, { commandId: 'desc' }],
+						skip: (query.page - 1) * query.pageSize,
+						take: query.pageSize
+					})
+				]);
+				return {
+					schemaVersion: 1 as const,
+					page: query.page,
+					pageSize: query.pageSize,
+					total,
+					items: items.map(item => this.adjustmentView(item))
+				};
+			},
+			{ isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }
+		);
+	}
+
+	async seatCommand(
+		workspaceId: string,
+		commandId: string,
+		actor: BillingActor
+	) {
+		this.role(actor);
+		const receipt = await this.prisma.billingCommandReceipt.findUnique({
+			where: { commandId }
+		});
+		if (!receipt)
+			throw new NotFoundException({
+				code: 'crm_admin_seats_command_not_found',
+				message:
+					'Подтверждённое изменение мест пока не найдено. Операция может ещё выполняться.'
+			});
+		return this.seatCommandProof(receipt, workspaceId, commandId);
+	}
+
+	async setSeats(
+		workspaceId: string,
+		dto: SetCrmSubscriptionSeatsDto,
+		context: Context
+	) {
+		const actorRole = this.role(context.actor);
+		this.assertActor(dto.expectedActorSubject, context.actor);
+		if (
+			(dto.expectedPeriodId === null) !==
+			(dto.expectedPeriodVersion === null)
+		)
+			throw new BadRequestException(
+				'Ожидаемая версия периода должна соответствовать его ID'
+			);
+		const requestHash = billingCommandRequestHash(SEAT_COMMAND_TYPE, {
+			...dto,
+			workspaceId,
+			actorSubject: context.actor.subject
+		});
+		const existing = await this.prisma.billingCommandReceipt.findUnique({
+			where: { commandId: dto.commandId }
+		});
+		if (existing) {
+			if (existing.commandType === CANCEL_SEAT_COMMAND_TYPE) {
+				const proof = this.seatCommandProof(
+					existing,
+					workspaceId,
+					dto.commandId
+				);
+				if (proof.actorSubject !== context.actor.subject)
+					throw this.commandConflict();
+				throw new ConflictException({
+					code: 'crm_admin_seats_cancelled',
+					message: 'Команда изменения мест отменена. Подписка не изменялась.'
+				});
+			}
+			return assertBillingCommandReceipt(
+				existing,
+				SEAT_COMMAND_TYPE,
+				requestHash
+			);
+		}
+		const firstAccess = (await this.access().context(workspaceId)) as {
+			usedSeats: number;
+			pendingOperationId: string | null;
+		};
+		const first = await this.prisma.$transaction(
+			tx => this.seatState(tx, workspaceId, firstAccess, dto.commandId),
+			{ isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }
+		);
+		this.assertSeatCas(first.subscription, dto);
+		this.assertSeatAllowed(first, dto.totalSeats);
+		let prepared = false;
+		const reservation = (await this.access().prepare({
+			schemaVersion: 1,
+			workspaceId,
+			commandId: dto.commandId,
+			actorSubject: context.actor.subject,
+			actorRole,
+			requestHash,
+			targetSeats: dto.totalSeats,
+			currentSeatLimit: first.currentTotalSeats
+		})) as {
+			capacityFence: AdminSeatFence;
+			state: 'PENDING' | 'COMMITTED' | 'CANCELLED';
+		};
+		prepared = true;
+		if (reservation.state !== 'PENDING') {
+			const replay = await this.prisma.billingCommandReceipt.findUnique({
+				where: { commandId: dto.commandId }
+			});
+			if (!replay)
+				throw new ConflictException({
+					code: 'crm_admin_subscription_operation_pending',
+					message: 'Состояние операции изменения мест ещё уточняется'
+				});
+			const terminal = this.seatCommandProof(
+				replay,
+				workspaceId,
+				dto.commandId
+			);
+			if (terminal.outcome === 'CANCELLED')
+				throw new ConflictException({
+					code: 'crm_admin_seats_cancelled',
+					message: 'Команда изменения мест отменена. Подписка не изменялась.'
+				});
+			return terminal.result;
+		}
+		try {
+			const access = (await this.access().context(workspaceId)) as {
+				usedSeats: number;
+				pendingOperationId: string | null;
+			};
+			await this.freshAdmin(context, actorRole);
+			const result = await this.prisma.$transaction(
+				async tx => {
+					await tx.$executeRaw`SET LOCAL lock_timeout = '5s'`;
+					await lockBillingCommand(tx, dto.commandId);
+					const prior = await tx.billingCommandReceipt.findUnique({
+						where: { commandId: dto.commandId }
+					});
+					if (prior)
+						return assertBillingCommandReceipt(
+							prior,
+							SEAT_COMMAND_TYPE,
+							requestHash
+						);
+					await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`billing-crm-entitlement:${workspaceId}`}, 0))`;
+					const state = await this.seatState(
+						tx,
+						workspaceId,
+						access,
+						dto.commandId
+					);
+					this.assertSeatCas(state.subscription, dto);
+					this.assertSeatAllowed(state, dto.totalSeats);
+					if (state.period) {
+						await tx.crmPaidPeriod.update({
+							where: {
+								id: state.period.id,
+								version: state.period.version
+							},
+							data: {
+								totalSeats: dto.totalSeats,
+								version: { increment: 1 }
+							}
+						});
+					} else {
+						await tx.crmEntitlement.update({
+							where: {
+								workspaceId,
+								aggregateVersion: BigInt(dto.expectedEntitlementVersion)
+							},
+							data: { seatLimit: dto.totalSeats }
+						});
+					}
+					if (state.subscription.billingVersion !== '0')
+						await tx.crmCommerceAccount.update({
+							where: {
+								workspaceId,
+								version: BigInt(dto.expectedBillingVersion)
+							},
+							data: { version: { increment: 1 } }
+						});
+					await enqueueCrmEntitlementChanged(tx, workspaceId);
+					const adjustment = await tx.crmAdminSeatAdjustment.create({
+						data: {
+							commandId: dto.commandId,
+							workspaceId,
+							actorSubject: context.actor.subject,
+							actorRole,
+							reason: dto.reason,
+							target: state.period ? 'PAID_PERIOD' : 'ENTITLEMENT',
+							periodId: state.period?.id ?? null,
+							oldTotalSeats: state.currentTotalSeats,
+							newTotalSeats: dto.totalSeats,
+							effectiveUntil: new Date(
+								state.subscription.entitlement.effectiveUntil
+							),
+							requestHash,
+							capacityFence: reservation.capacityFence
+						}
+					});
+					const response = {
+						schemaVersion: 1 as const,
+						workspaceId,
+						commandId: dto.commandId,
+						adjustment: this.adjustmentView(adjustment),
+						subscription: await this.read(tx, workspaceId)
+					};
+					await enqueueBillingAdminAudit(tx, {
+						actor: {
+							id: context.actor.subject,
+							role: actorRole,
+							ip: context.ip,
+							userAgent: context.userAgent
+						},
+						section: 'SUBSCRIPTIONS',
+						action: 'SUBSCRIPTION_SET_SEATS',
+						description: `aeroCRM: установлено ${dto.totalSeats} мест пространству ${workspaceId}`,
+						entity: {
+							type: 'crm_subscription',
+							id: workspaceId,
+							label: 'aeroCRM',
+							targetUserId: state.subscription.ownerSubject
+						},
+						metadata: {
+							productCode: 'AEROCRM',
+							...this.adjustmentView(adjustment)
+						}
+					});
+					await tx.billingCommandReceipt.create({
+						data: {
+							commandId: dto.commandId,
+							commandType: SEAT_COMMAND_TYPE,
+							requestHash,
+							requestHashVersion: 1,
+							result: response as unknown as Prisma.InputJsonValue
+						}
+					});
+					await tx.$executeRaw`SET CONSTRAINTS ALL IMMEDIATE`;
+					return response;
+				},
+				{
+					isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+					maxWait: 5000,
+					timeout: 25000
+				}
+			);
+			await this.access().synchronize({
+				schemaVersion: 1,
+				workspaceId,
+				commandId: dto.commandId,
+				actorSubject: context.actor.subject,
+				actorRole,
+				requestHash,
+				capacityFence: reservation.capacityFence
+			});
+			return result;
+		} catch (error) {
+			if (prepared) await this.closePreparedSeatCommand(
+				workspaceId,
+				dto.commandId,
+				context.actor.subject,
+				actorRole,
+				requestHash,
+				reservation.capacityFence
+			).catch(() => undefined);
+			throw error;
+		}
+	}
+
+	async cancelSeats(
+		workspaceId: string,
+		commandId: string,
+		dto: CancelCrmSubscriptionGrantDto,
+		context: Context
+	) {
+		const actorRole = this.role(context.actor);
+		this.assertActor(dto.expectedActorSubject, context.actor);
+		const requestHash = billingCommandRequestHash(CANCEL_SEAT_COMMAND_TYPE, {
+			...dto,
+			workspaceId,
+			commandId,
+			actorSubject: context.actor.subject
+		});
+		return this.cancelSeatReceipt(
+			workspaceId,
+			commandId,
+			context.actor.subject,
+			actorRole,
+			requestHash,
+			context
+		);
+	}
+
+	async adminSeatOperation(
+		dto: CrmAdminSeatOperationDto,
+		close: boolean
+	) {
+		let receipt = await this.prisma.billingCommandReceipt.findUnique({
+			where: { commandId: dto.commandId }
+		});
+		if (!receipt && !close)
+			throw new NotFoundException('CRM administrative seat operation not found');
+		if (!receipt) {
+			const cancelHash = billingCommandRequestHash(CANCEL_SEAT_COMMAND_TYPE, {
+				schemaVersion: 1,
+				expectedActorSubject: dto.actorSubject,
+				workspaceId: dto.workspaceId,
+				commandId: dto.commandId,
+				actorSubject: dto.actorSubject
+			});
+			await this.cancelSeatReceipt(
+				dto.workspaceId,
+				dto.commandId,
+				dto.actorSubject,
+				dto.actorRole,
+				cancelHash,
+				{
+					actor: {
+						subject: dto.actorSubject,
+						roles: [dto.actorRole],
+						active: true,
+						sessionId: 'internal-admin-seat-reconciliation'
+					}
+				}
+			);
+			receipt = await this.prisma.billingCommandReceipt.findUniqueOrThrow({
+				where: { commandId: dto.commandId }
+			});
+		}
+		if (
+			![SEAT_COMMAND_TYPE, CANCEL_SEAT_COMMAND_TYPE].includes(
+				receipt.commandType
+			)
+		)
+			throw this.commandConflict();
+		const proof = await this.internalSeatProof(receipt, dto);
+		return proof;
+	}
+
+	private async closePreparedSeatCommand(
+		workspaceId: string,
+		commandId: string,
+		actorSubject: string,
+		actorRole: 'ADMIN' | 'DEV',
+		requestHash: string,
+		capacityFence: AdminSeatFence
+	) {
+		await this.adminSeatOperation(
+			{
+				schemaVersion: 1,
+				workspaceId,
+				commandId,
+				actorSubject,
+				actorRole,
+				requestHash,
+				capacityFence
+			},
+			true
+		);
+		await this.access().synchronize({
+			schemaVersion: 1,
+			workspaceId,
+			commandId,
+			actorSubject,
+			actorRole,
+			requestHash,
+			capacityFence
+		});
+	}
+
+	private async cancelSeatReceipt(
+		workspaceId: string,
+		commandId: string,
+		actorSubject: string,
+		actorRole: 'ADMIN' | 'DEV',
+		requestHash: string,
+		context: Context
+	) {
+		return this.prisma.$transaction(
+			async tx => {
+				await tx.$executeRaw`SET LOCAL lock_timeout = '5s'`;
+				await lockBillingCommand(tx, commandId);
+				await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`billing-crm-entitlement:${workspaceId}`}, 0))`;
+				const prior = await tx.billingCommandReceipt.findUnique({
+					where: { commandId }
+				});
+				if (prior) {
+					const proof = this.seatCommandProof(prior, workspaceId, commandId);
+					if (proof.actorSubject !== actorSubject)
+						throw this.commandConflict();
+					if (prior.commandType === CANCEL_SEAT_COMMAND_TYPE)
+						assertBillingCommandReceipt(
+							prior,
+							CANCEL_SEAT_COMMAND_TYPE,
+							requestHash
+						);
+					return proof;
+				}
+				await this.requireEntitlement(tx, workspaceId);
+				const result = {
+					schemaVersion: 1 as const,
+					workspaceId,
+					commandId,
+					actorSubject,
+					actorRole,
+					outcome: 'CANCELLED' as const,
+					cancelledAt: new Date().toISOString()
+				};
+				await tx.billingCommandReceipt.create({
+					data: {
+						commandId,
+						commandType: CANCEL_SEAT_COMMAND_TYPE,
+						requestHash,
+						requestHashVersion: 1,
+						result
+					}
+				});
+				await enqueueBillingAdminAudit(tx, {
+					actor: {
+						id: actorSubject,
+						role: actorRole,
+						ip: context.ip,
+						userAgent: context.userAgent
+					},
+					section: 'SUBSCRIPTIONS',
+					action: 'SUBSCRIPTION_SET_SEATS',
+					description: `aeroCRM: отменена неподтверждённая команда изменения мест ${commandId}; подписка не изменена`,
+					entity: {
+						type: 'crm_subscription_command',
+						id: commandId,
+						label: 'aeroCRM',
+						targetUserId: null
+					},
+					metadata: {
+						productCode: 'AEROCRM',
+						operation: 'CANCEL_UNCONFIRMED_ADMIN_SEAT_COMMAND',
+						...result
+					}
+				});
+				await tx.$executeRaw`SET CONSTRAINTS ALL IMMEDIATE`;
+				return result;
+			},
+			{
+				isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+				maxWait: 5000,
+				timeout: 25000
+			}
+		);
+	}
+
+	private async internalSeatProof(
+		receipt: {
+			commandType: string;
+			requestHash: string;
+			result: Prisma.JsonValue;
+		},
+		dto: CrmAdminSeatOperationDto
+	) {
+		const terminal = this.seatCommandProof(
+			receipt,
+			dto.workspaceId,
+			dto.commandId
+		);
+		if (terminal.actorSubject !== dto.actorSubject)
+			throw this.commandConflict();
+		const subscription = await this.prisma.$transaction(tx =>
+			this.read(tx, dto.workspaceId)
+		);
+		if (terminal.outcome === 'COMMITTED') {
+			const result = terminal.result as Record<string, unknown>;
+			const adjustment = result.adjustment as Record<string, unknown>;
+			if (
+				receipt.requestHash !== dto.requestHash ||
+				adjustment.requestHash !== undefined ||
+				!this.sameSeatFence(
+					(await this.prisma.crmAdminSeatAdjustment.findUniqueOrThrow({
+						where: { commandId: dto.commandId }
+					})).capacityFence,
+					dto.capacityFence
+				)
+			)
+				throw this.commandConflict();
+			return {
+				schemaVersion: 1 as const,
+				workspaceId: dto.workspaceId,
+				commandId: dto.commandId,
+				actorSubject: dto.actorSubject,
+				requestHash: dto.requestHash,
+				capacityFence: dto.capacityFence,
+				status: 'COMMITTED' as const,
+				releaseFence: true as const,
+				billingVersion: subscription.billingVersion,
+				entitlementVersion: subscription.entitlementVersion,
+				totalSeats: dto.capacityFence.targetSeats
+			};
+		}
+		return {
+			schemaVersion: 1 as const,
+			workspaceId: dto.workspaceId,
+			commandId: dto.commandId,
+			actorSubject: dto.actorSubject,
+			requestHash: dto.requestHash,
+			capacityFence: dto.capacityFence,
+			status: 'CANCELLED' as const,
+			releaseFence: true as const,
+			billingVersion: subscription.billingVersion,
+			entitlementVersion: subscription.entitlementVersion,
+			totalSeats: null
+		};
+	}
+
+	private seatCommandProof(
+		receipt: { commandType: string; result: Prisma.JsonValue },
+		workspaceId: string,
+		commandId: string
+	) {
+		const result = receipt.result;
+		if (
+			!result ||
+			typeof result !== 'object' ||
+			Array.isArray(result) ||
+			result.schemaVersion !== 1 ||
+			result.workspaceId !== workspaceId ||
+			result.commandId !== commandId
+		)
+			throw this.commandConflict();
+		if (receipt.commandType === SEAT_COMMAND_TYPE) {
+			const adjustment = result.adjustment;
+			if (
+				!adjustment ||
+				typeof adjustment !== 'object' ||
+				Array.isArray(adjustment) ||
+				typeof adjustment.actorSubject !== 'string'
+			)
+				throw this.commandConflict();
+			return {
+				schemaVersion: 1 as const,
+				workspaceId,
+				commandId,
+				actorSubject: adjustment.actorSubject,
+				outcome: 'COMMITTED' as const,
+				result
+			};
+		}
+		if (
+			receipt.commandType !== CANCEL_SEAT_COMMAND_TYPE ||
+			result.outcome !== 'CANCELLED' ||
+			typeof result.actorSubject !== 'string' ||
+			!['ADMIN', 'DEV'].includes(String(result.actorRole)) ||
+			typeof result.cancelledAt !== 'string' ||
+			!Number.isFinite(Date.parse(result.cancelledAt))
+		)
+			throw this.commandConflict();
+		return {
+			schemaVersion: 1 as const,
+			workspaceId,
+			commandId,
+			actorSubject: result.actorSubject,
+			actorRole: result.actorRole as 'ADMIN' | 'DEV',
+			outcome: 'CANCELLED' as const,
+			cancelledAt: result.cancelledAt
+		};
+	}
+
+	private async seatState(
+		tx: Tx,
+		workspaceId: string,
+		access: { usedSeats: number; pendingOperationId: string | null },
+		allowedPendingOperationId?: string
+	) {
+		const subscription = await this.read(tx, workspaceId);
+		const now = new Date();
+		const [entitlement, latestPeriod, currentPeriod, renewal] =
+			await Promise.all([
+				this.requireEntitlement(tx, workspaceId),
+				tx.crmPaidPeriod.findFirst({
+					where: { workspaceId },
+					orderBy: [{ startsAt: 'desc' }, { id: 'desc' }]
+				}),
+				tx.crmPaidPeriod.findFirst({
+					where: { workspaceId, startsAt: { lte: now } },
+					orderBy: [{ startsAt: 'desc' }, { id: 'desc' }]
+				}),
+				tx.crmAutoRenewal.findUnique({ where: { workspaceId } })
+			]);
+		const futurePeriod =
+			!!latestPeriod && latestPeriod.id !== currentPeriod?.id;
+		const period = futurePeriod ? null : currentPeriod;
+		let includedSeats: number;
+		let currentTotalSeats: number;
+		if (period) {
+			includedSeats = readCrmPriceSnapshot(period.priceSnapshot).includedSeats;
+			currentTotalSeats = period.totalSeats;
+		} else {
+			if (!entitlement.policyVersion)
+				throw new ConflictException({
+					code: 'crm_admin_subscription_policy_invalid',
+					message: 'Тариф подписки не определён'
+				});
+			const policy = await tx.crmCommercialPolicy.findUniqueOrThrow({
+				where: { version: entitlement.policyVersion }
+			});
+			includedSeats = policy.includedSeats;
+			currentTotalSeats = entitlement.seatLimit ?? policy.trialSeatLimit;
+		}
+		const pendingAccess =
+			access.pendingOperationId !== null &&
+			access.pendingOperationId !== allowedPendingOperationId;
+		const blockedReason = ['SUSPENDED', 'CANCELLED'].includes(
+			entitlement.status
+		)
+			? 'crm_admin_subscription_suspended'
+			: futurePeriod
+				? 'crm_admin_seats_future_period'
+				: renewal?.dispatchPending ||
+					(renewal && !['USER_DISABLED', 'REVOKED'].includes(renewal.status))
+					? 'crm_admin_seats_renewal_active'
+					: subscription.blockedReason || pendingAccess
+						? 'crm_admin_subscription_operation_pending'
+						: null;
+		return {
+			subscription,
+			period,
+			minimumSeats: Math.max(includedSeats, access.usedSeats),
+			currentTotalSeats,
+			blockedReason
+		};
+	}
+
+	private assertSeatCas(
+		subscription: Awaited<ReturnType<CrmAdminSubscriptionService['read']>>,
+		dto: SetCrmSubscriptionSeatsDto
+	) {
+		if (
+			subscription.entitlementVersion !== dto.expectedEntitlementVersion ||
+			subscription.billingVersion !== dto.expectedBillingVersion ||
+			(subscription.period?.id ?? null) !== dto.expectedPeriodId ||
+			(subscription.period?.version ?? null) !== dto.expectedPeriodVersion
+		)
+			throw new ConflictException({
+				code: 'crm_admin_subscription_version_conflict',
+				message: 'Подписка изменилась. Обновите данные перед изменением мест.'
+			});
+	}
+
+	private assertSeatAllowed(
+		state: {
+			minimumSeats: number;
+			currentTotalSeats: number;
+			blockedReason: string | null;
+		},
+		totalSeats: number
+	) {
+		if (state.blockedReason)
+			throw new ConflictException({
+				code: state.blockedReason,
+				message: 'Изменение мест сейчас недоступно'
+			});
+		if (totalSeats < state.minimumSeats)
+			throw new ConflictException({
+				code: 'crm_admin_seats_below_minimum',
+				message: `Нельзя установить меньше ${state.minimumSeats} мест`
+			});
+		if (totalSeats === state.currentTotalSeats)
+			throw new ConflictException({
+				code: 'crm_admin_seats_unchanged',
+				message: 'Число мест не изменилось'
+			});
+	}
+
+	private adjustmentView(adjustment: CrmAdminSeatAdjustment) {
+		return {
+			commandId: adjustment.commandId,
+			workspaceId: adjustment.workspaceId,
+			actorSubject: adjustment.actorSubject,
+			actorRole: adjustment.actorRole as 'ADMIN' | 'DEV',
+			reason: adjustment.reason,
+			target: adjustment.target as 'ENTITLEMENT' | 'PAID_PERIOD',
+			periodId: adjustment.periodId,
+			oldTotalSeats: adjustment.oldTotalSeats,
+			newTotalSeats: adjustment.newTotalSeats,
+			effectiveUntil: adjustment.effectiveUntil.toISOString(),
+			createdAt: adjustment.createdAt.toISOString()
+		};
+	}
+
+	private sameSeatFence(value: unknown, expected: AdminSeatFence) {
+		if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+		const fence = value as Record<string, unknown>;
+		return (
+			Object.keys(fence).length === 4 &&
+			fence.operationId === expected.operationId &&
+			fence.requestHash === expected.requestHash &&
+			fence.fenceRevision === expected.fenceRevision &&
+			fence.targetSeats === expected.targetSeats
+		);
 	}
 
 	private async requireEntitlement(tx: Tx, workspaceId: string) {

@@ -8,10 +8,13 @@ import {
 	validSeats,
 	validVersion,
 	validHash,
-	validConsent
+	validConsent,
+	validSubject
 } from './billing.validation';
 import type {
 	CrmCommerceSummary,
+	CrmCommerceSummaryWithSeatControl,
+	CrmAdminSeatProof,
 	CrmCommerceCommandProof,
 	CrmCommerceQuote,
 	CrmOrderResponse,
@@ -161,13 +164,17 @@ export type BillingResponseKind =
 	| 'quote'
 	| 'proof'
 	| 'order'
-	| 'history';
+	| 'history'
+	| 'adminSeatProof'
+	| 'summaryWithSeatControl';
 export type BillingResponse =
 	| CrmCommerceSummary
 	| CrmCommerceCommandProof
 	| CrmCommerceQuote
 	| CrmOrderResponse
-	| CrmHistoryResponse;
+	| CrmHistoryResponse
+	| CrmAdminSeatProof
+	| CrmCommerceSummaryWithSeatControl;
 export function parseBillingResponse(
 	kind: BillingResponseKind,
 	value: unknown,
@@ -179,7 +186,23 @@ export function parseBillingResponse(
 		schemaVersion: literal(1),
 		workspaceId: literal(workspaceId)
 	};
-	if (kind === 'summary') {
+	if (kind === 'summaryWithSeatControl') {
+		if (
+			!shape(value, {
+				schemaVersion: literal(1),
+				summary: v => {
+					try {
+						parseBillingResponse('summary', v, workspaceId);
+						return true;
+					} catch {
+						return false;
+					}
+				},
+				seatChangeBlockedReason: literal(null, 'ADMIN_SEATS_ADJUSTED')
+			})
+		)
+			invalid();
+	} else if (kind === 'summary') {
 		if (
 			!shape(value, {
 				...common,
@@ -226,6 +249,30 @@ export function parseBillingResponse(
 			(value.holdUntil !== null &&
 				(value.status !== 'COMMITTED' || value.releaseFence)) ||
 			(isRecord(value.order) && value.order.workspaceId !== workspaceId)
+		)
+			invalid();
+	} else if (kind === 'adminSeatProof') {
+		if (
+			!binding ||
+			!shape(value, {
+				...common,
+				commandId: literal(binding.commandId),
+				actorSubject: validSubject,
+				requestHash: v => v === binding.requestHash && validHash(v),
+				capacityFence: v =>
+					shape(v, {
+						operationId: literal(binding.commandId),
+						requestHash: x => x === binding.requestHash && validHash(x),
+						fenceRevision: positive,
+						targetSeats: validSeats
+					}),
+				status: literal('COMMITTED', 'CANCELLED'),
+				releaseFence: literal(true),
+				billingVersion: validVersion,
+				entitlementVersion: validVersion,
+				totalSeats: nullable(validSeats)
+			}) ||
+			(value.status === 'COMMITTED') !== (value.totalSeats !== null)
 		)
 			invalid();
 	} else if (kind === 'quote') {

@@ -76,6 +76,91 @@ export class BillingOperationGuard implements CanActivate {
 @UseGuards(BillingOperationGuard)
 export class BillingOperationController {
 	constructor(private readonly capacity: CrmBillingCapacityService) {}
+	@Post('admin-seats/context')
+	@HttpCode(200)
+	@Header('Cache-Control', 'no-store')
+	adminSeatContext(@Body() body: unknown) {
+		if (
+			!isRecord(body) ||
+			!hasExactKeys(body, ['schemaVersion', 'workspaceId']) ||
+			body.schemaVersion !== 1 ||
+			!isUuidV4(body.workspaceId)
+		)
+			invalid();
+		return this.capacity.adminSeatContext(body.workspaceId as string);
+	}
+	@Post('admin-seats/prepare')
+	@HttpCode(200)
+	@Header('Cache-Control', 'no-store')
+	prepareAdminSeats(@Body() body: unknown) {
+		if (
+			!isRecord(body) ||
+			!hasExactKeys(body, [
+				'schemaVersion',
+				'workspaceId',
+				'commandId',
+				'actorSubject',
+				'actorRole',
+				'requestHash',
+				'targetSeats',
+				'currentSeatLimit'
+			]) ||
+			body.schemaVersion !== 1 ||
+			!isUuidV4(body.workspaceId) ||
+			!isUuidV4(body.commandId) ||
+			!validSubject(body.actorSubject) ||
+			!['ADMIN', 'DEV'].includes(String(body.actorRole)) ||
+			!validHash(body.requestHash) ||
+			!validSeats(body.targetSeats) ||
+			!validSeats(body.currentSeatLimit)
+		)
+			invalid();
+		return this.capacity.prepareAdminSeats(
+			body as unknown as Parameters<
+				CrmBillingCapacityService['prepareAdminSeats']
+			>[0]
+		);
+	}
+	@Post('admin-seats/synchronize')
+	@HttpCode(200)
+	@Header('Cache-Control', 'no-store')
+	synchronizeAdminSeats(@Body() body: unknown) {
+		if (
+			!isRecord(body) ||
+			!hasExactKeys(body, [
+				'schemaVersion',
+				'workspaceId',
+				'commandId',
+				'actorSubject',
+				'actorRole',
+				'requestHash',
+				'capacityFence'
+			]) ||
+			body.schemaVersion !== 1 ||
+			!isUuidV4(body.workspaceId) ||
+			!isUuidV4(body.commandId) ||
+			!validSubject(body.actorSubject) ||
+			!['ADMIN', 'DEV'].includes(String(body.actorRole)) ||
+			!validHash(body.requestHash) ||
+			!isRecord(body.capacityFence) ||
+			!hasExactKeys(body.capacityFence, [
+				'operationId',
+				'requestHash',
+				'fenceRevision',
+				'targetSeats'
+			]) ||
+			body.capacityFence.operationId !== body.commandId ||
+			body.capacityFence.requestHash !== body.requestHash ||
+			!validInt(body.capacityFence.fenceRevision) ||
+			!validSeats(body.capacityFence.targetSeats)
+		)
+			invalid();
+		return this.capacity.synchronizeAdminSeats(
+			body as unknown as Parameters<
+				CrmBillingCapacityService['synchronizeAdminSeats']
+			>[0]
+		);
+	}
 	@Post('authorize-operation')
 	@HttpCode(200)
 	@Header('Cache-Control', 'no-store')

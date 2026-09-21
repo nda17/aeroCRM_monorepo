@@ -37,6 +37,10 @@
       "SELECT",
       "INSERT"
     ],
+    "crm_admin_seat_adjustments": [
+      "SELECT",
+      "INSERT"
+    ],
     "crm_entitlements": [
       "SELECT",
       "INSERT",
@@ -116,6 +120,7 @@
     "reject_crm_commercial_policy_mutation",
     "protect_aerocrm_commerce_evidence",
     "protect_crm_admin_day_grants",
+    "protect_crm_admin_seat_adjustments",
     "protect_crm_admin_command_receipts",
     "enforce_service_identity_integrity"
   ]

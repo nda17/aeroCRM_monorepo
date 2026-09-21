@@ -5,6 +5,7 @@ import {
 	Header,
 	Headers,
 	HttpCode,
+	Optional,
 	Post,
 	UseGuards,
 	UsePipes,
@@ -23,8 +24,10 @@ import {
 	CrmOrderDto,
 	CrmQuoteDto,
 	CrmSeatChangeDto,
-	CrmVerifyOrderDto
+	CrmVerifyOrderDto,
+	CrmAdminSeatOperationDto
 } from './billing-crm-commerce.dto';
+import { CrmAdminSubscriptionService } from '../domain/crm-admin-subscription.service';
 
 @Controller('internal/v1/crm-access/billing/commerce')
 @UseGuards(BillingCrmAccessGuard)
@@ -36,12 +39,22 @@ import {
 	})
 )
 export class BillingCrmCommerceController {
-	constructor(private readonly commerce: CrmCommerceService) {}
+	constructor(
+		private readonly commerce: CrmCommerceService,
+		@Optional()
+		private readonly adminSubscriptions?: CrmAdminSubscriptionService
+	) {}
 	@Post('summary')
 	@HttpCode(200)
 	@Header('Cache-Control', 'no-store')
 	summary(@Body() dto: CrmCommerceContextDto) {
 		return this.commerce.summary(dto);
+	}
+	@Post('summary-with-seat-control')
+	@HttpCode(200)
+	@Header('Cache-Control', 'no-store')
+	summaryWithSeatControl(@Body() dto: CrmCommerceContextDto) {
+		return this.commerce.summaryWithSeatControl(dto);
 	}
 	@Post('quote')
 	@HttpCode(200)
@@ -126,6 +139,35 @@ export class BillingCrmCommerceController {
 	) {
 		this.commandKey(key, dto.commandId);
 		return this.commerce.closeCommand(dto);
+	}
+	@Post('admin-seats/operations/get')
+	@HttpCode(200)
+	@Header('Cache-Control', 'no-store')
+	adminSeatStatus(@Body() dto: CrmAdminSeatOperationDto) {
+		this.adminSeatBinding(dto);
+		if (!this.adminSubscriptions)
+			throw new Error('ADMIN_SUBSCRIPTIONS_UNAVAILABLE');
+		return this.adminSubscriptions.adminSeatOperation(dto, false);
+	}
+	@Post('admin-seats/operations/close')
+	@HttpCode(200)
+	@Header('Cache-Control', 'no-store')
+	adminSeatClose(
+		@Body() dto: CrmAdminSeatOperationDto,
+		@Headers('idempotency-key') key?: string
+	) {
+		this.commandKey(key, dto.commandId);
+		this.adminSeatBinding(dto);
+		if (!this.adminSubscriptions)
+			throw new Error('ADMIN_SUBSCRIPTIONS_UNAVAILABLE');
+		return this.adminSubscriptions.adminSeatOperation(dto, true);
+	}
+	private adminSeatBinding(dto: CrmAdminSeatOperationDto) {
+		if (
+			dto.capacityFence.operationId !== dto.commandId ||
+			dto.capacityFence.requestHash !== dto.requestHash
+		)
+			throw new BadRequestException('Administrative seat fence is invalid');
 	}
 	private commandKey(header: string | undefined, commandId: string) {
 		if (header !== commandId)

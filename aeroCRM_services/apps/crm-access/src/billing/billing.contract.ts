@@ -25,6 +25,20 @@ export interface CrmCapacityFence {
 	targetSeats: number;
 }
 
+export interface CrmAdminSeatProof {
+	schemaVersion: 1;
+	workspaceId: string;
+	commandId: string;
+	actorSubject: string;
+	requestHash: string;
+	capacityFence: CrmCapacityFence;
+	status: 'COMMITTED' | 'CANCELLED';
+	releaseFence: true;
+	billingVersion: string;
+	entitlementVersion: string;
+	totalSeats: number | null;
+}
+
 export interface CrmCommerceContext {
 	schemaVersion: 1;
 	workspaceId: string;
@@ -195,6 +209,12 @@ export interface CrmCommerceSummary {
 	period: CrmPaidPeriodView | null;
 	pendingOrder: CrmOrderView | null;
 	renewal: CrmRenewalView;
+}
+
+export interface CrmCommerceSummaryWithSeatControl {
+	schemaVersion: 1;
+	summary: CrmCommerceSummary;
+	seatChangeBlockedReason: 'ADMIN_SEATS_ADJUSTED' | null;
 }
 
 export interface CrmCommerceCommandProof {

@@ -63,6 +63,7 @@ export class BillingCommerceClient {
 		requireBilling(this.enabled);
 		const allowed = [
 			'summary',
+			'summary-with-seat-control',
 			'quote',
 			'checkout',
 			'seats',
@@ -72,7 +73,9 @@ export class BillingCommerceClient {
 			'orders/verify',
 			'history',
 			'operations/get',
-			'operations/close'
+			'operations/close',
+			'admin-seats/operations/get',
+			'admin-seats/operations/close'
 		];
 		if (!allowed.includes(path)) throw new Error('BILLING_PATH');
 		try {
@@ -106,7 +109,11 @@ export class BillingCommerceClient {
 				await response.body?.cancel();
 				if (
 					response.status === 404 &&
-					['operations/get', 'orders/get'].includes(path)
+					[
+						'operations/get',
+						'orders/get',
+						'admin-seats/operations/get'
+					].includes(path)
 				)
 					throw new NotFoundException('CRM billing operation not found');
 				if (response.status === 409)

@@ -25,10 +25,22 @@ import { commerceHash, requireBilling } from './billing.validation';
 import type {
 	CommerceCommandType,
 	CommerceUserCommand,
+	CrmAdminSeatProof,
 	CrmBillingOperationView,
 	CrmCapacityFence,
 	CrmCommerceCommandProof
 } from './billing.contract';
+
+type AdminSeatRequest = {
+	schemaVersion: 1;
+	workspaceId: string;
+	commandId: string;
+	actorSubject: string;
+	actorRole: 'ADMIN' | 'DEV';
+	requestHash: string;
+	targetSeats: number;
+	currentSeatLimit: number;
+};
 
 export function effectiveAdmissionCeiling(
 	remote: number,
@@ -60,6 +72,27 @@ export const operationView = (
 	requestHash: op.requestHash,
 	billing: op.proof as unknown as CrmCommerceCommandProof | null
 });
+
+const adminOperationView = (op: CrmBillingOperation) => ({
+	schemaVersion: 1 as const,
+	workspaceId: op.workspaceId,
+	commandId: op.commandId,
+	actorSubject: op.actorSubject,
+	requestHash: op.requestHash!,
+	state: op.state as 'PENDING' | 'COMMITTED' | 'CANCELLED',
+	releaseFence: op.releaseFence,
+	capacityFence: {
+		operationId: op.commandId,
+		requestHash: op.requestHash!,
+		fenceRevision: op.fenceRevision!,
+		targetSeats: op.targetSeats!
+	}
+});
+const sameFence = (left: CrmCapacityFence, right: CrmCapacityFence) =>
+	left.operationId === right.operationId &&
+	left.requestHash === right.requestHash &&
+	left.fenceRevision === right.fenceRevision &&
+	left.targetSeats === right.targetSeats;
 
 @Injectable()
 export class CrmBillingCapacityService {
@@ -113,6 +146,131 @@ export class CrmBillingCapacityService {
 		if (commandId)
 			await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`crm-team-command:${commandId}`},0))`;
 		await workspaceLock(tx, workspaceId);
+	}
+	async adminSeatContext(workspaceId: string) {
+		requireBilling(this.billing.enabled);
+		return serializable(this.prisma, async tx => {
+			await this.lock(tx, workspaceId);
+			const [capacity, enabledMembers] = await Promise.all([
+				tx.crmBillingCapacity.findUnique({ where: { workspaceId } }),
+				tx.crmWorkspaceMember.count({
+					where: { workspaceId, disabledAt: null }
+				})
+			]);
+			return {
+				schemaVersion: 1 as const,
+				workspaceId,
+				usedSeats: 1 + enabledMembers,
+				pendingOperationId: capacity?.pendingOperationId ?? null
+			};
+		});
+	}
+	async prepareAdminSeats(request: AdminSeatRequest) {
+		requireBilling(this.billing.enabled);
+		const commandType = 'ADMIN_SET_AEROCRM_SEATS';
+		const operation = await serializable(this.prisma, async tx => {
+			await this.lock(tx, request.workspaceId, request.commandId);
+			const prior = await tx.crmBillingOperation.findUnique({
+				where: { commandId: request.commandId }
+			});
+			if (prior) {
+				if (
+					prior.workspaceId !== request.workspaceId ||
+					prior.actorSubject !== request.actorSubject ||
+					prior.commandType !== commandType ||
+					prior.requestHash !== request.requestHash ||
+					prior.targetSeats !== request.targetSeats
+				)
+					throw new ConflictException(
+						'CRM administrative seat command conflicts with a prior operation'
+					);
+				return prior;
+			}
+			if (
+				await tx.crmTeamCommandReceipt.findUnique({
+					where: { commandId: request.commandId }
+				})
+			)
+				throw new ConflictException('CRM command identifier is already used');
+			const capacity = await tx.crmBillingCapacity.upsert({
+				where: { workspaceId: request.workspaceId },
+				create: {
+					workspaceId: request.workspaceId,
+					admissionCeiling: request.currentSeatLimit
+				},
+				update: {}
+			});
+			if (capacity.pendingOperationId)
+				throw new ConflictException(
+					'Resolve the pending CRM billing operation first'
+				);
+			const usedSeats =
+				1 +
+				(await tx.crmWorkspaceMember.count({
+					where: { workspaceId: request.workspaceId, disabledAt: null }
+				}));
+			if (request.targetSeats < usedSeats)
+				throw new ConflictException(
+					'CRM seats cannot be lower than the active roster'
+				);
+			if (capacity.revision >= 2147483646)
+				throw new ConflictException('CRM capacity revision is exhausted');
+			const fenceRevision = capacity.revision + 1;
+			await tx.crmTeamCommandReceipt.create({
+				data: {
+					commandId: request.commandId,
+					workspaceId: request.workspaceId,
+					actorSubject: request.actorSubject,
+					commandType,
+					requestHash: request.requestHash,
+					result: { schemaVersion: 1, operationId: request.commandId }
+				}
+			});
+			const created = await tx.crmBillingOperation.create({
+				data: {
+					commandId: request.commandId,
+					workspaceId: request.workspaceId,
+					actorSubject: request.actorSubject,
+					commandType,
+					requestHash: request.requestHash,
+					request: json(request),
+					targetSeats: request.targetSeats,
+					fenceRevision
+				}
+			});
+			await tx.crmBillingCapacity.update({
+				where: { workspaceId: request.workspaceId },
+				data: {
+					revision: fenceRevision,
+					pendingOperationId: request.commandId,
+					pendingTargetSeats: request.targetSeats
+				}
+			});
+			await this.audit(tx, created, 'BILLING_OPERATION_PREPARED');
+			return created;
+		});
+		return adminOperationView(operation);
+	}
+	async synchronizeAdminSeats(body: {
+		workspaceId: string;
+		commandId: string;
+		actorSubject: string;
+		actorRole: 'ADMIN' | 'DEV';
+		requestHash: string;
+		capacityFence: CrmCapacityFence;
+	}) {
+		const op = await this.known(body.workspaceId, body.commandId);
+		const fence = this.fence(op);
+		const request = op.request as unknown as AdminSeatRequest;
+		if (
+			op.commandType !== 'ADMIN_SET_AEROCRM_SEATS' ||
+			op.actorSubject !== body.actorSubject ||
+			request.actorRole !== body.actorRole ||
+			op.requestHash !== body.requestHash ||
+			!sameFence(fence, body.capacityFence)
+		)
+			throw new ForbiddenException('CRM administrative seat binding changed');
+		return adminOperationView(await this.synchronize(op));
 	}
 	async prepare(
 		commandType: CommerceCommandType,
@@ -265,6 +423,42 @@ export class CrmBillingCapacityService {
 	): Promise<CrmBillingOperation> {
 		if (op.state === 'NOT_STARTED' || op.releaseFence) return op;
 		try {
+			if (op.commandType === 'ADMIN_SET_AEROCRM_SEATS') {
+				const request = op.request as unknown as AdminSeatRequest;
+				const body = {
+						schemaVersion: 1,
+						workspaceId: op.workspaceId,
+						actorSubject: op.actorSubject,
+						actorRole: request.actorRole,
+						commandId: op.commandId,
+						requestHash: op.requestHash!,
+						capacityFence: this.fence(op)
+					};
+				let proof: CrmAdminSeatProof;
+				try {
+					proof = await this.billing.request<CrmAdminSeatProof>(
+						'admin-seats/operations/get',
+						body,
+						'adminSeatProof',
+						false,
+						{ commandId: op.commandId, requestHash: op.requestHash! }
+					);
+				} catch (error) {
+					if (
+						!(error instanceof NotFoundException) ||
+						Date.now() - op.createdAt.getTime() < 60_000
+					)
+						throw error;
+					proof = await this.billing.request<CrmAdminSeatProof>(
+						'admin-seats/operations/close',
+						body,
+						'adminSeatProof',
+						true,
+						{ commandId: op.commandId, requestHash: op.requestHash! }
+					);
+				}
+				return await this.applyAdminProof(op, proof);
+			}
 			const proof = await this.billing.request<CrmCommerceCommandProof>(
 				'operations/get',
 				{
@@ -282,6 +476,65 @@ export class CrmBillingCapacityService {
 			await this.prisma
 				.$executeRaw`UPDATE crm_access.crm_billing_operations SET next_check_at = clock_timestamp() + interval '5 seconds', updated_at = clock_timestamp() WHERE command_id = ${op.commandId}::uuid AND next_check_at = ${op.nextCheckAt} AND release_fence = false`;
 		}
+	}
+	private async applyAdminProof(
+		binding: CrmBillingOperation,
+		proof: CrmAdminSeatProof
+	): Promise<CrmBillingOperation> {
+		const fence = this.fence(binding);
+		if (
+			proof.workspaceId !== binding.workspaceId ||
+			proof.commandId !== binding.commandId ||
+			proof.actorSubject !== binding.actorSubject ||
+			proof.requestHash !== binding.requestHash ||
+			!['COMMITTED', 'CANCELLED'].includes(proof.status) ||
+			proof.releaseFence !== true ||
+			!sameFence(proof.capacityFence, fence) ||
+			(proof.status === 'COMMITTED'
+				? proof.totalSeats !== binding.targetSeats
+				: proof.totalSeats !== null)
+		)
+			throw new ServiceUnavailableException(
+				'CRM administrative seat proof binding is invalid'
+			);
+		return serializable(this.prisma, async tx => {
+			await this.lock(tx, binding.workspaceId, binding.commandId);
+			const op = await tx.crmBillingOperation.findUniqueOrThrow({
+				where: { commandId: binding.commandId }
+			});
+			if (op.releaseFence) return op;
+			const capacity = await tx.crmBillingCapacity.findUniqueOrThrow({
+				where: { workspaceId: op.workspaceId }
+			});
+			if (
+				op.commandType !== 'ADMIN_SET_AEROCRM_SEATS' ||
+				capacity.pendingOperationId !== op.commandId ||
+				capacity.revision !== op.fenceRevision
+			)
+				throw new ServiceUnavailableException('CRM capacity fence changed');
+			const updated = await tx.crmBillingOperation.update({
+				where: { commandId: op.commandId },
+				data: {
+					state: proof.status,
+					releaseFence: true,
+					billingVersion: proof.billingVersion,
+					proof: json(proof)
+				}
+			});
+			await tx.crmBillingCapacity.update({
+				where: { workspaceId: op.workspaceId },
+				data: {
+					pendingOperationId: null,
+					pendingTargetSeats: null,
+					...(proof.status === 'COMMITTED'
+						? { admissionCeiling: op.targetSeats }
+						: {})
+				}
+			});
+			await emitTeamEvent(tx, 'admission', op.workspaceId, `billing:${op.commandId}`);
+			await this.audit(tx, updated, 'BILLING_OPERATION_SYNCHRONIZED');
+			return updated;
+		});
 	}
 	async syncPending(workspaceId: string) {
 		if (!this.billing.enabled) return;
@@ -312,6 +565,8 @@ export class CrmBillingCapacityService {
 					throw new ConflictException(
 						'CRM command identifier is already used'
 					);
+				if (prior.commandType === 'ADMIN_SET_AEROCRM_SEATS')
+					throw new NotFoundException('CRM billing operation not found');
 				return prior;
 			}
 			if (
@@ -503,6 +758,7 @@ export class CrmBillingCapacityService {
 				capacity?.latestCommittedOperationId === body.commandId;
 			if (
 				!op ||
+				op.commandType === 'ADMIN_SET_AEROCRM_SEATS' ||
 				!capacity ||
 				op.workspaceId !== body.workspaceId ||
 				op.actorSubject !== body.actorSubject ||

@@ -165,6 +165,17 @@ function fixture() {
 		proof
 	};
 }
+const adminSeatRequest = (patch: Record<string, unknown> = {}) => ({
+	schemaVersion: 1 as const,
+	workspaceId,
+	commandId: randomUUID(),
+	actorSubject: 'crm-admin',
+	actorRole: 'ADMIN' as const,
+	requestHash: 'a'.repeat(64),
+	targetSeats: 5,
+	currentSeatLimit: 5,
+	...patch
+});
 describe('CRM Billing durable capacity fence', () => {
 	it.each([
 		[10, null, 10],
@@ -399,5 +410,161 @@ describe('CRM Billing durable capacity fence', () => {
 				actorSubject: 'other'
 			})
 		).not.toBe(hash);
+	});
+	it('replays an identical prepared admin-seat command without self-blocking', async () => {
+		const f = fixture();
+		const request = adminSeatRequest();
+		const first = await f.service.prepareAdminSeats(request);
+		const second = await f.service.prepareAdminSeats(request);
+
+		expect(second).toEqual(first);
+		expect(f.tx.crmBillingOperation.create).toHaveBeenCalledTimes(1);
+		expect(f.state.capacity).toMatchObject({
+			pendingOperationId: request.commandId,
+			pendingTargetSeats: request.targetSeats,
+			revision: 1
+		});
+	});
+	it('rejects an altered admin-seat replay while retaining the original fence', async () => {
+		const f = fixture();
+		const request = adminSeatRequest();
+		await f.service.prepareAdminSeats(request);
+
+		await expect(
+			f.service.prepareAdminSeats({ ...request, targetSeats: 6 })
+		).rejects.toBeInstanceOf(ConflictException);
+		expect(f.state.capacity).toMatchObject({
+			pendingOperationId: request.commandId,
+			pendingTargetSeats: 5,
+			revision: 1
+		});
+	});
+	it('rejects owner recovery of an admin-seat operation as not found', async () => {
+		const f = fixture();
+		const request = adminSeatRequest();
+		await f.service.prepareAdminSeats(request);
+
+		await expect(
+			f.service.recover(workspaceId, request.commandId, 'workspace-owner')
+		).rejects.toBeInstanceOf(NotFoundException);
+		expect(f.billing.request).not.toHaveBeenCalled();
+	});
+	it('closes an unknown admin-seat proof only after the 60-second 404 grace period', async () => {
+		const f = fixture();
+		const request = adminSeatRequest();
+		await f.service.prepareAdminSeats(request);
+		const operation = f.operations.get(request.commandId)!;
+		operation.createdAt = new Date(Date.now() - 60_000);
+		const fence = {
+			targetSeats: request.targetSeats,
+			fenceRevision: 1,
+			requestHash: request.requestHash,
+			operationId: request.commandId
+		};
+		f.billing.request
+			.mockRejectedValueOnce(new NotFoundException())
+			.mockResolvedValueOnce({
+				schemaVersion: 1,
+				workspaceId,
+				commandId: request.commandId,
+				actorSubject: request.actorSubject,
+				requestHash: request.requestHash,
+				capacityFence: fence,
+				status: 'CANCELLED',
+				releaseFence: true,
+				billingVersion: '1',
+				entitlementVersion: '1',
+				totalSeats: null
+			});
+
+		await expect(f.service.synchronize(operation)).resolves.toMatchObject({
+			state: 'CANCELLED',
+			releaseFence: true
+		});
+		expect(f.billing.request.mock.calls.map(call => call[0])).toEqual([
+			'admin-seats/operations/get',
+			'admin-seats/operations/close'
+		]);
+		expect(f.state.capacity?.pendingOperationId).toBeNull();
+	});
+	it('keeps the admin-seat fence pending when a 404 arrives before the grace period', async () => {
+		const f = fixture();
+		const request = adminSeatRequest();
+		await f.service.prepareAdminSeats(request);
+		const operation = f.operations.get(request.commandId)!;
+		operation.createdAt = new Date(Date.now() - 59_999);
+		f.billing.request.mockRejectedValueOnce(new NotFoundException());
+
+		await expect(f.service.synchronize(operation)).rejects.toBeInstanceOf(
+			NotFoundException
+		);
+		expect(f.billing.request).toHaveBeenCalledTimes(1);
+		expect(f.billing.request.mock.calls[0][0]).toBe(
+			'admin-seats/operations/get'
+		);
+		expect(f.state.capacity?.pendingOperationId).toBe(request.commandId);
+	});
+	it('accepts a committed proof when JSONB fence keys arrive in a different order', async () => {
+		const f = fixture();
+		const request = adminSeatRequest();
+		await f.service.prepareAdminSeats(request);
+		const operation = f.operations.get(request.commandId)!;
+		const fence = {
+			targetSeats: request.targetSeats,
+			fenceRevision: 1,
+			requestHash: request.requestHash,
+			operationId: request.commandId
+		};
+		f.billing.request.mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId,
+			commandId: request.commandId,
+			actorSubject: request.actorSubject,
+			requestHash: request.requestHash,
+			capacityFence: fence,
+			status: 'COMMITTED',
+			releaseFence: true,
+			billingVersion: '1',
+			entitlementVersion: '1',
+			totalSeats: request.targetSeats
+		});
+
+		await expect(f.service.synchronize(operation)).resolves.toMatchObject({
+			state: 'COMMITTED',
+			releaseFence: true
+		});
+		expect(f.state.capacity).toMatchObject({
+			pendingOperationId: null,
+			admissionCeiling: request.targetSeats
+		});
+	});
+	it('does not release a fence for a nonterminal admin-seat proof', async () => {
+		const f = fixture();
+		const request = adminSeatRequest();
+		await f.service.prepareAdminSeats(request);
+		const operation = f.operations.get(request.commandId)!;
+		f.billing.request.mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId,
+			commandId: request.commandId,
+			actorSubject: request.actorSubject,
+			requestHash: request.requestHash,
+			capacityFence: {
+				operationId: request.commandId,
+				requestHash: request.requestHash,
+				fenceRevision: 1,
+				targetSeats: request.targetSeats
+			},
+			status: 'PENDING',
+			releaseFence: false,
+			billingVersion: '1',
+			entitlementVersion: '1',
+			totalSeats: null
+		});
+
+		await expect(f.service.synchronize(operation)).rejects.toBeInstanceOf(
+			ServiceUnavailableException
+		);
+		expect(f.state.capacity?.pendingOperationId).toBe(request.commandId);
 	});
 });

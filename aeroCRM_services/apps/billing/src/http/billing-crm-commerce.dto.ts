@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
 	Equals,
 	IsBoolean,
+	IsDefined,
 	IsIn,
 	IsInt,
 	IsString,
@@ -86,6 +87,13 @@ export class CrmCloseCommandDto extends CrmCommandStatusDto {
 	@IsIn(['AEROCRM_CHECKOUT', 'AEROCRM_SEAT_CHANGE']) commandType!:
 		| 'AEROCRM_CHECKOUT'
 		| 'AEROCRM_SEAT_CHANGE';
+	@ValidateNested()
+	@Type(() => CrmCapacityFenceDto)
+	capacityFence!: CrmCapacityFenceDto;
+}
+export class CrmAdminSeatOperationDto extends CrmCommandStatusDto {
+	@IsIn(['ADMIN', 'DEV']) actorRole!: 'ADMIN' | 'DEV';
+	@IsDefined()
 	@ValidateNested()
 	@Type(() => CrmCapacityFenceDto)
 	capacityFence!: CrmCapacityFenceDto;

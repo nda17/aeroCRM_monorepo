@@ -145,6 +145,25 @@ export class CrmCommerceService {
 		};
 	}
 
+	async summaryWithSeatControl(dto: CrmCommerceContext) {
+		const summary = await this.summary(dto);
+		const adjusted = summary.period
+			? await this.prisma.crmAdminSeatAdjustment.count({
+					where: {
+						workspaceId: dto.workspaceId,
+						periodId: summary.period.id
+					}
+				})
+			: 0;
+		return {
+			schemaVersion: 1 as const,
+			summary,
+			seatChangeBlockedReason: adjusted
+				? ('ADMIN_SEATS_ADJUSTED' as const)
+				: null
+		};
+	}
+
 	async quote(dto: CrmQuoteRequest): Promise<CrmCommerceQuote> {
 		this.context(dto);
 		if (
@@ -168,6 +187,12 @@ export class CrmCommerceService {
 				current.cycle !== dto.cycle
 			)
 				commerceConflict('crm_paid_period_required');
+			if (
+				await this.prisma.crmAdminSeatAdjustment.count({
+					where: { workspaceId: dto.workspaceId, periodId: current.id }
+				})
+			)
+				commerceConflict('crm_seats_admin_adjusted');
 			snapshot = readCrmPriceSnapshot(current.priceSnapshot);
 			const conversion = this.convert(current, dto.totalSeats, now);
 			startsAt = current.startsAt;
@@ -359,6 +384,12 @@ export class CrmCommerceService {
 				current.version !== dto.expectedPeriodVersion
 			)
 				commerceConflict('crm_period_version_conflict');
+			if (
+				await tx.crmAdminSeatAdjustment.count({
+					where: { workspaceId: dto.workspaceId, periodId: current.id }
+				})
+			)
+				commerceConflict('crm_seats_admin_adjusted');
 			const renewal = await tx.crmAutoRenewal.findUnique({
 				where: { workspaceId: dto.workspaceId }
 			});

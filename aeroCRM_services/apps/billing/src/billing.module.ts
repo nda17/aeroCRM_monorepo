@@ -28,6 +28,7 @@ import { BillingSettingsController } from './http/billing-settings.controller';
 import { CrmAdminSubscriptionController } from './http/crm-admin-subscription.controller';
 import { CrmAdminSubscriptionService } from './domain/crm-admin-subscription.service';
 import { IdentityInternalClient } from './internal/identity-internal.client';
+import { CrmAccessAdminSeatsClient } from './internal/crm-access-admin-seats.client';
 import { BillingOutboxPublisherService } from './messaging/billing-outbox-publisher.service';
 import { BillingRabbitMqService } from './messaging/billing-rabbitmq.service';
 import { BillingWorkerService } from './messaging/billing-worker.service';
@@ -79,6 +80,7 @@ const API_PROVIDERS =
 	providers: [
 		...API_PROVIDERS,
 		IdentityInternalClient,
+		CrmAccessAdminSeatsClient,
 		CrmAdminSubscriptionService,
 		InternalCommandsService,
 		CrmEntitlementService,
