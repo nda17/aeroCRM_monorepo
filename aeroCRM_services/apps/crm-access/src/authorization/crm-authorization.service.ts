@@ -20,7 +20,8 @@ export type CrmRole =
 	| 'CRM_ADMIN'
 	| 'TEAM_LEAD'
 	| 'MANAGER'
-	| 'ANALYST';
+	| 'ANALYST'
+	| 'CUSTOM';
 export type CrmCaller = 'crm-customers' | 'crm-sales' | 'crm-intake';
 
 const READ_PERMISSIONS = [
@@ -119,32 +120,47 @@ export class CrmAuthorizationService {
 		purpose: string,
 		caller: CrmCaller
 	) {
-		const required = {
-			'crm-intake': ['intake:write'],
-			'crm-customers': ['customers:read', 'customers:write'],
-			'crm-sales': ['sales:write']
-		} as const;
-		if (purpose !== 'INTAKE_ACCEPT' || !Object.hasOwn(required, caller))
+		if (
+			purpose !== 'INTAKE_ACCEPT' ||
+			!['crm-intake', 'crm-customers', 'crm-sales'].includes(caller)
+		)
 			throw new ForbiddenException('Unsupported workflow authority');
 		const context = await this.authorizeSubject(
 			workspaceId,
-			subject,
-			caller
+			subject
 		);
+		const required = [
+			'intake:read',
+			'intake:write',
+			'customers:read',
+			'customers:write',
+			'sales:read',
+			'sales:write'
+		];
 		if (
 			context.state === 'READ_ONLY' ||
 			context.role === 'ANALYST' ||
-			!required[caller].every(permission =>
+			!required.every(permission =>
 				context.permissions.includes(permission)
 			)
 		)
 			throw new ForbiddenException('Workflow execution is not permitted');
-		return context;
+		const namespace = caller.replace('crm-', '');
+		return {
+			...context,
+			permissions: context.permissions.filter(permission =>
+				permission.startsWith(`${namespace}:`)
+			)
+		};
 	}
 
 	// Keep the existing exact authorize DTO unchanged. Sales assignment alone
 	// needs the current Identity membership binding, not a guessed CRM row ID.
-	async assignmentSubject(workspaceId: string, subject: string) {
+	async assignmentSubject(
+		workspaceId: string,
+		subject: string,
+		caller: CrmCaller = 'crm-sales'
+	) {
 		const correlationId = getCrmAccessCorrelationId();
 		const identity = await this.identity.sourceContext(
 			workspaceId,
@@ -156,7 +172,7 @@ export class CrmAuthorizationService {
 			identity.subject,
 			identity.membership,
 			correlationId,
-			'crm-sales'
+			caller
 		);
 		return { ...context, membershipId: identity.membership!.membershipId };
 	}
@@ -186,6 +202,7 @@ export class CrmAuthorizationService {
 							}
 						},
 						include: {
+							customRole: true,
 							teams: {
 								where: { team: { archivedAt: null } },
 								select: { teamId: true },
@@ -216,11 +233,23 @@ export class CrmAuthorizationService {
 		}
 		const role: CrmRole =
 			membership.role === 'OWNER' ? 'OWNER' : member!.role;
+		const customRole = member?.customRole;
+		if (
+			role === 'CUSTOM' &&
+			(!customRole ||
+				customRole.archivedAt ||
+				member!.customRoleId !== customRole.id)
+		)
+			throw new ForbiddenException('An active CRM role is required');
 		// teamIds also bounds assignment in every domain service. Administrative
 		// roles must use current, service-owned teams from this workspace, not an
 		// absent OWNER member row or arbitrary team IDs supplied by the client.
 		let teamIds = member?.teams.map(team => team.teamId) ?? [];
-		if (role === 'OWNER' || role === 'CRM_ADMIN') {
+		if (
+			role === 'OWNER' ||
+			role === 'CRM_ADMIN' ||
+			(role === 'CUSTOM' && customRole!.dataScope === 'ALL')
+		) {
 			const teams = await database.crmTeam.findMany({
 				where: { workspaceId, archivedAt: null },
 				select: { id: true },
@@ -241,16 +270,23 @@ export class CrmAuthorizationService {
 				? 'READ_ONLY'
 				: (billing.status as 'ACTIVE' | 'GRACE');
 		const canWrite = state !== 'READ_ONLY' && role !== 'ANALYST';
-		const permissions: string[] =
-			role === 'ANALYST' ? ['sales:analytics'] : [...READ_PERMISSIONS];
-		if (canWrite) permissions.push(...WRITE_PERMISSIONS);
-		if (canWrite && (role === 'OWNER' || role === 'CRM_ADMIN'))
-			permissions.push(...ADMIN_PERMISSIONS);
-		if (role === 'OWNER' || role === 'CRM_ADMIN') {
-			permissions.push('access:read-team');
-			if (canWrite) permissions.push('access:revoke-access');
+		let permissions: string[];
+		if (role === 'CUSTOM') {
+			permissions = customRole!.permissions.filter(
+				permission => state !== 'READ_ONLY' || !permission.endsWith(':write')
+			);
+		} else {
+			permissions =
+				role === 'ANALYST' ? ['sales:analytics'] : [...READ_PERMISSIONS];
+			if (canWrite) permissions.push(...WRITE_PERMISSIONS);
+			if (canWrite && (role === 'OWNER' || role === 'CRM_ADMIN'))
+				permissions.push(...ADMIN_PERMISSIONS);
+			if (role === 'OWNER' || role === 'CRM_ADMIN') {
+				permissions.push('access:read-team');
+				if (canWrite) permissions.push('access:revoke-access');
+			}
+			if (role === 'OWNER') permissions.push(...OWNER_PERMISSIONS);
 		}
-		if (role === 'OWNER') permissions.push(...OWNER_PERMISSIONS);
 		const namespace = caller?.replace('crm-', '');
 		return {
 			schemaVersion: 1 as const,
@@ -259,17 +295,20 @@ export class CrmAuthorizationService {
 			role,
 			state,
 			dataScope:
-				role === 'MANAGER'
+				role === 'CUSTOM'
+					? (customRole!.dataScope as 'OWN' | 'TEAM' | 'ALL')
+					: role === 'MANAGER'
 					? ('OWN' as const)
 					: role === 'TEAM_LEAD'
 						? ('TEAM' as const)
 						: ('ALL' as const),
 			teamIds,
-			permissions: namespace
+			permissions: (namespace
 				? permissions.filter(permission =>
 						permission.startsWith(`${namespace}:`)
 					)
 				: permissions
+			).sort()
 		};
 	}
 }

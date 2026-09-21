@@ -53,6 +53,8 @@ import { TaskSeriesAuthorityService } from './team/task-series-authority.service
 import { IntakeSlaAuthorityController } from './team/intake-sla-authority.controller';
 import { IntakeSlaAuthorityService } from './team/intake-sla-authority.service';
 import { IntakeSlaRecipientsService } from './team/intake-sla-recipients.service';
+import { CrmCustomRoleController } from './team/custom-role.controller';
+import { CrmCustomRoleService } from './team/custom-role.service';
 
 const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 
@@ -70,6 +72,7 @@ const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 					CrmPermissionsController,
 					CrmAuthorizationController,
 					CrmTeamController,
+					CrmCustomRoleController,
 					CrmEmployeeProfileController,
 					CrmWorkspaceBrandingController,
 					SupportWorkspaceContextController,
@@ -92,6 +95,7 @@ const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 		CrmAccessService,
 		CrmAccessHealthService,
 		CrmTeamService,
+		CrmCustomRoleService,
 		CrmEmployeeProfileService,
 		CrmWorkspaceBrandingService,
 		SupportWorkspaceContextGuard,

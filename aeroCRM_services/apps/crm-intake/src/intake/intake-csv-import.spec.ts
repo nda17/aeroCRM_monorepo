@@ -320,7 +320,7 @@ describe('CSV service authority, atomic command and scope', () => {
 			expect(db.$transaction).not.toHaveBeenCalled();
 		}
 	);
-	it.each(['OWNER', 'CRM_ADMIN', 'TEAM_LEAD', 'MANAGER'] as const)(
+	it.each(['OWNER', 'CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'CUSTOM'] as const)(
 		'permits writable GRACE %s with current team',
 		async role => {
 			const { service } = setup();

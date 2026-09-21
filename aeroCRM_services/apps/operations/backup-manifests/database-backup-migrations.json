@@ -90,11 +90,19 @@
 			]
 		},
 		"crm-access": {
-			"manifestSha256": "4557a68182dc258dd02d4167664d99a096dede14c70d0dc7cc27a0e6106b11e3",
+			"manifestSha256": "2e0dc020f539990fa24e4d2e6e3d897f14d6708fe81951c4fa003576c25cf552",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
 					"checksum": "5d808f9caf72a4aba765564b148e32cac62b5fc59e6efa09430c4f7faa4fbd14"
+				},
+				{
+					"name": "20260921020000_add_crm_custom_member_role",
+					"checksum": "2c8223b38d456cb7eddf54289f26305c1874e92c25403b3525dd6fe4cb7f6514"
+				},
+				{
+					"name": "20260921020100_crm_custom_roles",
+					"checksum": "5658f47ff4673c0d45ce61abd3e5fe5459dff9645d02dba9382224bb4234b876"
 				}
 			]
 		},

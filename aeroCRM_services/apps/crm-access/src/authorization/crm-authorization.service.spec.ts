@@ -69,6 +69,24 @@ function setup(role = 'OWNER', status = 'ACTIVE') {
 	};
 }
 
+const customRole = {
+	id: '44444444-4444-4444-8444-444444444444',
+	workspaceId,
+	name: 'Продажи',
+	nameKey: 'продажи',
+	permissions: [
+		'customers:read',
+		'customers:write',
+		'sales:read',
+		'sales:write',
+		'intake:read',
+		'intake:write'
+	],
+	dataScope: 'TEAM',
+	version: 1,
+	archivedAt: null
+};
+
 describe('CRM service authorization', () => {
 	it('uses an existing transaction connection for local reads while refreshing Identity and Billing', async () => {
 		const current = setup('CRM_ADMIN');
@@ -227,6 +245,83 @@ describe('CRM service authorization', () => {
 			expect(current.identity.authContext).not.toHaveBeenCalled();
 		}
 	);
+	it('keeps an existing CUSTOM role scoped and usable when catalog admission is disabled', async () => {
+		const current = setup('CUSTOM');
+		current.prisma.crmWorkspaceMember.findUnique.mockResolvedValue({
+			role: 'CUSTOM',
+			customRoleId: customRole.id,
+			customRole,
+			membershipId,
+			teams: [{ teamId }],
+			disabledAt: null
+		});
+		const previous = process.env.CRM_ACCESS_CUSTOM_ROLES_ENABLED;
+		process.env.CRM_ACCESS_CUSTOM_ROLES_ENABLED = 'false';
+		try {
+			const result = await current.service.authorize(
+				'Bearer user',
+				workspaceId,
+				'crm-intake'
+			);
+			expect(result).toMatchObject({
+				role: 'CUSTOM',
+				dataScope: 'TEAM',
+				teamIds: [teamId]
+			});
+			expect(result.permissions).toEqual([
+				'intake:read',
+				'intake:write'
+			]);
+		} finally {
+			if (previous === undefined)
+				delete process.env.CRM_ACCESS_CUSTOM_ROLES_ENABLED;
+			else process.env.CRM_ACCESS_CUSTOM_ROLES_ENABLED = previous;
+		}
+	});
+	it('requires all six workflow permissions and returns only the caller namespace for CUSTOM', async () => {
+		const current = setup('CUSTOM');
+		current.prisma.crmWorkspaceMember.findUnique.mockResolvedValue({
+			role: 'CUSTOM',
+			customRoleId: customRole.id,
+			customRole,
+			membershipId,
+			teams: [{ teamId }],
+			disabledAt: null
+		});
+		for (const [caller, permissions] of [
+			['crm-intake', ['intake:read', 'intake:write']],
+			['crm-customers', ['customers:read', 'customers:write']],
+			['crm-sales', ['sales:read', 'sales:write']]
+		] as const) {
+			expect(
+				(
+					await current.service.authorizeWorkflow(
+						workspaceId,
+						'user-1',
+						'INTAKE_ACCEPT',
+						caller
+					)
+				).permissions
+			).toEqual(permissions);
+		}
+		const incomplete = setup('CUSTOM');
+		incomplete.prisma.crmWorkspaceMember.findUnique.mockResolvedValue({
+			role: 'CUSTOM',
+			customRoleId: customRole.id,
+			customRole: { ...customRole, permissions: ['intake:read'] },
+			membershipId,
+			teams: [{ teamId }],
+			disabledAt: null
+		});
+		await expect(
+			incomplete.service.authorizeWorkflow(
+				workspaceId,
+				'user-1',
+				'INTAKE_ACCEPT',
+				'crm-intake'
+			)
+		).rejects.toBeInstanceOf(ForbiddenException);
+	});
 	it('denies unknown purpose/caller and read-only/analyst workflows', async () => {
 		for (const [role, state] of [
 			['ANALYST', 'ACTIVE'],
@@ -346,10 +441,10 @@ describe('CRM service authorization', () => {
 			teamIds: []
 		});
 		expect(result.permissions).toEqual([
-			'customers:read',
-			'customers:write',
+			'customers:export',
 			'customers:merge',
-			'customers:export'
+			'customers:read',
+			'customers:write'
 		]);
 		expect(
 			current.prisma.crmWorkspaceMember.findUnique
@@ -482,7 +577,7 @@ describe('CRM service authorization', () => {
 						'crm-customers'
 					)
 				).permissions
-			).toEqual(['customers:read', 'customers:export']);
+			).toEqual(['customers:export', 'customers:read']);
 		}
 	);
 	it.each(['NOT_ACTIVATED', 'EXPIRED', 'SUSPENDED', 'CANCELLED'])(

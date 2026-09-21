@@ -107,12 +107,13 @@ export class IntakeOperationClient {
 			!['ACTIVE', 'GRACE'].includes(access.state) ||
 			access.role === 'ANALYST' ||
 			!access.permissions.includes('sales:write') ||
-			access.dataScope !==
-				(access.role === 'MANAGER'
-					? 'OWN'
-					: access.role === 'TEAM_LEAD'
-						? 'TEAM'
-						: 'ALL') ||
+			(access.role !== 'CUSTOM' &&
+				access.dataScope !==
+					(access.role === 'MANAGER'
+						? 'OWN'
+						: access.role === 'TEAM_LEAD'
+							? 'TEAM'
+							: 'ALL')) ||
 			access.permissions.some(
 				permission => !permission.startsWith('sales:')
 			)

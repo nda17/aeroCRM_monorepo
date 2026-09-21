@@ -78,6 +78,7 @@ export function parseIntakeSlaRecipients(
 	return value as unknown as IntakeSlaRecipientsRequest;
 }
 const include = {
+	customRole: true,
 	teams: {
 		where: { team: { archivedAt: null } },
 		select: { teamId: true },
@@ -167,9 +168,20 @@ export class IntakeSlaRecipientsService {
 				return [];
 			const role = isOwner ? 'OWNER' : member!.role,
 				teams = member?.teams.map(item => item.teamId) ?? [];
-			const all = role === 'OWNER' || role === 'CRM_ADMIN';
+			const custom = role === 'CUSTOM' ? member!.customRole : null;
+			if (
+				role === 'CUSTOM' &&
+				(!custom ||
+					custom.archivedAt ||
+					!custom.permissions.includes('intake:read'))
+			)
+				return [];
+			const all =
+				role === 'OWNER' ||
+				role === 'CRM_ADMIN' ||
+				custom?.dataScope === 'ALL';
 			const teamLead =
-				role === 'TEAM_LEAD' &&
+				(role === 'TEAM_LEAD' || custom?.dataScope === 'TEAM') &&
 				input.entry.teamId !== null &&
 				teams.includes(input.entry.teamId);
 			// Preserve actual Inbox visibility: assignee metadata grants no extra access.
@@ -187,7 +199,11 @@ export class IntakeSlaRecipientsService {
 					input.responsibleBinding &&
 					same(input.responsibleBinding, current)
 				) &&
-				!(input.notifyManagers && (all || teamLead))
+				!(
+					input.notifyManagers &&
+					(role === 'OWNER' || role === 'CRM_ADMIN' || role === 'TEAM_LEAD') &&
+					(all || teamLead)
+				)
 			)
 				return [];
 			return [

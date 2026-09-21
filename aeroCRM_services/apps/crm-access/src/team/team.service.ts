@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import {
 	Prisma,
+	type CrmCustomRole,
 	type CrmInvitationIntent,
 	type CrmTeamDelivery,
 	type CrmTeam,
@@ -42,8 +43,13 @@ import {
 	employeeDisplayName,
 	normalizeEmployeeName
 } from './team-profile.dto';
+import {
+	CrmCustomRoleService,
+	customRolesEnabled
+} from './custom-role.service';
 
 const teamsInclude = {
+	customRole: true,
 	teams: {
 		where: { team: { archivedAt: null } },
 		select: { teamId: true },
@@ -64,6 +70,7 @@ export const deliveryDto = (item: CrmTeamDelivery) => ({
 	updatedAt: item.updatedAt.toISOString()
 });
 type MemberWithTeams = CrmWorkspaceMember & {
+	customRole: CrmCustomRole | null;
 	teams: { teamId: string }[];
 };
 
@@ -73,7 +80,8 @@ export class CrmTeamService {
 		private readonly prisma: CrmAccessPrismaService,
 		private readonly auth: CrmAuthorizationService,
 		private readonly billing: BillingEntitlementClient,
-		private readonly identity: IdentityInvitationClient
+		private readonly identity: IdentityInvitationClient,
+		private readonly customRoles: CrmCustomRoleService
 	) {}
 
 	async members(authorization: string | undefined, query: TeamQueryDto) {
@@ -181,11 +189,13 @@ export class CrmTeamService {
 	) {
 		const actor = await this.auth.authorize(
 			authorization,
-			query.workspaceId,
-			'crm-intake'
+			query.workspaceId
 		);
-		if (!actor.permissions.includes('intake:read'))
-			throw new ForbiddenException('Intake read access is required');
+		if (
+			!actor.permissions.includes('intake:read') &&
+			!actor.permissions.includes('sales:read')
+		)
+			throw new ForbiddenException('CRM record read access is required');
 		// This is not the administrative directory: only current assignable IDs
 		// from server authorization may disclose their names, even for ALL scope.
 		const where = {
@@ -331,7 +341,8 @@ export class CrmTeamService {
 		const where = { workspaceId: query.workspaceId };
 		const [items, total] = await this.prisma.$transaction([
 			this.prisma.crmInvitationIntent.findMany({
-				where,
+					where,
+					include: { customRole: true },
 				skip: (query.page - 1) * query.pageSize,
 				take: query.pageSize,
 				orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]
@@ -475,6 +486,8 @@ export class CrmTeamService {
 			'manage'
 		);
 		this.manageRole(actor, dto.role);
+		this.roleBinding(dto);
+		if (dto.role === 'CUSTOM') this.customAssignment(actor);
 		const email = dto.email.trim().toLowerCase();
 		const teamIds = [...dto.teamIds].sort();
 		const profile = dto.profile
@@ -487,6 +500,15 @@ export class CrmTeamService {
 			'invitation.create',
 			{ ...dto, email, teamIds, ...(profile ? { profile } : {}) },
 			async tx => {
+				const customRole =
+					dto.role === 'CUSTOM'
+						? await this.customRoles.requireActive(
+								tx,
+								dto.workspaceId,
+								dto.customRoleId!,
+								dto.expectedRoleVersion
+							)
+						: null;
 				await this.requireTeams(tx, dto.workspaceId, teamIds);
 				const now = new Date();
 				await tx.crmInvitationIntent.updateMany({
@@ -515,6 +537,7 @@ export class CrmTeamService {
 						workspaceId: dto.workspaceId,
 						email,
 						role: dto.role,
+						customRoleId: customRole?.id,
 						teamIds,
 						...profile,
 						inviterSubject: actor.subject,
@@ -537,10 +560,20 @@ export class CrmTeamService {
 					'INVITATION_CREATED',
 					invitation.id,
 					null,
-					{ role: dto.role, teamIds }
+					{
+						role: dto.role,
+						...(customRole ? { customRoleId: customRole.id } : {}),
+						teamIds
+					}
 				);
-				return { schemaVersion: 1, invitation: invitationDto(invitation) };
-			}
+				return {
+					schemaVersion: 1,
+					invitation: invitationDto({ ...invitation, customRole })
+				};
+			},
+			dto.role === 'CUSTOM'
+				? tx => this.customAssignmentAfterLock(authorization, actor, tx)
+				: undefined
 		);
 	}
 
@@ -555,7 +588,8 @@ export class CrmTeamService {
 			'revoke'
 		);
 		const preview = await this.prisma.crmInvitationIntent.findFirst({
-			where: { id, workspaceId: dto.workspaceId }
+			where: { id, workspaceId: dto.workspaceId },
+			include: { customRole: true }
 		});
 		if (!preview) throw new NotFoundException('Invitation not found');
 		this.manageRole(actor, preview.role);
@@ -567,7 +601,8 @@ export class CrmTeamService {
 			{ id, ...dto },
 			async tx => {
 				const current = await tx.crmInvitationIntent.findFirstOrThrow({
-					where: { id, workspaceId: dto.workspaceId }
+					where: { id, workspaceId: dto.workspaceId },
+					include: { customRole: true }
 				});
 				this.manageRole(actor, current.role);
 				if (current.version !== dto.expectedVersion)
@@ -635,7 +670,10 @@ export class CrmTeamService {
 			'manage'
 		);
 		this.manageRole(actor, dto.role);
-		await this.target(this.prisma, actor, id);
+		this.roleBinding(dto);
+		const preview = await this.target(this.prisma, actor, id);
+		const customPath = dto.role === 'CUSTOM' || preview.role === 'CUSTOM';
+		if (customPath) this.customAssignment(actor);
 		return command(
 			this.prisma,
 			actor,
@@ -649,9 +687,24 @@ export class CrmTeamService {
 					id,
 					dto.expectedVersion
 				);
+				if (dto.role === 'CUSTOM' || current.role === 'CUSTOM')
+					this.customAssignment(actor);
+				const customRole =
+					dto.role === 'CUSTOM'
+						? await this.customRoles.requireActive(
+								tx,
+								dto.workspaceId,
+								dto.customRoleId!,
+								dto.expectedRoleVersion
+							)
+						: null;
 				const updated = await tx.crmWorkspaceMember.update({
 					where: { id },
-					data: { role: dto.role, version: { increment: 1 } },
+					data: {
+						role: dto.role,
+						customRoleId: customRole?.id ?? null,
+						version: { increment: 1 }
+					},
 					include: teamsInclude
 				});
 				await auditTeam(
@@ -660,10 +713,28 @@ export class CrmTeamService {
 					dto.commandId,
 					'MEMBER_ROLE_CHANGED',
 					id,
-					{ role: current.role },
-					{ role: dto.role }
+					{
+						role: current.role,
+						...(current.customRoleId
+							? { customRoleId: current.customRoleId }
+							: {})
+					},
+					{
+						role: dto.role,
+						...(customRole ? { customRoleId: customRole.id } : {})
+					}
 				);
 				return { schemaVersion: 1, member: memberDto(updated) };
+			},
+			async tx => {
+				if (!customPath) {
+					const current = await tx.crmWorkspaceMember.findFirst({
+						where: { id, workspaceId: dto.workspaceId },
+						select: { role: true }
+					});
+					if (current?.role !== 'CUSTOM') return;
+				}
+				await this.customAssignmentAfterLock(authorization, actor, tx);
 			}
 		);
 	}
@@ -888,6 +959,54 @@ export class CrmTeamService {
 				'Only the owner can manage CRM administrators'
 			);
 	}
+	private customAssignment(actor: TeamAuthority) {
+		if (actor.role !== 'OWNER')
+			throw new ForbiddenException(
+				'Only the owner can assign custom CRM roles'
+			);
+		if (!customRolesEnabled())
+			throw new ServiceUnavailableException({
+				code: 'crm_custom_roles_disabled',
+				message: 'Настраиваемые роли временно недоступны'
+			});
+	}
+	private async customAssignmentAfterLock(
+		authorization: string | undefined,
+		expected: TeamAuthority,
+		tx: Prisma.TransactionClient
+	) {
+		const actor = await this.auth.authorize(
+			authorization,
+			expected.workspaceId,
+			undefined,
+			tx
+		);
+		if (
+			actor.subject !== expected.subject ||
+			actor.state === 'READ_ONLY' ||
+			!actor.permissions.includes('access:manage-team')
+		)
+			throw new ForbiddenException('CRM team authority has changed');
+		this.customAssignment(actor);
+	}
+	private roleBinding(dto: {
+		role: string;
+		customRoleId?: string;
+		expectedRoleVersion?: number;
+	}) {
+		if (
+			(dto.role === 'CUSTOM') !==
+				(typeof dto.customRoleId === 'string' &&
+					Number.isInteger(dto.expectedRoleVersion) &&
+					Number(dto.expectedRoleVersion) > 0) ||
+			(dto.role !== 'CUSTOM' &&
+				(dto.customRoleId !== undefined ||
+					dto.expectedRoleVersion !== undefined))
+		)
+			throw new BadRequestException(
+				'Custom role binding must match the selected role'
+			);
+	}
 	async requireTeams(
 		tx: Prisma.TransactionClient,
 		workspaceId: string,
@@ -978,6 +1097,15 @@ export const memberDto = (member: MemberWithTeams) => ({
 	subject: member.subject,
 	membershipId: member.membershipId,
 	role: member.role,
+	...(member.role === 'CUSTOM' && member.customRole
+		? {
+				customRole: {
+					id: member.customRole.id,
+					name: member.customRole.name,
+					version: member.customRole.version
+				}
+			}
+		: {}),
 	teamIds: member.teams.map(item => item.teamId),
 	disabledAt: member.disabledAt?.toISOString() ?? null,
 	version: member.version,
@@ -993,11 +1121,23 @@ export const teamDto = (team: CrmTeam) => ({
 	createdAt: team.createdAt.toISOString(),
 	updatedAt: team.updatedAt.toISOString()
 });
-export const invitationDto = (invitation: CrmInvitationIntent) => ({
+type InvitationWithCustomRole = CrmInvitationIntent & {
+	customRole?: CrmCustomRole | null;
+};
+export const invitationDto = (invitation: InvitationWithCustomRole) => ({
 	id: invitation.id,
 	workspaceId: invitation.workspaceId,
 	email: invitation.email,
 	role: invitation.role,
+	...(invitation.role === 'CUSTOM' && invitation.customRole
+		? {
+				customRole: {
+					id: invitation.customRole.id,
+					name: invitation.customRole.name,
+					version: invitation.customRole.version
+				}
+			}
+		: {}),
 	teamIds: invitation.teamIds,
 	status:
 		['REGISTERING', 'INVITED'].includes(invitation.status) &&

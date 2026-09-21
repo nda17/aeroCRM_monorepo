@@ -193,4 +193,16 @@ describe('Customers authorization boundary', () => {
 			)
 		).toThrow(ForbiddenException);
 	});
+	it('accepts a scoped CUSTOM authority without granting administrative permissions', () => {
+		const custom = {
+			...context,
+			role: 'CUSTOM' as const,
+			dataScope: 'TEAM' as const,
+			teamIds: [randomUUID()]
+		};
+		expect(parseCustomersAuthorization(custom, workspaceId)).toEqual(custom);
+		expect(() =>
+			assertCustomersPermission(custom, 'access:manage-team')
+		).toThrow(ForbiddenException);
+	});
 });

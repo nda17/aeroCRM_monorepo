@@ -5,6 +5,7 @@ import {
 	ServiceUnavailableException
 } from '@nestjs/common';
 import { Prisma, type CrmAdmission } from '@prisma/crm-access-client';
+import { randomUUID } from 'node:crypto';
 import { CrmAuthorizationService } from '../authorization/crm-authorization.service';
 import { getCrmAccessCorrelationId } from '../common/crm-access-request-context';
 import { BillingEntitlementClient } from '../internal/billing-entitlement.client';
@@ -83,9 +84,49 @@ export class CrmTeamAdmissionService {
 			intent.inviterSubject
 		);
 		this.requireManager(actor, intent.role);
+		if (intent.role === 'CUSTOM') {
+			if (actor.role !== 'OWNER')
+				throw new ForbiddenException(
+					'Only the owner can invite a custom CRM role'
+				);
+			const role = await this.prisma.crmCustomRole.findFirst({
+				where: {
+					id: intent.customRoleId ?? '',
+					workspaceId,
+					archivedAt: null
+				}
+			});
+			if (!role) throw new Error('CUSTOM_ROLE_UNAVAILABLE');
+		}
 		const registered = await this.invitations.create(intent);
 		await serializable(this.prisma, async tx => {
 			await workspaceLock(tx, workspaceId);
+			if (
+				intent.role === 'CUSTOM' &&
+				!(await tx.crmCustomRole.findFirst({
+					where: {
+						id: intent.customRoleId ?? '',
+						workspaceId,
+						archivedAt: null
+					}
+				}))
+			) {
+				await tx.crmInvitationIntent.updateMany({
+					where: {
+						id: intent.id,
+						workspaceId,
+						status: 'REGISTERING',
+						version: intent.version
+					},
+					data: {
+						status: 'REVOKED',
+						revokedAt: new Date(),
+						revokeCommandId: randomUUID(),
+						version: { increment: 1 }
+					}
+				});
+				return;
+			}
 			await tx.crmInvitationIntent.updateMany({
 				where: {
 					id: intent.id,
@@ -241,6 +282,10 @@ export class CrmTeamAdmissionService {
 		if (actor.state === 'READ_ONLY') return; // Resumed by a later entitlement/admission wake, without reserving a seat.
 		try {
 			this.requireManager(actor, intent?.role);
+			if (intent?.role === 'CUSTOM' && actor.role !== 'OWNER')
+				throw new ForbiddenException(
+					'Only the owner can admit a custom CRM role'
+				);
 		} catch (error) {
 			if (error instanceof ForbiddenException)
 				return this.cancel(candidate, 'INVITER_AUTHORITY_REVOKED');
@@ -329,6 +374,12 @@ export class CrmTeamAdmissionService {
 						where: { id: intent.id }
 					})
 				: null;
+			if (currentIntent?.role === 'CUSTOM' && actor.role !== 'OWNER')
+				return this.cancelInTransaction(
+					tx,
+					first,
+					'INVITER_AUTHORITY_REVOKED'
+				);
 			if (
 				intent &&
 				(!currentIntent || currentIntent.status !== 'ACCEPTED')
@@ -360,6 +411,21 @@ export class CrmTeamAdmissionService {
 					'MEMBER_VERSION_CHANGED'
 				);
 			const role = currentIntent?.role ?? member!.role;
+			const customRoleId = currentIntent
+				? currentIntent.customRoleId
+				: member!.customRoleId;
+			if (
+				role === 'CUSTOM' &&
+				(!customRoleId ||
+					!(await tx.crmCustomRole.findFirst({
+						where: { id: customRoleId, workspaceId, archivedAt: null }
+					})))
+			)
+				return this.cancelInTransaction(
+					tx,
+					first,
+					'CUSTOM_ROLE_UNAVAILABLE'
+				);
 			try {
 				this.teams.manageRole(actor, role);
 			} catch {
@@ -404,7 +470,8 @@ export class CrmTeamAdmissionService {
 							workspaceId,
 							subject: candidate.subject,
 							membershipId: candidate.membershipId,
-							role
+							role,
+							customRoleId
 						}
 					});
 			if (!member && currentIntent?.firstName && currentIntent.lastName)

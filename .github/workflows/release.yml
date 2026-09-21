@@ -31,6 +31,14 @@ on:
       billing_migration_env_hash:
         description: SHA-256 of the private VPS migrations/billing.env file; required only for Billing capacity migration
         required: false
+      crm_custom_roles_migration:
+        description: Backend target only; apply the two reviewed additive CRM Access custom-role migrations with the write gate disabled
+        type: boolean
+        default: false
+        required: true
+      crm_custom_roles_migration_env_hash:
+        description: SHA-256 of the private VPS migrations/crm-access.env file; required only for the CRM custom-role migration
+        required: false
       crm_contracts_cutover:
         description: Backend target only; release frontend separately after a successful CRM contract cutover
         type: boolean
@@ -75,6 +83,8 @@ jobs:
           BACK_HASH: ${{ inputs.backend_env_hash }}
           BILLING_MIGRATION: ${{ inputs.billing_capacity_migration && 'true' || 'false' }}
           BILLING_MIGRATION_HASH: ${{ inputs.billing_migration_env_hash }}
+          CUSTOM_ROLES_MIGRATION: ${{ inputs.crm_custom_roles_migration && 'true' || 'false' }}
+          CUSTOM_ROLES_MIGRATION_HASH: ${{ inputs.crm_custom_roles_migration_env_hash }}
           CUTOVER: ${{ inputs.crm_contracts_cutover && 'true' || 'false' }}
           RESUME: ${{ inputs.crm_contracts_cutover_resume && 'true' || 'false' }}
           STAGED_DIR: ${{ inputs.crm_contracts_staged_env_dir }}
@@ -97,9 +107,14 @@ jobs:
             [[ "$RESUME" == false && -z "$STAGED_DIR" && -z "$STAGED_HASH" && -z "$DEFINITIONS_FILE" ]]
           fi
           if [[ "$BILLING_MIGRATION" == true ]]; then
-            [[ "$TARGET" == backend && "$CUTOVER" == false && "$BILLING_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
+            [[ "$TARGET" == backend && "$CUTOVER" == false && "$CUSTOM_ROLES_MIGRATION" == false && "$BILLING_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
           else
             [[ -z "$BILLING_MIGRATION_HASH" ]]
+          fi
+          if [[ "$CUSTOM_ROLES_MIGRATION" == true ]]; then
+            [[ "$TARGET" == backend && "$CUTOVER" == false && "$BILLING_MIGRATION" == false && "$CUSTOM_ROLES_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
+          else
+            [[ -z "$CUSTOM_ROLES_MIGRATION_HASH" ]]
           fi
           case "$TARGET" in
             all)
@@ -135,6 +150,8 @@ jobs:
         run: |
           bash -n infra/scripts/release.sh
           bash -n infra/scripts/aerocrm-nginx-release.sh
+          bash -n infra/scripts/ensure-cutover-node.sh
+          node --check infra/scripts/crm-custom-roles-migration.mjs
       - name: Download exact CI artifacts
         env:
           GH_TOKEN: ${{ github.token }}
@@ -164,6 +181,8 @@ jobs:
           BACK_HASH: ${{ inputs.backend_env_hash }}
           BILLING_MIGRATION: ${{ inputs.billing_capacity_migration && 'true' || 'false' }}
           BILLING_MIGRATION_HASH: ${{ inputs.billing_migration_env_hash }}
+          CUSTOM_ROLES_MIGRATION: ${{ inputs.crm_custom_roles_migration && 'true' || 'false' }}
+          CUSTOM_ROLES_MIGRATION_HASH: ${{ inputs.crm_custom_roles_migration_env_hash }}
           KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
           CUTOVER: ${{ inputs.crm_contracts_cutover && 'true' || 'false' }}
           RESUME: ${{ inputs.crm_contracts_cutover_resume && 'true' || 'false' }}
@@ -205,6 +224,11 @@ jobs:
             node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'bash /opt/aerocrm/scripts/ensure-cutover-node.sh --billing')
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
           fi
+          if [ "$ROLE" = backend ] && [ "$CUSTOM_ROLES_MIGRATION" = true ]; then
+            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/crm-custom-roles-migration.mjs infra/scripts/ensure-cutover-node.sh "$dest:/opt/aerocrm/scripts/"
+            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'bash /opt/aerocrm/scripts/ensure-cutover-node.sh --crm-custom-roles')
+            [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
+          fi
           for app in $APPS; do
             gzip -dc "images/$app/$app.tar.gz" | ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'docker load >/dev/null'
           done
@@ -214,6 +238,8 @@ jobs:
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && '$node_bin' scripts/crm-contract-cutover.mjs '$SHA' '$STAGED_DIR' '$DEFINITIONS_FILE'$resume_arg"
           elif [ "$ROLE" = backend ] && [ "$BILLING_MIGRATION" = true ]; then
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash' true '$BILLING_MIGRATION_HASH'"
+          elif [ "$ROLE" = backend ] && [ "$CUSTOM_ROLES_MIGRATION" = true ]; then
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash' false '' true '$CUSTOM_ROLES_MIGRATION_HASH'"
           else
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash'"
           fi

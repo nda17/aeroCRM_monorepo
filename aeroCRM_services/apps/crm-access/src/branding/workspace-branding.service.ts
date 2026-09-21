@@ -190,7 +190,7 @@ export class CrmWorkspaceBrandingService {
 	) {
 		if (
 			actor.workspaceId !== workspaceId ||
-			!['OWNER', 'CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'ANALYST'].includes(
+			!['OWNER', 'CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'ANALYST', 'CUSTOM'].includes(
 				actor.role
 			) ||
 			!['ACTIVE', 'GRACE', 'READ_ONLY'].includes(actor.state) ||

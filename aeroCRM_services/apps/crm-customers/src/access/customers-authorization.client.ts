@@ -9,7 +9,7 @@ export interface CustomersAuthorization {
 	schemaVersion: 1;
 	workspaceId: string;
 	subject: string;
-	role: 'OWNER' | 'CRM_ADMIN' | 'TEAM_LEAD' | 'MANAGER' | 'ANALYST';
+	role: 'OWNER' | 'CRM_ADMIN' | 'TEAM_LEAD' | 'MANAGER' | 'ANALYST' | 'CUSTOM';
 	state: 'ACTIVE' | 'GRACE' | 'READ_ONLY';
 	dataScope: 'ALL' | 'TEAM' | 'OWN';
 	teamIds: string[];
@@ -45,7 +45,7 @@ export function parseCustomersAuthorization(
 		typeof data.subject !== 'string' ||
 		!/^[^\s\x00-\x1f\x7f]{1,256}$/.test(data.subject) ||
 		typeof data.role !== 'string' ||
-		!['OWNER', 'CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'ANALYST'].includes(
+		!['OWNER', 'CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'ANALYST', 'CUSTOM'].includes(
 			String(data.role)
 		) ||
 		typeof data.state !== 'string' ||

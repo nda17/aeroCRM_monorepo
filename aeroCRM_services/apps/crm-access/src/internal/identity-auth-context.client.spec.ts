@@ -53,14 +53,14 @@ describe('IdentityAuthContextClient', () => {
 			.spyOn(global, 'fetch')
 			.mockImplementation(async () => new Response(JSON.stringify(value)));
 		expect(
-			await client().sourceContext(
+			await client().ownerContext(
 				value.workspaceId,
 				'user-1',
 				CORRELATION_ID
 			)
 		).toEqual(value);
 		expect(fetchMock).toHaveBeenCalledWith(
-			'http://127.0.0.1:4900/internal/v1/crm-access/widget-source-context',
+			'http://127.0.0.1:4900/internal/v1/crm-access/owner-context',
 			expect.objectContaining({
 				method: 'POST',
 				redirect: 'error',
@@ -93,7 +93,7 @@ describe('IdentityAuthContextClient', () => {
 			.spyOn(global, 'fetch')
 			.mockResolvedValueOnce(new Response(JSON.stringify(value)));
 		expect(
-			await client().sourceContext(
+			await client().ownerContext(
 				value.workspaceId,
 				value.subject,
 				CORRELATION_ID
@@ -105,7 +105,7 @@ describe('IdentityAuthContextClient', () => {
 			)
 		);
 		expect(
-			await client().sourceContext(
+			await client().ownerContext(
 				value.workspaceId,
 				value.subject,
 				CORRELATION_ID
@@ -157,7 +157,7 @@ describe('IdentityAuthContextClient', () => {
 				new Response(JSON.stringify({ ...value, ...change }))
 			);
 			await expect(
-				client().sourceContext(
+				client().ownerContext(
 					value.workspaceId,
 					value.subject,
 					CORRELATION_ID
@@ -173,25 +173,25 @@ describe('IdentityAuthContextClient', () => {
 				new Response('private-untrusted-body', { status })
 			);
 			await expect(
-				client().sourceContext(workspaceId, 'user-1', CORRELATION_ID)
-			).rejects.toThrow('Widget source identity is unavailable');
+				client().ownerContext(workspaceId, 'user-1', CORRELATION_ID)
+			).rejects.toThrow('CRM owner identity is unavailable');
 		}
 		fetchMock.mockResolvedValueOnce(
 			new Response(JSON.stringify({ data: 'x'.repeat(1024 * 1024) }))
 		);
 		await expect(
-			client().sourceContext(workspaceId, 'user-1', CORRELATION_ID)
+			client().ownerContext(workspaceId, 'user-1', CORRELATION_ID)
 		).rejects.toBeInstanceOf(ServiceUnavailableException);
 		fetchMock.mockRejectedValueOnce(new Error('private-network-error'));
 		await expect(
-			client().sourceContext(workspaceId, 'user-1', CORRELATION_ID)
-		).rejects.toThrow('Widget source identity is unavailable');
+			client().ownerContext(workspaceId, 'user-1', CORRELATION_ID)
+		).rejects.toThrow('CRM owner identity is unavailable');
 		fetchMock.mockClear();
 		await expect(
-			client().sourceContext('bad', 'user-1', CORRELATION_ID)
+			client().ownerContext('bad', 'user-1', CORRELATION_ID)
 		).rejects.toBeInstanceOf(ServiceUnavailableException);
 		await expect(
-			client().sourceContext(workspaceId, '\uD800', CORRELATION_ID)
+			client().ownerContext(workspaceId, '\uD800', CORRELATION_ID)
 		).rejects.toBeInstanceOf(ServiceUnavailableException);
 		expect(fetchMock).not.toHaveBeenCalled();
 	});

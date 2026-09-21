@@ -14,7 +14,7 @@ export interface SalesAccess {
 	schemaVersion: 1;
 	workspaceId: string;
 	subject: string;
-	role: 'OWNER' | 'CRM_ADMIN' | 'TEAM_LEAD' | 'MANAGER' | 'ANALYST';
+	role: 'OWNER' | 'CRM_ADMIN' | 'TEAM_LEAD' | 'MANAGER' | 'ANALYST' | 'CUSTOM';
 	state: 'ACTIVE' | 'GRACE' | 'READ_ONLY';
 	dataScope: 'ALL' | 'TEAM' | 'OWN';
 	teamIds: string[];
@@ -77,7 +77,7 @@ export function parseSalesAccess(
 		access.workspaceId !== workspaceId ||
 		typeof access.subject !== 'string' ||
 		!/^[^\s\x00-\x1f\x7f]{1,256}$/.test(access.subject) ||
-		!['OWNER', 'CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'ANALYST'].includes(
+		!['OWNER', 'CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'ANALYST', 'CUSTOM'].includes(
 			String(access.role)
 		) ||
 		!['ACTIVE', 'GRACE', 'READ_ONLY'].includes(String(access.state)) ||

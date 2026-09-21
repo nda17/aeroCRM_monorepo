@@ -129,7 +129,8 @@ export async function command<T>(
 	commandId: string,
 	commandType: string,
 	body: unknown,
-	action: (tx: Prisma.TransactionClient) => Promise<T>
+	action: (tx: Prisma.TransactionClient) => Promise<T>,
+	authorizeAfterLock?: (tx: Prisma.TransactionClient) => Promise<void>
 ): Promise<T> {
 	const requestHash = semanticHash({
 		actor: actor.subject,
@@ -140,6 +141,7 @@ export async function command<T>(
 	return serializable(prisma, async tx => {
 		await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`crm-team-command:${commandId}`}, 0))`;
 		await workspaceLock(tx, actor.workspaceId);
+		await authorizeAfterLock?.(tx);
 		if (actor.role !== 'OWNER') {
 			const currentActor = await tx.crmWorkspaceMember.findUnique({
 				where: {

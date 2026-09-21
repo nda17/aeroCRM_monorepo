@@ -64,7 +64,8 @@ export class IntakeSlaAuthorityService {
 		try {
 			const access = await this.authorization.assignmentSubject(
 				input.workspaceId,
-				input.actorSubject
+				input.actorSubject,
+				'crm-intake'
 			);
 			const binding = {
 				subject: access.subject,

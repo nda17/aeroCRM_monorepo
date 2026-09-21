@@ -50,6 +50,15 @@ describe('Sales authorization boundary', () => {
 	])('rejects unbound or malformed authorizer response', value => {
 		expect(() => parseSalesAccess(value, workspaceId)).toThrow();
 	});
+	it('accepts a scoped CUSTOM authority with only sales permissions', () => {
+		const custom = {
+			...access,
+			role: 'CUSTOM' as const,
+			dataScope: 'OWN' as const,
+			permissions: ['sales:read', 'sales:write']
+		};
+		expect(parseSalesAccess(custom, workspaceId)).toEqual(custom);
+	});
 
 	it('fetches fresh access with pairwise authentication for every call', async () => {
 		global.fetch = jest

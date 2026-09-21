@@ -84,6 +84,17 @@ describe('Sales assignment authority client', () => {
 		expect(options.headers.Authorization).toBe('Bearer test');
 		expect(options.headers['x-aerocrm-service']).toBe('crm-sales');
 	});
+	it('accepts a CUSTOM target with its exact scoped team binding', async () => {
+		const customTarget = {
+			...target,
+			role: 'CUSTOM',
+			dataScope: 'TEAM'
+		};
+		fetchMock.mockResolvedValue(
+			Response.json({ ...reply(), assignee: customTarget })
+		);
+		await expect(call()).resolves.toEqual(customTarget);
+	});
 	it.each([
 		[401, UnauthorizedException],
 		[403, ForbiddenException],

@@ -124,7 +124,7 @@ export class SalesAssigneeClient {
 				]) ||
 				target.subject !== assignee.subject ||
 				target.membershipId !== assignee.membershipId ||
-				!['OWNER', 'CRM_ADMIN', 'TEAM_LEAD', 'MANAGER'].includes(
+				!['OWNER', 'CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'CUSTOM'].includes(
 					String(target.role)
 				) ||
 				!['ALL', 'TEAM', 'OWN'].includes(String(target.dataScope)) ||

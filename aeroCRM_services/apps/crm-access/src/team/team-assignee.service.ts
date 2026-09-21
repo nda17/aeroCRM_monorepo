@@ -27,6 +27,16 @@ const candidateSelect = {
 	subject: true,
 	membershipId: true,
 	role: true,
+	customRoleId: true,
+	customRole: {
+		select: {
+			id: true,
+			version: true,
+			permissions: true,
+			dataScope: true,
+			archivedAt: true
+		}
+	},
 	version: true,
 	teams: {
 		where: { team: { archivedAt: null } },
@@ -74,7 +84,10 @@ export class CrmAssigneeService {
 		];
 		const candidateQuery = {
 			where: {
-				AND: [this.candidateScope(actor), { subject: { in: subjects } }]
+				AND: [
+					this.candidateScope(actor, undefined, 'sales:read'),
+					{ subject: { in: subjects } }
+				]
 			},
 			select: candidateSelect,
 			orderBy: { id: 'asc' as const },
@@ -193,7 +206,24 @@ export class CrmAssigneeService {
 			'crm-sales'
 		);
 		this.permission(actor, false, query.teamId);
-		const where = this.candidateScope(actor, query.teamId);
+		if (
+			query.purpose &&
+			!['OWNER', 'CRM_ADMIN'].includes(actor.role)
+		)
+			throw new ForbiddenException(
+				'CRM recipient directory requires administrative access'
+			);
+		const targetPermission =
+			query.purpose === 'TASK_RECIPIENT'
+				? 'sales:read'
+				: query.purpose === 'SLA_RECIPIENT'
+					? 'intake:read'
+					: 'sales:write';
+		const where = this.candidateScope(
+			actor,
+			query.teamId,
+			targetPermission
+		);
 		const candidates = await this.prisma.crmWorkspaceMember.findMany({
 			where,
 			select: candidateSelect,
@@ -235,6 +265,13 @@ export class CrmAssigneeService {
 			'crm-sales'
 		);
 		this.permission(fresh, false, query.teamId);
+		if (
+			query.purpose &&
+			!['OWNER', 'CRM_ADMIN'].includes(fresh.role)
+		)
+			throw new ForbiddenException(
+				'CRM recipient directory requires administrative access'
+			);
 		if (fingerprint(fresh) !== fingerprint(actor))
 			throw new ForbiddenException('CRM directory authority changed');
 		return this.prisma.$transaction(
@@ -384,6 +421,22 @@ export class CrmAssigneeService {
 		this.permission(fresh, true, dto.teamId);
 		if (fresh.subject !== actor.subject)
 			throw new ForbiddenException('CRM assignment actor changed');
+		let currentTarget: typeof target;
+		try {
+			currentTarget = await this.auth.assignmentSubject(
+				dto.workspaceId,
+				dto.subject
+			);
+		} catch (error) {
+			if (error instanceof ForbiddenException) fail();
+			throw error;
+		}
+		if (
+			currentTarget.membershipId !== target.membershipId ||
+			fingerprint(currentTarget) !== fingerprint(target)
+		)
+			fail();
+		target = currentTarget;
 		if (fresh.dataScope === 'OWN' && fresh.subject !== target.subject)
 			fail();
 		if (target.role === 'OWNER') {
@@ -439,13 +492,28 @@ export class CrmAssigneeService {
 	}
 	private candidateScope(
 		actor: AssigneeActor,
-		teamId?: string
+		teamId?: string,
+		customPermission: 'sales:read' | 'sales:write' | 'intake:read' =
+			'sales:write'
 	): Prisma.CrmWorkspaceMemberWhereInput {
 		return {
 			workspaceId: actor.workspaceId,
 			disabledAt: null,
-			role: { not: 'ANALYST' },
 			AND: [
+				{
+					OR: [
+						{ role: { in: ['CRM_ADMIN', 'TEAM_LEAD', 'MANAGER'] } },
+						{
+							role: 'CUSTOM',
+							customRole: {
+								is: {
+									archivedAt: null,
+									permissions: { has: customPermission }
+								}
+							}
+						}
+					]
+				},
 				actor.dataScope === 'OWN'
 					? { subject: actor.subject }
 					: actor.dataScope === 'TEAM'
@@ -467,6 +535,16 @@ export class CrmAssigneeService {
 					? {
 							OR: [
 								{ role: 'CRM_ADMIN' },
+								{
+									role: 'CUSTOM',
+									customRole: {
+										is: {
+											archivedAt: null,
+											dataScope: 'ALL',
+											permissions: { has: customPermission }
+										}
+									}
+								},
 								{ teams: { some: { teamId, team: { archivedAt: null } } } }
 							]
 						}

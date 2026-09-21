@@ -21,6 +21,11 @@
       "INSERT",
       "UPDATE"
     ],
+    "crm_custom_roles": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
     "crm_employee_profiles": [
       "SELECT",
       "INSERT",
@@ -86,9 +91,13 @@
     "CrmMemberRole"
   ],
   "routines": [
+    "is_valid_custom_role_permissions",
     "reject_team_history_mutation",
     "guard_billing_operation",
     "guard_billing_capacity",
     "enforce_service_identity_integrity"
+  ],
+  "routineExecute": [
+    "is_valid_custom_role_permissions(text[])"
   ]
 }

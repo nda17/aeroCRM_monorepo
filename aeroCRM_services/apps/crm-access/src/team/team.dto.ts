@@ -74,8 +74,16 @@ export class UpdateTeamDto extends VersionedTeamCommandDto {
 	name!: string;
 }
 export class ChangeRoleDto extends VersionedTeamCommandDto {
-	@IsIn(['CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'ANALYST'])
+	@IsIn(['CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'ANALYST', 'CUSTOM'])
 	role!: CrmMemberRole;
+	@IsOptional()
+	@IsUUID('4')
+	customRoleId?: string;
+	@IsOptional()
+	@IsInt()
+	@Min(1)
+	@Max(2147483647)
+	expectedRoleVersion?: number;
 }
 export class SetMemberTeamsDto extends VersionedTeamCommandDto {
 	@IsArray()
@@ -94,8 +102,16 @@ export class CreateInvitationDto extends TeamCommandDto {
 	@IsEmail()
 	@MaxLength(254)
 	email!: string;
-	@IsIn(['CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'ANALYST'])
+	@IsIn(['CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'ANALYST', 'CUSTOM'])
 	role!: CrmMemberRole;
+	@IsOptional()
+	@IsUUID('4')
+	customRoleId?: string;
+	@IsOptional()
+	@IsInt()
+	@Min(1)
+	@Max(2147483647)
+	expectedRoleVersion?: number;
 	@IsArray()
 	@ArrayUnique()
 	@ArrayMaxSize(1000)

@@ -108,7 +108,7 @@ const setup = (role = 'OWNER', state = 'ACTIVE') => {
 };
 
 describe('CRM workspace branding', () => {
-	it.each(['OWNER', 'CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'ANALYST'])(
+	it.each(['OWNER', 'CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'ANALYST', 'CUSTOM'])(
 		'%s reads the optional setting in every supported access state',
 		async role => {
 			for (const state of ['ACTIVE', 'GRACE', 'READ_ONLY']) {

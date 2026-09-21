@@ -5,6 +5,7 @@ import {
 	Equals,
 	IsArray,
 	IsObject,
+	IsIn,
 	IsOptional,
 	IsString,
 	IsUUID,
@@ -16,6 +17,9 @@ import {
 import { TeamQueryDto } from './team.dto';
 
 export class AssigneeQueryDto extends TeamQueryDto {
+	@IsOptional()
+	@IsIn(['TASK_RECIPIENT', 'SLA_RECIPIENT'])
+	purpose?: 'TASK_RECIPIENT' | 'SLA_RECIPIENT';
 	@IsOptional() @IsString() @MaxLength(200) search?: string;
 	@IsOptional()
 	@IsString()

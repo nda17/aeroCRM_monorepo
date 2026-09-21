@@ -229,6 +229,18 @@ describe('Intake authorization boundary', () => {
 			message: 'CRM access could not be confirmed'
 		});
 	});
+	it('accepts a scoped CUSTOM authority without granting source administration', () => {
+		const custom = {
+			...context,
+			role: 'CUSTOM' as const,
+			dataScope: 'TEAM' as const,
+			teamIds: [randomUUID()]
+		};
+		expect(parseIntakeAuthorization(custom, workspaceId)).toEqual(custom);
+		expect(() =>
+			assertIntakePermission(custom, 'intake:manage-sources')
+		).toThrow(ForbiddenException);
+	});
 
 	it.each([
 		undefined,

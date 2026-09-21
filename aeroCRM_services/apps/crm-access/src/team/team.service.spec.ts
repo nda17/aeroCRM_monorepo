@@ -38,13 +38,17 @@ const setup = (actor = owner) => {
 	};
 	prisma.$transaction.mockImplementation(callback => callback(prisma));
 	const auth = { authorize: jest.fn().mockResolvedValue(actor) };
+	const customRoles = {
+		requireActive: jest.fn().mockResolvedValue(null)
+	};
 	const service = new CrmTeamService(
 		prisma as never,
 		auth as never,
 		{} as never,
-		{} as never
+		{} as never,
+		customRoles as never
 	);
-	return { service, prisma, auth };
+	return { service, prisma, auth, customRoles };
 };
 describe('CRM team authorization and command binding', () => {
 	it.each(['P2034', 'P2002'])(
@@ -109,6 +113,48 @@ describe('CRM team authorization and command binding', () => {
 		expect(() => service.manageRole(owner, 'OWNER')).toThrow(
 			ForbiddenException
 		);
+	});
+	it('rechecks the owner-only CUSTOM transition after the transaction lock', async () => {
+		const current = setup();
+		const target = {
+			id: randomUUID(),
+			workspaceId,
+			subject: 'member',
+			membershipId: randomUUID(),
+			role: 'CUSTOM',
+			customRoleId: randomUUID(),
+			version: 1,
+			disabledAt: null,
+			teams: [],
+			customRole: null
+		};
+		current.prisma.crmWorkspaceMember.findFirst.mockResolvedValue(target);
+		const originalFlag = process.env.CRM_ACCESS_CUSTOM_ROLES_ENABLED;
+		process.env.CRM_ACCESS_CUSTOM_ROLES_ENABLED = 'true';
+		current.prisma.$transaction.mockImplementation(async callback => {
+			process.env.CRM_ACCESS_CUSTOM_ROLES_ENABLED = 'false';
+			return callback(current.prisma);
+		});
+		try {
+			await expect(
+				current.service.changeRole('Bearer test', target.id, {
+					schemaVersion: 1,
+					commandId: randomUUID(),
+					workspaceId,
+					expectedVersion: target.version,
+					role: 'MANAGER'
+				})
+			).rejects.toMatchObject({
+				response: { code: 'crm_custom_roles_disabled' }
+			});
+			expect(current.prisma.crmWorkspaceMember.findFirst).toHaveBeenCalledTimes(
+				1
+			);
+		} finally {
+			if (originalFlag === undefined)
+				delete process.env.CRM_ACCESS_CUSTOM_ROLES_ENABLED;
+			else process.env.CRM_ACCESS_CUSTOM_ROLES_ENABLED = originalFlag;
+		}
 	});
 	it('rejects cross-workspace team IDs before writing joins', async () => {
 		const { service, prisma } = setup();

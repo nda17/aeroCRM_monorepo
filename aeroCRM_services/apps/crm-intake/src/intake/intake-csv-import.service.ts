@@ -272,7 +272,7 @@ export class IntakeCsvImportService {
 		);
 		if (
 			write &&
-			!['OWNER', 'CRM_ADMIN', 'TEAM_LEAD', 'MANAGER'].includes(
+			!['OWNER', 'CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'CUSTOM'].includes(
 				context.role
 			)
 		)

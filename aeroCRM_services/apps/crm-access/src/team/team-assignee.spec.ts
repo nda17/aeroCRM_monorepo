@@ -222,10 +222,15 @@ describe('Scoped assignee selection and command authority', () => {
 			prisma.crmWorkspaceMember.findMany.mock.calls[0][0].where;
 		expect(where).toMatchObject({
 			workspaceId,
-			disabledAt: null,
-			role: { not: 'ANALYST' }
+			disabledAt: null
 		});
-		expect(where.AND[0]).toEqual(
+		expect(where.AND[0]).toMatchObject({
+			OR: expect.arrayContaining([
+				expect.objectContaining({ role: { in: ['CRM_ADMIN', 'TEAM_LEAD', 'MANAGER'] } }),
+				expect.objectContaining({ role: 'CUSTOM' })
+			])
+		});
+		expect(where.AND[1]).toEqual(
 			patch.dataScope === 'OWN'
 				? { subject: 'member' }
 				: {
@@ -687,7 +692,7 @@ describe('Bounded read-only assignee labels', () => {
 			).resolves.toMatchObject({ items: [{ employee }] });
 			const candidateWhere =
 				prisma.crmWorkspaceMember.findMany.mock.calls[0][0].where.AND[0];
-			expect(candidateWhere.AND[0]).toEqual(
+			expect(candidateWhere.AND[1]).toEqual(
 				patch.dataScope === 'OWN'
 					? { subject: 'member' }
 					: {

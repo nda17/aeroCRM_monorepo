@@ -125,6 +125,7 @@ export function parseTaskReminderRecipients(
 	return value as unknown as TaskReminderRecipientsRequest;
 }
 const memberInclude = {
+	customRole: true,
 	teams: {
 		where: { team: { archivedAt: null } },
 		select: { teamId: true },
@@ -220,7 +221,18 @@ export class TaskReminderRecipientsService {
 			const role = isOwner ? 'OWNER' : member!.role,
 				teams = member?.teams.map(item => item.teamId) ?? [];
 			if (role === 'ANALYST') return [];
-			const all = role === 'OWNER' || role === 'CRM_ADMIN';
+			const custom = role === 'CUSTOM' ? member!.customRole : null;
+			if (
+				role === 'CUSTOM' &&
+				(!custom ||
+					custom.archivedAt ||
+					!custom.permissions.includes('sales:read'))
+			)
+				return [];
+			const all =
+				role === 'OWNER' ||
+				role === 'CRM_ADMIN' ||
+				custom?.dataScope === 'ALL';
 			const taskTeam = input.task.deal
 				? input.task.deal.teamId
 				: input.task.teamId;
@@ -231,7 +243,7 @@ export class TaskReminderRecipientsService {
 				!(
 					all ||
 					ownTask ||
-					(role === 'TEAM_LEAD' &&
+					((role === 'TEAM_LEAD' || custom?.dataScope === 'TEAM') &&
 						taskTeam !== null &&
 						teams.includes(taskTeam))
 				)
@@ -253,7 +265,8 @@ export class TaskReminderRecipientsService {
 			if (
 				recipientKind === 'TEAM_LEADS' &&
 				!(
-					all ||
+					role === 'OWNER' ||
+					role === 'CRM_ADMIN' ||
 					(role === 'TEAM_LEAD' &&
 						taskTeam !== null &&
 						teams.includes(taskTeam))

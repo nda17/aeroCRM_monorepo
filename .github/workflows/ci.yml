@@ -233,8 +233,168 @@ jobs:
           BILLING_TEST_RUNTIME_ROLE: aerocrm_billing_runtime
           BILLING_INTEGRATION_ALLOW_MUTATION: 'true'
         run: node test/integration/crm-commerce-postgres18.integration.mjs
+  crm-custom-roles-postgres18:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local-contract-only
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply CRM Access baseline and custom-role migrations
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          psql_admin() {
+            docker exec -i -e PGPASSWORD=local-contract-only "$PG_CONTAINER" \
+              psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d "$1" "${@:2}"
+          }
+          psql_migration() {
+            docker exec -i -e PGPASSWORD=local-migration-only "$PG_CONTAINER" \
+              psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U aerocrm_crm_access_migration \
+              -d aerocrm_crm_access_test "${@:1}"
+          }
+          psql_admin postgres -c "CREATE ROLE aerocrm_crm_access_migration LOGIN PASSWORD 'local-migration-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+          psql_admin postgres -c "CREATE ROLE aerocrm_crm_access_runtime LOGIN PASSWORD 'local-runtime-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+          psql_admin postgres -c "CREATE ROLE aerocrm_crm_access_backup LOGIN PASSWORD 'local-backup-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+          psql_admin postgres -c 'CREATE DATABASE aerocrm_crm_access_test OWNER aerocrm_crm_access_migration'
+          psql_admin aerocrm_crm_access_test -c 'CREATE SCHEMA crm_access AUTHORIZATION aerocrm_crm_access_migration'
+          psql_admin aerocrm_crm_access_test -c 'GRANT CONNECT ON DATABASE aerocrm_crm_access_test TO aerocrm_crm_access_runtime, aerocrm_crm_access_backup; GRANT USAGE ON SCHEMA crm_access TO aerocrm_crm_access_runtime, aerocrm_crm_access_backup'
+          for migration in \
+            aeroCRM_services/apps/crm-access/prisma/migrations/20260920000000_init_aerocrm/migration.sql \
+            aeroCRM_services/apps/crm-access/prisma/migrations/20260921020000_add_crm_custom_member_role/migration.sql \
+            aeroCRM_services/apps/crm-access/prisma/migrations/20260921020100_crm_custom_roles/migration.sql; do
+            test -f "$migration"
+            psql_migration < "$migration"
+          done
+          psql_migration <<'SQL'
+          BEGIN;
+          REVOKE ALL ON TABLE crm_access.crm_custom_roles FROM PUBLIC, aerocrm_crm_access_runtime, aerocrm_crm_access_backup;
+          REVOKE ALL ON FUNCTION crm_access.is_valid_custom_role_permissions(text[]) FROM PUBLIC, aerocrm_crm_access_runtime, aerocrm_crm_access_backup;
+          GRANT SELECT, INSERT, UPDATE ON TABLE crm_access.crm_custom_roles TO aerocrm_crm_access_runtime;
+          GRANT SELECT ON TABLE crm_access.crm_custom_roles TO aerocrm_crm_access_backup;
+          GRANT EXECUTE ON FUNCTION crm_access.is_valid_custom_role_permissions(text[]) TO aerocrm_crm_access_runtime;
+          COMMIT;
+          SQL
+      - name: Verify custom-role schema, bindings and runtime ACL
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          docker exec -i -e PGPASSWORD=local-migration-only "$PG_CONTAINER" \
+            psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U aerocrm_crm_access_migration \
+            -d aerocrm_crm_access_test <<'SQL'
+          DO $contract$
+          DECLARE
+            workspace_a uuid := '10000000-0000-4000-8000-000000000001';
+            workspace_b uuid := '10000000-0000-4000-8000-000000000002';
+            role_id uuid := '20000000-0000-4000-8000-000000000001';
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid=e.enumtypid
+              JOIN pg_namespace n ON n.oid=t.typnamespace
+              WHERE n.nspname='crm_access' AND t.typname='CrmMemberRole' AND e.enumlabel='CUSTOM'
+            ) THEN RAISE EXCEPTION 'CUSTOM enum value missing'; END IF;
+            INSERT INTO crm_access.crm_custom_roles
+              (id, workspace_id, name, name_key, permissions, data_scope, updated_at)
+              VALUES (role_id, workspace_a, 'Менеджер 1', 'менеджер1',
+                ARRAY['customers:read','sales:analytics'], 'TEAM', now());
+            BEGIN
+              INSERT INTO crm_access.crm_custom_roles
+                (id, workspace_id, name, name_key, permissions, data_scope, updated_at)
+                VALUES ('20000000-0000-4000-8000-000000000004', workspace_a,
+                  'М Е Н Е Д Ж Е Р 1', 'менеджер1', ARRAY['customers:read'], 'OWN', now());
+              RAISE EXCEPTION 'Active role name key uniqueness is missing';
+            EXCEPTION WHEN unique_violation THEN NULL;
+            END;
+            BEGIN
+              INSERT INTO crm_access.crm_custom_roles
+                (id, workspace_id, name, name_key, permissions, data_scope, updated_at)
+                VALUES ('20000000-0000-4000-8000-000000000002', workspace_a,
+                  'Неверная', 'неверная', ARRAY['customers:write'], 'OWN', now());
+              RAISE EXCEPTION 'Invalid write-without-read permissions accepted';
+            EXCEPTION WHEN check_violation THEN NULL;
+            END;
+            BEGIN
+              INSERT INTO crm_access.crm_custom_roles
+                (id, workspace_id, name, name_key, permissions, data_scope, updated_at)
+                VALUES ('20000000-0000-4000-8000-000000000003', workspace_a,
+                  'менеджер', 'менеджер', ARRAY['customers:read'], 'OWN', now());
+              RAISE EXCEPTION 'Lowercase role name accepted';
+            EXCEPTION WHEN check_violation THEN NULL;
+            END;
+            BEGIN
+              INSERT INTO crm_access.crm_workspace_members
+                (id, workspace_id, subject, membership_id, role, custom_role_id, updated_at)
+                VALUES ('30000000-0000-4000-8000-000000000001', workspace_b, 'member-b',
+                  '40000000-0000-4000-8000-000000000001', 'CUSTOM', role_id, now());
+              RAISE EXCEPTION 'Cross-workspace custom role binding accepted';
+            EXCEPTION WHEN foreign_key_violation THEN NULL;
+            END;
+            BEGIN
+              INSERT INTO crm_access.crm_workspace_members
+                (id, workspace_id, subject, membership_id, role, custom_role_id, updated_at)
+                VALUES ('30000000-0000-4000-8000-000000000002', workspace_a, 'member-a',
+                  '40000000-0000-4000-8000-000000000002', 'MANAGER', role_id, now());
+              RAISE EXCEPTION 'Builtin role with custom binding accepted';
+            EXCEPTION WHEN check_violation THEN NULL;
+            END;
+            INSERT INTO crm_access.crm_workspace_members
+              (id, workspace_id, subject, membership_id, role, custom_role_id, updated_at)
+              VALUES ('30000000-0000-4000-8000-000000000003', workspace_a, 'custom-a',
+                '40000000-0000-4000-8000-000000000003', 'CUSTOM', role_id, now());
+            BEGIN
+              INSERT INTO crm_access.crm_invitation_intents
+                (id, workspace_id, email, role, custom_role_id, inviter_subject,
+                 expires_at, provisioning_command_id, updated_at)
+                VALUES ('50000000-0000-4000-8000-000000000001', workspace_a,
+                  'member@example.com', 'MANAGER', role_id, 'owner', now() + interval '1 day',
+                  '60000000-0000-4000-8000-000000000001', now());
+              RAISE EXCEPTION 'Builtin invitation with custom binding accepted';
+            EXCEPTION WHEN check_violation THEN NULL;
+            END;
+            IF NOT has_table_privilege('aerocrm_crm_access_runtime','crm_access.crm_custom_roles','SELECT')
+              OR NOT has_table_privilege('aerocrm_crm_access_runtime','crm_access.crm_custom_roles','INSERT')
+              OR NOT has_table_privilege('aerocrm_crm_access_runtime','crm_access.crm_custom_roles','UPDATE')
+              OR has_table_privilege('aerocrm_crm_access_runtime','crm_access.crm_custom_roles','DELETE')
+              OR NOT has_function_privilege('aerocrm_crm_access_runtime','crm_access.is_valid_custom_role_permissions(text[])','EXECUTE')
+              OR NOT has_table_privilege('aerocrm_crm_access_backup','crm_access.crm_custom_roles','SELECT')
+              OR has_function_privilege('aerocrm_crm_access_backup','crm_access.is_valid_custom_role_permissions(text[])','EXECUTE')
+              OR EXISTS (SELECT 1 FROM pg_proc p,
+                LATERAL aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) acl
+                WHERE p.oid='crm_access.is_valid_custom_role_permissions(text[])'::regprocedure
+                  AND acl.grantee=0 AND acl.privilege_type='EXECUTE')
+            THEN RAISE EXCEPTION 'CRM custom role ACL mismatch'; END IF;
+          END
+          $contract$;
+          SQL
+          docker exec -i -e PGPASSWORD=local-runtime-only "$PG_CONTAINER" \
+            psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U aerocrm_crm_access_runtime \
+            -d aerocrm_crm_access_test <<'SQL'
+          INSERT INTO crm_access.crm_custom_roles
+            (id, workspace_id, name, name_key, permissions, data_scope, updated_at)
+            VALUES ('20000000-0000-4000-8000-000000000005',
+              '10000000-0000-4000-8000-000000000002', 'Аналитик', 'аналитик',
+              ARRAY['sales:analytics'], 'ALL', now());
+          UPDATE crm_access.crm_custom_roles SET version=2, updated_at=now()
+            WHERE id='20000000-0000-4000-8000-000000000005';
+          SELECT id FROM crm_access.crm_custom_roles
+            WHERE id='20000000-0000-4000-8000-000000000005';
+          SQL
+          docker exec -i -e PGPASSWORD=local-backup-only "$PG_CONTAINER" \
+            psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U aerocrm_crm_access_backup \
+            -d aerocrm_crm_access_test -c 'SELECT count(*) FROM crm_access.crm_custom_roles'
   image:
-    needs: [frontends, contract-migrations, billing-capacity-postgres18]
+    needs: [frontends, contract-migrations, billing-capacity-postgres18, crm-custom-roles-postgres18]
     if: github.ref == 'refs/heads/prod_0.1.0' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:

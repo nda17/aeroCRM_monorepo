@@ -39,6 +39,7 @@ const setup = (overrides = {}) => {
 		prisma as never,
 		auth as never,
 		{} as never,
+		{} as never,
 		{} as never
 	);
 	return { service, prisma, auth };
@@ -63,8 +64,7 @@ describe('CRM intake department options', () => {
 			);
 			expect(auth.authorize).toHaveBeenCalledWith(
 				'Bearer test',
-				workspaceId,
-				'crm-intake'
+				workspaceId
 			);
 			const where = {
 				workspaceId,

@@ -43,7 +43,7 @@ export class AcceptanceController {
 	) {
 		this.key(dto.commandId, key);
 		return this.acceptance.accept(
-			await this.authorization.authorize(token, dto.workspaceId),
+			await this.workflowAuthority(token, dto.workspaceId),
 			id,
 			dto
 		);
@@ -56,7 +56,7 @@ export class AcceptanceController {
 	) {
 		this.key(dto.commandId, key);
 		return this.acceptance.retry(
-			await this.authorization.authorize(token, dto.workspaceId),
+			await this.workflowAuthority(token, dto.workspaceId),
 			id,
 			dto
 		);
@@ -80,5 +80,18 @@ export class AcceptanceController {
 			throw new BadRequestException(
 				'Idempotency-Key must match commandId'
 			);
+	}
+	private async workflowAuthority(
+		token: string | undefined,
+		workspaceId: string
+	) {
+		const authenticated = await this.authorization.authorize(
+			token,
+			workspaceId
+		);
+		return this.authorization.authorizeWorkflow(
+			workspaceId,
+			authenticated.subject
+		);
 	}
 }

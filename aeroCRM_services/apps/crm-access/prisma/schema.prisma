@@ -61,6 +61,8 @@ model CrmWorkspaceMember {
   subject      String          @db.VarChar(256)
   membershipId String          @map("membership_id") @db.Uuid
   role         CrmMemberRole
+  customRoleId String?         @map("custom_role_id") @db.Uuid
+  customRole   CrmCustomRole?  @relation(fields: [customRoleId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
   teams        CrmMemberTeam[]
   disabledAt   DateTime?       @map("disabled_at")
   version      Int             @default(1)
@@ -72,6 +74,26 @@ model CrmWorkspaceMember {
   @@unique([id, workspaceId])
   @@index([workspaceId, disabledAt])
   @@map("crm_workspace_members")
+  @@schema("crm_access")
+}
+
+model CrmCustomRole {
+  id          String                @id @default(uuid()) @db.Uuid
+  workspaceId String                @map("workspace_id") @db.Uuid
+  name        String                @db.VarChar(80)
+  nameKey     String                @map("name_key") @db.VarChar(80)
+  permissions String[]              @default([])
+  dataScope   String                @map("data_scope") @db.VarChar(8)
+  version     Int                   @default(1)
+  archivedAt  DateTime?             @map("archived_at")
+  createdAt   DateTime              @default(now()) @map("created_at")
+  updatedAt   DateTime              @updatedAt @map("updated_at")
+  members     CrmWorkspaceMember[]
+  invitations CrmInvitationIntent[]
+
+  @@unique([id, workspaceId])
+  @@index([workspaceId, archivedAt, nameKey, id])
+  @@map("crm_custom_roles")
   @@schema("crm_access")
 }
 
@@ -131,6 +153,8 @@ model CrmInvitationIntent {
   lastName              String?       @map("last_name") @db.VarChar(100)
   middleName            String?       @map("middle_name") @db.VarChar(100)
   role                  CrmMemberRole
+  customRoleId          String?       @map("custom_role_id") @db.Uuid
+  customRole            CrmCustomRole? @relation(fields: [customRoleId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
   teamIds               String[]      @default([]) @map("team_ids") @db.Uuid
   inviterSubject        String        @map("inviter_subject") @db.VarChar(256)
   status                String        @default("REGISTERING") @db.VarChar(24)
@@ -253,6 +277,7 @@ enum CrmMemberRole {
   TEAM_LEAD
   MANAGER
   ANALYST
+  CUSTOM
 
   @@schema("crm_access")
 }
