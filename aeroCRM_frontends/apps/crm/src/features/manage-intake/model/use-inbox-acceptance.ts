@@ -71,7 +71,7 @@ export const useInboxAcceptance = (
 	])
 	const command = useIntakeCommand(
 		access,
-		'intake:write',
+		'intake:accept',
 		mutateInboxAcceptance,
 		result => {
 			client.setQueryData(key, result)

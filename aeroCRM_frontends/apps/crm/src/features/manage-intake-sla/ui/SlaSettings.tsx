@@ -58,6 +58,7 @@ const SlaForm = ({
 		structuredClone(response.rule?.config ?? initialConfig)
 	)
 	const options = useAssigneeOptions(context.directory, {
+		purpose: 'SLA_RECIPIENT',
 		selectedSubject: config.responsibleBinding?.subject
 	})
 	// Only the directory's current OWNER may resolve the contract's null owner binding.

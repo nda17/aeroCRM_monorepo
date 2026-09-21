@@ -4,7 +4,8 @@ export const assigneeRoles = [
 	'OWNER',
 	'CRM_ADMIN',
 	'TEAM_LEAD',
-	'MANAGER'
+	'MANAGER',
+	'CUSTOM'
 ] as const
 export interface AssigneeOption {
 	subject: string
@@ -18,7 +19,9 @@ export interface AssigneeBinding {
 	// null is an existing, historically unknown membership; never replace it implicitly.
 	membershipId: string | null
 }
+export type AssigneeDirectoryPurpose = 'TASK_RECIPIENT' | 'SLA_RECIPIENT'
 export interface AssigneeOptionsRequest {
+	purpose?: AssigneeDirectoryPurpose
 	workspaceId: string
 	subject: string
 	dataScope: 'ALL' | 'TEAM' | 'OWN'
@@ -45,6 +48,8 @@ export const isAssigneeSubject = (value: unknown): value is string =>
 export const validAssigneeOptionsRequest = (
 	request: AssigneeOptionsRequest
 ) =>
+	(request.purpose === undefined ||
+		['TASK_RECIPIENT', 'SLA_RECIPIENT'].includes(request.purpose)) &&
 	isUuidV4(request.workspaceId) &&
 	isAssigneeSubject(request.subject) &&
 	['ALL', 'TEAM', 'OWN'].includes(request.dataScope) &&

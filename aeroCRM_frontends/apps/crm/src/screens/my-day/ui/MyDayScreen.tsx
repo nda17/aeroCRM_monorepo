@@ -173,14 +173,8 @@ const MyDayContent = ({
 							<>
 								{context.permissions.data?.permissions.includes(
 									'sales:analytics'
-								) &&
-								['OWNER', 'CRM_ADMIN', 'TEAM_LEAD'].includes(
-									context.permissions.data.role
-								) ? (
-									<Link
-										href="/analytics"
-										className={styles.overviewLink}
-									>
+								) && context.permissions.data.dataScope !== 'OWN' ? (
+									<Link href="/analytics" className={styles.overviewLink}>
 										Обзор команды
 									</Link>
 								) : null}

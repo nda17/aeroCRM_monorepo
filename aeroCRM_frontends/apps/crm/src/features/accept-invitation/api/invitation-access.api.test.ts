@@ -50,7 +50,10 @@ describe('invitation CRM readiness', () => {
 		vi.mocked(getCrmPermissions).mockResolvedValue({
 			subject: 'user-1',
 			role: 'ANALYST',
-			state: 'READ_ONLY'
+			state: 'READ_ONLY',
+			dataScope: 'ALL',
+			teamIds: [],
+			permissions: ['sales:analytics']
 		} as never)
 		await expect(
 			checkInvitationCrmAccess('test-token', workspaceId, 'user-1')

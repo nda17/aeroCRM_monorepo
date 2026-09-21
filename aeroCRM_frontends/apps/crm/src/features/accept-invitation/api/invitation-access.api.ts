@@ -1,5 +1,6 @@
 import {
 	canOpenCrmWorkspace,
+	crmDefaultRoute,
 	getCrmPermissions,
 	parseCrmAccessBootstrap
 } from '@/entities/crm-access'
@@ -42,6 +43,6 @@ export const checkInvitationCrmAccess = async (
 	return {
 		workspaceId,
 		state: permissions.state,
-		destination: `${permissions.role === 'ANALYST' ? '/analytics' : '/inbox'}?workspaceId=${workspaceId}`
+		destination: `${crmDefaultRoute(permissions)}?workspaceId=${workspaceId}`
 	}
 }

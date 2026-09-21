@@ -283,8 +283,12 @@ const DealsWorkspaceScreen = ({
 						</ActionMenu>
 						<Button
 							tooltip="Выбрать клиента, сумму сделки и первое действие по ней"
+							disabledTooltip="Для новой сделки нужны права изменения сделок, просмотра контактов и доступная воронка."
 							disabled={
 								!context.canWrite ||
+								!context.permissions.data?.permissions.includes(
+									'customers:read'
+								) ||
 								pipelines.isError ||
 								pipelines.isFetching ||
 								!pipelines.data?.length
@@ -722,6 +726,7 @@ const DealsWorkspaceScreen = ({
 							action={
 								<Button
 									tooltip="Выбрать клиента, сумму сделки и первое действие по ней"
+									disabledTooltip="Для новой сделки нужны права изменения сделок, просмотра контактов и доступная воронка."
 									disabled={!context.canWrite || !pipelines.data?.length}
 									onClick={() => setCreateOpen(true)}
 								>

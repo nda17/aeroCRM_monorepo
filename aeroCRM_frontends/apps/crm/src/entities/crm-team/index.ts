@@ -14,3 +14,5 @@ export {
 export * from './model/assignee-labels.contract'
 export * from './api/assignee-labels.api'
 export * from './model/use-assignee-labels'
+
+export * from './model/custom-role.contract'

@@ -7,6 +7,7 @@ import {
 	useCrmWorkspaceAccess
 } from '@/entities/crm-access'
 import { useSessionStore } from '@/entities/session'
+import { isUuidV4 } from '@/shared/lib/contract'
 import {
 	useAssigneeOptions,
 	type AssigneeDirectoryContext
@@ -69,20 +70,34 @@ export const useReminderSession = () => {
 		isCurrent: current,
 		authority
 	}
-	const self = useAssigneeOptions(directory, {
-		selectedSubject: session?.userId
-	})
+	const customReader =
+		authority?.role === 'CUSTOM' &&
+		!authority.permissions.includes('sales:write')
+	const self = useAssigneeOptions(
+		{ ...directory, canRead: canRead && !customReader },
+		{
+			selectedSubject: session?.userId
+		}
+	)
 	const selected = self.selected
 	const confirmedActor =
-		selected &&
-		selected.subject === session?.userId &&
-		selected.role === authority?.role
+		customReader &&
+		canRead &&
+		session &&
+		isUuidV4(workspace.membership.membershipId)
 			? {
-					subject: selected.subject,
-					membershipId:
-						selected.role === 'OWNER' ? null : selected.membershipId
+					subject: session.userId,
+					membershipId: workspace.membership.membershipId
 				}
-			: null
+			: selected &&
+				  selected.subject === session?.userId &&
+				  selected.role === authority?.role
+				? {
+						subject: selected.subject,
+						membershipId:
+							selected.role === 'OWNER' ? null : selected.membershipId
+					}
+				: null
 	// Retain only the draft's proven binding during refresh, never its eligibility.
 	const [previous, setPrevious] = useState<{
 		key: string

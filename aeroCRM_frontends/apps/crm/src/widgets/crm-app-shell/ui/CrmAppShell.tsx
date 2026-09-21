@@ -5,7 +5,14 @@ import {
 	CRM_NAVIGATION,
 	type CrmNavigationItem
 } from '@/widgets/crm-app-shell/model/crm-navigation'
-import { useCrmWorkspaceAccess } from '@/entities/crm-access'
+import {
+	canReadCrmRoute,
+	crmDefaultRoute,
+	useCrmPermissions,
+	type CrmPermissions,
+	useCrmWorkspaceAccess
+} from '@/entities/crm-access'
+import { useSessionStore } from '@/entities/session'
 import { useWorkspaceBranding } from '@/entities/crm-workspace-branding'
 import { ThemeSwitcher } from '@/shared/ui/theme-switcher/ThemeSwitcher'
 import { TaskNotificationCenter } from '@/features/manage-reminders'
@@ -16,16 +23,18 @@ import {
 	Drawer,
 	ReadOnlyBanner,
 	StatusBadge,
+	ScreenState,
 	useTooltip
 } from '@/shared/ui'
 import clsx from 'clsx'
-import { usePathname } from 'next/navigation'
-import { type PropsWithChildren, useId, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { type PropsWithChildren, useEffect, useId, useState } from 'react'
 
 interface CrmNavigationProps {
 	ariaLabel: string
 	enabled?: boolean
 	onNavigate?: () => void
+	authority?: CrmPermissions
 }
 
 const isNavigationItemActive = (
@@ -36,14 +45,17 @@ const isNavigationItemActive = (
 const CrmNavigation = ({
 	ariaLabel,
 	enabled = true,
-	onNavigate
+	onNavigate,
+	authority
 }: CrmNavigationProps) => {
 	const pathname = usePathname()
 
 	return (
 		<nav aria-label={ariaLabel}>
 			<ul className={styles.navigationList}>
-				{CRM_NAVIGATION.map(item => {
+				{CRM_NAVIGATION.filter(
+					item => authority && canReadCrmRoute(authority, item.href)
+				).map(item => {
 					const isActive = isNavigationItemActive(pathname, item)
 
 					return (
@@ -62,7 +74,11 @@ const CrmNavigation = ({
 	)
 }
 
-const CrmMobileNavigation = () => {
+const CrmMobileNavigation = ({
+	authority
+}: {
+	authority?: CrmPermissions
+}) => {
 	const [isOpen, setIsOpen] = useState(false)
 
 	return (
@@ -85,6 +101,7 @@ const CrmMobileNavigation = () => {
 			>
 				<div className={styles.mobileNavigation}>
 					<CrmNavigation
+						authority={authority}
 						key={String(isOpen)}
 						enabled={isOpen}
 						ariaLabel="Мобильная навигация CRM"
@@ -106,6 +123,31 @@ const CrmProductSwitch = () => (
 const CrmAppShell = ({ children }: PropsWithChildren) => {
 	const pathname = usePathname()
 	const access = useCrmWorkspaceAccess()
+	const router = useRouter()
+	const searchParams = useSearchParams()
+	const { session, sessionRevision } = useSessionStore()
+	const permissions = useCrmPermissions(
+		access.workspaceId,
+		session,
+		sessionRevision
+	)
+	const authority =
+		permissions.isSuccess &&
+		!permissions.isError &&
+		permissions.data.subject === session?.userId
+			? permissions.data
+			: undefined
+	const home = authority ? crmDefaultRoute(authority) : '/inbox'
+	const entryRedirect =
+		pathname === '/inbox' &&
+		authority &&
+		!canReadCrmRoute(authority, pathname)
+	useEffect(() => {
+		if (entryRedirect)
+			router.replace(
+				`${home}${searchParams.size ? `?${searchParams.toString()}` : ''}`
+			)
+	}, [entryRedirect, home, router, searchParams])
 	const branding = useWorkspaceBranding()
 	const companyName = branding.data?.branding.displayName
 	const sidebarId = useId()
@@ -157,7 +199,7 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 					)}
 				>
 					<div className={styles.sidebarBrand}>
-						<BrandLogo href="/inbox" />
+						<BrandLogo href={home} />
 						{companyName ? (
 							<span className={styles.companyName} title={companyName}>
 								{companyName}
@@ -168,6 +210,7 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 						<CrmNavigation
 							key={`${pathname}:${isSidebarCollapsed}`}
 							enabled={!isSidebarCollapsed}
+							authority={authority}
 							ariaLabel="Основная навигация CRM"
 						/>
 					</div>
@@ -179,7 +222,7 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 
 			<div className={styles.workspace}>
 				<header className={styles.topbar}>
-					<CrmMobileNavigation key={pathname} />
+					<CrmMobileNavigation key={pathname} authority={authority} />
 					<button
 						{...sidebarHint.triggerProps}
 						type="button"
@@ -293,7 +336,7 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 							description="Данные сохранены. Просмотр доступен, а экспорт — пользователям с соответствующими правами. Для изменений и приёма новых заявок продлите доступ."
 						/>
 					) : null}
-					{children}
+					{entryRedirect ? <ScreenState variant="loading" /> : children}
 				</main>
 			</div>
 		</div>

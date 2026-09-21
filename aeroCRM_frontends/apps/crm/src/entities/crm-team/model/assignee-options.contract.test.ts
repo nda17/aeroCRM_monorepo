@@ -63,6 +63,32 @@ describe('scoped assignee options contract', () => {
 			})
 		).toEqual(page)
 	})
+	it('accepts a CUSTOM assignee while preserving the same scope checks', () => {
+		const custom = { ...employee, role: 'CUSTOM' as const }
+		expect(
+			parseAssigneeOptions({ ...result, items: [custom] }, request)
+		).toMatchObject({ items: [custom] })
+		expect(
+			parseAssigneeOptions(
+				{ ...result, items: [custom] },
+				{ ...request, dataScope: 'OWN', subject: 'owner' }
+			)
+		).toBeNull()
+	})
+	it.each(['TASK_RECIPIENT', 'SLA_RECIPIENT'] as const)(
+		'accepts the explicit %s directory purpose without broadening the request',
+		purpose => {
+			expect(validAssigneeOptionsRequest({ ...request, purpose })).toBe(
+				true
+			)
+			expect(
+				validAssigneeOptionsRequest({
+					...request,
+					purpose: 'OTHER' as never
+				})
+			).toBe(false)
+		}
+	)
 	it.each([
 		{ ...result, schemaVersion: 2 },
 		{ ...result, workspaceId: owner.membershipId },

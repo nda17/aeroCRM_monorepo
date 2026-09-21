@@ -10,17 +10,65 @@ import {
 	isUuidV4,
 	isNonEmptyString
 } from '@/shared/lib/contract'
+import { customRolePermissions } from '@/shared/lib/custom-role'
 import { useQuery } from '@tanstack/react-query'
 
 export interface CrmPermissions {
 	schemaVersion: 1
 	workspaceId: string
 	subject: string
-	role: 'OWNER' | 'CRM_ADMIN' | 'TEAM_LEAD' | 'MANAGER' | 'ANALYST'
+	role:
+		| 'OWNER'
+		| 'CRM_ADMIN'
+		| 'TEAM_LEAD'
+		| 'MANAGER'
+		| 'ANALYST'
+		| 'CUSTOM'
 	state: 'ACTIVE' | 'GRACE' | 'READ_ONLY'
 	dataScope: 'ALL' | 'TEAM' | 'OWN'
 	teamIds: string[]
 	permissions: string[]
+}
+
+export const crmDefaultRoute = (authority: CrmPermissions) => {
+	if (authority.permissions.includes('intake:read')) return '/inbox'
+	if (authority.permissions.includes('sales:read')) return '/planner'
+	if (authority.permissions.includes('customers:read')) return '/contacts'
+	if (authority.permissions.includes('sales:analytics'))
+		return '/analytics'
+	return '/settings'
+}
+
+export const canAcceptInbox = (authority?: CrmPermissions) =>
+	!!authority &&
+	authority.state !== 'READ_ONLY' &&
+	[
+		'intake:read',
+		'intake:write',
+		'customers:read',
+		'customers:write',
+		'sales:read',
+		'sales:write'
+	].every(permission => authority.permissions.includes(permission))
+
+export const canReadCrmRoute = (
+	authority: CrmPermissions,
+	pathname: string
+) => {
+	const section = pathname.split('/')[1]
+	const required: Record<string, string> = {
+		inbox: 'intake:read',
+		contacts: 'customers:read',
+		companies: 'customers:read',
+		deals: 'sales:read',
+		tasks: 'sales:read',
+		planner: 'sales:read',
+		'my-day': 'sales:read',
+		analytics: 'sales:analytics'
+	}
+	return required[section]
+		? authority.permissions.includes(required[section])
+		: true
 }
 
 const knownPermissions = new Set([
@@ -62,9 +110,14 @@ export const parseCrmPermissions = (
 		value.workspaceId !== workspaceId ||
 		!isUuidV4(value.workspaceId) ||
 		!isNonEmptyString(value.subject, 256) ||
-		!['OWNER', 'CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'ANALYST'].includes(
-			String(value.role)
-		) ||
+		![
+			'OWNER',
+			'CRM_ADMIN',
+			'TEAM_LEAD',
+			'MANAGER',
+			'ANALYST',
+			'CUSTOM'
+		].includes(String(value.role)) ||
 		!['ACTIVE', 'GRACE', 'READ_ONLY'].includes(String(value.state)) ||
 		!['ALL', 'TEAM', 'OWN'].includes(String(value.dataScope)) ||
 		!Array.isArray(value.teamIds) ||
@@ -79,12 +132,13 @@ export const parseCrmPermissions = (
 	)
 		return null
 	if (
+		value.role !== 'CUSTOM' &&
 		value.dataScope !==
-		(value.role === 'MANAGER'
-			? 'OWN'
-			: value.role === 'TEAM_LEAD'
-				? 'TEAM'
-				: 'ALL')
+			(value.role === 'MANAGER'
+				? 'OWN'
+				: value.role === 'TEAM_LEAD'
+					? 'TEAM'
+					: 'ALL')
 	)
 		return null
 	if (
@@ -120,6 +174,22 @@ export const parseCrmPermissions = (
 				'access:revoke-access'
 			].includes(item)
 		)
+	)
+		return null
+	const permissions = value.permissions as string[]
+	if (
+		value.role === 'CUSTOM' &&
+		(value.permissions.some(
+			item =>
+				!customRolePermissions.includes(
+					item as (typeof customRolePermissions)[number]
+				)
+		) ||
+			['customers', 'intake', 'sales'].some(
+				section =>
+					permissions.includes(`${section}:write`) &&
+					!permissions.includes(`${section}:read`)
+			))
 	)
 		return null
 	return value as unknown as CrmPermissions

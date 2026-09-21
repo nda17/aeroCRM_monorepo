@@ -6,18 +6,27 @@ import {
 	isUuidV4
 } from '@/shared/lib/contract'
 
+import {
+	isCustomRoleRef,
+	parseCrmCustomRole,
+	type CustomRoleRef,
+	type CrmCustomRoleRow
+} from './custom-role.contract'
+
 export const crmRoles = [
 	'CRM_ADMIN',
 	'TEAM_LEAD',
 	'MANAGER',
 	'ANALYST'
 ] as const
-export type CrmRole = (typeof crmRoles)[number]
+export type CrmBuiltinRole = (typeof crmRoles)[number]
+export type CrmRole = CrmBuiltinRole | 'CUSTOM'
 export const crmRoleLabels: Record<CrmRole, string> = {
 	CRM_ADMIN: 'Администратор CRM',
 	TEAM_LEAD: 'Руководитель отдела',
 	MANAGER: 'Менеджер',
-	ANALYST: 'Аналитик'
+	ANALYST: 'Аналитик',
+	CUSTOM: 'Своя роль'
 }
 export interface CrmMember {
 	id: string
@@ -25,6 +34,7 @@ export interface CrmMember {
 	subject: string
 	membershipId: string
 	role: CrmRole
+	customRole?: CustomRoleRef
 	teamIds: string[]
 	disabledAt: string | null
 	version: number
@@ -53,6 +63,7 @@ export interface CrmInvitation {
 	workspaceId: string
 	email: string
 	role: CrmRole
+	customRole?: CustomRoleRef
 	teamIds: string[]
 	status: 'REGISTERING' | 'INVITED' | 'ACCEPTED' | 'REVOKED' | 'EXPIRED'
 	version: number
@@ -84,11 +95,13 @@ export type TeamRow =
 	| CrmTeamRow
 	| CrmInvitationRow
 	| CrmDeliveryRow
+	| CrmCustomRoleRow
 export type TeamCollection =
 	| 'members'
 	| 'teams'
 	| 'invitations'
 	| 'deliveries'
+	| 'roles'
 export interface TeamPage {
 	schemaVersion: 1
 	page: number
@@ -114,7 +127,7 @@ const email = (value: unknown) =>
 	value === value.trim().toLowerCase() &&
 	/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 const role = (value: unknown): value is CrmRole =>
-	crmRoles.includes(value as CrmRole)
+	value === 'CUSTOM' || crmRoles.includes(value as CrmBuiltinRole)
 const base = (
 	value: unknown,
 	workspaceId: string
@@ -139,6 +152,7 @@ export const parseCrmMember = (
 			'subject',
 			'membershipId',
 			'role',
+			...(value.role === 'CUSTOM' ? ['customRole'] : []),
 			'teamIds',
 			'disabledAt',
 			'version',
@@ -149,6 +163,7 @@ export const parseCrmMember = (
 		!isNonEmptyString(value.subject, 256) ||
 		!isUuidV4(value.membershipId) ||
 		!role(value.role) ||
+		(value.role === 'CUSTOM' && !isCustomRoleRef(value.customRole)) ||
 		!teamIds(value.teamIds) ||
 		!nullableDate(value.disabledAt) ||
 		(profile &&
@@ -192,6 +207,7 @@ export const parseCrmInvitation = (
 		'workspaceId',
 		'email',
 		'role',
+		...(value.role === 'CUSTOM' ? ['customRole'] : []),
 		'teamIds',
 		'status',
 		'version',
@@ -201,6 +217,7 @@ export const parseCrmInvitation = (
 	]) ||
 	!email(value.email) ||
 	!role(value.role) ||
+	(value.role === 'CUSTOM' && !isCustomRoleRef(value.customRole)) ||
 	!teamIds(value.teamIds) ||
 	!['REGISTERING', 'INVITED', 'ACCEPTED', 'REVOKED', 'EXPIRED'].includes(
 		String(value.status)
@@ -283,6 +300,12 @@ export const parseTeamPage = (
 	)
 		return null
 	const items = value.items.map(item => {
+		if (collection === 'roles') {
+			const row = parseCrmCustomRole(item, workspaceId)
+			return row?.archivedAt === null
+				? { ...row, kind: 'role' as const }
+				: null
+		}
 		if (collection === 'members')
 			return parseCrmMember(item, workspaceId, true) as CrmMemberRow | null
 		if (collection === 'teams') {

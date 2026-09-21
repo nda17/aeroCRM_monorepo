@@ -14,13 +14,19 @@ import {
 	parseCrmMember,
 	parseCrmTeam,
 	parseTeamPage,
-	type CrmRole,
+	type CrmBuiltinRole,
 	type TeamCollection
 } from '../model/team.contract'
 import {
 	parseTeamOptions,
 	type TeamOptionsRequest
 } from '../model/team-options.contract'
+import { parseCrmCustomRole } from '../model/custom-role.contract'
+import {
+	normalizeRoleName,
+	type CustomRolePermission,
+	type CustomRoleScope
+} from '@/shared/lib/custom-role'
 import type { EmployeeName } from '../model/employee-profile.contract'
 
 export const listTeamOptions = async (
@@ -71,7 +77,26 @@ export const listTeamRecords = async (
 	if (!result) throw invalidContractError()
 	return result
 }
+export type RoleAssignment =
+	| {
+			role: CrmBuiltinRole
+			customRoleId?: never
+			expectedRoleVersion?: never
+	  }
+	| { role: 'CUSTOM'; customRoleId: string; expectedRoleVersion: number }
+export interface CustomRoleInput {
+	name: string
+	permissions: CustomRolePermission[]
+	dataScope: CustomRoleScope
+}
 export type TeamMutation =
+	| ({ kind: 'create-role' } & CustomRoleInput)
+	| ({
+			kind: 'update-role'
+			id: string
+			expectedVersion: number
+	  } & CustomRoleInput)
+	| { kind: 'archive-role'; id: string; expectedVersion: number }
 	| { kind: 'create-team'; name: string }
 	| {
 			kind: 'rename-team'
@@ -80,16 +105,19 @@ export type TeamMutation =
 			name: string
 	  }
 	| { kind: 'archive-team'; id: string; expectedVersion: number }
-	| {
+	| ({
 			kind: 'invite'
 			email: string
-			role: CrmRole
 			teamIds: string[]
 			ttlDays: number
 			profile?: EmployeeName
-	  }
+	  } & RoleAssignment)
 	| { kind: 'revoke'; id: string; expectedVersion: number }
-	| { kind: 'role'; id: string; expectedVersion: number; role: CrmRole }
+	| ({
+			kind: 'role'
+			id: string
+			expectedVersion: number
+	  } & RoleAssignment)
 	| {
 			kind: 'teams'
 			id: string
@@ -118,6 +146,9 @@ export const mutateTeam = async (
 	const { kind, ...fields } = mutation
 	const id = 'id' in mutation ? mutation.id : undefined
 	const paths: Record<TeamMutation['kind'], string> = {
+		'create-role': 'roles',
+		'update-role': `roles/${id}/update`,
+		'archive-role': `roles/${id}/archive`,
 		'create-team': 'teams',
 		'rename-team': `teams/${id}/rename`,
 		'archive-team': `teams/${id}/archive`,
@@ -143,15 +174,17 @@ export const mutateTeam = async (
 		headers: { 'Idempotency-Key': commandId },
 		data
 	})
-	const key = ['create-team', 'rename-team', 'archive-team'].includes(kind)
-		? 'team'
-		: ['invite', 'revoke'].includes(kind)
-			? 'invitation'
-			: kind === 'enable'
-				? 'admission'
-				: kind === 'retry'
-					? 'delivery'
-					: 'member'
+	const key = ['create-role', 'update-role', 'archive-role'].includes(kind)
+		? 'role'
+		: ['create-team', 'rename-team', 'archive-team'].includes(kind)
+			? 'team'
+			: ['invite', 'revoke'].includes(kind)
+				? 'invitation'
+				: kind === 'enable'
+					? 'admission'
+					: kind === 'retry'
+						? 'delivery'
+						: 'member'
 	if (
 		!isRecord(result) ||
 		!hasExactKeys(result, ['schemaVersion', key]) ||
@@ -178,6 +211,36 @@ export const mutateTeam = async (
 			throw invalidContractError()
 		return { kind, id: value.id }
 	}
+	if (
+		kind === 'create-role' ||
+		kind === 'update-role' ||
+		kind === 'archive-role'
+	) {
+		const role = parseCrmCustomRole(value, workspaceId)
+		if (
+			!role ||
+			(id && role.id !== id) ||
+			role.version !==
+				('expectedVersion' in mutation ? mutation.expectedVersion + 1 : 1)
+		)
+			throw invalidContractError()
+		if (kind === 'archive-role') {
+			if (
+				role.archivedAt === null ||
+				role.memberCount !== 0 ||
+				role.invitationCount !== 0
+			)
+				throw invalidContractError()
+		} else if (
+			role.name !== normalizeRoleName(mutation.name) ||
+			role.archivedAt !== null ||
+			role.dataScope !== mutation.dataScope ||
+			[...role.permissions].sort().join() !==
+				[...mutation.permissions].sort().join()
+		)
+			throw invalidContractError()
+		return { kind, id: role.id }
+	}
 	const row =
 		key === 'team'
 			? parseCrmTeam(value, workspaceId)
@@ -189,9 +252,16 @@ export const mutateTeam = async (
 	if (
 		!row ||
 		(id && row.id !== id) ||
-		('expectedVersion' in mutation
-			? row.version !== mutation.expectedVersion + 1
-			: row.version !== 1)
+		row.version !==
+			('expectedVersion' in mutation ? mutation.expectedVersion + 1 : 1)
+	)
+		throw invalidContractError()
+	if (
+		(kind === 'invite' || kind === 'role') &&
+		mutation.role === 'CUSTOM' &&
+		(!('customRole' in row) ||
+			row.customRole?.id !== mutation.customRoleId ||
+			row.customRole.version !== mutation.expectedRoleVersion)
 	)
 		throw invalidContractError()
 	if (kind === 'create-team' || kind === 'rename-team') {

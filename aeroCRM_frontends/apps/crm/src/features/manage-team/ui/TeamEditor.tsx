@@ -1,15 +1,26 @@
 'use client'
 
 import {
+	listTeamRecords,
 	crmRoleLabels,
 	crmRoles,
 	normalizeEmployeeName,
 	type EmployeeName,
 	type CrmRole,
 	type TeamMutation,
+	type CustomRoleInput,
+	type CrmCustomRoleRow,
+	type RoleAssignment,
 	type TeamRow
 } from '@/entities/crm-team'
 import { Button, Drawer, SelectField, TextField } from '@/shared/ui'
+import { useInfiniteQuery } from '@tanstack/react-query'
+import { CustomRoleFields } from './CustomRoleFields'
+import {
+	isCustomRoleName,
+	isCustomRolePermissions,
+	normalizeRoleName
+} from '@/shared/lib/custom-role'
 import { useState, type FormEvent } from 'react'
 import toast from 'react-hot-toast'
 import { useTeamCommand } from '../model/use-team-command'
@@ -23,6 +34,9 @@ export interface TeamEditorSelection {
 	record?: TeamRow
 }
 const titles: Record<TeamMutation['kind'], string> = {
+	'create-role': 'Новая роль',
+	'update-role': 'Настройки роли',
+	'archive-role': 'Архивировать роль',
 	invite: 'Пригласить сотрудника',
 	'create-team': 'Новый отдел',
 	'rename-team': 'Название отдела',
@@ -35,6 +49,10 @@ const titles: Record<TeamMutation['kind'], string> = {
 	retry: 'Повторить фоновую обработку'
 }
 const descriptions: Partial<Record<TeamMutation['kind'], string>> = {
+	'update-role':
+		'Название и права изменятся у всех сотрудников и действующих приглашений с этой ролью.',
+	'archive-role':
+		'Архивировать можно только роль без назначенных сотрудников и действующих приглашений.',
 	invite:
 		'Приглашение действует 7 дней. Потребуется вход с подтверждённым email. Место выделяется только после проверки доступа и квоты.',
 	'archive-team':
@@ -75,6 +93,45 @@ export const TeamEditor = ({
 	const [role, setRole] = useState<CrmRole>(
 		record && 'role' in record ? record.role : 'MANAGER'
 	)
+	const [customRoleId, setCustomRoleId] = useState(
+		record && 'customRole' in record ? (record.customRole?.id ?? '') : ''
+	)
+	const [roleInput, setRoleInput] = useState<CustomRoleInput>(
+		record?.kind === 'role'
+			? {
+					name: record.name,
+					permissions: record.permissions,
+					dataScope: record.dataScope
+				}
+			: { name: '', permissions: [], dataScope: 'OWN' }
+	)
+	const [impactConfirmed, setImpactConfirmed] = useState(false)
+	const owner = context.permissions.data?.role === 'OWNER'
+	const roleChoices = useInfiniteQuery({
+		queryKey: ['crm-role-options', ...context.key],
+		enabled:
+			owner &&
+			context.canRead &&
+			['invite', 'role'].includes(selection.kind),
+		initialPageParam: 1,
+		queryFn: ({ pageParam }) =>
+			listTeamRecords(
+				context.session!.accessToken,
+				context.workspace.workspaceId,
+				'roles',
+				pageParam,
+				100
+			),
+		getNextPageParam: last =>
+			last.page * last.pageSize < last.total ? last.page + 1 : undefined,
+		retry: false,
+		staleTime: 0,
+		gcTime: 0
+	})
+	const customRoles =
+		roleChoices.data?.pages
+			.flatMap(page => page.items)
+			.filter((row): row is CrmCustomRoleRow => row.kind === 'role') ?? []
 	const [teamIds, setTeamIds] = useState<string[]>(
 		record && 'teamIds' in record ? record.teamIds : []
 	)
@@ -89,23 +146,58 @@ export const TeamEditor = ({
 			onClose()
 		}
 	)
-	const locked = command.locked || reviewing
+	const roleOperation = [
+		'create-role',
+		'update-role',
+		'archive-role'
+	].includes(kind)
+	const locked = command.locked || reviewing || (roleOperation && !owner)
+	const assignment = (): RoleAssignment => {
+		if (role !== 'CUSTOM') return { role }
+		const selectedRole = customRoles.find(item => item.id === customRoleId)
+		if (
+			!owner ||
+			!selectedRole ||
+			roleChoices.isError ||
+			roleChoices.isFetching
+		)
+			throw new Error('Обновите список ролей и выберите действующую роль.')
+		return {
+			role,
+			customRoleId: selectedRole.id,
+			expectedRoleVersion: selectedRole.version
+		}
+	}
 	const prepare = (): TeamMutation => {
+		if (kind === 'create-role')
+			return {
+				kind,
+				...roleInput,
+				name: normalizeRoleName(roleInput.name)
+			}
 		if (kind === 'create-team') return { kind, name: name.trim() }
 		if (kind === 'invite')
 			return {
 				kind,
 				email: email.trim().toLowerCase(),
-				role,
+				...assignment(),
 				teamIds,
 				ttlDays: 7,
 				profile: normalizeEmployeeName(profile)!
 			}
 		if (!record) throw new Error('Нет записи для команды')
 		const versioned = { id: record.id, expectedVersion: record.version }
+		if (kind === 'update-role')
+			return {
+				kind,
+				...versioned,
+				...roleInput,
+				name: normalizeRoleName(roleInput.name)
+			}
+		if (kind === 'archive-role') return { kind, ...versioned }
 		if (kind === 'rename-team')
 			return { kind, ...versioned, name: name.trim() }
-		if (kind === 'role') return { kind, ...versioned, role }
+		if (kind === 'role') return { kind, ...versioned, ...assignment() }
 		if (kind === 'teams') return { kind, ...versioned, teamIds }
 		return { kind, ...versioned }
 	}
@@ -118,12 +210,42 @@ export const TeamEditor = ({
 			toast.error(message)
 			return
 		}
-		if (!locked) void command.execute(prepare())
+		if (locked) return
+		if (
+			['create-role', 'update-role'].includes(kind) &&
+			(!isCustomRoleName(normalizeRoleName(roleInput.name)) ||
+				!isCustomRolePermissions(roleInput.permissions))
+		) {
+			toast.error(
+				'Укажите название на русском с заглавной буквы и разрешите хотя бы один раздел.'
+			)
+			return
+		}
+		if (
+			kind === 'update-role' &&
+			record?.kind === 'role' &&
+			record.memberCount + record.invitationCount > 0 &&
+			!impactConfirmed
+		) {
+			toast.error('Подтвердите изменение прав сотрудников с этой ролью.')
+			return
+		}
+		try {
+			void command.execute(prepare())
+		} catch (error) {
+			toast.error(
+				error instanceof Error ? error.message : 'Проверьте выбранную роль'
+			)
+		}
 	}
 	const review = async () => {
 		setReviewing(true)
 		try {
 			const fresh = await onReview()
+			if (owner && (kind === 'invite' || kind === 'role')) {
+				const roles = await roleChoices.refetch()
+				if (roles.isError) throw new Error('Не удалось обновить роли')
+			}
 			if (record && !fresh) {
 				toast.error(
 					'Запись отсутствует на текущей странице. Закройте форму и откройте актуальную запись.'
@@ -132,6 +254,16 @@ export const TeamEditor = ({
 			}
 			if (fresh) {
 				setRecord(fresh)
+				if (fresh.kind === 'role') {
+					setRoleInput({
+						name: fresh.name,
+						permissions: fresh.permissions,
+						dataScope: fresh.dataScope
+					})
+					setImpactConfirmed(false)
+				}
+				if ('customRole' in fresh)
+					setCustomRoleId(fresh.customRole?.id ?? '')
 				if (fresh.kind === 'team') setName(fresh.name)
 				if ('role' in fresh) setRole(fresh.role)
 				if ('teamIds' in fresh) setTeamIds(fresh.teamIds)
@@ -163,10 +295,37 @@ export const TeamEditor = ({
 								'Профиль сотрудника недоступен')
 							: record.kind === 'invitation'
 								? record.email
-								: record.kind === 'team'
+								: record.kind === 'team' || record.kind === 'role'
 									? record.name
 									: `Обработка ${record.consumer}`}
 					</div>
+				) : null}
+				{['create-role', 'update-role'].includes(kind) ? (
+					<CustomRoleFields
+						value={roleInput}
+						onChange={value => {
+							setRoleInput(value)
+							setImpactConfirmed(false)
+						}}
+						disabled={locked}
+					/>
+				) : null}
+				{kind === 'update-role' &&
+				record?.kind === 'role' &&
+				record.memberCount + record.invitationCount > 0 ? (
+					<label className={styles.check}>
+						<input
+							type="checkbox"
+							checked={impactConfirmed}
+							disabled={locked}
+							onChange={event => setImpactConfirmed(event.target.checked)}
+						/>
+						<span>
+							Изменить права всех сотрудников с этой ролью:{' '}
+							{record.memberCount}. Действующих приглашений:{' '}
+							{record.invitationCount}.
+						</span>
+					</label>
 				) : null}
 				{['create-team', 'rename-team'].includes(kind) ? (
 					<TextField
@@ -213,8 +372,17 @@ export const TeamEditor = ({
 					<>
 						<SelectField
 							label="CRM-роль"
-							value={role}
-							onChange={event => setRole(event.target.value as CrmRole)}
+							value={role === 'CUSTOM' ? `custom:${customRoleId}` : role}
+							onChange={event => {
+								const value = event.target.value
+								if (value.startsWith('custom:')) {
+									setRole('CUSTOM')
+									setCustomRoleId(value.slice(7))
+								} else {
+									setRole(value as CrmRole)
+									setCustomRoleId('')
+								}
+							}}
 							disabled={locked}
 						>
 							{crmRoles
@@ -228,11 +396,46 @@ export const TeamEditor = ({
 										{crmRoleLabels[value]}
 									</option>
 								))}
+							{role === 'CUSTOM' &&
+							!customRoles.some(item => item.id === customRoleId) ? (
+								<option value={`custom:${customRoleId}`} disabled>
+									{record && 'customRole' in record
+										? (record.customRole?.name ?? 'Выберите роль')
+										: 'Выберите роль'}
+								</option>
+							) : null}
+							{owner
+								? customRoles.map(item => (
+										<option key={item.id} value={`custom:${item.id}`}>
+											{item.name}
+										</option>
+									))
+								: null}
 						</SelectField>
+						{owner && roleChoices.isError ? (
+							<div role="alert" className={styles.error}>
+								Не удалось загрузить собственные роли.
+								<Button
+									variant="secondary"
+									onClick={() => void roleChoices.refetch()}
+								>
+									Повторить
+								</Button>
+							</div>
+						) : null}
+						{owner && roleChoices.hasNextPage ? (
+							<Button
+								variant="secondary"
+								disabled={roleChoices.isFetching}
+								onClick={() => void roleChoices.fetchNextPage()}
+							>
+								Ещё роли
+							</Button>
+						) : null}
 						<p className={styles.muted}>
-							Руководитель видит данные своих отделов, менеджер — свои
-							записи, аналитик — агрегированные показатели без персональных
-							данных.
+							{role === 'CUSTOM'
+								? 'Права и область данных определяются выбранной ролью. Владелец может изменить их в разделе «Роли».'
+								: 'Руководитель видит данные своих отделов, менеджер — свои записи, аналитик — агрегированные показатели без персональных данных.'}
 						</p>
 					</>
 				) : null}

@@ -29,6 +29,7 @@ export const listAssigneeOptions = async (
 				...(request.selectedSubject
 					? { selectedSubject: request.selectedSubject }
 					: {}),
+				...(request.purpose ? { purpose: request.purpose } : {}),
 				...(request.teamId ? { teamId: request.teamId } : {})
 			}
 		}),

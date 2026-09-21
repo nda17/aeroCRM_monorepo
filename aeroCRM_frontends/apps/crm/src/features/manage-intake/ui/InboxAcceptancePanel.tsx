@@ -1,5 +1,7 @@
 'use client'
 
+import { canAcceptInbox } from '@/entities/crm-access'
+
 import { listCustomers, type Customer } from '@/entities/customer'
 import {
 	isAcceptanceTerminal,
@@ -81,6 +83,7 @@ export const InboxAcceptancePanel = ({
 		!query.isError
 	const available =
 		fresh &&
+		canAcceptInbox(access.permissions.data) &&
 		access.canWrite &&
 		!competingCommand &&
 		!command.locked &&
@@ -299,7 +302,11 @@ export const InboxAcceptancePanel = ({
 						onCancel={() => setEditing(false)}
 					/>
 				) : (
-					<Button disabled={!available} onClick={() => setEditing(true)}>
+					<Button
+						disabled={!available}
+						disabledTooltip="Для принятия нужны права изменения обращений, контактов и сделок."
+						onClick={() => setEditing(true)}
+					>
 						Принять в работу
 					</Button>
 				)
@@ -347,9 +354,7 @@ const AcceptanceForm = ({
 		access.scopeKey
 	]
 	const canReadReferences =
-		access.canRead &&
-		access.permissions.data?.permissions.includes('customers:read') &&
-		access.permissions.data.permissions.includes('sales:read')
+		access.canRead && canAcceptInbox(access.permissions.data)
 	const contacts = useQuery({
 		queryKey: ['crm-intake-contact-picker', ...scope, page, search],
 		enabled: !!canReadReferences && mode === 'EXISTING',
@@ -409,9 +414,7 @@ const AcceptanceForm = ({
 			commandId: crypto.randomUUID(),
 			expectedVersion: entry.version,
 			contact:
-				mode === 'EXISTING'
-					? { mode, contactId: selected!.id }
-					: { mode },
+				mode === 'EXISTING' ? { mode, contactId: selected!.id } : { mode },
 			deal: {
 				title: title.trim(),
 				currency: 'RUB',
@@ -431,7 +434,7 @@ const AcceptanceForm = ({
 				<ScreenState
 					compact
 					variant="permission"
-					description="Для принятия нужны права на контакты и сделки."
+					description="Для принятия нужны права изменения обращений, контактов и сделок."
 				/>
 			) : null}
 			<fieldset
@@ -448,11 +451,10 @@ const AcceptanceForm = ({
 				</SelectField>
 				{mode === 'CREATE_FROM_ENTRY' ? (
 					<>
-
 						<p className={styles.notice}>
-							Создадим новый контакт «{entry.name}»
-							с телефоном и email из обращения. Автоматического объединения
-							нет. Проверьте, не существует ли этот клиент уже.
+							Создадим новый контакт «{entry.name}» с телефоном и email из
+							обращения. Автоматического объединения нет. Проверьте, не
+							существует ли этот клиент уже.
 						</p>
 					</>
 				) : (

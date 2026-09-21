@@ -1,5 +1,7 @@
 'use client'
 
+import { canAcceptInbox } from '@/entities/crm-access'
+
 import {
 	commandOwner,
 	useMemoryCommand
@@ -8,7 +10,7 @@ import type { IntakeAccess } from './use-intake-access'
 
 export const useIntakeCommand = <T extends { commandId: string }, R>(
 	access: IntakeAccess,
-	permission: 'intake:write' | 'intake:manage-sources',
+	permission: 'intake:write' | 'intake:manage-sources' | 'intake:accept',
 	send: (token: string, command: T) => Promise<R>,
 	onSuccess: (result: R, command: T) => void,
 	intent: string
@@ -21,9 +23,11 @@ export const useIntakeCommand = <T extends { commandId: string }, R>(
 		},
 		`intake:${intent}`,
 		access.online &&
-			(permission === 'intake:write'
-				? access.canWrite
-				: access.canManageSources),
+			(permission === 'intake:accept'
+				? access.canWrite && canAcceptInbox(access.permissions.data)
+				: permission === 'intake:write'
+					? access.canWrite
+					: access.canManageSources),
 		() => access.authorize(permission),
 		send,
 		onSuccess

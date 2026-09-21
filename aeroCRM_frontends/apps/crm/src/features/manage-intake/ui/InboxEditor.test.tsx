@@ -94,7 +94,9 @@ const access = (write = true) =>
 					'intake:read',
 					'intake:write',
 					'customers:read',
-					'sales:read'
+					'customers:write',
+					'sales:read',
+					'sales:write'
 				]
 			}
 		}

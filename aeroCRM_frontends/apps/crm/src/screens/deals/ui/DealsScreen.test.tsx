@@ -97,7 +97,18 @@ const context = {
 	permissions: {
 		isError: false,
 		isPending: false,
-		data: { role: 'OWNER', state: 'ACTIVE' },
+		data: {
+			role: 'OWNER',
+			state: 'ACTIVE',
+			permissions: [
+				'intake:read',
+				'intake:write',
+				'customers:read',
+				'customers:write',
+				'sales:read',
+				'sales:write'
+			]
+		},
 		refetch: permissionsRefetch
 	}
 }
@@ -214,7 +225,7 @@ describe('deal list without-next-action filter', () => {
 				workspace: { ...context.workspace, canWrite: state === 'ACTIVE' },
 				permissions: {
 					...context.permissions,
-					data: { role: 'OWNER', state }
+					data: { ...context.permissions.data, role: 'OWNER', state }
 				}
 			} as never)
 			vi.mocked(listSalesDeals).mockImplementation(
@@ -422,7 +433,11 @@ describe('deal list without-next-action filter', () => {
 			workspace: { ...context.workspace, canWrite: false },
 			permissions: {
 				...context.permissions,
-				data: { role: 'OWNER', state: 'READ_ONLY' }
+				data: {
+					...context.permissions.data,
+					role: 'OWNER',
+					state: 'READ_ONLY'
+				}
 			}
 		} as never)
 		render(view())

@@ -15,6 +15,8 @@ import { CRM_NAVIGATION } from '../model/crm-navigation'
 
 const fixture = vi.hoisted(() => ({
 	pathname: '/inbox',
+	router: { replace: vi.fn() },
+	searchParams: new URLSearchParams(),
 	companyName: null as string | null,
 	access: {
 		state: 'ACTIVE' as 'ACTIVE' | 'GRACE' | 'READ_ONLY',
@@ -25,12 +27,48 @@ const fixture = vi.hoisted(() => ({
 		}
 	}
 }))
-vi.mock('next/navigation', () => ({ usePathname: () => fixture.pathname }))
+vi.mock('next/navigation', () => ({
+	usePathname: () => fixture.pathname,
+	useRouter: () => fixture.router,
+	useSearchParams: () => fixture.searchParams
+}))
 vi.mock('@/features/manage-reminders', () => ({
 	TaskNotificationCenter: () => <button>Уведомления</button>
 }))
-vi.mock('@/entities/crm-access', () => ({
-	useCrmWorkspaceAccess: () => fixture.access
+vi.mock('@/entities/crm-access', async original => ({
+	...(await original<object>()),
+	useCrmWorkspaceAccess: () => ({
+		workspaceId: '11111111-1111-4111-8111-111111111111',
+		...fixture.access
+	}),
+	useCrmPermissions: () => ({
+		isSuccess: true,
+		isError: false,
+		data: {
+			schemaVersion: 1,
+			workspaceId: '11111111-1111-4111-8111-111111111111',
+			subject: 'owner',
+			role: 'OWNER',
+			state: fixture.access.state,
+			dataScope: 'ALL',
+			teamIds: [],
+			permissions: [
+				'intake:read',
+				'intake:write',
+				'customers:read',
+				'customers:write',
+				'sales:read',
+				'sales:write',
+				'sales:analytics'
+			]
+		}
+	})
+}))
+vi.mock('@/entities/session', () => ({
+	useSessionStore: () => ({
+		session: { userId: 'owner', accessToken: 'session-token' },
+		sessionRevision: 1
+	})
 }))
 vi.mock('@/entities/crm-workspace-branding', () => ({
 	useWorkspaceBranding: () => ({
@@ -42,6 +80,7 @@ vi.mock('next/link', () => ({
 	default: ({ children, onClick, ...props }: ComponentProps<'a'>) => (
 		<a
 			{...props}
+			href={props.href ?? '#'}
 			onClick={event => {
 				onClick?.(event)
 				event.preventDefault()
@@ -54,6 +93,8 @@ vi.mock('next/link', () => ({
 
 beforeEach(() => {
 	fixture.pathname = '/inbox'
+	fixture.router.replace.mockReset()
+	fixture.searchParams = new URLSearchParams()
 	fixture.companyName = null
 	fixture.access.state = 'ACTIVE'
 	fixture.access.isReadOnly = false

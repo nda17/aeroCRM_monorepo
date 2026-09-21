@@ -87,13 +87,16 @@ export const ReminderRuleForm = ({
 	)
 	const selected =
 		rule.recipients.kind === 'SELECTED' ? rule.recipients.bindings : []
-	const options = useAssigneeOptions({
-		...context.directory,
-		canRead:
-			context.directory.canRead &&
-			rule.recipients.kind === 'SELECTED' &&
-			!disabled
-	})
+	const options = useAssigneeOptions(
+		{
+			...context.directory,
+			canRead:
+				context.directory.canRead &&
+				rule.recipients.kind === 'SELECTED' &&
+				!disabled
+		},
+		{ purpose: 'TASK_RECIPIENT' }
+	)
 	const labels = useAssigneeLabels(
 		{
 			...context.directory,

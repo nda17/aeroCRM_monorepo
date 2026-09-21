@@ -25,7 +25,12 @@ export const useTeamCommand = (
 ) => {
 	const { workspace, session, sessionRevision, scopeKey } = context
 	const queryClient = useQueryClient()
-	const enabled = revoke ? context.canRevoke : context.canManage
+	const ownerOnly = ['create-role', 'update-role', 'archive-role'].some(
+		kind => intent.startsWith(`${kind}:`)
+	)
+	const enabled =
+		(revoke ? context.canRevoke : context.canManage) &&
+		(!ownerOnly || context.permissions.data?.role === 'OWNER')
 	const command = useMemoryCommand<TeamCommand, TeamCommandResult>(
 		{
 			owner: commandOwner(session?.userId, sessionRevision),
@@ -71,6 +76,7 @@ export const useTeamCommand = (
 			assertCurrentSession()
 			queryClient.setQueryData(permissionsKey, permissions)
 			if (
+				(ownerOnly && permissions.role !== 'OWNER') ||
 				!['OWNER', 'CRM_ADMIN'].includes(permissions.role) ||
 				permissions.state === 'READ_ONLY' ||
 				!permissions.permissions.includes(

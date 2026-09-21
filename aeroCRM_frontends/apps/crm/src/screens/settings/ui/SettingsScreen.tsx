@@ -37,9 +37,15 @@ const tabs: Record<TeamCollection, string> = {
 	members: 'Сотрудники',
 	invitations: 'Приглашения',
 	teams: 'Отделы',
-	deliveries: 'Ошибки обработки'
+	deliveries: 'Ошибки обработки',
+	roles: 'Роли'
 }
 const teamActionTooltips: Record<TeamEditorSelection['kind'], string> = {
+	'create-role':
+		'Создать роль с выбором разрешённых действий и области данных',
+	'update-role': 'Изменить название и права всех сотрудников с этой ролью',
+	'archive-role':
+		'Убрать роль без назначенных сотрудников и действующих приглашений',
 	invite:
 		'Создать приглашение на 7 дней. Доступ зависит от подтверждения email и свободного места',
 	'create-team':
@@ -80,7 +86,9 @@ const SettingsScreen = () => {
 	const queryKey = ['crm-team', ...context.key, tab, page] as const
 	const records = useQuery({
 		queryKey,
-		enabled: context.canRead,
+		enabled:
+			context.canRead &&
+			(tab !== 'roles' || context.permissions.data?.role === 'OWNER'),
 		queryFn: () =>
 			listTeamRecords(
 				session!.accessToken,
@@ -132,6 +140,9 @@ const SettingsScreen = () => {
 				queryKey: ['crm-team-quota', workspace.workspaceId]
 			}),
 			queryClient.invalidateQueries({
+				queryKey: ['crm-role-options', workspace.workspaceId]
+			}),
+			queryClient.invalidateQueries({
 				queryKey: ['crm-team-picker', workspace.workspaceId]
 			})
 		])
@@ -157,7 +168,19 @@ const SettingsScreen = () => {
 		revoke = false,
 		disabled = false
 	) => {
-		const reason = protectedReason(row)
+		const reason =
+			protectedReason(row) ??
+			(kind === 'role' &&
+			'role' in row &&
+			row.role === 'CUSTOM' &&
+			context.permissions.data?.role !== 'OWNER'
+				? 'Только владелец назначает собственные роли'
+				: undefined) ??
+			(kind === 'archive-role' &&
+			row.kind === 'role' &&
+			row.memberCount + row.invitationCount > 0
+				? 'Сначала назначьте сотрудникам другую роль и отмените действующие приглашения с этой ролью'
+				: undefined)
 		return (
 			<Button
 				size="sm"
@@ -183,11 +206,13 @@ const SettingsScreen = () => {
 			header:
 				tab === 'members'
 					? 'Сотрудник'
-					: tab === 'teams'
-						? 'Отдел'
-						: tab === 'invitations'
-							? 'Email приглашения'
-							: 'Обработка',
+					: tab === 'roles'
+						? 'Роль'
+						: tab === 'teams'
+							? 'Отдел'
+							: tab === 'invitations'
+								? 'Email приглашения'
+								: 'Обработка',
 			render: row => (
 				<div className={styles.record}>
 					{row.kind === 'member' ? (
@@ -201,7 +226,7 @@ const SettingsScreen = () => {
 								{row.verifiedEmail ?? 'Подтверждённый email не указан'}
 							</span>
 						</>
-					) : row.kind === 'team' ? (
+					) : row.kind === 'team' || row.kind === 'role' ? (
 						<strong>{row.name}</strong>
 					) : row.kind === 'invitation' ? (
 						<>
@@ -232,7 +257,9 @@ const SettingsScreen = () => {
 				<div className={styles.record}>
 					{row.kind === 'member' ? (
 						<>
-							<strong>{crmRoleLabels[row.role]}</strong>
+							<strong>
+								{row.customRole?.name ?? crmRoleLabels[row.role]}
+							</strong>
 							<StatusBadge tone={row.disabledAt ? 'neutral' : 'success'}>
 								{row.disabledAt ? 'Отключён' : 'Доступ включён'}
 							</StatusBadge>
@@ -240,7 +267,9 @@ const SettingsScreen = () => {
 						</>
 					) : row.kind === 'invitation' ? (
 						<>
-							<strong>{crmRoleLabels[row.role]}</strong>
+							<strong>
+								{row.customRole?.name ?? crmRoleLabels[row.role]}
+							</strong>
 							<StatusBadge
 								tone={
 									row.status === 'REVOKED' || row.status === 'EXPIRED'
@@ -253,6 +282,22 @@ const SettingsScreen = () => {
 							{row.status === 'ACCEPTED' ? (
 								<span>Допуск зависит от прав и свободного места</span>
 							) : null}
+						</>
+					) : row.kind === 'role' ? (
+						<>
+							<span>
+								{
+									{
+										OWN: 'Свои записи',
+										TEAM: 'Записи отделов',
+										ALL: 'Все записи'
+									}[row.dataScope]
+								}
+							</span>
+							<span>
+								Сотрудников: {row.memberCount}. Приглашений:{' '}
+								{row.invitationCount}.
+							</span>
 						</>
 					) : row.kind === 'team' ? (
 						<StatusBadge tone="success">Активен</StatusBadge>
@@ -295,6 +340,17 @@ const SettingsScreen = () => {
 							{row.disabledAt
 								? action(row, 'enable', 'Запросить включение')
 								: action(row, 'disable', 'Отключить', true)}
+						</>
+					) : row.kind === 'role' ? (
+						<>
+							{action(row, 'update-role', 'Настроить')}
+							{action(
+								row,
+								'archive-role',
+								'Архивировать',
+								false,
+								row.memberCount + row.invitationCount > 0
+							)}
 						</>
 					) : row.kind === 'team' ? (
 						<>
@@ -339,6 +395,15 @@ const SettingsScreen = () => {
 				description="Приглашайте сотрудников, распределяйте роли и отделы."
 				actions={
 					<div className={styles.actions}>
+						{context.permissions.data?.role === 'OWNER' ? (
+							<Button
+								variant="secondary"
+								disabled={!context.canManage}
+								onClick={() => open('create-role')}
+							>
+								Новая роль
+							</Button>
+						) : null}
 						{session ? (
 							<EmployeeProfileControl
 								key={context.key.join(':')}
@@ -448,33 +513,41 @@ const SettingsScreen = () => {
 						role="group"
 						aria-label="Раздел настроек команды"
 					>
-						{(Object.keys(tabs) as TeamCollection[]).map(value => (
-							<Button
-								key={value}
-								variant={tab === value ? 'primary' : 'secondary'}
-								aria-pressed={tab === value}
-								onClick={() => {
-									setTab(value)
-									setPage(1)
-									setSelected(null)
-								}}
-							>
-								{tabs[value]}
-							</Button>
-						))}
+						{(Object.keys(tabs) as TeamCollection[])
+							.filter(
+								value =>
+									value !== 'roles' ||
+									context.permissions.data?.role === 'OWNER'
+							)
+							.map(value => (
+								<Button
+									key={value}
+									variant={tab === value ? 'primary' : 'secondary'}
+									aria-pressed={tab === value}
+									onClick={() => {
+										setTab(value)
+										setPage(1)
+										setSelected(null)
+									}}
+								>
+									{tabs[value]}
+								</Button>
+							))}
 					</div>
 					<section className={styles.panel} aria-label={tabs[tab]}>
 						<div className={styles.panelHeader}>
 							<div>
 								<h2 className={styles.panelTitle}>{tabs[tab]}</h2>
 								<p className={styles.muted}>
-									{tab === 'members'
-										? 'Владелец не входит в редактируемый список.'
-										: tab === 'deliveries'
-											? 'Только ошибки этого пространства; повтор не создаёт второго сотрудника.'
-											: tab === 'invitations'
-												? 'После подтверждения email квота и права проверяются отдельно.'
-												: 'Отделы определяют область данных для руководителей.'}
+									{tab === 'roles'
+										? 'Встроенные роли сохраняются. Здесь владелец настраивает собственные роли сотрудников.'
+										: tab === 'members'
+											? 'Владелец не входит в редактируемый список.'
+											: tab === 'deliveries'
+												? 'Только ошибки этого пространства; повтор не создаёт второго сотрудника.'
+												: tab === 'invitations'
+													? 'После подтверждения email квота и права проверяются отдельно.'
+													: 'Отделы объединяют сотрудников и определяют доступ к записям команды.'}
 								</p>
 							</div>
 							<Button
@@ -515,15 +588,17 @@ const SettingsScreen = () => {
 							<ScreenState
 								variant="empty"
 								title={
-									page > 1
-										? 'На этой странице нет записей'
-										: tab === 'members'
-											? 'В CRM пока работает только владелец'
-											: tab === 'teams'
-												? 'Отделов пока нет'
-												: tab === 'invitations'
-													? 'Приглашений пока нет'
-													: 'Ошибок обработки нет'
+									tab === 'roles' && page === 1
+										? 'Собственных ролей пока нет'
+										: page > 1
+											? 'На этой странице нет записей'
+											: tab === 'members'
+												? 'В CRM пока работает только владелец'
+												: tab === 'teams'
+													? 'Отделов пока нет'
+													: tab === 'invitations'
+														? 'Приглашений пока нет'
+														: 'Ошибок обработки нет'
 								}
 								description={
 									page > 1

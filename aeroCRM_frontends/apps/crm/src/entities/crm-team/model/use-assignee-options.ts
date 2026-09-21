@@ -8,6 +8,7 @@ import { listAssigneeOptions } from '../api/assignee-options.api'
 import {
 	assigneeRoles,
 	isAssigneeSubject,
+	type AssigneeDirectoryPurpose,
 	type AssigneeOption
 } from './assignee-options.contract'
 
@@ -29,6 +30,7 @@ export interface AssigneeDirectoryContext {
 	}
 }
 export interface AssigneeOptionsSelection {
+	purpose?: AssigneeDirectoryPurpose
 	selectedSubject?: string
 	teamId?: string
 }
@@ -65,7 +67,8 @@ export const useAssigneeOptions = (
 		authority?.dataScope,
 		[...(authority?.teamIds ?? [])].sort(),
 		[...(authority?.permissions ?? [])].sort(),
-		selection.teamId
+		selection.teamId,
+		selection.purpose ?? 'SALES_ASSIGNMENT'
 	])
 	const [filters, setFilters] = useState({ scopeKey, page: 1, search: '' })
 	const page = filters.scopeKey === scopeKey ? filters.page : 1
@@ -82,7 +85,11 @@ export const useAssigneeOptions = (
 		authority.subject === context.subject &&
 		assigneeRoles.includes(authority.role as AssigneeOption['role']) &&
 		['ACTIVE', 'GRACE', 'READ_ONLY'].includes(authority.state) &&
-		authority.permissions.includes('sales:read') &&
+		authority.permissions.includes(
+			selection.purpose === 'SLA_RECIPIENT' ? 'intake:read' : 'sales:read'
+		) &&
+		(!selection.purpose ||
+			['OWNER', 'CRM_ADMIN'].includes(authority.role)) &&
 		['ALL', 'TEAM', 'OWN'].includes(authority.dataScope) &&
 		authority.teamIds.length <= 1000 &&
 		authority.teamIds.every(isUuidV4) &&
@@ -145,6 +152,7 @@ export const useAssigneeOptions = (
 				...(selection.selectedSubject
 					? { selectedSubject: selection.selectedSubject }
 					: {}),
+				...(selection.purpose ? { purpose: selection.purpose } : {}),
 				...(selection.teamId ? { teamId: selection.teamId } : {})
 			})
 			if (!current()) throw invalidContractError()

@@ -1,6 +1,7 @@
 'use client'
 
 import {
+	canAcceptInbox,
 	useCrmPermissions,
 	useCrmWorkspaceAccess,
 	crmPermissionScope
@@ -51,7 +52,7 @@ export const useIntakeAccess = () => {
 		workspace.canWrite &&
 		permissions.data!.permissions.includes('intake:manage-sources')
 	const authorize = async (
-		permission: 'intake:write' | 'intake:manage-sources'
+		permission: 'intake:write' | 'intake:manage-sources' | 'intake:accept'
 	) => {
 		if (!session || !navigator.onLine)
 			throw new AuthenticatedApiError(
@@ -75,7 +76,9 @@ export const useIntakeAccess = () => {
 		if (
 			!workspace.canWrite ||
 			result.data?.state === 'READ_ONLY' ||
-			!result.data?.permissions.includes(permission)
+			(permission === 'intake:accept'
+				? !canAcceptInbox(result.data)
+				: !result.data?.permissions.includes(permission))
 		)
 			throw new AuthenticatedApiError(
 				'forbidden',

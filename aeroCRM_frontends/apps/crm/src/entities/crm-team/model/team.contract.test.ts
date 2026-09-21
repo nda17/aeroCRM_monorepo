@@ -9,6 +9,11 @@ import {
 const workspaceId = '11111111-1111-4111-8111-111111111111'
 const id = '22222222-2222-4222-8222-222222222222'
 const now = '2026-09-05T12:00:00.000Z'
+const customRole = {
+	id: '44444444-4444-4444-8444-444444444444',
+	name: 'Продажи',
+	version: 2
+}
 const member = {
 	id,
 	workspaceId,
@@ -52,6 +57,47 @@ describe('CRM team exact trust boundary', () => {
 				true
 			)
 		).toMatchObject({ displayName: null, verifiedEmail: null })
+	})
+	it('requires a valid role binding for CUSTOM members and invitations', () => {
+		const customMember = {
+			...member,
+			role: 'CUSTOM',
+			customRole
+		}
+		expect(parseCrmMember(customMember, workspaceId)).toMatchObject(
+			customMember
+		)
+		for (const patch of [
+			{ customRole: undefined },
+			{ customRole: { ...customRole, version: 0 } },
+			{ customRole: { ...customRole, name: 'invalid' } }
+		])
+			expect(
+				parseCrmMember({ ...customMember, ...patch }, workspaceId)
+			).toBeNull()
+
+		const invitation = {
+			id,
+			workspaceId,
+			email: 'custom@example.test',
+			role: 'CUSTOM',
+			customRole,
+			teamIds: [],
+			status: 'INVITED',
+			version: 1,
+			expiresAt: now,
+			createdAt: now,
+			updatedAt: now
+		}
+		expect(parseCrmInvitation(invitation, workspaceId)).toMatchObject(
+			invitation
+		)
+		expect(
+			parseCrmInvitation(
+				{ ...invitation, customRole: undefined },
+				workspaceId
+			)
+		).toBeNull()
 	})
 	it.each([
 		{ role: 'OWNER' },
