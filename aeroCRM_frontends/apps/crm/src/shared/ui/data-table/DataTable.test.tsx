@@ -52,6 +52,97 @@ describe('DataTable optional mobile cards', () => {
 		).toBe(true)
 	})
 
+	it('opens a row from a non-interactive cell and preserves an inert table without the opt-in', () => {
+		const onRowClick = vi.fn()
+		render(
+			<DataTable
+				caption="Клиенты"
+				columns={columns}
+				rows={rows}
+				getRowKey={getRowKey}
+				onRowClick={onRowClick}
+			/>
+		)
+		fireEvent.click(screen.getByRole('cell', { name: '1500' }))
+		expect(onRowClick).toHaveBeenCalledExactlyOnceWith(rows[0], 0)
+
+		cleanup()
+		const inert = render(
+			<DataTable
+				caption="Без перехода"
+				columns={columns}
+				rows={rows}
+				getRowKey={getRowKey}
+			/>
+		)
+		expect(
+			inert.container.querySelector('tr')?.hasAttribute('tabindex')
+		).toBe(false)
+		expect(onRowClick).toHaveBeenCalledExactlyOnceWith(rows[0], 0)
+	})
+
+	it('does not turn nested buttons or links into row actions', () => {
+		const onRowClick = vi.fn()
+		const onButtonClick = vi.fn()
+		render(
+			<DataTable
+				caption="Действия"
+				columns={[
+					{
+						id: 'title',
+						header: 'Сделка',
+						render: () => (
+							<button type="button" onClick={onButtonClick}>
+								Новый заказ
+							</button>
+						)
+					},
+					{
+						id: 'link',
+						header: 'Ссылка',
+						render: () => (
+							<a
+								href="/deals/first"
+								onClick={event => event.preventDefault()}
+							>
+								Открыть ссылку
+							</a>
+						)
+					}
+				]}
+				rows={rows.slice(0, 1)}
+				getRowKey={getRowKey}
+				onRowClick={onRowClick}
+			/>
+		)
+		fireEvent.click(screen.getByRole('button', { name: 'Новый заказ' }))
+		fireEvent.click(screen.getByRole('link', { name: 'Открыть ссылку' }))
+		expect(onButtonClick).toHaveBeenCalledTimes(1)
+		expect(onRowClick).not.toHaveBeenCalled()
+	})
+
+	it('does not open a row while text is selected', () => {
+		const onRowClick = vi.fn()
+		const selection = vi
+			.spyOn(document, 'getSelection')
+			.mockReturnValue({ toString: () => 'Анна' } as Selection)
+		try {
+			render(
+				<DataTable
+					caption="Выбор"
+					columns={columns}
+					rows={rows}
+					getRowKey={getRowKey}
+					onRowClick={onRowClick}
+				/>
+			)
+			fireEvent.click(screen.getByRole('cell', { name: 'Анна' }))
+			expect(onRowClick).not.toHaveBeenCalled()
+		} finally {
+			selection.mockRestore()
+		}
+	})
+
 	it('retains table, row and column relationships when card styles change display', () => {
 		const { container } = render(
 			<DataTable

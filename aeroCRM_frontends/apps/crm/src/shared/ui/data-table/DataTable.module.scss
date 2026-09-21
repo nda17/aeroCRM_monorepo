@@ -59,6 +59,15 @@
 	@apply hidden;
 }
 
+.interactiveRow {
+	@apply cursor-pointer;
+}
+
+.interactiveRow:hover .cell,
+.interactiveRow:focus-within .cell {
+	@apply bg-crm-surface-muted;
+}
+
 @media (max-width: 767px) {
 	.cards .scrollArea {
 		@apply overflow-x-visible;

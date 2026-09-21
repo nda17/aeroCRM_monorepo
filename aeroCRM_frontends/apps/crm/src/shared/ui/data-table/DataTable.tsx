@@ -22,6 +22,8 @@ export interface DataTableProps<T> {
 	columns: readonly DataTableColumn<T>[]
 	rows: readonly T[]
 	getRowKey: (row: T, rowIndex: number) => Key
+	/** Pointer shortcut for a row's existing keyboard-accessible control. */
+	onRowClick?: (row: T, rowIndex: number) => void
 	emptyMessage?: ReactNode
 	embedded?: boolean
 	mobileLayout?: DataTableMobileLayout
@@ -42,6 +44,7 @@ export const DataTable = <T,>({
 	columns,
 	rows,
 	getRowKey,
+	onRowClick,
 	emptyMessage = 'Данных пока нет',
 	embedded = false,
 	mobileLayout = 'table',
@@ -107,7 +110,39 @@ export const DataTable = <T,>({
 									<tr
 										key={getRowKey(row, rowIndex)}
 										role={useMobileCards ? 'row' : undefined}
-										className={clsx(styles.bodyRow, resolvedRowClassName)}
+										className={clsx(
+											styles.bodyRow,
+											onRowClick && styles.interactiveRow,
+											resolvedRowClassName
+										)}
+										onClick={
+											onRowClick
+												? event => {
+														if (
+															event.defaultPrevented ||
+															event.button !== 0 ||
+															event.altKey ||
+															event.ctrlKey ||
+															event.metaKey ||
+															event.shiftKey ||
+															!(event.target instanceof Element) ||
+															event.currentTarget.ownerDocument
+																.getSelection()
+																?.toString()
+														)
+															return
+														const control = event.target.closest(
+															'a, button, input, select, textarea, label, summary, [role="button"], [role="link"], [tabindex], [contenteditable]:not([contenteditable="false"]), [data-row-click-ignore]'
+														)
+														if (
+															control &&
+															event.currentTarget.contains(control)
+														)
+															return
+														onRowClick(row, rowIndex)
+													}
+												: undefined
+										}
 									>
 										{columns.map(column => {
 											const content = column.render(row, rowIndex)

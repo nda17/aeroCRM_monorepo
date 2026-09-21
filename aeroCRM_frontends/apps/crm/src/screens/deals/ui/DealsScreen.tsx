@@ -741,6 +741,7 @@ const DealsWorkspaceScreen = ({
 							rows={deals.data.items}
 							columns={columns}
 							getRowKey={deal => deal.id}
+							onRowClick={deal => setSelected(deal.id)}
 						/>
 					)}
 					{layout === 'list' && deals.data && !deals.isError ? (

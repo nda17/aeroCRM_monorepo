@@ -14,9 +14,9 @@
 	}
 }
 .record {
-	@apply flex max-w-sm flex-col gap-1 text-left text-sm text-primary hover:underline;
+	@apply flex max-w-sm flex-col gap-1 rounded text-left text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-crm-surface;
 	strong {
-		@apply font-semibold;
+		@apply text-base font-bold;
 	}
 	span {
 		@apply text-xs text-crm-muted;
