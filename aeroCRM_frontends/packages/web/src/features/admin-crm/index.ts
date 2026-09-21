@@ -6,6 +6,21 @@ export {
 } from './api/crm-provider-operations.api'
 export { adminCrmSubscriptionsService } from './api/admin-crm-subscriptions.api'
 export {
+	createCrmAdminSeatsCommand,
+	type CrmAdminSeatsCommand,
+	type CrmAdminSeatsContext,
+	type CrmAdminSeatAdjustment,
+	type CrmAdminSeatsResult,
+	type CrmAdminSeatsRecovery
+} from './model/crm-subscription-seats.contract'
+export {
+	bindCrmAdminSeatsActor,
+	readPendingCrmAdminSeats,
+	retainPendingCrmAdminSeats,
+	clearResolvedCrmAdminSeats,
+	type PendingCrmAdminSeats
+} from './model/crm-seats-pending'
+export {
 	CrmAdminGrantNotSentError,
 	createCrmAdminGrantCommand,
 	type CrmAdminSubscription,

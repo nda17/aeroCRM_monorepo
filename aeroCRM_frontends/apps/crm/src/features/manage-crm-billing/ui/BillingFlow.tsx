@@ -288,6 +288,13 @@ export const BillingFlow = ({
 								>
 									Изменить количество мест
 								</Button>
+							) : period.state === 'ACTIVE' &&
+							  !billing.pendingOrder &&
+							  !commandId ? (
+								<p className={styles.note}>
+									Самостоятельное изменение мест сейчас недоступно. Для
+									изменения их количества обратитесь в поддержку.
+								</p>
 							) : null}
 						</>
 					) : (

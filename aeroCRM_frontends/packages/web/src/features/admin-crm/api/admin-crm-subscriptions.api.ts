@@ -16,6 +16,13 @@ import {
 	parseCrmAdminSubscriptionDetail,
 	type CrmAdminGrantCommand
 } from '../model/crm-subscriptions.contract'
+import {
+	parseCrmAdminSeatsContext,
+	parseCrmAdminSeatsHistory,
+	parseCrmAdminSeatsRecovery,
+	parseCrmAdminSeatsResult,
+	type CrmAdminSeatsCommand
+} from '../model/crm-subscription-seats.contract'
 
 const BASE = '/subscriptions/admin/crm'
 const workspacePath = (workspaceId: string) => {
@@ -39,6 +46,91 @@ const actorBoundBearer = (actorSubject: string): string => {
 }
 
 export const adminCrmSubscriptionsService = {
+	async seats(workspaceId: string) {
+		const { data } = await axiosInterceptorsRequest.get<unknown>(
+			`${workspacePath(workspaceId)}/seats`,
+			{ timeout: 15_000 }
+		)
+		return parseCrmAdminSeatsContext(data, workspaceId)
+	},
+	async seatsHistory(workspaceId: string, page: number, pageSize: number) {
+		const { data } = await axiosInterceptorsRequest.get<unknown>(
+			`${workspacePath(workspaceId)}/seats/history`,
+			{ params: { page, pageSize }, timeout: 15_000 }
+		)
+		return parseCrmAdminSeatsHistory(data, workspaceId, page, pageSize)
+	},
+	async setSeats(
+		workspaceId: string,
+		actorSubject: string,
+		command: CrmAdminSeatsCommand
+	) {
+		if (command.expectedActorSubject !== actorSubject)
+			throw new CrmAdminGrantNotSentError()
+		const accessToken = actorBoundBearer(actorSubject)
+		const { data } = await axiosClassicRequest.post<unknown>(
+			`${workspacePath(workspaceId)}/seats`,
+			command,
+			{
+				headers: {
+					Authorization: `Bearer ${accessToken}`,
+					'Idempotency-Key': command.commandId
+				},
+				timeout: 30_000
+			}
+		)
+		return parseCrmAdminSeatsResult(
+			data,
+			workspaceId,
+			command.commandId,
+			actorSubject,
+			command
+		)
+	},
+	async seatsCommand(
+		workspaceId: string,
+		commandId: string,
+		actorSubject: string
+	) {
+		if (!CRM_ADMIN_UUID.test(commandId))
+			throw new Error('Invalid CRM command')
+		const { data } = await axiosInterceptorsRequest.get<unknown>(
+			`${workspacePath(workspaceId)}/seats/commands/${commandId}`,
+			{ timeout: 15_000 }
+		)
+		return parseCrmAdminSeatsRecovery(
+			data,
+			workspaceId,
+			commandId,
+			actorSubject
+		)
+	},
+	async cancelSeatsCommand(
+		workspaceId: string,
+		commandId: string,
+		actorSubject: string
+	) {
+		if (!CRM_ADMIN_UUID.test(commandId))
+			throw new Error('Invalid CRM command')
+		const accessToken = actorBoundBearer(actorSubject)
+		const { data } = await axiosClassicRequest.post<unknown>(
+			`${workspacePath(workspaceId)}/seats/commands/${commandId}/cancel`,
+			{ schemaVersion: 1, expectedActorSubject: actorSubject },
+			{
+				headers: {
+					Authorization: `Bearer ${accessToken}`,
+					'Idempotency-Key': commandId
+				},
+				timeout: 30_000
+			}
+		)
+		return parseCrmAdminSeatsRecovery(
+			data,
+			workspaceId,
+			commandId,
+			actorSubject
+		)
+	},
 	async list(page: number, pageSize: number, ownerSubject?: string) {
 		const { data } = await axiosInterceptorsRequest.get<unknown>(BASE, {
 			params: { page, pageSize, ownerSubject },

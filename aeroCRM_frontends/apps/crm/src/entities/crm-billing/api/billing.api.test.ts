@@ -86,8 +86,31 @@ describe('Access BFF-only Billing API', () => {
 			method: 'POST',
 			url: '/crm/access/billing/checkout',
 			data: checkout,
-			headers: { 'Idempotency-Key': commandId }
+			headers: { 'Idempotency-Key': commandId },
+			mapError: expect.any(Function)
 		})
+	})
+	it('maps only the exact administrator seat adjustment conflict', async () => {
+		vi.mocked(authenticatedRequest).mockResolvedValue(operation)
+		await mutateBilling('token', { action: 'checkout', body: checkout })
+		const request = vi.mocked(authenticatedRequest).mock.calls[0][0] as {
+			mapError?: (error: unknown) => AuthenticatedApiError | undefined
+		}
+		const conflict = {
+			isAxiosError: true,
+			response: { status: 409, data: { code: 'crm_seats_admin_adjusted' } }
+		}
+		expect(request.mapError?.(conflict)).toMatchObject({
+			kind: 'conflict',
+			message:
+				'Места этого периода изменены администратором. Для изменения их количества обратитесь в поддержку.'
+		})
+		expect(
+			request.mapError?.({
+				isAxiosError: true,
+				response: { status: 409, data: { code: 'other_conflict' } }
+			})
+		).toBeUndefined()
 	})
 	it.each([
 		'temporary',
@@ -206,7 +229,8 @@ describe('Access BFF-only Billing API', () => {
 			method: 'POST',
 			url: '/crm/access/billing/orders/verify',
 			data: body,
-			headers: { 'Idempotency-Key': commandId }
+			headers: { 'Idempotency-Key': commandId },
+			mapError: expect.any(Function)
 		})
 	})
 })

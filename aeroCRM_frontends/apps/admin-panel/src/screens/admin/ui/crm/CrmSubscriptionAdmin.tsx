@@ -40,6 +40,7 @@ import {
 import toast from 'react-hot-toast'
 import common from './AdminCrm.module.scss'
 import styles from './CrmSubscriptionAdmin.module.scss'
+import CrmSubscriptionSeats from './CrmSubscriptionSeats'
 
 const PAGE_SIZE = 10
 const ROOT_KEY = ['admin-crm-subscriptions'] as const
@@ -112,13 +113,13 @@ export default function CrmSubscriptionAdmin() {
 						Подписки aeroCRM
 					</h3>
 					<p className={common.sectionHint}>
-						Бесплатное начисление дней клиенту или собственной CRM. Цены и
-						подписки aeroCRM не меняются.
+						Ручное продление подписки и изменение количества мест в рабочем
+						пространстве клиента.
 					</p>
 				</div>
 				<AdminTooltip
-					title="Ручное продление aeroCRM"
-					description="ADMIN и DEV сервиса могут начислять дни, в том числе себе. Причина, прежний и новый срок, исполнитель и рабочее пространство записываются в Журнал событий. Оплата и согласие на автосписания не создаются."
+					title="Управление подписками aeroCRM"
+					description="ADMIN и DEV сервиса могут начислять дни и менять число мест. Причина, прежние и новые условия, исполнитель и рабочее пространство записываются в историю. Оплата не создаётся."
 					risk="medium"
 				/>
 			</div>
@@ -130,7 +131,7 @@ export default function CrmSubscriptionAdmin() {
 				<p role="status">Проверяем доступ...</p>
 			) : !canView ? (
 				<p className={common.accessNote}>
-					Просмотр и начисление дней доступны ADMIN и DEV сервиса.
+					Управление подписками доступно ADMIN и DEV сервиса.
 				</p>
 			) : (
 				<SubscriptionManager
@@ -192,6 +193,7 @@ function SubscriptionManager({
 	const [checking, setChecking] = useState(false)
 	const [cancelConfirmation, setCancelConfirmation] = useState(false)
 	const [forbidden, setForbidden] = useState(false)
+	const [seatsLocked, setSeatsLocked] = useState(false)
 	const inFlight = useRef(false)
 	const mounted = useRef(true)
 	useEffect(() => {
@@ -251,7 +253,9 @@ function SubscriptionManager({
 		networkMode: 'always'
 	})
 	const busy = mutation.isPending || checking
-	const locked = !!pending || recovery.storageError || forbidden || busy
+	const grantLocked =
+		!!pending || recovery.storageError || forbidden || busy
+	const locked = grantLocked || seatsLocked
 	const subscription = detail.data
 	const daysNumber = Number(days)
 	const validDraft =
@@ -319,7 +323,13 @@ function SubscriptionManager({
 		command: CrmAdminGrantCommand,
 		replay: boolean
 	) => {
-		if (!online || inFlight.current || forbidden || recovery.storageError)
+		if (
+			!online ||
+			inFlight.current ||
+			forbidden ||
+			recovery.storageError ||
+			(!replay && seatsLocked)
+		)
 			return
 		inFlight.current = true
 		let id: string | undefined
@@ -745,6 +755,13 @@ function SubscriptionManager({
 					)}
 				</>
 			)}
+			<CrmSubscriptionSeats
+				actorSubject={actorSubject}
+				workspaceId={workspaceId}
+				online={online}
+				externalLocked={grantLocked}
+				onLockedChange={setSeatsLocked}
+			/>
 			{workspaceId && (
 				<section
 					className={styles.detail}

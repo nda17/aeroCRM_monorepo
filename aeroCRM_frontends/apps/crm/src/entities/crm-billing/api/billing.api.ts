@@ -20,8 +20,18 @@ import {
 	type BillingQuoteRequest
 } from '../model/billing-values.contract'
 import type { BillingMutation } from '../model/billing.types'
+import axios from 'axios'
 
 const endpoint = '/crm/access/billing'
+const mapBillingError = (error: unknown) =>
+	axios.isAxiosError(error) &&
+	error.response?.status === 409 &&
+	error.response.data?.code === 'crm_seats_admin_adjusted'
+		? new AuthenticatedApiError(
+				'conflict',
+				'Места этого периода изменены администратором. Для изменения их количества обратитесь в поддержку.'
+			)
+		: undefined
 const requireBillingUi = () => {
 	if (!getRuntimeConfig().crmBillingEnabled)
 		throw new AuthenticatedApiError(
@@ -70,7 +80,8 @@ export const getBillingQuote = async (
 				accessToken,
 				method: 'POST',
 				url: `${endpoint}/quote`,
-				data: request
+				data: request,
+				mapError: mapBillingError
 			}),
 			request
 		)
@@ -90,7 +101,8 @@ export const mutateBilling = async (
 				method: 'POST',
 				url: `${endpoint}/${mutation.action}`,
 				data: mutation.body,
-				headers: { 'Idempotency-Key': commandId }
+				headers: { 'Idempotency-Key': commandId },
+				mapError: mapBillingError
 			}),
 			workspaceId,
 			commandId,

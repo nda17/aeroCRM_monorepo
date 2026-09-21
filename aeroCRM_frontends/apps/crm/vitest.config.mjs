@@ -3,9 +3,30 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
 	resolve: {
-		alias: {
-			'@': fileURLToPath(new URL('./src', import.meta.url))
-		}
+		alias: [
+			{
+				find: /^@\/entities\/user\/model\/auth-store$/,
+				replacement: fileURLToPath(
+					new URL(
+						'../../packages/web/src/entities/user/model/auth-store.ts',
+						import.meta.url
+					)
+				)
+			},
+			{
+				find: /^@\/shared\/api$/,
+				replacement: fileURLToPath(
+					new URL(
+						'../../packages/web/src/shared/api/index.ts',
+						import.meta.url
+					)
+				)
+			},
+			{
+				find: '@',
+				replacement: fileURLToPath(new URL('./src', import.meta.url))
+			}
+		]
 	},
 	test: {
 		environment: 'jsdom',
