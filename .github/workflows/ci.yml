@@ -304,6 +304,16 @@ jobs:
               JOIN pg_namespace n ON n.oid=t.typnamespace
               WHERE n.nspname='crm_access' AND t.typname='CrmMemberRole' AND e.enumlabel='CUSTOM'
             ) THEN RAISE EXCEPTION 'CUSTOM enum value missing'; END IF;
+            INSERT INTO crm_access.crm_workspace_access
+              (id, workspace_id, activated_by_subject, billing_entitlement_id,
+               provisioning_command_id, provisioning_command_type, updated_at)
+              VALUES
+                ('70000000-0000-4000-8000-000000000001', workspace_a, 'owner-a',
+                 '80000000-0000-4000-8000-000000000001',
+                 '90000000-0000-4000-8000-000000000001', 'TEST_SETUP', now()),
+                ('70000000-0000-4000-8000-000000000002', workspace_b, 'owner-b',
+                 '80000000-0000-4000-8000-000000000002',
+                 '90000000-0000-4000-8000-000000000002', 'TEST_SETUP', now());
             INSERT INTO crm_access.crm_custom_roles
               (id, workspace_id, name, name_key, permissions, data_scope, updated_at)
               VALUES (role_id, workspace_a, 'Менеджер 1', 'менеджер1',
