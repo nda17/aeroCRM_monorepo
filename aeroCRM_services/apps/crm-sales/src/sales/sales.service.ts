@@ -12,7 +12,7 @@ import {
 } from '@prisma/crm-sales-client';
 import { createHash, randomUUID } from 'node:crypto';
 import { CrmSalesPrismaService } from '../prisma/crm-sales-prisma.service';
-import type { SalesAccess } from './sales-access';
+import { UUID, type SalesAccess } from './sales-access';
 import { SalesContactClient } from './sales-contact.client';
 import type {
 	CompleteTaskDto,
@@ -359,9 +359,12 @@ export class SalesService {
 
 	async analytics(access: SalesAccess, query?: SalesAnalyticsQuery) {
 		this.permission(access, 'sales:analytics');
+		const pipelineId = query?.pipelineId;
+		if (pipelineId !== undefined && !UUID.test(pipelineId))
+			throw new BadRequestException('Некорректная воронка');
 		const period = salesCreatedPeriod(query || {});
 		const base: Prisma.DealWhereInput = {
-			AND: [salesScope(access), { archivedAt: null }]
+			AND: [salesScope(access), { archivedAt: null, pipelineId }]
 		};
 		const aggregate = (
 			transaction: Pick<Prisma.TransactionClient, 'deal'>,

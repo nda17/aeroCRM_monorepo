@@ -6,6 +6,7 @@ export type CrmNavigationIcon =
 	| 'contacts'
 	| 'analytics'
 	| 'settings'
+	| 'products'
 
 export interface CrmNavigationItem {
 	href: string
@@ -35,6 +36,13 @@ export const CRM_NAVIGATION = [
 		label: 'Сделки',
 		description:
 			'Ведите клиентов по этапам продаж и следите за результатами сделок.'
+	},
+	{
+		href: '/catalog',
+		icon: 'products',
+		label: 'Каталог',
+		description:
+			'Товары и услуги пространства, базовые цены и импорт из Excel или CSV.'
 	},
 	{
 		href: '/tasks',

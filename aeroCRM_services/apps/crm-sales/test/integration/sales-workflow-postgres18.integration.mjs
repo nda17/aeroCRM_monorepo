@@ -1607,6 +1607,11 @@ try {
 			const job = await prisma.reminderJob.findFirstOrThrow({
 				where: { workspaceId, taskId }
 			});
+			// The local PostgreSQL VM clock can run ahead of the host process clock.
+			await prisma.reminderJob.update({
+				where: { id: job.id },
+				data: { availableAt: new Date(Date.now() - 1000) }
+			});
 			const wake = await prisma.reminderOutbox.findFirstOrThrow({
 				where: {
 					eventType: REMINDER_TICK,
@@ -1989,6 +1994,12 @@ try {
 				assignedToSubject: current.subject,
 				dueAt: new Date(Date.now() + 86400000)
 			}
+		});
+		// The PostgreSQL VM clock can lead the host clock; keep the immediate
+		// ASSIGNED notification available to the host-clock-based service query.
+		await prisma.taskNotification.updateMany({
+			where: { taskId: task.id, kind: 'ASSIGNED' },
+			data: { availableAt: new Date(Date.now() - 1000) }
 		});
 		let list = await center.list(current, query, 'Bearer fixture');
 		assert.equal(

@@ -197,6 +197,7 @@ describe('Sales analytics cohorts and workload', () => {
 	it.each([
 		{ details: true },
 		{ details: 'false' },
+		{ pipelineId: 'not-a-uuid' },
 		{ assigneePage: '0' },
 		{ assigneePage: '1000001' },
 		{ createdFrom: '2026-09-01' }
@@ -212,5 +213,20 @@ describe('Sales analytics cohorts and workload', () => {
 				{ type: 'query', metatype: SalesAnalyticsQuery }
 			)
 		).rejects.toBeInstanceOf(BadRequestException);
+	});
+	it('accepts a UUID pipeline filter before analytics service execution', async () => {
+		const pipe = new ValidationPipe({
+			whitelist: true,
+			forbidNonWhitelisted: true,
+			transform: true
+		});
+		await expect(
+			pipe.transform(
+				{ workspaceId, pipelineId: '22222222-2222-4222-8222-222222222222' },
+				{ type: 'query', metatype: SalesAnalyticsQuery }
+			)
+		).resolves.toMatchObject({
+			pipelineId: '22222222-2222-4222-8222-222222222222'
+		});
 	});
 });

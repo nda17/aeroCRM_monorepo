@@ -15,6 +15,7 @@ import {
 	type SalesDeal
 } from '@/entities/sales'
 import { useSalesSession } from '@/features/manage-sales'
+import { useSalesSession as useCommerceSalesSession } from '@/features/manage-sales/model/use-sales-session'
 import DealsScreen from './DealsScreen'
 
 const navigation = vi.hoisted(() => ({ search: '' }))
@@ -55,6 +56,9 @@ vi.mock('@/features/manage-sales', () => ({
 	),
 	salesDate: (date: string) => date,
 	salesMoney: (amount: number) => String(amount)
+}))
+vi.mock('@/features/manage-sales/model/use-sales-session', () => ({
+	useSalesSession: vi.fn()
 }))
 vi.mock('@/features/export-records', () => ({
 	ExportRecordsControl: () => null
@@ -169,6 +173,7 @@ beforeEach(() => {
 		defaultOptions: { queries: { retry: false, gcTime: 0 } }
 	})
 	vi.mocked(useSalesSession).mockReturnValue(context as never)
+	vi.mocked(useCommerceSalesSession).mockReturnValue(context as never)
 	vi.mocked(listSalesPipelines).mockResolvedValue([
 		{
 			id: pipelineId,

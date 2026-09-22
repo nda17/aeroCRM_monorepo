@@ -24,6 +24,7 @@ import { useSalesSession } from '../model/use-sales-session'
 import { SalesCommandState } from './SalesCommandState'
 import { NextActionFields } from './NextActionFields'
 import { useSalesAssignees } from '../model/use-sales-assignees'
+import { DealCommercePanel } from './DealCommercePanel'
 import styles from './SalesWorkflow.module.scss'
 
 export const salesMoney = (minor: number) =>
@@ -139,7 +140,7 @@ const DealEditor = ({
 						/>
 					) : (
 						<p className={styles.muted}>
-							Текущее действие завершится вместе со сделкой.
+							Все открытые задачи по сделке завершатся при закрытии.
 						</p>
 					)}
 				</fieldset>
@@ -147,7 +148,7 @@ const DealEditor = ({
 			{confirmArchive ? (
 				<div className={styles.error}>
 					<p>
-						Архивировать сделку? Открытое действие будет отменено. История
+						Архивировать сделку? Открытые задачи будут отменены. История
 						сохранится.
 					</p>
 					<div className={styles.actions}>
@@ -177,7 +178,7 @@ const DealEditor = ({
 				<Button
 					variant="ghost"
 					disabled={command.locked || !enabled}
-					tooltip="Открыть подтверждение архивации: сделка уйдёт из активных, открытое действие будет отменено, история сохранится."
+					tooltip="Открыть подтверждение архивации: сделка уйдёт из активных, открытые задачи будут отменены, история сохранится."
 					onClick={() => setConfirmArchive(true)}
 				>
 					Архивировать сделку
@@ -203,6 +204,7 @@ export const DealDetailsDrawer = ({
 	const [page, setPage] = useState(1)
 	const [openedAt] = useState(() => Date.now())
 	const [editorRevision, setEditorRevision] = useState(0)
+	const [commerceBusy, setCommerceBusy] = useState(false)
 	const detail = useQuery({
 		queryKey: ['sales', 'deal', ...context.key, id],
 		enabled: context.canRead && !!context.session,
@@ -292,6 +294,12 @@ export const DealDetailsDrawer = ({
 		<Drawer
 			isOpen
 			onClose={() => {
+				if (commerceBusy) {
+					toast(
+						'Сохраните или отмените изменения состава и подтвердите результат текущей команды.'
+					)
+					return
+				}
 				if (command.canClose()) onClose()
 			}}
 			title={
@@ -311,6 +319,7 @@ export const DealDetailsDrawer = ({
 							!context.canWrite ||
 							detail.isFetching ||
 							!pipeline ||
+							commerceBusy ||
 							command.locked
 						}
 						isLoading={command.pending}
@@ -356,7 +365,8 @@ export const DealDetailsDrawer = ({
 									className={styles.contactLink}
 									href={`/contacts?contactId=${encodeURIComponent(deal.contactId)}`}
 									onClick={event => {
-										if (!command.canClose()) event.preventDefault()
+										if (commerceBusy || !command.canClose())
+											event.preventDefault()
 									}}
 								>
 									{deal.contactName}
@@ -446,11 +456,26 @@ export const DealDetailsDrawer = ({
 							</p>
 						) : null}
 					</section>
+					<DealCommercePanel
+						context={context}
+						dealId={deal.id}
+						onBusyChange={setCommerceBusy}
+						onSaved={() => {
+							setEditorRevision(value => value + 1)
+							onSaved()
+							void detail.refetch()
+						}}
+					/>
 					<DealEditor
 						key={editorRevision}
 						deal={deal}
 						pipeline={pipeline}
-						enabled={context.canWrite && !detail.isFetching && !!pipeline}
+						enabled={
+							context.canWrite &&
+							!detail.isFetching &&
+							!commerceBusy &&
+							!!pipeline
+						}
 						command={command}
 					/>
 					<section className={styles.section}>

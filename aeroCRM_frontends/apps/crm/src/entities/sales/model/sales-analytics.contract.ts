@@ -2,7 +2,8 @@ import {
 	hasExactKeys,
 	isIsoDate,
 	isNonEmptyString,
-	isRecord
+	isRecord,
+	isUuidV4
 } from '@/shared/lib/contract'
 import type { DealStatus } from './sales.contract'
 
@@ -63,6 +64,7 @@ export interface SalesAnalyticsPeriod {
 	createdTo: string
 }
 export interface SalesAnalyticsOverviewQuery {
+	pipelineId?: string
 	createdFrom?: string
 	createdTo?: string
 	assigneePage?: number
@@ -120,7 +122,8 @@ export const validAnalyticsOverviewQuery = (
 	(query.assigneePage === undefined ||
 		(Number.isSafeInteger(query.assigneePage) &&
 			query.assigneePage >= 1 &&
-			query.assigneePage <= 1000000))
+			query.assigneePage <= 1000000)) &&
+	(query.pipelineId === undefined || isUuidV4(query.pipelineId))
 const validAttention = (value: unknown): value is SalesAttention =>
 	isRecord(value) &&
 	['open', 'overdue', 'withoutNextAction'].every(

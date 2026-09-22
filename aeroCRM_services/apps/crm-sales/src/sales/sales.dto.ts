@@ -30,6 +30,7 @@ export class SalesPeriodQuery extends WorkspaceQuery {
 	createdTo?: string;
 }
 export class SalesAnalyticsQuery extends SalesPeriodQuery {
+	@IsOptional() @IsUUID('4') pipelineId?: string;
 	@ValidateIf((_object, value) => value !== undefined)
 	@IsIn(['true'])
 	details?: 'true';

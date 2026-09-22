@@ -38,6 +38,10 @@ import { TaskSeriesService } from './recurring-tasks/task-series.service';
 import { TaskSeriesAuthorityClient } from './recurring-tasks/task-series-authority.client';
 import { TaskNotificationsController } from './task-notifications/task-notifications.controller';
 import { TaskNotificationsService } from './task-notifications/task-notifications.service';
+import { CommerceController } from './commerce/commerce.controller';
+import { CommerceService } from './commerce/commerce.service';
+import { CommerceFinanceService } from './commerce/commerce-finance.service';
+import { CommerceImportService } from './commerce/commerce-import.service';
 
 @Module({
 	imports: [
@@ -56,7 +60,8 @@ import { TaskNotificationsService } from './task-notifications/task-notification
 		ReminderRulesController,
 		ReminderDeliveryController,
 		SalesExportController,
-		IntakeOperationController
+		IntakeOperationController,
+		CommerceController
 	],
 	providers: [
 		LiveChangesService,
@@ -82,7 +87,10 @@ import { TaskNotificationsService } from './task-notifications/task-notification
 		SalesContactClient,
 		IntakeOperationClient,
 		IntakeOperationGuard,
-		IntakeOperationService
+		IntakeOperationService,
+		CommerceService,
+		CommerceFinanceService,
+		CommerceImportService
 	]
 })
 export class CrmSalesModule {}

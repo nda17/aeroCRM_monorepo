@@ -31,6 +31,13 @@
       "INSERT",
       "UPDATE"
     ],
+    "commerce_catalog_items": ["SELECT", "INSERT", "UPDATE"],
+    "commerce_deal_lines": ["SELECT", "INSERT", "UPDATE", "DELETE"],
+    "commerce_quotes": ["SELECT", "INSERT"],
+    "commerce_payments": ["SELECT", "INSERT"],
+    "commerce_import_previews": ["SELECT", "INSERT", "UPDATE"],
+    "commerce_commands": ["SELECT", "INSERT"],
+    "commerce_events": ["SELECT", "INSERT"],
     "tasks": [
       "SELECT",
       "INSERT",
@@ -126,6 +133,7 @@
     "track_task_assignment",
     "record_task_notifications",
     "notify_live_change",
+    "reject_commerce_immutable_mutation",
     "enforce_service_identity_integrity"
   ]
 }

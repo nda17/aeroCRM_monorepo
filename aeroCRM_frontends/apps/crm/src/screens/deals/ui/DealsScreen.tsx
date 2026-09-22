@@ -40,6 +40,8 @@ import { ExportRecordsControl } from '@/features/export-records'
 import { useSalesAssignees } from '@/features/manage-sales/model/use-sales-assignees'
 import { isUuidV4 } from '@/shared/lib/contract'
 import { DealPipelineBoard } from './DealPipelineBoard'
+import { PipelineManager } from '@/features/manage-sales/ui/PipelineManager'
+import { CommerceExportControl } from '@/features/manage-sales/ui/CommerceExportControl'
 import {
 	defaultDealView,
 	dealViewFromSearch,
@@ -77,6 +79,7 @@ const DealsWorkspaceScreen = ({
 	const selectedValue = new URLSearchParams(routeSearch).get('dealId')
 	const selected = isUuidV4(selectedValue) ? selectedValue : null
 	const [createOpen, setCreateOpen] = useState(false)
+	const [pipelinesOpen, setPipelinesOpen] = useState(false)
 	// Next client navigation can reactivate this screen with previous React state.
 	// The route is the source of filters; UI actions only update that route.
 	if (routeView.search !== routeSearch) {
@@ -272,6 +275,18 @@ const DealsWorkspaceScreen = ({
 					<>
 						<ActionMenu>
 							<ExportRecordsControl entity="deals" />
+							<CommerceExportControl />
+							{context.canWrite &&
+								context.permissions.data?.permissions.includes(
+									'sales:manage-pipelines'
+								) && (
+									<Button
+										variant="secondary"
+										onClick={() => setPipelinesOpen(true)}
+									>
+										Управление воронками
+									</Button>
+								)}
 							<Button
 								variant="secondary"
 								tooltip="Загрузить актуальные сделки, этапы воронок и права доступа"
@@ -775,6 +790,13 @@ const DealsWorkspaceScreen = ({
 						</div>
 					) : null}
 				</>
+			)}
+			{pipelinesOpen && (
+				<PipelineManager
+					context={context}
+					onClose={() => setPipelinesOpen(false)}
+					onSaved={saved}
+				/>
 			)}
 			{createOpen && pipelines.data ? (
 				<CreateDealDrawer

@@ -61,6 +61,7 @@ export const canReadCrmRoute = (
 		contacts: 'customers:read',
 		companies: 'customers:read',
 		deals: 'sales:read',
+		catalog: 'sales:read',
 		tasks: 'sales:read',
 		planner: 'sales:read',
 		'my-day': 'sales:read',

@@ -26,6 +26,8 @@ async function bootstrap(): Promise<void> {
 		{ forceCloseConnections: true }
 	);
 	application = app;
+	// A bounded 1 MiB catalog upload is base64 encoded in a JSON request.
+	app.useBodyParser('json', { limit: '2mb' });
 
 	app.setGlobalPrefix('api/v1', {
 		exclude: [

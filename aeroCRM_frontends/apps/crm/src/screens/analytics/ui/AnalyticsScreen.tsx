@@ -27,6 +27,8 @@ import Link from 'next/link'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import styles from './AnalyticsScreen.module.scss'
+import { listAnalyticsPipelines } from '@/entities/sales/api/commerce.api'
+import { CommerceAnalyticsPanel } from '@/features/manage-sales/ui/CommerceAnalyticsPanel'
 
 const statuses: {
 	status: DealStatus
@@ -97,6 +99,7 @@ const AnalyticsScreen = () => {
 	)
 	const [to, setTo] = useState(() => dateInput(new Date()))
 	const [assigneePage, setAssigneePage] = useState(1)
+	const [pipelineId, setPipelineId] = useState('')
 	const permissions = context.permissions
 	const canRead =
 		!!context.session &&
@@ -107,7 +110,22 @@ const AnalyticsScreen = () => {
 		!permissions.isFetching &&
 		permissions.data.permissions.includes('sales:analytics')
 	const canReadDeals = canRead && context.canRead
-	const query = { ...(period || {}), assigneePage }
+	const pipelines = useQuery({
+		queryKey: ['sales', 'analytics-pipelines', ...context.key],
+		enabled: canRead,
+		queryFn: () =>
+			listAnalyticsPipelines(
+				context.session!.accessToken,
+				context.workspace.workspaceId
+			),
+		retry: false,
+		gcTime: 0
+	})
+	const query = {
+		...(period || {}),
+		assigneePage,
+		...(pipelineId ? { pipelineId } : {})
+	}
 	const report = useQuery({
 		queryKey: [
 			'sales',
@@ -179,6 +197,9 @@ const AnalyticsScreen = () => {
 		await client.invalidateQueries({
 			queryKey: ['sales', 'analytics', ...context.key]
 		})
+		await client.invalidateQueries({
+			queryKey: ['sales', 'commerce-analytics', ...context.key]
+		})
 	}
 	const changePreset = (value: string) => {
 		setPreset(value)
@@ -215,7 +236,10 @@ const AnalyticsScreen = () => {
 		canReadDeals ? (
 			<Link
 				className={styles.countLink}
-				href={dealsHref(filters)}
+				href={dealsHref({
+					...filters,
+					...(pipelineId ? { pipelineId } : {})
+				})}
 				aria-label={`${title}: ${number.format(count)}, открыть сделки`}
 			>
 				{number.format(count)} <span aria-hidden="true">→</span>
@@ -251,6 +275,22 @@ const AnalyticsScreen = () => {
 			{canRead && (
 				<div className={styles.filters}>
 					<SelectField
+						label="Воронка аналитики"
+						value={pipelineId}
+						disabled={pipelines.isFetching}
+						onChange={event => {
+							setPipelineId(event.target.value)
+							setAssigneePage(1)
+						}}
+					>
+						<option value="">Все воронки</option>
+						{pipelines.data?.items.map(item => (
+							<option key={item.id} value={item.id}>
+								{item.name}
+							</option>
+						))}
+					</SelectField>
+					<SelectField
 						label="Создание сделок"
 						value={preset}
 						onChange={event => changePreset(event.target.value)}
@@ -282,6 +322,18 @@ const AnalyticsScreen = () => {
 					)}
 					<span className={styles.timeZone}>Даты по Москве (UTC+3)</span>
 				</div>
+			)}
+			{canRead && pipelines.isError && (
+				<p className={styles.footnote}>
+					Не удалось загрузить список воронок.{' '}
+					<Button
+						size="sm"
+						variant="ghost"
+						onClick={() => void pipelines.refetch()}
+					>
+						Повторить
+					</Button>
+				</p>
 			)}
 			{permissions.isError ? (
 				<ScreenState
@@ -586,6 +638,12 @@ const AnalyticsScreen = () => {
 					</p>
 				</>
 			)}
+			<CommerceAnalyticsPanel
+				key={context.key.join(':')}
+				context={context}
+				canRead={canRead}
+				pipelineId={pipelineId}
+			/>
 		</div>
 	)
 }
