@@ -97,9 +97,11 @@ function setup() {
 		$transaction: jest.fn(async (work: (client: typeof tx) => Promise<unknown>) => work(tx))
 	};
 	const operations = {
-		request: jest.fn(async (target: string, _action: string, _proofBinding: unknown) =>
-			target === 'customers' ? contactProof : salesProof
-		)
+		request: jest.fn(async (target: string, action: string, proofBinding: unknown) => {
+			if (action !== 'read' || !proofBinding || typeof proofBinding !== 'object')
+				throw new Error('Unexpected operation proof request');
+			return target === 'customers' ? contactProof : salesProof;
+		})
 	};
 	const service = new WorkspaceClosureService(prisma as never, operations as never);
 	return { candidate, contactProof, salesProof, tx, prisma, operations, service };
