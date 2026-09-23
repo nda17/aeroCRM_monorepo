@@ -180,3 +180,41 @@ describe('Drawer accessible full title', () => {
 		expect(close).toHaveBeenCalledOnce()
 	})
 })
+
+describe('Drawer cancel events', () => {
+	it('does not close the drawer when a nested file input cancels selection', () => {
+		const close = vi.fn()
+		render(
+			<Drawer isOpen onClose={close} title="Импорт каталога">
+				<input type="file" aria-label="Файл каталога" />
+			</Drawer>
+		)
+
+		fireEvent(
+			screen.getByLabelText('Файл каталога'),
+			new Event('cancel', { bubbles: true, cancelable: true })
+		)
+
+		expect(close).not.toHaveBeenCalled()
+		const dialog = screen.getByRole('dialog', {
+			name: 'Импорт каталога'
+		}) as HTMLDialogElement
+		expect(dialog.open).toBe(true)
+	})
+
+	it('prevents the native dialog cancel and requests the drawer close', () => {
+		const close = vi.fn()
+		render(
+			<Drawer isOpen onClose={close} title="Панель отмены">
+				Содержимое
+			</Drawer>
+		)
+		const dialog = screen.getByRole('dialog', { name: 'Панель отмены' })
+		const event = new Event('cancel', { bubbles: true, cancelable: true })
+
+		fireEvent(dialog, event)
+
+		expect(event.defaultPrevented).toBe(true)
+		expect(close).toHaveBeenCalledOnce()
+	})
+})

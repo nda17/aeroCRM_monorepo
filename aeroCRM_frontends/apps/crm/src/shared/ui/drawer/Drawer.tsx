@@ -116,6 +116,7 @@ export const Drawer = ({
 			aria-labelledby={titleId}
 			aria-describedby={description ? descriptionId : undefined}
 			onCancel={event => {
+				if (event.target !== event.currentTarget) return
 				event.preventDefault()
 				onClose()
 			}}
