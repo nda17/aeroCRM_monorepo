@@ -81,7 +81,9 @@ export async function serializable<T>(
 			if (error instanceof Prisma.PrismaClientKnownRequestError) {
 				// PostgreSQL can report a unique conflict instead of serialization failure
 				// after waiting for a concurrent insert whose commit was outside this snapshot.
-				if (attempt < 2 && ['P2034', 'P2002'].includes(error.code))
+				if (attempt < 2 && (['P2034', 'P2002'].includes(error.code) ||
+					(error.code === 'P2010' &&
+						['40001', '40P01'].includes(String(error.meta?.code)))))
 					continue;
 				if (error.code === 'P2002')
 					throw new ConflictException(

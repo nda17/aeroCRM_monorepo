@@ -28,7 +28,7 @@ import { NotificationDeliveryEventPayload } from './notification-delivery-contra
 import { NotificationDeliveryPrismaService } from './prisma/notification-delivery-prisma.service';
 import { TelegramInfoTransportService } from '../telegram/telegram-info-transport.service';
 import { Injectable, Optional } from '@nestjs/common';
-import { NotificationDeliveryReceiptStatus } from '@prisma/notification-delivery-client';
+import { NotificationDeliveryReceiptStatus, Prisma } from '@prisma/notification-delivery-client';
 import { CrmInvitationContextService } from './crm-invitation-context.service';
 import { assertCrmInvitationEvent } from '../messaging/crm-invitation.contract';
 import { assertCrmTaskReminderEvent } from '../messaging/crm-task-reminder.contract';
@@ -382,37 +382,42 @@ export class NotificationDeliveryAdapterService {
 		workspaceId: string
 	): Promise<boolean> {
 		if (!lockToken) throw new Error('CRM_DISPATCH_CLAIM_MISSING');
-		try {
-			return await this.prisma.$transaction(async tx => {
-				await tx.$executeRaw`SELECT notification_delivery.assert_workspace_open(${workspaceId}::uuid)`;
-				const permitted = await tx.$queryRaw<Array<{ id: string }>>`
-					UPDATE notification_delivery.delivery_receipts
-					SET crm_workspace_id = COALESCE(crm_workspace_id, ${workspaceId}::uuid),
-						crm_dispatch_started_at = COALESCE(crm_dispatch_started_at, clock_timestamp())
-					WHERE event_id = ${eventId}::uuid AND consumer = ${kind}
-						AND status = 'PROCESSING' AND lock_token = ${lockToken}::uuid
-						AND lease_expires_at > clock_timestamp()
-						AND (crm_workspace_id IS NULL OR crm_workspace_id = ${workspaceId}::uuid)
-					RETURNING id`;
-				if (permitted.length !== 1)
-					throw new Error('CRM_DISPATCH_CLAIM_LOST');
-				return true;
-			});
-		} catch (error) {
-			if (String(error).includes('crm_workspace_closed')) {
-				await this.prisma.notificationDeliveryReceipt.updateMany({
-					where: {
-						eventId,
-						consumer: kind,
-						status: NotificationDeliveryReceiptStatus.PROCESSING,
-						lockToken,
-						OR: [{ crmWorkspaceId: null }, { crmWorkspaceId: workspaceId }]
-					},
-					data: { crmWorkspaceId: workspaceId }
+		for (let attempt = 0; ; attempt++) {
+			try {
+				return await this.prisma.$transaction(async tx => {
+					await tx.$executeRaw`SELECT notification_delivery.assert_workspace_open(${workspaceId}::uuid)`;
+					const permitted = await tx.$queryRaw<Array<{ id: string }>>`
+						UPDATE notification_delivery.delivery_receipts
+						SET crm_workspace_id = COALESCE(crm_workspace_id, ${workspaceId}::uuid),
+							crm_dispatch_started_at = COALESCE(crm_dispatch_started_at, clock_timestamp())
+						WHERE event_id = ${eventId}::uuid AND consumer = ${kind}
+							AND status = 'PROCESSING' AND lock_token = ${lockToken}::uuid
+							AND lease_expires_at > clock_timestamp()
+							AND (crm_workspace_id IS NULL OR crm_workspace_id = ${workspaceId}::uuid)
+						RETURNING id`;
+					if (permitted.length !== 1)
+						throw new Error('CRM_DISPATCH_CLAIM_LOST');
+					return true;
 				});
-				return false;
+			} catch (error) {
+				if (String(error).includes('crm_workspace_closed')) {
+					await this.prisma.notificationDeliveryReceipt.updateMany({
+						where: {
+							eventId,
+							consumer: kind,
+							status: NotificationDeliveryReceiptStatus.PROCESSING,
+							lockToken,
+							OR: [{ crmWorkspaceId: null }, { crmWorkspaceId: workspaceId }]
+						},
+						data: { crmWorkspaceId: workspaceId }
+					});
+					return false;
+				}
+				if (attempt < 2 && error instanceof Prisma.PrismaClientKnownRequestError &&
+					(error.code === 'P2034' || (error.code === 'P2010' &&
+						['40001', '40P01'].includes(String(error.meta?.code))))) continue;
+				throw error;
 			}
-			throw error;
 		}
 	}
 

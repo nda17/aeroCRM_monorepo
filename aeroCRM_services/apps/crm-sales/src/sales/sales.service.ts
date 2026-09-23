@@ -829,7 +829,9 @@ export class SalesService {
 					!error ||
 					typeof error !== 'object' ||
 					!('code' in error) ||
-					error.code !== 'P2034'
+					!(error.code === 'P2034' ||
+						(error.code === 'P2010' && 'meta' in error &&
+							['40001', '40P01'].includes(String((error.meta as { code?: unknown })?.code))))
 				)
 					throw error;
 			}

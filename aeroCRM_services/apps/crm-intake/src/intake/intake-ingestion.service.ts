@@ -107,10 +107,6 @@ export class IntakeIngestionRateLimiter {
 			});
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
-			if (String(error).includes('crm_workspace_closed'))
-				throw new ForbiddenException({
-					code: 'crm_workspace_closed', message: 'Workspace is closed'
-				});
 			throw new ServiceUnavailableException(
 				'Intake limits could not be confirmed'
 			);
@@ -328,7 +324,9 @@ export class IntakeIngestionService {
 				} catch (error) {
 					if (
 						error instanceof Prisma.PrismaClientKnownRequestError &&
-						['P2002', 'P2034'].includes(error.code) &&
+						(['P2002', 'P2034'].includes(error.code) ||
+							(error.code === 'P2010' &&
+								['40001', '40P01'].includes(String(error.meta?.code)))) &&
 						attempt < 2
 					)
 						continue;
@@ -340,6 +338,10 @@ export class IntakeIngestionService {
 			);
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
+			if (String(error).includes('crm_workspace_closed'))
+				throw new ForbiddenException({
+					code: 'crm_workspace_closed', message: 'Workspace is closed'
+				});
 			// Do not log Prisma arguments, contact data, source credentials or dependency payloads.
 			throw new ServiceUnavailableException({
 				code: 'crm_intake_ingest_unavailable',

@@ -155,6 +155,9 @@ async function verifyFencedMutation(service, runtime, migration) {
 	const closedId = randomUUID();
 	const otherId = randomUUID();
 	await seedWorkspace(service, migration, runtime, closedId);
+	const intakeProofFixtures = service.prefix === 'CRM_INTAKE'
+		? await Promise.all([insertIntakeProofFixture(migration, closedId), insertIntakeProofFixture(migration, closedId), insertIntakeProofFixture(migration, closedId)])
+		: [];
 	const existingContactId = service.prefix === 'CRM_CUSTOMERS' ? randomUUID() : null;
 	if (existingContactId) {
 		await migration.query(
@@ -163,6 +166,7 @@ async function verifyFencedMutation(service, runtime, migration) {
 		);
 	}
 	await setFenced(service, migration, closedId);
+	if (intakeProofFixtures.length) await verifyIntakeTerminalException(runtime, migration, intakeProofFixtures);
 	const mutation = insertSql(service, closedId);
 	await assert.rejects(runtime.query(mutation.text, mutation.values), error => closedError(error));
 	if (existingContactId) {
@@ -192,6 +196,93 @@ async function verifyFencedMutation(service, runtime, migration) {
 	]) {
 		const values = operation.includes('$2') ? [closedId, randomUUID()] : [closedId];
 		await assert.rejects(migration.query(operation, values), error => immutableFenceError(error));
+	}
+}
+
+async function insertIntakeProofFixture(migration, workspaceId) {
+	const sourceId = randomUUID();
+	const entryId = randomUUID();
+	const acceptanceId = randomUUID();
+	const contactOperationId = randomUUID();
+	const salesOperationId = randomUUID();
+	const contactCommandId = randomUUID();
+	const salesCommandId = randomUUID();
+	const contactPayloadHash = randomUUID().replaceAll('-', '').padEnd(64, 'a');
+	const salesPayloadHash = randomUUID().replaceAll('-', '').padEnd(64, 'b');
+	const actorSubject = 'closure-proof-fixture';
+	await migration.query(
+		`INSERT INTO crm_intake.intake_sources(id,workspace_id,name,token_hash,created_by_subject,updated_at)
+		 VALUES ($1,$2,'Closure proof fixture',$3,$4,now())`,
+		[sourceId, workspaceId, randomUUID().replaceAll('-', '').padEnd(64, 'c'), actorSubject]
+	);
+	await migration.query(
+		`INSERT INTO crm_intake.inbox_entries(id,workspace_id,title,name,origin,source_id,created_by_subject,updated_at)
+		 VALUES ($1,$2,'Closure proof fixture','Proof contact','API',$3,$4,now())`,
+		[entryId, workspaceId, sourceId, actorSubject]
+	);
+	await migration.query(
+		`INSERT INTO crm_intake.acceptances(id,workspace_id,entry_id,actor_subject,contact_operation_id,sales_operation_id,
+		 contact_command_id,sales_command_id,contact_payload,sales_payload,contact_payload_hash,sales_payload_hash,updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'{}'::jsonb,'{}'::jsonb,$9,$10,now())`,
+		[acceptanceId, workspaceId, entryId, actorSubject, contactOperationId, salesOperationId, contactCommandId, salesCommandId, contactPayloadHash, salesPayloadHash]
+	);
+	return { workspaceId, entryId, acceptanceId, actorSubject, contactOperationId, salesOperationId, contactPayloadHash, salesPayloadHash };
+}
+
+async function verifyIntakeTerminalException(runtime, migration, fixtures) {
+	const committedAt = new Date().toISOString();
+	for (const [index, fixture] of fixtures.entries()) {
+		const contactId = randomUUID();
+		const dealId = randomUUID();
+		const firstTaskId = randomUUID();
+		const contactProof = {
+			schemaVersion: 1,
+			workspaceId: fixture.workspaceId,
+			workflowId: fixture.acceptanceId,
+			actorSubject: fixture.actorSubject,
+			payloadHash: index === 1 ? 'f'.repeat(64) : fixture.contactPayloadHash,
+			operationId: fixture.contactOperationId,
+			state: 'COMMITTED',
+			result: { contactId },
+			committedAt
+		};
+		const salesProof = {
+			schemaVersion: 1,
+			workspaceId: fixture.workspaceId,
+			workflowId: fixture.acceptanceId,
+			actorSubject: fixture.actorSubject,
+			payloadHash: fixture.salesPayloadHash,
+			operationId: fixture.salesOperationId,
+			state: 'COMMITTED',
+			result: { contactId, dealId },
+			committedAt
+		};
+		if (index === 2) {
+			await migration.query(
+				`UPDATE crm_intake.acceptances SET status='FAILED',contact_proof=NULL,sales_proof=NULL,
+				 contact_id=NULL,deal_id=NULL,first_task_id=NULL,completed_at=NULL,updated_at=now() WHERE id=$1`,
+				[fixture.acceptanceId]
+			);
+		} else {
+			await migration.query(
+				`UPDATE crm_intake.acceptances SET status='COMPLETED',contact_proof=$2::jsonb,sales_proof=$3::jsonb,
+				 contact_id=$4,deal_id=$5,first_task_id=$6,completed_at=now(),updated_at=now() WHERE id=$1`,
+				[fixture.acceptanceId, JSON.stringify(contactProof), JSON.stringify(salesProof), contactId, dealId, firstTaskId]
+			);
+		}
+		const transition = runtime.query(
+			`UPDATE crm_intake.inbox_entries SET status='ACCEPTED',contact_id=$2,deal_id=$3,accepted_at=now(),version=version+1,updated_at=now()
+			 WHERE id=$1 AND status='NEW'`,
+			[fixture.entryId, contactId, dealId]
+		);
+		if (index === 0) {
+			const result = await transition;
+			assert.equal(result.rowCount, 1, 'Intake exact COMMITTED proof must permit the one terminal NEW to ACCEPTED transition');
+		} else {
+			await assert.rejects(transition, error => closedError(error));
+			const unchanged = await migration.query(`SELECT status,contact_id,deal_id,version FROM crm_intake.inbox_entries WHERE id=$1`, [fixture.entryId]);
+			assert.deepEqual(unchanged.rows[0], { status: 'NEW', contact_id: null, deal_id: null, version: 1 }, index === 1 ? 'tampered proof must not terminalize an inbox entry' : 'missing proof must not terminalize an inbox entry');
+		}
 	}
 }
 

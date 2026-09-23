@@ -69,39 +69,47 @@ export class IdentityInternalService {
 	}
 
 	async fenceWorkspace(input: { closureId: string; workspaceId: string; generation: '1'; ownerSubject: string; requestedAt: string }) {
-		return this.prisma.$transaction(async tx => {
-			let existing = await tx.workspaceClosureFence.findUnique({ where: { workspaceId: input.workspaceId } });
-			if (existing?.fencedAt) {
-				if (existing.closureId !== input.closureId || existing.generation !== 1n || existing.ownerSubject !== input.ownerSubject ||
-					existing.requestedAt?.toISOString() !== input.requestedAt)
-					throw new ConflictException('Workspace has another closure binding');
-				return this.identityFenceAck(input, existing.fencedAt);
+		for (let attempt = 0; ; attempt++) {
+			try {
+				return await this.prisma.$transaction(async tx => {
+					let existing = await tx.workspaceClosureFence.findUnique({ where: { workspaceId: input.workspaceId } });
+					if (existing?.fencedAt) {
+						if (existing.closureId !== input.closureId || existing.generation !== 1n || existing.ownerSubject !== input.ownerSubject ||
+							existing.requestedAt?.toISOString() !== input.requestedAt)
+							throw new ConflictException('Workspace has another closure binding');
+						return this.identityFenceAck(input, existing.fencedAt);
+					}
+					await tx.$executeRaw`SELECT identity.assert_workspace_open(${input.workspaceId}::uuid)`;
+					existing = await tx.workspaceClosureFence.findUnique({ where: { workspaceId: input.workspaceId } });
+					if (existing?.fencedAt) throw new ConflictException('Workspace has another closure binding');
+					const workspace = await tx.workspace.findUnique({ where: { id: input.workspaceId } });
+					const owners = await tx.workspaceMember.findMany({
+						where: { workspaceId: input.workspaceId, role: 'OWNER', status: WorkspaceMemberStatus.ACTIVE,
+							user: { status: UserStatus.ACTIVE, deletedAt: null } },
+						select: { userId: true }, take: 2, orderBy: { id: 'asc' }
+					});
+					if (!workspace || workspace.status !== WorkspaceStatus.ACTIVE || owners.length !== 1 ||
+						owners[0].userId !== input.ownerSubject ||
+						(workspace.type === WorkspaceType.PERSONAL && workspace.personalOwnerUserId !== input.ownerSubject) ||
+						(workspace.type === WorkspaceType.ORGANIZATION && workspace.personalOwnerUserId !== null))
+						throw new ForbiddenException('Canonical workspace owner changed');
+					await tx.workspace.update({ where: { id: input.workspaceId }, data: { status: WorkspaceStatus.INACTIVE } });
+					await tx.workspaceInvitation.updateMany({
+						where: { workspaceId: input.workspaceId, status: 'PENDING' },
+						data: { status: 'REVOKED', revokedAt: new Date(), version: { increment: 1 } }
+					});
+					const fencedAt = new Date();
+					await tx.workspaceClosureFence.update({ where: { workspaceId: input.workspaceId },
+						data: { closureId: input.closureId, generation: 1n, ownerSubject: input.ownerSubject,
+							requestedAt: new Date(input.requestedAt), fencedAt, revision: { increment: 1 } } });
+					return this.identityFenceAck(input, fencedAt);
+				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });
+			} catch (error) {
+				if (attempt >= 2 || !(error instanceof Prisma.PrismaClientKnownRequestError &&
+					(error.code === 'P2034' || (error.code === 'P2010' &&
+						['40001', '40P01'].includes(String(error.meta?.code)))))) throw error;
 			}
-			await tx.$executeRaw`SELECT identity.assert_workspace_open(${input.workspaceId}::uuid)`;
-			existing = await tx.workspaceClosureFence.findUnique({ where: { workspaceId: input.workspaceId } });
-			if (existing?.fencedAt) throw new ConflictException('Workspace has another closure binding');
-			const workspace = await tx.workspace.findUnique({ where: { id: input.workspaceId } });
-			const owners = await tx.workspaceMember.findMany({
-				where: { workspaceId: input.workspaceId, role: 'OWNER', status: WorkspaceMemberStatus.ACTIVE,
-					user: { status: UserStatus.ACTIVE, deletedAt: null } },
-				select: { userId: true }, take: 2, orderBy: { id: 'asc' }
-			});
-			if (!workspace || workspace.status !== WorkspaceStatus.ACTIVE || owners.length !== 1 ||
-				owners[0].userId !== input.ownerSubject ||
-				(workspace.type === WorkspaceType.PERSONAL && workspace.personalOwnerUserId !== input.ownerSubject) ||
-				(workspace.type === WorkspaceType.ORGANIZATION && workspace.personalOwnerUserId !== null))
-				throw new ForbiddenException('Canonical workspace owner changed');
-			await tx.workspace.update({ where: { id: input.workspaceId }, data: { status: WorkspaceStatus.INACTIVE } });
-			await tx.workspaceInvitation.updateMany({
-				where: { workspaceId: input.workspaceId, status: 'PENDING' },
-				data: { status: 'REVOKED', revokedAt: new Date(), version: { increment: 1 } }
-			});
-			const fencedAt = new Date();
-			await tx.workspaceClosureFence.update({ where: { workspaceId: input.workspaceId },
-				data: { closureId: input.closureId, generation: 1n, ownerSubject: input.ownerSubject,
-					requestedAt: new Date(input.requestedAt), fencedAt, revision: { increment: 1 } } });
-			return this.identityFenceAck(input, fencedAt);
-		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });
+		}
 	}
 
 	private identityFenceAck(input: { closureId: string; workspaceId: string; generation: '1' }, fencedAt: Date) {

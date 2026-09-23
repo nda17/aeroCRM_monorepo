@@ -5,6 +5,7 @@ import {
 	ValidationPipe
 } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { Prisma } from '@prisma/crm-intake-client';
 import { IntakeIngestionController } from './intake-ingestion.controller';
 import {
 	IntakeIngestionRateLimiter,
@@ -238,6 +239,47 @@ describe('source-authenticated Intake ingress', () => {
 			expect(JSON.stringify(safe)).not.toContain(token);
 			expect(JSON.stringify(safe)).not.toContain(dto.message);
 		}
+	});
+	it('retries a wrapped serialization failure with the same ingress request', async () => {
+		const current = setup();
+		current.prisma.$transaction.mockRejectedValueOnce(
+			new Prisma.PrismaClientKnownRequestError(
+				'Raw query failed. Code: 40001',
+				{
+					code: 'P2010',
+					clientVersion: '5.22.0',
+					meta: { code: '40001' }
+				}
+			)
+		);
+
+		await expect(current.invoke()).resolves.toMatchObject({
+			schemaVersion: 1,
+			entryId: expect.any(String)
+		});
+		expect(current.prisma.$transaction).toHaveBeenCalledTimes(2);
+		expect(current.tx.inboxEntry.create).toHaveBeenCalledTimes(1);
+		expect(current.tx.inboundReceipt.create).toHaveBeenCalledTimes(1);
+	});
+	it('maps a wrapped workspace-closed assertion to 403 without retrying ingress', async () => {
+		const current = setup();
+		current.prisma.$transaction.mockRejectedValueOnce(
+			new Prisma.PrismaClientKnownRequestError(
+				'Raw query failed. Code: P0001. Message: crm_workspace_closed',
+				{
+					code: 'P2010',
+					clientVersion: '5.22.0',
+					meta: { code: 'P0001' }
+				}
+			)
+		);
+
+		await expect(current.invoke()).rejects.toMatchObject({
+			status: 403,
+			response: expect.objectContaining({ code: 'crm_workspace_closed' })
+		});
+		expect(current.prisma.$transaction).toHaveBeenCalledTimes(1);
+		expect(current.tx.inboxEntry.create).not.toHaveBeenCalled();
 	});
 	it('reauthorizes and authenticates every replay and rejects reused keys with a changed payload', async () => {
 		const current = setup();

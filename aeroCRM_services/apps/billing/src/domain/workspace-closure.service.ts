@@ -81,7 +81,10 @@ export class BillingWorkspaceClosureService {
 					return this.ack(input, fencedAt, financialPendingCount);
 				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 25000 });
 			} catch (error) {
-				if (attempt >= 2 || (error as { code?: string }).code !== 'P2034') throw error;
+				if (attempt >= 2 || !((error as { code?: string }).code === 'P2034' ||
+					((error as { code?: string }).code === 'P2010' &&
+						['40001', '40P01'].includes(String(
+							(error as { meta?: { code?: unknown } }).meta?.code))))) throw error;
 			}
 		}
 	}

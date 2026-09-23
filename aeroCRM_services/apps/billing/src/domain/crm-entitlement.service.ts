@@ -334,7 +334,10 @@ export class CrmEntitlementService {
 			typeof error === 'object' &&
 			error !== null &&
 			'code' in error &&
-			(error as { code?: unknown }).code === 'P2034'
+			((error as { code?: unknown }).code === 'P2034' ||
+				((error as { code?: unknown; meta?: { code?: unknown } }).code === 'P2010' &&
+					['40001', '40P01'].includes(String(
+						(error as { meta?: { code?: unknown } }).meta?.code))))
 		);
 	}
 }

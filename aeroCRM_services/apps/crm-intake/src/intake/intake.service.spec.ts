@@ -5,6 +5,7 @@ import {
 	NotFoundException
 } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { Prisma } from '@prisma/crm-intake-client';
 import { IntakeAuthorization } from '../access/intake-authorization.client';
 import { CrmIntakePrismaService } from '../prisma/crm-intake-prisma.service';
 import {
@@ -210,6 +211,66 @@ describe('IntakeService', () => {
 		await expect(
 			service.createManual(context, command)
 		).rejects.toBeInstanceOf(NotFoundException);
+	});
+
+	it('retries a wrapped serialization failure before observing the winning receipt', async () => {
+		const { service, tx, prisma } = setup();
+		prisma.$transaction.mockRejectedValueOnce(
+			new Prisma.PrismaClientKnownRequestError(
+				'Raw query failed. Code: 40001',
+				{
+					code: 'P2010',
+					clientVersion: '5.22.0',
+					meta: { code: '40001' }
+				}
+			)
+		);
+		tx.intakeCommand.findUnique.mockResolvedValue({
+			commandId: command.commandId,
+			workspaceId,
+			actorSubject: context.subject,
+			entityKind: 'entry',
+			requestHash: 'winner-request-hash',
+			entityId: entry.id,
+			response: { schemaVersion: 1 }
+		});
+
+		await expect(
+			service.createManual(context, {
+				...command,
+				title: 'Проигравшая команда'
+			})
+		).rejects.toBeInstanceOf(ConflictException);
+		expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+		expect(tx.intakeCommand.findUnique).toHaveBeenCalledTimes(1);
+		expect(tx.inboxEntry.create).not.toHaveBeenCalled();
+	});
+
+	it('does not retry a wrapped workspace-closed assertion failure', async () => {
+		const { service, tx, prisma } = setup();
+		const closed = new Prisma.PrismaClientKnownRequestError(
+			'Raw query failed. Code: P0001. Message: crm_workspace_closed',
+			{
+				code: 'P2010',
+				clientVersion: '5.22.0',
+				meta: { code: 'P0001' }
+			}
+		);
+		let executeCount = 0;
+		tx.$executeRaw.mockImplementation(async () => {
+			if (++executeCount === 2) throw closed;
+			return 0;
+		});
+
+		await expect(
+			service.createManual(context, command)
+		).rejects.toMatchObject({
+			status: 403,
+			response: expect.objectContaining({ code: 'crm_workspace_closed' })
+		});
+		expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+		expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
+		expect(tx.inboxEntry.create).not.toHaveBeenCalled();
 	});
 
 	it('rejects only NEW entries with the exact current version', async () => {

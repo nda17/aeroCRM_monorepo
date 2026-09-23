@@ -177,7 +177,10 @@ export class WorkspaceClosureWorker implements OnModuleInit, BeforeApplicationSh
 			'CLOSURE_ACCEPTANCE_CONFLICT', 'CLOSURE_ENTRY_CONFLICT'].includes(error.message))
 			return error.message;
 		if (error && typeof error === 'object' && 'code' in error &&
-			(error as { code?: string }).code === 'P2034') return 'CLOSURE_SERIALIZATION_RETRY';
+			((error as { code?: string }).code === 'P2034' ||
+				((error as { code?: string }).code === 'P2010' && 'meta' in error &&
+					['40001', '40P01'].includes(String((error.meta as { code?: unknown })?.code)))))
+			return 'CLOSURE_SERIALIZATION_RETRY';
 		return 'CLOSURE_PARTICIPANT_UNAVAILABLE';
 	}
 

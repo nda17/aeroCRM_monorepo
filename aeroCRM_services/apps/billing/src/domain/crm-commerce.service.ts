@@ -845,7 +845,10 @@ export class CrmCommerceService {
 			} catch (error) {
 				if (
 					attempt >= 2 ||
-					!['P2034'].includes((error as { code?: string }).code ?? '')
+					!((error as { code?: string }).code === 'P2034' ||
+						((error as { code?: string }).code === 'P2010' &&
+							['40001', '40P01'].includes(String(
+								(error as { meta?: { code?: unknown } }).meta?.code))))
 				)
 					throw error;
 			}
