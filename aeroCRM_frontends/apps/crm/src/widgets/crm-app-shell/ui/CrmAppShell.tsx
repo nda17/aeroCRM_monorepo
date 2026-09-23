@@ -325,10 +325,14 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 									label={section}
 									description={sectionItem.description}
 								>
-									{section}
+									<span className={styles.sectionLabel} title={section}>
+										{section}
+									</span>
 								</HelpHint>
 							) : (
-								section
+								<span className={styles.sectionLabel} title={section}>
+									{section}
+								</span>
 							)}
 						</span>
 					</div>

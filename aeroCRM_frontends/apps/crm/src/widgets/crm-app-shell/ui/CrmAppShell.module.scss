@@ -114,6 +114,10 @@
 	@apply break-words text-sm font-semibold text-crm-text;
 }
 
+.sectionLabel {
+	@apply block truncate;
+}
+
 .productSwitch {
 	@apply relative shrink-0 text-crm-text;
 }
