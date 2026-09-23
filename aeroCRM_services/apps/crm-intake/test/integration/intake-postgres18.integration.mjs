@@ -36,6 +36,8 @@ const context = access(workspaceIds[0]);
 const token = randomBytes(32).toString('base64url');
 const peerIp = `fd00:${randomBytes(2).toString('hex')}:${randomBytes(2).toString('hex')}::1`;
 const peerBucketKey = `ip:${createHash('sha256').update(peerIp).digest('hex')}`;
+const UUID_V4_PATTERN =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 try {
 	const [version] = await runtime.$queryRawUnsafe(
@@ -47,6 +49,24 @@ try {
 	);
 	assert.equal(role.name, expectedRole);
 	assert.equal(role.restricted, true);
+	const [notificationIdColumn] = await runtime.$queryRaw`
+		SELECT pg_get_expr(def.adbin, def.adrelid) AS default_expression
+		FROM pg_attribute AS attr
+		JOIN pg_class AS cls ON cls.oid = attr.attrelid
+		JOIN pg_namespace AS ns ON ns.oid = cls.relnamespace
+		LEFT JOIN pg_attrdef AS def
+			ON def.adrelid = cls.oid
+			AND def.adnum = attr.attnum
+		WHERE ns.nspname = 'crm_intake'
+			AND cls.relname = 'inbox_notifications'
+			AND attr.attname = 'id'
+			AND NOT attr.attisdropped
+	`;
+	assert.equal(
+		notificationIdColumn.default_expression,
+		'gen_random_uuid()',
+		'inbox_notifications.id must have a database UUID default for trigger inserts'
+	);
 	for (const table of [
 		'intake_commands',
 		'intake_activities',
@@ -92,6 +112,15 @@ try {
 		email: 'ANNA@EXAMPLE.TEST'
 	});
 	const first = await service.createManual(context, create);
+	const manualNotification = await runtime.inboxNotification.findUnique({
+		where: { entryId: first.entry.id }
+	});
+	assert.ok(
+		manualNotification,
+		'manual intake creates its notification in the transaction'
+	);
+	assert.match(manualNotification.id, UUID_V4_PATTERN);
+	assert.equal(manualNotification.workspaceId, context.workspaceId);
 	const notificationQuery = {
 		workspaceId: context.workspaceId,
 		page: 1,
@@ -168,6 +197,22 @@ try {
 	assert.equal(first.entry.dealId, null);
 	assert.equal(first.entry.email, 'anna@example.test');
 	assert.deepEqual(await service.createManual(context, create), first);
+	assert.equal(
+		await runtime.inboxEntry.count({ where: { id: first.entry.id } }),
+		1
+	);
+	assert.equal(
+		await runtime.inboxNotification.count({
+			where: { entryId: first.entry.id }
+		}),
+		1
+	);
+	assert.equal(
+		await runtime.intakeCommand.count({
+			where: { commandId: create.commandId }
+		}),
+		1
+	);
 	assert.equal(
 		await runtime.intakeActivity.count({
 			where: { commandId: create.commandId }
@@ -424,12 +469,103 @@ try {
 	const apiEntry = await runtime.inboxEntry.findUnique({
 		where: { id: received.entryId }
 	});
+	const apiNotification = await runtime.inboxNotification.findUnique({
+		where: { entryId: received.entryId }
+	});
+	const apiReceipt = await runtime.inboundReceipt.findUnique({
+		where: {
+			sourceId_externalCommandId: {
+				sourceId: source.source.id,
+				externalCommandId: inboundKey
+			}
+		}
+	});
+	assert.ok(
+		apiNotification,
+		'API intake creates its notification in the transaction'
+	);
+	assert.match(apiNotification.id, UUID_V4_PATTERN);
+	assert.equal(apiNotification.workspaceId, context.workspaceId);
+	assert.ok(apiReceipt);
+	assert.equal(apiReceipt.entryId, received.entryId);
+	assert.match(apiReceipt.auditCommandId, UUID_V4_PATTERN);
+	assert.equal(
+		await runtime.inboxEntry.count({ where: { id: received.entryId } }),
+		1
+	);
+	assert.equal(
+		await runtime.inboxNotification.count({
+			where: { entryId: received.entryId }
+		}),
+		1
+	);
+	assert.equal(
+		await runtime.inboundReceipt.count({
+			where: {
+				sourceId: source.source.id,
+				externalCommandId: inboundKey
+			}
+		}),
+		1
+	);
+	assert.equal(
+		await runtime.intakeActivity.count({
+			where: { commandId: apiReceipt.auditCommandId }
+		}),
+		1
+	);
 	assert.equal(apiEntry.origin, 'API');
 	assert.equal(apiEntry.status, 'NEW');
 	assert.equal(apiEntry.createdBySubject, context.subject);
 	assert.equal(apiEntry.workspaceId, context.workspaceId);
 	assert.equal(apiEntry.sourceId, source.source.id);
 	assert.equal(apiEntry.email, 'api@example.test');
+	const tildaBody = {
+		tranid: `pg18-${randomUUID()}`,
+		formid: 'form-intake-pg18',
+		Name: 'Tilda integration lead',
+		Comments: 'Please call tomorrow'
+	};
+	const sendTilda = () =>
+		ingestion.ingestTilda(source.source.id, token, tildaBody, peerIp);
+	const tildaReceived = await sendTilda();
+	assert.deepEqual(await sendTilda(), tildaReceived);
+	const tildaEntry = await runtime.inboxEntry.findUniqueOrThrow({
+		where: { id: tildaReceived.entryId }
+	});
+	assert.equal(tildaEntry.name, 'Tilda integration lead');
+	assert.equal(tildaEntry.origin, 'API');
+	assert.ok(tildaEntry.message.includes(tildaBody.Comments));
+	assert.ok(tildaEntry.message.includes(tildaBody.tranid));
+	const tildaReceipt = await runtime.inboundReceipt.findFirstOrThrow({
+		where: { sourceId: source.source.id, entryId: tildaReceived.entryId }
+	});
+	const tildaNotification = await runtime.inboxNotification.findUniqueOrThrow({
+		where: { entryId: tildaReceived.entryId }
+	});
+	assert.match(tildaNotification.id, UUID_V4_PATTERN);
+	assert.equal(
+		await runtime.inboxEntry.count({ where: { id: tildaReceived.entryId } }),
+		1
+	);
+	assert.equal(
+		await runtime.inboxNotification.count({
+			where: { entryId: tildaReceived.entryId }
+		}),
+		1
+	);
+	assert.equal(
+		await runtime.inboundReceipt.count({
+			where: { sourceId: source.source.id, entryId: tildaReceived.entryId }
+		}),
+		1
+	);
+	assert.equal(
+		await runtime.intakeActivity.count({
+			where: { commandId: tildaReceipt.auditCommandId }
+		}),
+		1
+	);
 	await assert.rejects(
 		send(inboundKey, { ...inboundBody, name: 'Changed' }),
 		http(409)
@@ -662,7 +798,12 @@ try {
 		),
 		/forced intake receipt failure/
 	);
-	for (const delegate of ['inboxEntry', 'intakeCommand', 'intakeActivity'])
+	for (const delegate of [
+		'inboxEntry',
+		'inboxNotification',
+		'intakeCommand',
+		'intakeActivity'
+	])
 		assert.equal(
 			await runtime[delegate].count({
 				where: { workspaceId: workspaceIds[2] }

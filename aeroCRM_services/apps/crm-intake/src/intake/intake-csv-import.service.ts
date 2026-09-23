@@ -221,7 +221,7 @@ export class IntakeCsvImportService {
 						});
 						// Force deferred proof checks inside the callback; never rely on
 						// a driver surfacing a failed COMMIT as a rejected transaction.
-						await tx.$executeRaw`SET CONSTRAINTS crm_intake.csv_imports_command_fkey,
+						await tx.$executeRaw`SET CONSTRAINTS crm_intake.csv_imports_id_fkey,
 						crm_intake.csv_imports_integrity_check, crm_intake.csv_import_rows_integrity_check IMMEDIATE`;
 						return response;
 					},

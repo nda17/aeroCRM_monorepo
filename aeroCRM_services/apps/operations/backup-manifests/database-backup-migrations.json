@@ -115,11 +115,15 @@
 			]
 		},
 		"crm-intake": {
-			"manifestSha256": "9881db46414742452af7c3fadff453f28e047760a3ca36baf414b0cda0e74acf",
+			"manifestSha256": "13bf23225bba56524b8afc4b1d99e8ac67ae4cc4d88f9bf03abb959ed50d2455",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
 					"checksum": "0fdf108713220e0f25a8ef0561ea8f4fe79e6e50c9f1090890447d4fbdf6c10d"
+				},
+				{
+					"name": "20260923020000_inbox_notification_id_default",
+					"checksum": "ae29292abdfca9a89bae67d23624c31e53c817bb85a68b8b8a48b7381f798ca8"
 				}
 			]
 		},
