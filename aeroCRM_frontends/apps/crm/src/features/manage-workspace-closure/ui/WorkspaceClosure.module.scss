@@ -1,0 +1,51 @@
+.card {
+	@apply flex flex-col gap-4 rounded-panel border border-crm-border bg-crm-surface p-5 shadow-panel;
+}
+.card h2 {
+	@apply text-lg font-bold text-crm-text;
+}
+.card h3 {
+	@apply font-semibold text-crm-text;
+}
+.muted {
+	@apply text-sm leading-relaxed text-crm-muted;
+}
+.notice {
+	@apply rounded-xl border border-crm-border bg-crm-surface-muted p-4 text-sm leading-relaxed;
+}
+.danger {
+	@apply rounded-xl border border-crm-danger bg-crm-surface-muted p-4 text-sm leading-relaxed;
+}
+.actions {
+	@apply flex flex-wrap items-center gap-2;
+}
+.facts {
+	@apply grid gap-3 text-sm sm:grid-cols-2;
+}
+.facts div {
+	@apply rounded-lg bg-crm-surface-muted p-3;
+}
+.facts dt {
+	@apply text-crm-muted;
+}
+.facts dd {
+	@apply mt-1 font-medium text-crm-text;
+}
+.steps {
+	@apply grid gap-2 text-sm;
+}
+.steps li {
+	@apply flex flex-wrap justify-between gap-2 rounded-lg bg-crm-surface-muted p-3;
+}
+.history {
+	@apply grid gap-2;
+}
+.history li {
+	@apply flex flex-wrap items-center justify-between gap-2 rounded-lg bg-crm-surface-muted p-3 text-sm;
+}
+.dialogBody {
+	@apply flex flex-col gap-4;
+}
+.label {
+	@apply break-all rounded-lg bg-crm-surface-muted p-3 font-semibold text-crm-text;
+}

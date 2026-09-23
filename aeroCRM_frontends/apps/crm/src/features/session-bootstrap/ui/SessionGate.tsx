@@ -2,7 +2,11 @@
 
 import { useSessionBootstrap } from '@/features/session-bootstrap/model/useSessionBootstrap'
 import styles from '@/features/session-bootstrap/ui/SessionGate.module.scss'
-import { buildLoginUrl } from '@/shared/lib/auth-return-url'
+import {
+	buildLoginUrl,
+	captureInvitationEmailHint,
+	invitationEmailFragment
+} from '@/shared/lib/auth-return-url'
 import { Button, ScreenState } from '@/shared/ui'
 import type { PropsWithChildren } from 'react'
 import { useCallback, useEffect, useRef } from 'react'
@@ -21,6 +25,8 @@ const SessionGate = ({
 	const hasStartedRedirect = useRef(false)
 
 	useEffect(() => {
+		const returnPath = `${window.location.pathname}${window.location.search}`
+		captureInvitationEmailHint(returnPath)
 		if (status !== 'anonymous' || hasStartedRedirect.current) {
 			return
 		}
@@ -28,7 +34,7 @@ const SessionGate = ({
 		try {
 			const loginUrl = buildLoginUrl(window.location.href)
 			hasStartedRedirect.current = true
-			redirectToLogin(loginUrl)
+			redirectToLogin(loginUrl + invitationEmailFragment(returnPath))
 		} catch {
 			fail('Не удалось подготовить безопасный переход на страницу входа.')
 		}

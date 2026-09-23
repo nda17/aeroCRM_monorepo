@@ -21,6 +21,46 @@ model ServiceIdentity {
   @@schema("crm_access")
 }
 
+model WorkspaceClosureFence {
+  workspaceId  String    @id @map("workspace_id") @db.Uuid
+  revision     BigInt    @default(0)
+  closureId    String?   @map("closure_id") @db.Uuid
+  generation   BigInt?
+  ownerSubject String?   @map("owner_subject")
+  requestedAt  DateTime? @map("requested_at")
+  fencedAt     DateTime? @map("fenced_at")
+
+  @@map("workspace_closure_fences")
+  @@schema("crm_access")
+}
+
+model CrmWorkspaceClosure {
+  id                    String   @id @default(uuid()) @db.Uuid
+  workspaceId           String   @unique @map("workspace_id") @db.Uuid
+  commandId             String   @unique @map("command_id") @db.Uuid
+  ownerSubject          String   @map("owner_subject")
+  ownerMembershipId     String   @map("owner_membership_id") @db.Uuid
+  requestHash           String   @map("request_hash") @db.VarChar(64)
+  displayNameSnapshot   String?  @map("display_name_snapshot") @db.VarChar(200)
+  generation            BigInt   @default(1)
+  state                 String   @db.VarChar(16)
+  version               BigInt   @default(1)
+  participants          Json
+  leaseToken            String?  @map("lease_token") @db.Uuid
+  leaseUntil            DateTime? @map("lease_until")
+  nextAttemptAt         DateTime @default(now()) @map("next_attempt_at")
+  lastErrorCode         String?  @map("last_error_code") @db.VarChar(80)
+  requestedAt           DateTime @default(now()) @map("requested_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  closedAt              DateTime? @map("closed_at")
+  financialPendingCount Int      @default(0) @map("financial_pending_count")
+  priorDispatchCount    Int      @default(0) @map("prior_dispatch_count")
+
+  @@index([state, nextAttemptAt])
+  @@map("crm_workspace_closures")
+  @@schema("crm_access")
+}
+
 model CrmWorkspaceAccess {
   id                            String             @id @default(uuid()) @db.Uuid
   workspaceId                   String             @unique @map("workspace_id") @db.Uuid

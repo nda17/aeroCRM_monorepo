@@ -23,6 +23,7 @@ const owner: TeamAuthority = {
 const setup = (actor = owner) => {
 	const prisma = {
 		$executeRaw: jest.fn(),
+		$queryRaw: jest.fn().mockResolvedValue([]),
 		$transaction: jest.fn(),
 		crmWorkspaceMember: { findUnique: jest.fn(), findFirst: jest.fn() },
 		crmWorkspaceAccess: {

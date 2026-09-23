@@ -377,3 +377,7 @@ updates, fresh revoke, OWN/TEAM isolation, archives, output limits, SQL timeout,
 audit failure and append-only/foreign-schema ACL. These PG tests stub the Access
 response to control revocation; end-to-end HTTP authorization remains a separate
 local-stack/rollout gate.
+
+## Workspace closure (WS-01)
+
+The loopback-only `POST /internal/v1/workspace-closures/fence` endpoint accepts only the `crm-access` caller authenticated with `CRM_CUSTOMERS_CRM_ACCESS_TOKEN`. It commits an immutable local fence binding before returning its ACK. Business admission and transport permits write the same workspace fence row, so a stale transaction cannot commit new work after the ACK. The token is a target-specific secret and must not be reused from the reverse service call.

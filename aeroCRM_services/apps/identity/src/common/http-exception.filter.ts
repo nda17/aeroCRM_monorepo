@@ -4,6 +4,13 @@ import {
 	ExceptionFilter,
 	HttpException
 } from '@nestjs/common';
+import { Prisma } from '@prisma/identity-client';
+
+const closed = (value: unknown) =>
+	(value instanceof Prisma.PrismaClientKnownRequestError ||
+		value instanceof Prisma.PrismaClientUnknownRequestError) &&
+	(value.message.includes('crm_workspace_closed') ||
+		JSON.stringify('meta' in value ? value.meta : null).includes('crm_workspace_closed'));
 
 type ErrorDescriptor = {
 	code: string;
@@ -135,10 +142,15 @@ const ERROR_MAP: Record<string, ErrorDescriptor> = {
 	}
 };
 
-@Catch(HttpException)
+@Catch()
 export class IdentityHttpExceptionFilter implements ExceptionFilter {
-	catch(exception: HttpException, host: ArgumentsHost) {
+	catch(exception: unknown, host: ArgumentsHost) {
 		const response = host.switchToHttp().getResponse();
+		if (!(exception instanceof HttpException)) {
+			return response.status(closed(exception) ? 403 : 500).json(closed(exception)
+				? { statusCode: 403, message: 'Workspace is closed', error: 'ForbiddenException', code: 'crm_workspace_closed' }
+				: { statusCode: 500, message: 'Internal server error', error: 'InternalServerError', code: 'internal_error' });
+		}
 		const status = exception.getStatus();
 		const exceptionResponse = exception.getResponse();
 

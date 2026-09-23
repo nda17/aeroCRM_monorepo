@@ -9,7 +9,7 @@ import {
 	type WorkdayScope,
 	type WorkdayStatus
 } from '@/entities/crm-workday'
-import { Button, SelectField, TextField } from '@/shared/ui'
+import { Button, HelpHint, SelectField, TextField } from '@/shared/ui'
 import { useRef, useState, type FormEvent } from 'react'
 import type { AssigneeDirectoryContext } from '@/entities/crm-team'
 import toast from 'react-hot-toast'
@@ -183,6 +183,15 @@ export const WorkdayFilters = ({
 				</SelectField>
 				<SelectField
 					label="Чьи задачи"
+					hint={
+						<>
+							Область зависит от вашей роли.{' '}
+							<HelpHint
+								label="Область задач"
+								description="«Мои задачи» показывает назначенные вам. «Мои отделы» добавляет задачи доступных отделов, «Вся команда» — все разрешённые вашей ролью задачи."
+							/>
+						</>
+					}
 					value={scope}
 					onChange={e => setScope(e.target.value as WorkdayScope)}
 				>

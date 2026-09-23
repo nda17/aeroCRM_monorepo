@@ -5,8 +5,8 @@ on:
       target:
         description: Deployment target
         type: choice
-        options: [all, frontend, backend]
-        default: all
+        options: [backend, frontend]
+        default: backend
         required: true
       ci_run_id:
         description: Green CI run ID for this exact commit
@@ -54,6 +54,14 @@ on:
         required: true
       crm_intake_notifications_migration_env_hash:
         description: SHA-256 of the private VPS migrations/crm-intake.env file; required only for the CRM Intake notification migration
+        required: false
+      workspace_closure_migration:
+        description: Backend target only; apply the reviewed seven-service workspace closure migration with the closure gate OFF
+        type: boolean
+        default: false
+        required: true
+      workspace_closure_migration_env_hash:
+        description: SHA-256 of sorted checksums for the seven fixed private migration env files
         required: false
       crm_contracts_cutover:
         description: Backend target only; release frontend separately after a successful CRM contract cutover
@@ -105,6 +113,8 @@ jobs:
           SALES_COMMERCE_MIGRATION_HASH: ${{ inputs.crm_sales_commerce_migration_env_hash }}
           INTAKE_NOTIFICATIONS_MIGRATION: ${{ inputs.crm_intake_notifications_migration && 'true' || 'false' }}
           INTAKE_NOTIFICATIONS_MIGRATION_HASH: ${{ inputs.crm_intake_notifications_migration_env_hash }}
+          CLOSURE_MIGRATION: ${{ inputs.workspace_closure_migration && 'true' || 'false' }}
+          CLOSURE_MIGRATION_HASH: ${{ inputs.workspace_closure_migration_env_hash }}
           CUTOVER: ${{ inputs.crm_contracts_cutover && 'true' || 'false' }}
           RESUME: ${{ inputs.crm_contracts_cutover_resume && 'true' || 'false' }}
           STAGED_DIR: ${{ inputs.crm_contracts_staged_env_dir }}
@@ -147,10 +157,17 @@ jobs:
           else
             [[ -z "$INTAKE_NOTIFICATIONS_MIGRATION_HASH" ]]
           fi
+          if [[ "$CLOSURE_MIGRATION" == true ]]; then
+            [[ "$TARGET" == backend && "$CUTOVER" == false && "$BILLING_MIGRATION" == false &&
+              "$SALES_COMMERCE_MIGRATION" == false && "$INTAKE_NOTIFICATIONS_MIGRATION" == false &&
+              "$CLOSURE_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
+          else
+            [[ -z "$CLOSURE_MIGRATION_HASH" ]]
+          fi
           case "$TARGET" in
             all)
-              [[ "$FRONT_HASH" =~ ^[a-f0-9]{64}$ && "$BACK_HASH" =~ ^[a-f0-9]{64}$ ]]
-              echo 'matrix={"include":[{"role":"frontend","apps":"landing crm admin-panel"},{"role":"backend","apps":"api-gateway notification-delivery campaigns reporting billing identity platform support operations crm-access crm-intake crm-customers crm-sales"}]}' >> "$GITHUB_OUTPUT"
+              echo 'Parallel backend/frontend release is forbidden for workspace closure' >&2
+              exit 1
               ;;
             frontend)
               [[ "$FRONT_HASH" =~ ^[a-f0-9]{64}$ ]]
@@ -186,9 +203,11 @@ jobs:
           node --check infra/scripts/crm-custom-roles-migration.mjs
           node --check infra/scripts/crm-sales-commerce-migration.mjs
           node --check infra/scripts/crm-intake-notifications-migration.mjs
+          node --check infra/scripts/workspace-closure-migration.mjs
           node --check infra/scripts/backend-rollback-compatibility-guard.mjs
           node infra/scripts/crm-sales-commerce-migration.mjs --policy-self-test
           node infra/scripts/crm-intake-notifications-migration.mjs --policy-self-test
+          node infra/scripts/workspace-closure-migration.mjs --policy-self-test
           node infra/scripts/backend-rollback-compatibility-guard.mjs --policy-self-test
       - name: Download exact CI artifacts
         env:
@@ -225,6 +244,8 @@ jobs:
           SALES_COMMERCE_MIGRATION_HASH: ${{ inputs.crm_sales_commerce_migration_env_hash }}
           INTAKE_NOTIFICATIONS_MIGRATION: ${{ inputs.crm_intake_notifications_migration && 'true' || 'false' }}
           INTAKE_NOTIFICATIONS_MIGRATION_HASH: ${{ inputs.crm_intake_notifications_migration_env_hash }}
+          CLOSURE_MIGRATION: ${{ inputs.workspace_closure_migration && 'true' || 'false' }}
+          CLOSURE_MIGRATION_HASH: ${{ inputs.workspace_closure_migration_env_hash }}
           KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
           CUTOVER: ${{ inputs.crm_contracts_cutover && 'true' || 'false' }}
           RESUME: ${{ inputs.crm_contracts_cutover_resume && 'true' || 'false' }}
@@ -245,6 +266,14 @@ jobs:
           fi
           [[ "$hash" =~ ^[a-f0-9]{64}$ && "$port" =~ ^[0-9]{1,5}$ ]]
           dest="$user@$host"
+          if [ "$ROLE" = frontend ]; then
+            backend_key="$RUNNER_TEMP/aerocrm_backend_check_key"
+            printf '%s\n' "$BACK_KEY" > "$backend_key"
+            chmod 600 "$backend_key"
+            ssh -i "$backend_key" -p "$BACK_PORT" -o StrictHostKeyChecking=yes "$BACK_USER@$BACK_HOST" \
+              "bash -c 'set -euo pipefail; cd /opt/aerocrm; test \"\$(cat releases/backend.sha)\" = \"$SHA\"; test \"\$(cat releases/workspace-closure-enabled.sha)\" = \"$SHA\"'"
+            rm -f "$backend_key"
+          fi
           ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'mkdir -p /opt/aerocrm/compose /opt/aerocrm/scripts'
           scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes "infra/compose/$ROLE.yml" "$dest:/opt/aerocrm/compose/"
           if [ "$ROLE" = frontend ]; then
@@ -253,7 +282,7 @@ jobs:
           fi
           if [ "$ROLE" = backend ]; then
             scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/compose/rabbitmq.conf "$dest:/opt/aerocrm/compose/"
-            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/backend-rollback-compatibility-guard.mjs infra/scripts/ensure-cutover-node.sh "$dest:/opt/aerocrm/scripts/"
+            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/backend-rollback-compatibility-guard.mjs infra/scripts/workspace-closure-reviewed-inventory.json infra/scripts/ensure-cutover-node.sh "$dest:/opt/aerocrm/scripts/"
             node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'bash /opt/aerocrm/scripts/ensure-cutover-node.sh --rollback-guard')
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
           fi
@@ -284,6 +313,9 @@ jobs:
             node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'bash /opt/aerocrm/scripts/ensure-cutover-node.sh --crm-intake-notifications')
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
           fi
+          if [ "$ROLE" = backend ] && [ "$CLOSURE_MIGRATION" = true ]; then
+            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/workspace-closure-migration.mjs "$dest:/opt/aerocrm/scripts/"
+          fi
           for app in $APPS; do
             gzip -dc "images/$app/$app.tar.gz" | ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'docker load >/dev/null'
           done
@@ -292,7 +324,7 @@ jobs:
             if [ "$RESUME" = true ]; then resume_arg=' --resume'; fi
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && '$node_bin' scripts/crm-contract-cutover.mjs '$SHA' '$STAGED_DIR' '$DEFINITIONS_FILE'$resume_arg"
           elif [ "$ROLE" = backend ]; then
-            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH' '$INTAKE_NOTIFICATIONS_MIGRATION' '$INTAKE_NOTIFICATIONS_MIGRATION_HASH'"
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH' '$INTAKE_NOTIFICATIONS_MIGRATION' '$INTAKE_NOTIFICATIONS_MIGRATION_HASH' '$CLOSURE_MIGRATION' '$CLOSURE_MIGRATION_HASH'"
           else
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash'"
           fi

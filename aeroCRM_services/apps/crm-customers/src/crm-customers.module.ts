@@ -1,3 +1,10 @@
+import { APP_FILTER } from '@nestjs/core';
+import {
+	WorkspaceClosureController,
+	WorkspaceClosureErrorFilter,
+	WorkspaceClosureService,
+	WorkspaceClosureInternalGuard
+} from './workspace-closure/workspace-closure.controller';
 import { LiveChangesService } from './live/live-changes.service';
 import { LiveChangesController } from './live/live-changes.controller';
 import { Module } from '@nestjs/common';
@@ -23,10 +30,7 @@ import {
 } from './intake-operations/intake-operation.controller';
 
 @Module({
-	imports: [
-		ConfigModule.forRoot({ isGlobal: true }),
-		CrmCustomersPrismaModule
-	],
+	imports: [ConfigModule.forRoot({ isGlobal: true }), CrmCustomersPrismaModule],
 	controllers: [
 		LiveChangesController,
 		CrmCustomersHealthController,
@@ -35,7 +39,8 @@ import {
 		ContactsV2Controller,
 		CompanyLookupController,
 		CustomersExportController,
-		ContactIntakeOperationController
+		ContactIntakeOperationController,
+		WorkspaceClosureController
 	],
 	providers: [
 		LiveChangesService,
@@ -49,7 +54,10 @@ import {
 		},
 		CustomersExportService,
 		ContactIntakeOperationService,
-		ContactIntakeOperationGuard
+		ContactIntakeOperationGuard,
+		WorkspaceClosureService,
+		WorkspaceClosureInternalGuard,
+		{ provide: APP_FILTER, useClass: WorkspaceClosureErrorFilter }
 	]
 })
 export class CrmCustomersModule {}

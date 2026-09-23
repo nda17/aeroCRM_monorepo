@@ -167,6 +167,12 @@ export class ReminderDeliveryService {
 		});
 		for (const task of tasks) {
 			if (!stillOwned()) throw new Error('REMINDER_JOB_LEASE_LOST');
+			if (
+				(await this.prisma.workspaceClosureFence.findUnique({
+					where: { workspaceId: task.workspaceId }
+				}))?.fencedAt
+			)
+				continue;
 			const rules = await this.prisma.reminderRule.findMany({
 				where: {
 					workspaceId: task.workspaceId,
@@ -220,6 +226,12 @@ export class ReminderDeliveryService {
 		row: ReminderRule,
 		stillOwned: () => boolean
 	) {
+		if (
+			(await this.prisma.workspaceClosureFence.findUnique({
+				where: { workspaceId: task.workspaceId }
+			}))?.fencedAt
+		)
+			return;
 		const rule = config(row);
 		const occurrence = taskOccurrence(rule, row, task);
 		if (
@@ -366,6 +378,12 @@ export class ReminderDeliveryService {
 			content: null
 		});
 		if (!reminderDeliveryEnabled()) return suppress();
+		if (
+			(await this.prisma.workspaceClosureFence.findUnique({
+				where: { workspaceId: input.workspaceId }
+			}))?.fencedAt
+		)
+			return suppress();
 		const delivery = await this.prisma.reminderDelivery.findUnique({
 			where: { id }
 		});

@@ -36,6 +36,7 @@ export const useMemoryCommand = <C extends { commandId: string }, R>(
 		current.current.intent === intent &&
 		coordinator.current(scope)
 	const relevant = () => sameObserver() && current.current.enabled
+	const errorToastId = `pending-command:${scope.owner}:${scope.workspaceId}:${scope.view}:${intent}`
 	const execute = async (build?: () => C, recovering = false) => {
 		if (!enabled || !relevant()) return
 		try {
@@ -59,14 +60,17 @@ export const useMemoryCommand = <C extends { commandId: string }, R>(
 			if (!relevant()) return
 			const state = coordinator.get(scope, intent)
 			if (state.status === 'success') {
+				toast.dismiss(errorToastId)
 				coordinator.consume<C, R>(scope, intent, (result, command) =>
 					current.current.onSuccess(result, command)
 				)
-			} else if (state.error) toast.error(state.error.message)
+			} else if (state.error)
+				toast.error(state.error.message, { id: errorToastId })
 		} catch {
 			if (relevant())
 				toast.error(
-					'Не удалось подтвердить доступ. Сохранённая команда не изменена.'
+					'Не удалось подтвердить доступ. Сохранённая команда не изменена.',
+					{ id: errorToastId }
 				)
 		}
 	}

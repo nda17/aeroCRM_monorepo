@@ -33,6 +33,7 @@ async function bootstrap(): Promise<void> {
 	}
 	app.setGlobalPrefix('api/v1', {
 		exclude: [
+			{ path: 'internal/v1/workspace-closures/fence', method: RequestMethod.POST },
 			{ path: 'health/live', method: RequestMethod.GET },
 			{ path: 'health/ready', method: RequestMethod.GET },
 			{

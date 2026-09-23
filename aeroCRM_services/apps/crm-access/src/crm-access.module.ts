@@ -55,6 +55,10 @@ import { IntakeSlaAuthorityService } from './team/intake-sla-authority.service';
 import { IntakeSlaRecipientsService } from './team/intake-sla-recipients.service';
 import { CrmCustomRoleController } from './team/custom-role.controller';
 import { CrmCustomRoleService } from './team/custom-role.service';
+import { WorkspaceClosureController } from './workspace-closure/workspace-closure.controller';
+import { WorkspaceClosureService } from './workspace-closure/workspace-closure.service';
+import { WorkspaceClosureClient } from './workspace-closure/workspace-closure.client';
+import { WorkspaceClosureWorker } from './workspace-closure/workspace-closure.worker';
 
 const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 
@@ -69,6 +73,7 @@ const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 		...(role === 'api'
 			? [
 					CrmAccessController,
+					WorkspaceClosureController,
 					CrmPermissionsController,
 					CrmAuthorizationController,
 					CrmTeamController,
@@ -113,7 +118,10 @@ const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 		CrmBillingCapacityService,
 		BillingCommerceClient,
 		BillingOperationGuard,
-		CrmBillingReconciliationService
+		CrmBillingReconciliationService,
+		WorkspaceClosureService,
+		WorkspaceClosureClient,
+		WorkspaceClosureWorker
 	]
 })
 export class CrmAccessModule implements OnApplicationShutdown {

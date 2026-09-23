@@ -6,6 +6,8 @@
       "SELECT"
     ],
     "_prisma_migrations": [],
+    "workspace_closure_fences": ["SELECT", "INSERT", "UPDATE"],
+    "crm_workspace_closures": ["SELECT", "INSERT", "UPDATE"],
     "crm_workspace_access": [
       "SELECT",
       "INSERT",
@@ -95,9 +97,15 @@
     "reject_team_history_mutation",
     "guard_billing_operation",
     "guard_billing_capacity",
-    "enforce_service_identity_integrity"
+    "enforce_service_identity_integrity",
+    "assert_workspace_open",
+    "guard_workspace_business",
+    "guard_workspace_intent",
+    "enforce_workspace_closure_fence",
+    "enforce_workspace_closure_operation"
   ],
   "routineExecute": [
-    "is_valid_custom_role_permissions(text[])"
+    "is_valid_custom_role_permissions(text[])",
+    "assert_workspace_open(uuid)"
   ]
 }

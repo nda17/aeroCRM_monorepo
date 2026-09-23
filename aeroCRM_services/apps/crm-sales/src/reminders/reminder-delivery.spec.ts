@@ -87,6 +87,7 @@ function fixture() {
 	const created: any[] = [],
 		outbox: any[] = [];
 	const prisma: any = {
+		workspaceClosureFence: { findUnique: jest.fn().mockResolvedValue(null) },
 		salesTask: {
 			findUnique: jest.fn(async () => task),
 			findMany: jest.fn(async () => [task])

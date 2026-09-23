@@ -17,6 +17,7 @@ import {
 	AppIcon,
 	Button,
 	DataTable,
+	HelpHint,
 	PageHeader,
 	ReadOnlyBanner,
 	ScreenState,
@@ -270,7 +271,16 @@ const DealsWorkspaceScreen = ({
 		<div className={styles.screen}>
 			<PageHeader
 				title="Сделки"
-				description="Клиенты, этапы продаж и следующее действие по каждой открытой сделке."
+				description={
+					<>
+						Клиенты, этапы продаж и следующее действие по каждой открытой
+						сделке.{' '}
+						<HelpHint
+							label="Сделки"
+							description="Воронка показывает этапы работы с клиентом. Следующее действие — отдельная задача с ответственным и сроком; закрытие сделки не заменяет учёт оплаты."
+						/>
+					</>
+				}
 				actions={
 					<>
 						<ActionMenu>
@@ -450,6 +460,12 @@ const DealsWorkspaceScreen = ({
 						/>
 						<SelectField
 							label="Воронка"
+							hint={
+								<HelpHint
+									label="Воронка сделок"
+									description="Воронка задаёт набор этапов работы. На доске сделки группируются по этапам выбранной воронки."
+								/>
+							}
 							value={pipelineId}
 							onChange={event => {
 								updateFilters({

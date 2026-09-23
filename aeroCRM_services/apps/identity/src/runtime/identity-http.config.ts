@@ -53,6 +53,8 @@ export const IDENTITY_GLOBAL_PREFIX_EXCLUDES = [
 		path: 'internal/v1/crm-access/owner-context',
 		method: RequestMethod.POST
 	},
+	{ path: 'internal/v1/crm-access/closure-owner-context', method: RequestMethod.POST },
+	{ path: 'internal/v1/workspace-closures/fence', method: RequestMethod.POST },
 	{
 		path: 'internal/v1/operations/audit-snapshots',
 		method: RequestMethod.ALL

@@ -17,6 +17,7 @@ import {
 	ActionMenu,
 	Button,
 	DataTable,
+	HelpHint,
 	PageHeader,
 	ScreenState,
 	SelectField,
@@ -144,9 +145,7 @@ const InboxContent = ({
 			header: 'Источник',
 			headerClassName: styles.originColumn,
 			render: entry =>
-				({ MANUAL: 'Вручную', API: 'API', CSV: 'CSV' })[
-					entry.origin
-				]
+				({ MANUAL: 'Вручную', API: 'API', CSV: 'CSV' })[entry.origin]
 		},
 		{
 			id: 'status',
@@ -211,7 +210,15 @@ const InboxContent = ({
 		<div className={styles.screen}>
 			<PageHeader
 				title="Входящие"
-				description="Новые заявки и история работы с обращениями."
+				description={
+					<>
+						Новые заявки и история работы с обращениями.{' '}
+						<HelpHint
+							label="Входящие"
+							description="Новое обращение ещё не стало клиентом или сделкой. При принятии CRM связывает его с контактом и создаёт работу; отклонение сохраняет историю обращения."
+						/>
+					</>
+				}
 				actions={
 					<div className={styles.tabs}>
 						<ActionMenu>
@@ -303,6 +310,10 @@ const InboxContent = ({
 				>
 					<div className={styles.panelHeader}>
 						<h2 className={styles.panelTitle}>Обращения</h2>
+						<HelpHint
+							label="Статусы обращений"
+							description="Новое ждёт решения. Принятое связано с клиентом и сделкой; отклонённое остаётся в истории без создания сделки."
+						/>
 						<form className={styles.search} onSubmit={searchSubmit}>
 							<TextField
 								label="Поиск обращений"

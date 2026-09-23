@@ -38,6 +38,7 @@ async function bootstrap(): Promise<void> {
 
 	app.setGlobalPrefix('api/v1', {
 		exclude: [
+			{ path: 'internal/v1/workspace-closures/fence', method: RequestMethod.POST },
 			{
 				path: 'internal/v1/crm-customers/intake-operations/verify',
 				method: RequestMethod.POST

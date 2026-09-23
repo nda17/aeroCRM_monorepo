@@ -19,10 +19,18 @@ import toast from 'react-hot-toast'
 import {
 	canOpenCrmWorkspace,
 	getCrmPermissions,
+	getWorkspaceDisplaySummaries,
 	CrmWorkspaceAccessProvider
 } from '@/entities/crm-access'
 import { useSessionStore } from '@/entities/session'
+import { listWorkspaceClosures } from '@/entities/workspace-closure'
 import { billingHref } from '@/entities/crm-billing'
+import {
+	pendingClosureCommand,
+	WorkspaceClosureCard,
+	WorkspaceClosureList,
+	WorkspaceClosureStatus
+} from '@/features/manage-workspace-closure'
 import { getRuntimeConfig } from '@/shared/config/runtime'
 import {
 	AuthenticatedApiError,
@@ -78,7 +86,10 @@ const blockedCopy = {
 		'Срок доступа закончился. Рабочая область закрыта.'
 	],
 	CANCELLED: ['Подписка отменена', 'Рабочая область закрыта.'],
-	SUSPENDED: ['Доступ приостановлен', 'Рабочая область закрыта.']
+	SUSPENDED: [
+		'Доступ приостановлен',
+		'Новые действия недоступны. Обновите состояние, чтобы проверить ход закрытия пространства.'
+	]
 } as const
 
 export const AccessGate = ({ children }: PropsWithChildren) => (
@@ -194,6 +205,34 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 		},
 		enabled: Boolean(session) && !invalidTarget,
 		retry: false
+	})
+	const workspaceNames = useQuery({
+		queryKey: [
+			'crm-workspace-display-summaries',
+			session?.userId,
+			sessionRevision
+		],
+		queryFn: () =>
+			getWorkspaceDisplaySummaries(session!.accessToken, session!.userId),
+		enabled:
+			!!session && access.data?.state === 'WORKSPACE_SELECTION_REQUIRED',
+		retry: false,
+		staleTime: 0,
+		gcTime: 0
+	})
+	const ownedClosures = useQuery({
+		queryKey: ['crm-workspace-closures', session?.userId, sessionRevision],
+		queryFn: () =>
+			listWorkspaceClosures(session!.accessToken, session!.userId),
+		enabled:
+			!!session &&
+			!invalidTarget &&
+			(access.data?.state === 'SUSPENDED' ||
+				access.data?.state === 'WORKSPACE_SELECTION_REQUIRED' ||
+				access.isError),
+		retry: false,
+		staleTime: 0,
+		gcTime: 0
 	})
 
 	useEffect(() => {
@@ -320,6 +359,90 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 				/>
 			</div>
 		)
+	const closedWorkspaceId = workspaceId ?? access.data?.selectedWorkspaceId
+	const pendingClosure = closedWorkspaceId
+		? pendingClosureCommand(
+				`${session.userId}:${sessionRevision}:${closedWorkspaceId}`
+			)
+		: null
+	const validatedOwnedClosures =
+		!ownedClosures.isError &&
+		ownedClosures.data?.scope.subject === session.userId
+			? ownedClosures.data
+			: undefined
+	const selectedClosure = validatedOwnedClosures?.items.find(
+		item => item.workspaceId === closedWorkspaceId
+	)
+	if (selectedClosure)
+		return (
+			<div className={`${styles.gate} ${styles.gateColumn}`}>
+				<WorkspaceClosureStatus
+					key={`${session.userId}:${sessionRevision}:${selectedClosure.id}`}
+					initial={selectedClosure}
+				/>
+				<Button
+					variant="secondary"
+					onClick={() => selectWorkspace(undefined)}
+				>
+					Выбрать другое пространство
+				</Button>
+			</div>
+		)
+	if (pendingClosure && closedWorkspaceId)
+		return (
+			<div className={`${styles.gate} ${styles.gateColumn}`}>
+				<WorkspaceClosureCard
+					key={`${session.userId}:${sessionRevision}:${closedWorkspaceId}`}
+					workspaceId={closedWorkspaceId}
+				/>
+				<Button
+					variant="secondary"
+					onClick={() => selectWorkspace(undefined)}
+				>
+					Выбрать другое пространство
+				</Button>
+			</div>
+		)
+	if (
+		access.error instanceof CrmWorkspaceRequiredError &&
+		(ownedClosures.isPending ||
+			(ownedClosures.isFetching && !validatedOwnedClosures?.items.length))
+	)
+		return (
+			<div className={styles.gate}>
+				<ScreenState
+					variant="loading"
+					title="Проверяем сохранённые пространства"
+				/>
+			</div>
+		)
+	if (
+		access.error instanceof CrmWorkspaceRequiredError &&
+		ownedClosures.isError
+	)
+		return (
+			<div className={styles.gate}>
+				<ScreenState
+					variant="error"
+					title="Не удалось проверить пространства"
+					description="Повторите проверку перед созданием нового пространства."
+					action={
+						<Button onClick={() => void ownedClosures.refetch()}>
+							Повторить
+						</Button>
+					}
+				/>
+			</div>
+		)
+	if (
+		access.error instanceof CrmWorkspaceRequiredError &&
+		validatedOwnedClosures?.items.length
+	)
+		return (
+			<div className={`${styles.gate} ${styles.gateColumn}`}>
+				<WorkspaceClosureList onSelect={selectWorkspace} />
+			</div>
+		)
 	if (access.error instanceof CrmWorkspaceRequiredError)
 		return (
 			<div className={styles.gate}>
@@ -361,6 +484,7 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 					isRetrying={access.isFetching}
 					onRetry={() => {
 						void access.refetch()
+						void ownedClosures.refetch()
 					}}
 				/>
 			</div>
@@ -374,17 +498,61 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 					isRetrying={access.isFetching}
 					onRetry={() => {
 						void access.refetch()
+						void ownedClosures.refetch()
 					}}
 				/>
 			</div>
 		)
 	if (data.state === 'WORKSPACE_SELECTION_REQUIRED') {
+		if (workspaceNames.isPending)
+			return (
+				<div className={styles.gate}>
+					<ScreenState
+						variant="loading"
+						title="Загружаем названия пространств"
+					/>
+				</div>
+			)
+		const summaries =
+			!workspaceNames.isError &&
+			workspaceNames.data?.scope.subject === session.userId
+				? workspaceNames.data.items
+				: []
+		const names = data.workspaces.map(workspace => {
+			const summary = summaries.find(
+				item =>
+					item.workspaceId === workspace.workspaceId &&
+					item.membershipRole === workspace.role
+			)
+			return summary?.displayName?.trim() || null
+		})
+		const counts = new Map<string, number>()
+		for (const name of names) {
+			if (name) counts.set(name, (counts.get(name) ?? 0) + 1)
+		}
+		let codeLength = 8
+		while (
+			codeLength < 36 &&
+			new Set(
+				data.workspaces.map(item => item.workspaceId.slice(0, codeLength))
+			).size < data.workspaces.length
+		)
+			codeLength += 1
+		const workspaceLabel = (index: number) => {
+			const workspace = data.workspaces[index]
+			const name = names[index]
+			const code = workspace.workspaceId.slice(0, codeLength)
+			const title = name
+				? `${name}${(counts.get(name) ?? 0) > 1 ? ` · ${code}` : ''}`
+				: `Пространство без названия · ${code}`
+			return `${title} · ${workspace.role === 'OWNER' ? 'Владелец' : 'Участник'}`
+		}
 		const selected =
 			(choice.scope === choiceScope ? choice.value : '') ||
 			data.workspaces[0]?.workspaceId ||
 			''
 		return (
-			<div className={styles.gate}>
+			<div className={`${styles.gate} ${styles.gateColumn}`}>
 				<div className={styles.panel}>
 					<h1>Выберите рабочее пространство</h1>
 					<form
@@ -412,17 +580,32 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 								})
 							}
 						>
-							{data.workspaces.map(item => (
+							{data.workspaces.map((item, index) => (
 								<option value={item.workspaceId} key={item.workspaceId}>
-									{item.workspaceId} · {item.role}
+									{workspaceLabel(index)}
 								</option>
 							))}
 						</SelectField>
+						{workspaceNames.isError ? (
+							<div className={styles.nameNotice}>
+								<p>
+									Названия пространств сейчас недоступны. Выберите
+									пространство по короткому коду.
+								</p>
+								<Button
+									variant="secondary"
+									onClick={() => void workspaceNames.refetch()}
+								>
+									Загрузить названия ещё раз
+								</Button>
+							</div>
+						) : null}
 						<Button type="submit" isLoading={access.isFetching}>
 							Продолжить
 						</Button>
 					</form>
 				</div>
+				<WorkspaceClosureList onSelect={selectWorkspace} />
 			</div>
 		)
 	}
@@ -447,10 +630,7 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 		!access.isFetching &&
 		!access.isError &&
 		billingUrl ? (
-			<a
-				href={billingUrl}
-				className={styles.billingLink}
-			>
+			<a href={billingUrl} className={styles.billingLink}>
 				Подписка и оплата aeroCRM
 			</a>
 		) : null
@@ -543,6 +723,8 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 							isLoading={access.isFetching}
 							onClick={() => {
 								void access.refetch()
+								if (data.state === 'SUSPENDED')
+									void ownedClosures.refetch()
 							}}
 						>
 							Обновить статус

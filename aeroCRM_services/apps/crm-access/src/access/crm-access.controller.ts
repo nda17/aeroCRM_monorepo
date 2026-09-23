@@ -20,6 +20,13 @@ import {
 export class CrmAccessController {
 	constructor(private readonly access: CrmAccessService) {}
 
+	@Get('workspaces/display-summaries')
+	@HttpCode(200)
+	@Header('Cache-Control', 'no-store')
+	displaySummaries(@Headers('authorization') authorization: string | undefined) {
+		return this.access.displaySummaries(authorization);
+	}
+
 	@Get('bootstrap')
 	@HttpCode(200)
 	@Header('Cache-Control', 'no-store')

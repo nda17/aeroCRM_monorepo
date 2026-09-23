@@ -24,6 +24,8 @@ import { BillingCampaignAudienceController } from './http/billing-campaign-audie
 import { BillingOperationsController } from './http/billing-operations.controller';
 import { BillingIdentityController } from './http/billing-identity.controller';
 import { BillingCrmAccessController } from './http/billing-crm-access.controller';
+import { BillingWorkspaceClosureController } from './http/billing-workspace-closure.controller';
+import { BillingWorkspaceClosureService } from './domain/workspace-closure.service';
 import { BillingSettingsController } from './http/billing-settings.controller';
 import { CrmAdminSubscriptionController } from './http/crm-admin-subscription.controller';
 import { CrmAdminSubscriptionService } from './domain/crm-admin-subscription.service';
@@ -50,6 +52,7 @@ const API_CONTROLLERS =
 				CrmAdminSubscriptionController,
 				BillingCampaignAudienceController,
 				BillingCrmAccessController,
+				BillingWorkspaceClosureController,
 				BillingCrmCommerceController,
 				BillingCrmProviderController,
 				BillingCrmWebhookController,
@@ -84,6 +87,7 @@ const API_PROVIDERS =
 		CrmAdminSubscriptionService,
 		InternalCommandsService,
 		CrmEntitlementService,
+		BillingWorkspaceClosureService,
 		CrmCommercialPolicyService,
 		CrmCommerceService,
 		CrmAccessAuthorizationClient,

@@ -47,6 +47,8 @@ describe('CustomersService authorization and transaction semantics', () => {
 	const setup = () => {
 		const tx = {
 			$executeRaw: jest.fn(),
+			$queryRaw: jest.fn().mockResolvedValue([]),
+			workspaceClosureFence: { findUnique: jest.fn().mockResolvedValue(null) },
 			contact: {
 				findFirst: jest.fn().mockResolvedValue(row),
 				findMany: jest.fn().mockResolvedValue([row]),

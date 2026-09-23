@@ -63,6 +63,8 @@ const deal = {
 function harness() {
 	const transaction = {
 		$executeRaw: jest.fn().mockResolvedValue(1),
+		$queryRaw: jest.fn().mockResolvedValue([]),
+		workspaceClosureFence: { findUnique: jest.fn().mockResolvedValue(null) },
 		salesCommandReceipt: {
 			findUnique: jest.fn().mockResolvedValue(null),
 			create: jest.fn().mockResolvedValue({})

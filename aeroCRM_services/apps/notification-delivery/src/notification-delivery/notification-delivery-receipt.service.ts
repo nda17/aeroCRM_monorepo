@@ -210,12 +210,20 @@ export class NotificationDeliveryReceiptService {
 				(CRM_TASK_REMINDER_KINDS.some(kind => kind === consumer) &&
 					reason === 'TASK_REMINDER_UNAVAILABLE') ||
 				(CRM_INTAKE_SLA_KINDS.some(kind => kind === consumer) &&
-					reason === 'INTAKE_SLA_UNAVAILABLE')
+					reason === 'INTAKE_SLA_UNAVAILABLE') ||
+				((consumer === 'crm-invitation-email' ||
+					CRM_TASK_REMINDER_KINDS.some(kind => kind === consumer) ||
+					CRM_INTAKE_SLA_KINDS.some(kind => kind === consumer)) &&
+					reason === 'WORKSPACE_CLOSED')
 			)
 		)
 			throw new Error('Unsupported notification skip');
 		await this.prisma.$transaction(async transaction => {
 			const now = new Date();
+			const previous = await transaction.notificationDeliveryReceipt.findUnique({
+				where: { eventId_consumer: { eventId, consumer } },
+				select: { crmDispatchStartedAt: true }
+			});
 			const closed =
 				await transaction.notificationDeliveryReceipt.updateMany({
 					where: {
@@ -229,8 +237,14 @@ export class NotificationDeliveryReceiptService {
 						status: NotificationDeliveryReceiptStatus.CLOSED_NO_RETRY,
 						checkpoint: {
 							schemaVersion: 1,
-							outcome: 'SKIPPED',
+							outcome:
+								reason === 'WORKSPACE_CLOSED' && previous?.crmDispatchStartedAt
+									? 'UNKNOWN_PRIOR_DISPATCH'
+									: 'SKIPPED',
 							reason,
+							...(reason === 'WORKSPACE_CLOSED' && previous?.crmDispatchStartedAt
+								? { priorDispatchStartedAt: previous.crmDispatchStartedAt.toISOString() }
+								: {}),
 							skippedAt: now.toISOString()
 						},
 						lockedAt: null,

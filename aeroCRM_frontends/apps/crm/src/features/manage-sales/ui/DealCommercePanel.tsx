@@ -12,7 +12,13 @@ import {
 	downloadDealQuote,
 	listCommerceHistory
 } from '@/entities/sales/api/commerce.api'
-import { Button, ScreenState, TextField, TextareaField } from '@/shared/ui'
+import {
+	Button,
+	HelpHint,
+	ScreenState,
+	TextField,
+	TextareaField
+} from '@/shared/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
@@ -293,6 +299,10 @@ export const DealCommercePanel = ({
 				aria-labelledby="deal-quotes-title"
 			>
 				<h3 id="deal-quotes-title">Коммерческие предложения</h3>
+				<HelpHint
+					label="Версии КП"
+					description="КП фиксирует состав и цены сделки на момент создания. Чтобы получить КП с новыми позициями, сохраните состав и сформируйте новую версию."
+				/>
 				<p className={styles.muted}>
 					КП создаётся из сохранённого состава сделки. Каждая версия
 					сохраняет свои данные: последующие изменения сделки и каталога на
@@ -349,7 +359,11 @@ export const DealCommercePanel = ({
 								hint="Имя клиента будет взято из сделки."
 								onChange={event => setCustomerDetails(event.target.value)}
 							/>
-							<Button type="submit" isLoading={command.running}>
+							<Button
+								type="submit"
+								isLoading={command.running}
+								tooltip="Сохранить отдельную версию КП из уже сохранённого состава сделки"
+							>
 								Сформировать КП
 							</Button>
 						</fieldset>

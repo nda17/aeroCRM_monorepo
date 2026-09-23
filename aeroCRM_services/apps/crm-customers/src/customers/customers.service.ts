@@ -391,6 +391,7 @@ export class CustomersService {
 							if (!current) throw this.notFound();
 							return receipt.response;
 						}
+						await tx.$executeRaw`SELECT crm_customers.assert_workspace_open(${context.workspaceId}::uuid)`;
 						// One local lock prevents company archive racing contact linkage.
 						await tx.$executeRaw(
 							Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${`crm-customers:workspace:${context.workspaceId}`}, 0))`
@@ -532,6 +533,10 @@ export class CustomersService {
 					{ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
 				);
 			} catch (error) {
+				if (String(error).includes('crm_workspace_closed'))
+					throw new ForbiddenException({
+						code: 'crm_workspace_closed', message: 'Workspace is closed'
+					});
 				if (
 					!(error instanceof Prisma.PrismaClientKnownRequestError) ||
 					!['P2034', 'P2002'].includes(error.code)

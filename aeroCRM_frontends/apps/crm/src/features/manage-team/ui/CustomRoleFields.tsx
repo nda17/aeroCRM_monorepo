@@ -10,11 +10,13 @@ import styles from './TeamEditor.module.scss'
 export const CustomRoleFields = ({
 	value,
 	onChange,
-	disabled
+	disabled,
+	nameError
 }: {
 	value: CustomRoleInput
 	onChange: (value: CustomRoleInput) => void
 	disabled: boolean
+	nameError?: string
 }) => (
 	<>
 		<TextField
@@ -23,6 +25,7 @@ export const CustomRoleFields = ({
 			maxLength={80}
 			autoCapitalize="sentences"
 			placeholder="Старший менеджер"
+			error={nameError}
 			required
 			disabled={disabled}
 			onChange={event => onChange({ ...value, name: event.target.value })}

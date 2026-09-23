@@ -2,6 +2,7 @@
 
 import { useSessionStore } from '@/entities/session'
 import { workspaceAuthApi } from '@/features/workspace-auth/api/workspace-auth.api'
+import { parseWorkspaceReturnPath } from '@/shared/lib/auth-return-url'
 import { Button, ScreenState } from '@/shared/ui'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -16,7 +17,15 @@ const LogoutPage = () => {
 			await workspaceAuthApi.logout()
 			queryClient.clear()
 			useSessionStore.getState().setAnonymous()
-			window.location.replace('/login')
+			const requested = new URLSearchParams(window.location.search).get(
+				'returnPath'
+			)
+			const safe = requested && parseWorkspaceReturnPath(requested)
+			window.location.replace(
+				safe
+					? `/login?${new URLSearchParams({ returnPath: safe })}`
+					: '/login'
+			)
 		} catch {
 			setError('Не удалось подтвердить выход. Повторите попытку.')
 		}

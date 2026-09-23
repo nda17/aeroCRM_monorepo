@@ -72,7 +72,11 @@ vi.mock('@/entities/sales', () => ({
 }))
 vi.mock('../model/use-sales-session', () => ({ useSalesSession: vi.fn() }))
 vi.mock('react-hot-toast', () => ({
-	default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() })
+	default: Object.assign(vi.fn(), {
+		success: vi.fn(),
+		error: vi.fn(),
+		dismiss: vi.fn()
+	})
 }))
 const workspaceId = '11111111-1111-4111-8111-111111111111'
 const date = '2026-09-05T10:00:00.000Z'

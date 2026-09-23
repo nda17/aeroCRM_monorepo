@@ -35,12 +35,21 @@
     "export_audit": [
       "SELECT",
       "INSERT"
+    ],
+    "workspace_closure_fences": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
     ]
   },
   "sequences": {},
   "types": [],
   "routines": [
     "notify_live_change",
-    "enforce_service_identity_integrity"
-  ]
+    "enforce_service_identity_integrity",
+    "workspace_closure_fence_immutable",
+    "assert_workspace_open",
+    "guard_workspace_business_write"
+  ],
+  "routineExecute": ["assert_workspace_open(uuid)"]
 }

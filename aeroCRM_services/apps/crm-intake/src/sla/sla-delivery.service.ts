@@ -55,6 +55,9 @@ export class SlaDeliveryService {
 			content: null
 		};
 		if (!intakeSlaEnabled()) return unavailable;
+		if ((await this.prisma.workspaceClosureFence.findUnique({
+			where: { workspaceId }
+		}))?.fencedAt) return unavailable;
 		const snapshot = await this.snapshot(
 			notificationId,
 			workspaceId,

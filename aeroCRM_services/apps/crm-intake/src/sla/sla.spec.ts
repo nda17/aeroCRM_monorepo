@@ -194,6 +194,7 @@ function processorFixture() {
 	const db = {
 		$executeRaw: jest.fn(),
 		$queryRaw: jest.fn().mockResolvedValue([{ now: current }]),
+		workspaceClosureFence: { findUnique: jest.fn().mockResolvedValue(null) },
 		slaReceipt: {
 			findUnique: jest.fn().mockResolvedValue(receipt),
 			create: jest.fn(),

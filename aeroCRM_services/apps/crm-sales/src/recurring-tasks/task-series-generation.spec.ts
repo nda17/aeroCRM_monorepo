@@ -35,6 +35,7 @@ function harness() {
 	const tx: any = {
 		$queryRaw: jest.fn(),
 		$executeRaw: jest.fn(),
+		workspaceClosureFence: { findUnique: jest.fn().mockResolvedValue(null) },
 		taskSeries: {
 			findUnique: jest.fn(async () => ({ ...row })),
 			updateMany: jest.fn(async ({ where, data }) => {

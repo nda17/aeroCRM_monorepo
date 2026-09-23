@@ -105,7 +105,8 @@
       "INSERT",
       "UPDATE"
     ],
-    "_prisma_migrations": []
+    "_prisma_migrations": [],
+    "workspace_closure_fences": ["SELECT", "INSERT", "UPDATE"]
   },
   "sequences": {},
   "types": [
@@ -122,6 +123,12 @@
     "protect_crm_admin_day_grants",
     "protect_crm_admin_seat_adjustments",
     "protect_crm_admin_command_receipts",
-    "enforce_service_identity_integrity"
-  ]
+    "enforce_service_identity_integrity",
+    "assert_workspace_open",
+    "touch_workspace_fence",
+    "guard_workspace_new_finance",
+    "guard_workspace_renewal",
+    "enforce_workspace_closure_fence"
+  ],
+  "routineExecute": ["assert_workspace_open(uuid)", "touch_workspace_fence(uuid)"]
 }

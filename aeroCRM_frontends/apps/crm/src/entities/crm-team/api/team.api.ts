@@ -1,7 +1,9 @@
 import {
 	authenticatedRequest,
+	AuthenticatedApiError,
 	invalidContractError
 } from '@/shared/api/authenticated-http-client'
+import axios from 'axios'
 import {
 	hasExactKeys,
 	isIsoDate,
@@ -134,6 +136,20 @@ export interface TeamCommand {
 	commandId: string
 	mutation: TeamMutation
 }
+const roleCommandError = (error: unknown) => {
+	if (!axios.isAxiosError(error) || error.response?.status !== 409) return
+	const code: unknown = error.response.data?.code
+	if (code === 'crm_role_name_conflict')
+		return new AuthenticatedApiError(
+			'validation',
+			'Название занято или зарезервировано. Выберите другое название.'
+		)
+	if (code === 'crm_role_version_conflict')
+		return new AuthenticatedApiError(
+			'conflict',
+			'Роль уже изменилась. Перечитайте данные перед сохранением.'
+		)
+}
 export interface TeamCommandResult {
 	kind: TeamMutation['kind']
 	id: string
@@ -172,7 +188,10 @@ export const mutateTeam = async (
 		method: 'POST',
 		url: `/crm/access/team/${paths[kind]}`,
 		headers: { 'Idempotency-Key': commandId },
-		data
+		data,
+		...(kind === 'create-role' || kind === 'update-role'
+			? { mapError: roleCommandError }
+			: {})
 	})
 	const key = ['create-role', 'update-role', 'archive-role'].includes(kind)
 		? 'role'

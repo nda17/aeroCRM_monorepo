@@ -204,6 +204,7 @@ describe('CrmEntitlementService', () => {
 			});
 			const transaction = {
 				$executeRaw: jest.fn().mockResolvedValue(1),
+				$queryRaw: jest.fn().mockResolvedValue([]),
 				crmCommercialPolicy: {
 					findFirst: jest.fn().mockResolvedValue({
 						version: 2,
@@ -294,6 +295,7 @@ describe('CrmEntitlementService', () => {
 		const prior = entitlement();
 		const transaction = {
 			$executeRaw: jest.fn().mockResolvedValue(1),
+			$queryRaw: jest.fn().mockResolvedValue([]),
 			billingCommandReceipt: {
 				findUnique: jest.fn().mockResolvedValue(null),
 				create: jest.fn().mockResolvedValue({})
@@ -351,6 +353,7 @@ describe('CrmEntitlementService', () => {
 		const payload = command();
 		const transaction = {
 			$executeRaw: jest.fn().mockResolvedValue(1),
+			$queryRaw: jest.fn().mockResolvedValue([]),
 			billingCommandReceipt: {
 				findUnique: jest.fn().mockResolvedValue({
 					commandType: 'ACTIVATE_AEROCRM_TRIAL',
@@ -397,6 +400,7 @@ describe('CrmEntitlementService', () => {
 		};
 		const transaction = {
 			$executeRaw: jest.fn().mockResolvedValue(1),
+			$queryRaw: jest.fn().mockResolvedValue([]),
 			billingCommandReceipt: {
 				findUnique: jest.fn().mockResolvedValue({
 					commandType: PROVISIONING_COMMAND_TYPE,
@@ -431,6 +435,7 @@ describe('CrmEntitlementService', () => {
 		const payload = command();
 		const transaction = {
 			$executeRaw: jest.fn().mockResolvedValue(1),
+			$queryRaw: jest.fn().mockResolvedValue([]),
 			billingCommandReceipt: {
 				findUnique: jest.fn().mockResolvedValue({
 					commandType: PROVISIONING_COMMAND_TYPE,
@@ -469,6 +474,7 @@ describe('CrmEntitlementService', () => {
 			const payload = command();
 			const transaction = {
 				$executeRaw: jest.fn().mockResolvedValue(1),
+				$queryRaw: jest.fn().mockResolvedValue([]),
 				billingCommandReceipt: {
 					findUnique: jest.fn().mockResolvedValue({
 						commandType: PROVISIONING_COMMAND_TYPE,

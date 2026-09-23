@@ -131,6 +131,9 @@ function build(authContext = context()) {
 		getInstallation: jest.fn().mockResolvedValue(null)
 	};
 	const prisma = {
+		workspaceClosureFence: {
+			findUnique: jest.fn().mockResolvedValue(null)
+		},
 		crmWorkspaceAccess: {
 			findUnique: jest.fn().mockResolvedValue(null),
 			updateMany: jest.fn().mockResolvedValue({ count: 1 }),

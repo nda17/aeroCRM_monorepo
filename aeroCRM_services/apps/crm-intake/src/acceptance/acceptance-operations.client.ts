@@ -143,11 +143,18 @@ export class AcceptanceOperationsClient {
 			} finally {
 				reader.releaseLock();
 			}
-			return parseOperationProof(
-				JSON.parse(Buffer.concat(chunks, size).toString('utf8')),
-				binding,
-				target
-			);
+			try {
+				return parseOperationProof(
+					JSON.parse(Buffer.concat(chunks, size).toString('utf8')),
+					binding,
+					target
+				);
+			} catch {
+				throw new ConflictException({
+					code: 'crm_workspace_closure_proof_conflict',
+					message: 'Workflow operation proof does not match'
+				});
+			}
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
 			throw new ServiceUnavailableException(

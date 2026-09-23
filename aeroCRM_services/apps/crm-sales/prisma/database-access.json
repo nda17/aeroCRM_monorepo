@@ -31,13 +31,38 @@
       "INSERT",
       "UPDATE"
     ],
-    "commerce_catalog_items": ["SELECT", "INSERT", "UPDATE"],
-    "commerce_deal_lines": ["SELECT", "INSERT", "UPDATE", "DELETE"],
-    "commerce_quotes": ["SELECT", "INSERT"],
-    "commerce_payments": ["SELECT", "INSERT"],
-    "commerce_import_previews": ["SELECT", "INSERT", "UPDATE"],
-    "commerce_commands": ["SELECT", "INSERT"],
-    "commerce_events": ["SELECT", "INSERT"],
+    "commerce_catalog_items": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "commerce_deal_lines": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "commerce_quotes": [
+      "SELECT",
+      "INSERT"
+    ],
+    "commerce_payments": [
+      "SELECT",
+      "INSERT"
+    ],
+    "commerce_import_previews": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "commerce_commands": [
+      "SELECT",
+      "INSERT"
+    ],
+    "commerce_events": [
+      "SELECT",
+      "INSERT"
+    ],
     "tasks": [
       "SELECT",
       "INSERT",
@@ -117,6 +142,11 @@
     "export_audit": [
       "SELECT",
       "INSERT"
+    ],
+    "workspace_closure_fences": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
     ]
   },
   "sequences": {},
@@ -134,6 +164,10 @@
     "record_task_notifications",
     "notify_live_change",
     "reject_commerce_immutable_mutation",
-    "enforce_service_identity_integrity"
-  ]
+    "enforce_service_identity_integrity",
+    "workspace_closure_fence_immutable",
+    "assert_workspace_open",
+    "guard_workspace_business_write"
+  ],
+  "routineExecute": ["assert_workspace_open(uuid)"]
 }

@@ -26,13 +26,24 @@ const event: CrmInvitationEmailRequestedEventPayload = {
 function setup() {
 	const sendMail = jest.fn().mockResolvedValue({});
 	const canDeliver = jest.fn().mockResolvedValue(true);
+	const tx = {
+		$executeRaw: jest.fn().mockResolvedValue(0),
+		$queryRaw: jest.fn().mockResolvedValue([{ id: 'receipt-1' }])
+	};
+	const prisma = {
+		$transaction: jest.fn(async (callback: (value: typeof tx) => unknown) =>
+			callback(tx)
+		)
+	};
 	return {
 		sendMail,
 		canDeliver,
+		prisma,
+		tx,
 		service: new NotificationDeliveryAdapterService(
 			new EmailService({ sendMail } as unknown as Transporter),
 			{} as TelegramInfoTransportService,
-			{} as NotificationDeliveryPrismaService,
+			prisma as unknown as NotificationDeliveryPrismaService,
 			{ canDeliver } as unknown as CrmInvitationContextService,
 			{} as CrmTaskReminderContextService
 		)
@@ -54,13 +65,19 @@ describe('aeroCRM invitation email adapter (fake SMTP only)', () => {
 			'claimed'
 		);
 		expect(value.canDeliver).toHaveBeenCalledWith(event);
+		expect(value.prisma.$transaction).toHaveBeenCalledTimes(1);
+		expect(value.tx.$executeRaw).toHaveBeenCalledTimes(1);
+		expect(value.tx.$queryRaw).toHaveBeenCalledTimes(1);
+		expect(String(value.tx.$executeRaw.mock.calls[0][0])).toContain(
+			'notification_delivery.assert_workspace_open'
+		);
 		expect(value.sendMail).toHaveBeenCalledWith(
 			expect.objectContaining({
 				to: event.destination.email,
 				subject: 'Приглашение в aeroCRM',
 				messageId: `<${event.eventId}.crm-invitation@aerocrm.space>`,
 				html: expect.stringContaining(
-					`href="https://workspace.aerocrm.space/invitations/${event.reference.id}"`
+					`href="https://workspace.aerocrm.space/invitations/${event.reference.id}#email=${encodeURIComponent(event.destination.email)}"`
 				)
 			})
 		);

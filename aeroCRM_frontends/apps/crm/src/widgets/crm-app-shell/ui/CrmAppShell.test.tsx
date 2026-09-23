@@ -5,16 +5,20 @@ import {
 	fireEvent,
 	render,
 	screen,
+	waitFor,
 	within
 } from '@testing-library/react'
-import type { ComponentProps } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import toast from 'react-hot-toast'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CrmAppShell from './CrmAppShell'
 import { CRM_NAVIGATION } from '../model/crm-navigation'
 
 const fixture = vi.hoisted(() => ({
 	pathname: '/inbox',
+	userId: 'owner',
+	workspaceId: '11111111-1111-4111-8111-111111111111',
 	router: { replace: vi.fn() },
 	searchParams: new URLSearchParams(),
 	companyName: null as string | null,
@@ -27,6 +31,7 @@ const fixture = vi.hoisted(() => ({
 		}
 	}
 }))
+const profileRequest = vi.hoisted(() => vi.fn())
 vi.mock('next/navigation', () => ({
 	usePathname: () => fixture.pathname,
 	useRouter: () => fixture.router,
@@ -38,7 +43,7 @@ vi.mock('@/features/manage-reminders', () => ({
 vi.mock('@/entities/crm-access', async original => ({
 	...(await original<object>()),
 	useCrmWorkspaceAccess: () => ({
-		workspaceId: '11111111-1111-4111-8111-111111111111',
+		workspaceId: fixture.workspaceId,
 		...fixture.access
 	}),
 	useCrmPermissions: () => ({
@@ -46,8 +51,8 @@ vi.mock('@/entities/crm-access', async original => ({
 		isError: false,
 		data: {
 			schemaVersion: 1,
-			workspaceId: '11111111-1111-4111-8111-111111111111',
-			subject: 'owner',
+			workspaceId: fixture.workspaceId,
+			subject: fixture.userId,
 			role: 'OWNER',
 			state: fixture.access.state,
 			dataScope: 'ALL',
@@ -66,9 +71,13 @@ vi.mock('@/entities/crm-access', async original => ({
 }))
 vi.mock('@/entities/session', () => ({
 	useSessionStore: () => ({
-		session: { userId: 'owner', accessToken: 'session-token' },
+		session: { userId: fixture.userId, accessToken: 'session-token' },
 		sessionRevision: 1
 	})
+}))
+vi.mock('@/entities/crm-team', async original => ({
+	...(await original<object>()),
+	getEmployeeProfile: profileRequest
 }))
 vi.mock('@/entities/crm-workspace-branding', () => ({
 	useWorkspaceBranding: () => ({
@@ -76,6 +85,7 @@ vi.mock('@/entities/crm-workspace-branding', () => ({
 	})
 }))
 vi.mock('react-hot-toast', () => ({ default: vi.fn() }))
+let queryClient: QueryClient
 vi.mock('next/link', () => ({
 	default: ({ children, onClick, ...props }: ComponentProps<'a'>) => (
 		<a
@@ -92,7 +102,29 @@ vi.mock('next/link', () => ({
 }))
 
 beforeEach(() => {
+	queryClient = new QueryClient({
+		defaultOptions: { queries: { retry: false } }
+	})
+	profileRequest.mockImplementation(async (_token, request) => ({
+		schemaVersion: 1,
+		workspaceId: request.workspaceId,
+		subject: request.subject,
+		targetSubject: request.targetSubject,
+		profile:
+			request.targetSubject === 'named-user'
+				? {
+						id: '33333333-3333-4333-8333-333333333333',
+						version: 1,
+						firstName: 'Анна',
+						lastName: 'Иванова',
+						middleName: null,
+						updatedAt: '2026-09-23T00:00:00.000Z'
+					}
+				: null
+	}))
 	fixture.pathname = '/inbox'
+	fixture.userId = 'owner'
+	fixture.workspaceId = '11111111-1111-4111-8111-111111111111'
 	fixture.router.replace.mockReset()
 	fixture.searchParams = new URLSearchParams()
 	fixture.companyName = null
@@ -117,6 +149,7 @@ beforeEach(() => {
 })
 afterEach(() => {
 	cleanup()
+	queryClient.clear()
 	vi.useRealTimers()
 	vi.restoreAllMocks()
 	Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal')
@@ -124,10 +157,17 @@ afterEach(() => {
 })
 const mount = () =>
 	render(
-		<CrmAppShell>
-			<h1>Содержимое раздела</h1>
-		</CrmAppShell>
+		<QueryClientProvider client={queryClient}>
+			<CrmAppShell>
+				<h1>Содержимое раздела</h1>
+			</CrmAppShell>
+		</QueryClientProvider>
 	)
+const renderShell = (children: ReactNode = <h1>Контент</h1>) => (
+	<QueryClientProvider client={queryClient}>
+		<CrmAppShell>{children}</CrmAppShell>
+	</QueryClientProvider>
+)
 const mainNavigation = () =>
 	screen.getByRole('navigation', { name: 'Основная навигация CRM' })
 
@@ -271,11 +311,7 @@ describe('CRM navigation descriptions', () => {
 		)
 		expect(screen.getByRole('tooltip')).toBeTruthy()
 		fixture.pathname = '/tasks'
-		view.rerender(
-			<CrmAppShell>
-				<h1>Контент</h1>
-			</CrmAppShell>
-		)
+		view.rerender(renderShell())
 		expect(screen.queryByRole('tooltip')).toBeNull()
 		pointer(
 			within(mainNavigation()).getByRole('link', { name: 'Задачи' }),
@@ -401,11 +437,7 @@ describe('aeroCRM application shell', () => {
 			).toBeTruthy()
 		}
 		fixture.companyName = null
-		view.rerender(
-			<CrmAppShell>
-				<h1>Контент</h1>
-			</CrmAppShell>
-		)
+		view.rerender(renderShell())
 		expect(screen.queryByText('Студия Север')).toBeNull()
 		expect(mainNavigation()).toBeTruthy()
 	})
@@ -446,11 +478,7 @@ describe('aeroCRM application shell', () => {
 			screen.getByRole('button', { name: 'Свернуть боковую панель' })
 		)
 		fixture.pathname = '/tasks'
-		view.rerender(
-			<CrmAppShell>
-				<h1>Задачи сегодня</h1>
-			</CrmAppShell>
-		)
+		view.rerender(renderShell(<h1>Задачи сегодня</h1>))
 		expect(
 			screen
 				.getByRole('button', { name: 'Развернуть боковую панель' })
@@ -515,6 +543,26 @@ describe('aeroCRM application shell', () => {
 		expect(document.body.textContent).not.toMatch(
 			/CRM_ADMIN|Менеджер|Администратор/
 		)
+	})
+	it('uses the current workspace profile and falls back to the current account when it is empty', async () => {
+		const view = mount()
+		await screen.findByText('Текущий аккаунт')
+		fixture.userId = 'named-user'
+		fixture.workspaceId = '22222222-2222-4222-8222-222222222222'
+		view.rerender(renderShell(<h1>Содержимое раздела</h1>))
+		await waitFor(() =>
+			expect(profileRequest).toHaveBeenCalledWith('session-token', {
+				workspaceId: '22222222-2222-4222-8222-222222222222',
+				subject: 'named-user',
+				targetSubject: 'named-user'
+			})
+		)
+		await screen.findByText('Иванова Анна')
+		expect(profileRequest).toHaveBeenLastCalledWith('session-token', {
+			workspaceId: '22222222-2222-4222-8222-222222222222',
+			subject: 'named-user',
+			targetSubject: 'named-user'
+		})
 	})
 	it('preserves GRACE status, allowance and backend deadline', () => {
 		fixture.access.state = 'GRACE'

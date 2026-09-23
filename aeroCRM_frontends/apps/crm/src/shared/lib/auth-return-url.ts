@@ -8,6 +8,74 @@ const WORKSPACE_PATH =
 	/^\/(?:inbox|deals|contacts|tasks|planner|analytics|settings|billing)(?:\/|$)/
 const INVITATION_PATH =
 	/^\/invitations\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?:\/)?$/i
+const EMAIL_HINT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const HINT_TTL_MS = 20 * 60 * 1000
+let invitationHint: {
+	path: string
+	email: string
+	expiresAt: number
+} | null = null
+
+const invitationPath = (returnPath: string) => {
+	const safe = parseWorkspaceReturnPath(returnPath)
+	if (!safe) return null
+	const pathname = new URL(safe, 'https://workspace.invalid').pathname
+	return INVITATION_PATH.test(pathname) ? pathname : null
+}
+
+export const rememberInvitationEmail = (
+	returnPath: string,
+	email: string
+) => {
+	const path = invitationPath(returnPath)
+	if (!path || email.length > 254) return
+	invitationHint = { path, email, expiresAt: Date.now() + HINT_TTL_MS }
+}
+
+export const getInvitationEmailHint = (returnPath: string) => {
+	const path = invitationPath(returnPath)
+	if (
+		!path ||
+		invitationHint?.path !== path ||
+		invitationHint.expiresAt <= Date.now()
+	) {
+		invitationHint = null
+		return ''
+	}
+	return invitationHint.email
+}
+
+export const readInvitationEmailHint = (returnPath: string) => {
+	if (typeof window === 'undefined' || !invitationPath(returnPath))
+		return getInvitationEmailHint(returnPath)
+	const hash = window.location.hash
+	if (hash.startsWith('#email=') && !hash.includes('&')) {
+		const email = new URLSearchParams(hash.slice(1)).get('email') ?? ''
+		if (email.length <= 254 && EMAIL_HINT.test(email)) return email
+	}
+	return getInvitationEmailHint(returnPath)
+}
+
+export const captureInvitationEmailHint = (returnPath: string) => {
+	if (typeof window === 'undefined' || !invitationPath(returnPath)) return
+	const hash = window.location.hash
+	if (hash.startsWith('#email=') && !hash.includes('&')) {
+		const email = readInvitationEmailHint(returnPath)
+		if (email) rememberInvitationEmail(returnPath, email)
+		window.history.replaceState(
+			window.history.state,
+			'',
+			`${window.location.pathname}${window.location.search}`
+		)
+	}
+}
+
+export const invitationEmailFragment = (returnPath: string) => {
+	const email = getInvitationEmailHint(returnPath)
+	return email && EMAIL_HINT.test(email)
+		? `#email=${encodeURIComponent(email)}`
+		: ''
+}
 
 export const parseWorkspaceReturnPath = (
 	value: string | null | undefined

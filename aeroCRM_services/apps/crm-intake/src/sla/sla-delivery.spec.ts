@@ -77,6 +77,7 @@ function fixture() {
 		effectiveAt: new Date('2026-09-08T07:00:00Z')
 	};
 	const db = {
+		workspaceClosureFence: { findUnique: jest.fn().mockResolvedValue(null) },
 		slaNotification: {
 			findFirst: jest.fn().mockResolvedValue(notification)
 		},

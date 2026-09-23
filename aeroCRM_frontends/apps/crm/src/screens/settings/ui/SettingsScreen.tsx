@@ -2,6 +2,7 @@
 
 import {
 	crmRoleLabels,
+	crmRoles,
 	listTeamRecords,
 	type TeamCollection,
 	type TeamRow
@@ -12,6 +13,10 @@ import { WorkspaceBrandingSettings } from '@/features/manage-workspace-branding'
 import { ReminderSettings } from '@/features/manage-reminders'
 import { SlaSettings } from '@/features/manage-intake-sla'
 import { BillingEntryCard } from '@/features/manage-crm-billing'
+import {
+	WorkspaceClosureCard,
+	WorkspaceClosureList
+} from '@/features/manage-workspace-closure'
 import { getRuntimeConfig } from '@/shared/config/runtime'
 import {
 	TeamEditor,
@@ -22,6 +27,7 @@ import {
 import {
 	Button,
 	DataTable,
+	HelpHint,
 	PageHeader,
 	ReadOnlyBanner,
 	ScreenState,
@@ -66,11 +72,19 @@ const teamActionTooltips: Record<TeamEditorSelection['kind'], string> = {
 }
 const invitationStatuses = {
 	REGISTERING: 'Подготавливается',
-	INVITED: 'Ожидает подтверждения email',
-	ACCEPTED: 'Email подтверждён',
+	INVITED: 'Ожидает принятия приглашения',
+	ACCEPTED: 'Приглашение принято',
 	REVOKED: 'Отозвано',
 	EXPIRED: 'Истекло'
 }
+const builtinRoleDescriptions = {
+	CRM_ADMIN:
+		'Управляет командой и настройками CRM в пределах прав владельца.',
+	TEAM_LEAD: 'Работает с данными своих отделов и распределяет задачи.',
+	MANAGER: 'Работает со своими клиентами, обращениями и сделками.',
+	ANALYST:
+		'Просматривает агрегированные показатели без персональных данных.'
+} as const
 const date = (value: string) => new Date(value).toLocaleDateString('ru-RU')
 
 const SettingsScreen = () => {
@@ -392,7 +406,15 @@ const SettingsScreen = () => {
 			<PageHeader
 				eyebrow="Настройки CRM"
 				title="Команда и доступ"
-				description="Приглашайте сотрудников, распределяйте роли и отделы."
+				description={
+					<>
+						Приглашайте сотрудников, распределяйте роли и отделы.{' '}
+						<HelpHint
+							label="Роли и допуск"
+							description="Роль определяет разрешённые действия, отдел — область записей. Принятое приглашение ещё не означает допуск: он зависит от прав и свободного места."
+						/>
+					</>
+				}
 				actions={
 					<div className={styles.actions}>
 						{context.permissions.data?.role === 'OWNER' ? (
@@ -439,6 +461,15 @@ const SettingsScreen = () => {
 					key={`${session?.userId}:${sessionRevision}:${workspace.workspaceId}`}
 					workspaceId={workspace.workspaceId}
 				/>
+			) : null}
+			{workspace.membership.role === 'OWNER' ? (
+				<>
+					<WorkspaceClosureCard
+						key={`${session?.userId}:${sessionRevision}:${workspace.workspaceId}`}
+						workspaceId={workspace.workspaceId}
+					/>
+					<WorkspaceClosureList />
+				</>
 			) : null}
 			{!context.confirmed ? (
 				<ScreenState
@@ -540,13 +571,13 @@ const SettingsScreen = () => {
 								<h2 className={styles.panelTitle}>{tabs[tab]}</h2>
 								<p className={styles.muted}>
 									{tab === 'roles'
-										? 'Встроенные роли сохраняются. Здесь владелец настраивает собственные роли сотрудников.'
+										? 'Встроенные роли доступны для назначения. Собственные роли владелец настраивает ниже.'
 										: tab === 'members'
 											? 'Владелец не входит в редактируемый список.'
 											: tab === 'deliveries'
 												? 'Только ошибки этого пространства; повтор не создаёт второго сотрудника.'
 												: tab === 'invitations'
-													? 'После подтверждения email квота и права проверяются отдельно.'
+													? 'Принятие приглашения и фактический допуск проверяются отдельно.'
 													: 'Отделы объединяют сотрудников и определяют доступ к записям команды.'}
 								</p>
 							</div>
@@ -564,6 +595,23 @@ const SettingsScreen = () => {
 								Обновить
 							</Button>
 						</div>
+						{tab === 'roles' ? (
+							<section
+								className={styles.builtinRoles}
+								aria-label="Встроенные роли"
+							>
+								<h3>Встроенные роли</h3>
+								<div className={styles.builtinRoleList}>
+									{crmRoles.map(role => (
+										<div key={role}>
+											<strong>{crmRoleLabels[role]}</strong>
+											<p>{builtinRoleDescriptions[role]}</p>
+										</div>
+									))}
+								</div>
+								<h3>Собственные роли</h3>
+							</section>
+						) : null}
 						{records.isError ? (
 							<ScreenState
 								variant="error"

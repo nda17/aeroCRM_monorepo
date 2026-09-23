@@ -196,6 +196,7 @@ export const useTooltip = <T extends HTMLElement>(
 	}
 	return {
 		triggerProps,
+		open,
 		close,
 		tooltip:
 			active && anchor ? (
@@ -214,4 +215,28 @@ export const useTooltip = <T extends HTMLElement>(
 				/>
 			) : null
 	}
+}
+
+export const HelpHint = ({
+	label,
+	description
+}: {
+	label: string
+	description: string
+}) => {
+	const hint = useTooltip<HTMLButtonElement>(description)
+	return (
+		<>
+			<button
+				{...hint.triggerProps}
+				type="button"
+				className={styles.helpButton}
+				aria-label={`Пояснение: ${label}`}
+				onClick={event => hint.open(event.currentTarget)}
+			>
+				?
+			</button>
+			{hint.tooltip}
+		</>
+	)
 }

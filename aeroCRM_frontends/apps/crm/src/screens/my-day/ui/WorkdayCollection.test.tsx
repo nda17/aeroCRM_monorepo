@@ -40,7 +40,11 @@ vi.mock('@/features/manage-workday', () => ({
 	useWorkdayTaskCommandState: vi.fn(() => ({ unresolved: false }))
 }))
 vi.mock('react-hot-toast', () => ({
-	default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() })
+	default: Object.assign(vi.fn(), {
+		success: vi.fn(),
+		error: vi.fn(),
+		dismiss: vi.fn()
+	})
 }))
 const adapter = vi.hoisted(() => ({
 	props: null as ComponentProps<typeof DndContext> | null,

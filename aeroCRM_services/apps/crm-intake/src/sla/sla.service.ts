@@ -259,7 +259,8 @@ export class SlaService {
 			 FROM crm_intake.inbox_entries e JOIN crm_intake.sla_rules r ON r.workspace_id = e.workspace_id
 			 WHERE e.status = 'NEW' AND r.enabled AND e.received_at >= r.effective_at
 			 AND NOT EXISTS (SELECT 1 FROM crm_intake.acceptances a WHERE a.workspace_id=e.workspace_id AND a.entry_id=e.id)
-			 AND NOT EXISTS (SELECT 1 FROM crm_intake.sla_jobs j WHERE j.workspace_id=e.workspace_id AND j.entry_id=e.id AND j.rule_version=r.version)
+				 AND NOT EXISTS (SELECT 1 FROM crm_intake.sla_jobs j WHERE j.workspace_id=e.workspace_id AND j.entry_id=e.id AND j.rule_version=r.version)
+				 AND NOT EXISTS (SELECT 1 FROM crm_intake.workspace_closure_fences f WHERE f.workspace_id=e.workspace_id AND f.fenced_at IS NOT NULL)
 			 ORDER BY e.received_at,e.id LIMIT 20 FOR UPDATE OF e,r SKIP LOCKED`;
 				for (const row of candidates) {
 					const id = randomUUID(),

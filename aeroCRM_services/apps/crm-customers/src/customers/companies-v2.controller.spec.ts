@@ -312,6 +312,8 @@ describe('Companies v1/v2 coexistence through actual Nest HTTP', () => {
 	};
 	const tx = {
 		$executeRaw: jest.fn(),
+		$queryRaw: jest.fn().mockResolvedValue([]),
+		workspaceClosureFence: { findUnique: jest.fn().mockResolvedValue(null) },
 		company,
 		contact: { count: jest.fn().mockResolvedValue(0) },
 		customerCommand: {

@@ -2,7 +2,7 @@
 	"schemaVersion": 1,
 	"targets": {
 		"notification-delivery": {
-			"manifestSha256": "72749be0b6571041b84c5d2d337eecd5790ac7d0b77b97917ff0e7240225f7d1",
+			"manifestSha256": "a1c937509ef4f97e6b16aa9581a5a0c5fa624726e2b54ed53d3cdf9bc4179f8d",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -11,6 +11,10 @@
 				{
 					"name": "20260920010000_crm_runtime_contracts",
 					"checksum": "2ed176683aa3ba406e865df9b22b6fa31e880b45cef0cf7692bd3ecc57c4b3dc"
+				},
+				{
+					"name": "20260923030000_workspace_closure",
+					"checksum": "b451c18521ba07170352e55e8ab6e47f59937375bd7a9a4498c57d16c1bf49b5"
 				}
 			]
 		},
@@ -33,7 +37,7 @@
 			]
 		},
 		"billing": {
-			"manifestSha256": "2ddb57c06eaed170231b6ea20988dd42537944a78893db903041f81bdc06561c",
+			"manifestSha256": "67efd16a1ca4af820c38ee2253eaf011eff5ad30ba16d1c7f185ff3b30a7abeb",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -46,11 +50,15 @@
 				{
 					"name": "20260921030000_crm_admin_seat_adjustments",
 					"checksum": "8deb754f74e6a495ad1c42774f1e7ccb27243358ff6452c62d52037d5cd81201"
+				},
+				{
+					"name": "20260923030000_workspace_closure",
+					"checksum": "692fc4e8d1218ff2ab360b1bc33bfe7757a017095728b2b307385b82cd2756f5"
 				}
 			]
 		},
 		"identity": {
-			"manifestSha256": "29fb4057ee7cc413794be97173a3c4597b1dc3d34253f88b801ff3f613fc2c55",
+			"manifestSha256": "bb36091342cb528d9798a2e552810835b8f3a88fa70fcff99e2b58c1decfc15e",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -59,6 +67,10 @@
 				{
 					"name": "20260920120000_oauth_workspace_client",
 					"checksum": "7c8768e78bd04d77a53a4ca5fe1bf3ab251e3bb879ccf1a8c9908af2a38b19a1"
+				},
+				{
+					"name": "20260923030000_workspace_closure",
+					"checksum": "c870b738c75153e0d6f2883395a8ebd5dad197b87b8f2ea9262ca0c00a355be0"
 				}
 			]
 		},
@@ -94,7 +106,7 @@
 			]
 		},
 		"crm-access": {
-			"manifestSha256": "02d2f73e087e297f95c9cad5b0bfe2f0344f7d55dec3f841b91c02521d036403",
+			"manifestSha256": "ad10520842079ae391d22cfbccbc192edb7060ea6aac756e46daafa60649dd1e",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -111,11 +123,15 @@
 				{
 					"name": "20260921030100_crm_admin_seat_capacity",
 					"checksum": "56fa9cdd16e74655bc3fe058713ad76f07563638977a286e843729a2c5f2059d"
+				},
+				{
+					"name": "20260923030000_workspace_closure",
+					"checksum": "bf58555641fe010e897ae2d4af2152fa4078c6a86a3fded7c502c1c5476c9cc6"
 				}
 			]
 		},
 		"crm-intake": {
-			"manifestSha256": "13bf23225bba56524b8afc4b1d99e8ac67ae4cc4d88f9bf03abb959ed50d2455",
+			"manifestSha256": "0feac0c1096990f6b62776926a77214569d9b4675ce55c87652ff9809285d1fb",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -124,20 +140,28 @@
 				{
 					"name": "20260923020000_inbox_notification_id_default",
 					"checksum": "ae29292abdfca9a89bae67d23624c31e53c817bb85a68b8b8a48b7381f798ca8"
+				},
+				{
+					"name": "20260923030000_workspace_closure",
+					"checksum": "cb0b4178225089f3d226fe4da1517df8895c9438688ce2ec3ff2eb1b9a0383ae"
 				}
 			]
 		},
 		"crm-customers": {
-			"manifestSha256": "54aa28a715723df1a8b483361b9a02d94cc5103182282b02418b66a52c7c7c3a",
+			"manifestSha256": "95a1b0695f22fcc08a784e5445259f02420ef88f630cd11d43d433e6c729e565",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
 					"checksum": "670a7d55cb2611a32e0653864c727fa20fe3179676c5019dde07d96daf04006b"
+				},
+				{
+					"name": "20260923030000_workspace_closure",
+					"checksum": "a2ce71bb7301a7430e04ac543d0a91ed818651e9418f86f2a49f20f0b612a57c"
 				}
 			]
 		},
 		"crm-sales": {
-			"manifestSha256": "22c7ac1166cbabef31217f6b3d4ab286b7ed61ae5c528a6c545feae733ca26a3",
+			"manifestSha256": "e05ce841906b02ab8632c1c7c0b24a00c3cbda04d0ed9d6c2c9d5b88a6e840f6",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -146,6 +170,10 @@
 				{
 					"name": "20260923010000_sales_commerce",
 					"checksum": "04b371cfb2664da21cd6ffc3f62de88f2a7bf3b64f3bfec2b8ab6f7aaf84f433"
+				},
+				{
+					"name": "20260923030000_workspace_closure",
+					"checksum": "bb118b4953dbb143cd79e8c6b1c453958c88a38ac709bc57e1c33235c29e7d4a"
 				}
 			]
 		}

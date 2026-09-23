@@ -16,6 +16,11 @@ import {
 } from '@/shared/lib/phone'
 import { useAndroidAppContext } from '@/shared/lib/pwa/app-context'
 import {
+	captureInvitationEmailHint,
+	readInvitationEmailHint,
+	rememberInvitationEmail
+} from '@/shared/lib/auth-return-url'
+import {
 	AppIcon,
 	BrandLogo,
 	Button,
@@ -52,9 +57,13 @@ const linkWithReturn = (path: string, returnPath: string) =>
 	`${path}?${new URLSearchParams({ returnPath })}`
 
 const OtpFallback = ({
-	onAuthenticated
+	onAuthenticated,
+	initialEmail,
+	onEmailChange
 }: {
 	onAuthenticated: (session: AuthenticatedSession) => void
+	initialEmail: string
+	onEmailChange: (email: string) => void
 }) => {
 	const capabilities = useQuery({
 		queryKey: ['workspace-login-otp-capabilities'],
@@ -62,7 +71,7 @@ const OtpFallback = ({
 		retry: false
 	})
 	const [channel, setChannel] = useState<LoginOtpChannel>('EMAIL')
-	const [destination, setDestination] = useState('')
+	const [destination, setDestination] = useState(initialEmail)
 	const [challenge, setChallenge] = useState<LoginOtpChallenge | null>(
 		null
 	)
@@ -154,7 +163,11 @@ const OtpFallback = ({
 						label={selectedChannel === 'EMAIL' ? 'Email' : 'Телефон'}
 						type={selectedChannel === 'EMAIL' ? 'email' : 'tel'}
 						value={destination}
-						onChange={event => setDestination(event.target.value)}
+						onChange={event => {
+							setDestination(event.target.value)
+							if (selectedChannel === 'EMAIL')
+								onEmailChange(event.target.value)
+						}}
 						required
 					/>
 				</>
@@ -219,7 +232,12 @@ export const WorkspaceAuthForm = ({
 	}, [androidApp, requestedMode, returnPath, router])
 	const [method, setMethod] = useState<ContactMethod>('email')
 	const [stage, setStage] = useState<'credentials' | 'code'>('credentials')
-	const [email, setEmail] = useState('')
+	const [email, setEmail] = useState(() =>
+		readInvitationEmailHint(returnPath)
+	)
+	useEffect(() => {
+		captureInvitationEmailHint(returnPath)
+	}, [returnPath])
 	const [phone, setPhone] = useState('')
 	const [password, setPassword] = useState('')
 	const [code, setCode] = useState('')
@@ -360,6 +378,7 @@ export const WorkspaceAuthForm = ({
 		['vk', 'VK', settings.data?.vkAuthEnabled]
 	] as const
 	const enabledProviders = providers.filter(([, , enabled]) => enabled)
+	const invitationReturn = returnPath.startsWith('/invitations/')
 	if (requestedMode === 'register' && androidApp !== false) {
 		return <ScreenState variant="loading" title="Пожалуйста, подождите" />
 	}
@@ -378,8 +397,24 @@ export const WorkspaceAuthForm = ({
 							? 'Создайте единый аккаунт aeroCRM.'
 							: 'Получите инструкцию для восстановления доступа.'}
 				</p>
+				{invitationReturn ? (
+					<p className={styles.intro}>
+						{mode === 'register'
+							? 'Создайте аккаунт с email из приглашения и подтвердите его кодом. После регистрации приглашение откроется автоматически — нажмите «Принять приглашение».'
+							: mode === 'restore'
+								? 'Восстановите пароль для email из приглашения, затем войдите. Приглашение откроется после входа — нажмите «Принять приглашение».'
+								: 'Войдите с email из приглашения. Если аккаунта ещё нет, выберите «Создать аккаунт». После входа приглашение откроется автоматически — нажмите «Принять приглашение».'}
+					</p>
+				) : null}
 				{mode === 'login' && isTurnstileUnavailable ? (
-					<OtpFallback onAuthenticated={authenticated} />
+					<OtpFallback
+						onAuthenticated={authenticated}
+						initialEmail={email}
+						onEmailChange={value => {
+							setEmail(value)
+							rememberInvitationEmail(returnPath, value)
+						}}
+					/>
 				) : (
 					<form
 						className={styles.form}
@@ -391,17 +426,19 @@ export const WorkspaceAuthForm = ({
 							role="group"
 							aria-label="Способ авторизации"
 						>
-							{(['email', 'phone'] as const).map(item => (
-								<button
-									key={item}
-									type="button"
-									aria-pressed={method === item}
-									disabled={pending || stage === 'code'}
-									onClick={() => setMethod(item)}
-								>
-									{item === 'email' ? 'Email' : 'Телефон'}
-								</button>
-							))}
+							{(['email', 'phone'] as const)
+								.filter(item => !invitationReturn || item === 'email')
+								.map(item => (
+									<button
+										key={item}
+										type="button"
+										aria-pressed={method === item}
+										disabled={pending || stage === 'code'}
+										onClick={() => setMethod(item)}
+									>
+										{item === 'email' ? 'Email' : 'Телефон'}
+									</button>
+								))}
 						</div>
 						{method === 'email' ? (
 							<TextField
@@ -412,7 +449,10 @@ export const WorkspaceAuthForm = ({
 								type="email"
 								autoComplete="email"
 								value={email}
-								onChange={event => setEmail(event.target.value)}
+								onChange={event => {
+									setEmail(event.target.value)
+									rememberInvitationEmail(returnPath, event.target.value)
+								}}
 								disabled={stage === 'code'}
 								required
 							/>
@@ -575,7 +615,9 @@ export const WorkspaceAuthForm = ({
 				) : (
 					<nav className={styles.links}>
 						<Link href={linkWithReturn('/login', returnPath)}>
-							Вернуться ко входу
+							{invitationReturn
+								? 'У меня есть аккаунт'
+								: 'Вернуться ко входу'}
 						</Link>
 					</nav>
 				)}

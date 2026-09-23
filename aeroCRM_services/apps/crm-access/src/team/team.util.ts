@@ -171,6 +171,7 @@ export async function command<T>(
 				throw new ConflictException('Team command conflict');
 			return prior.result as unknown as T;
 		}
+		await tx.$executeRaw`SELECT crm_access.assert_workspace_open(${actor.workspaceId}::uuid)`;
 		const result = await action(tx);
 		await tx.crmTeamCommandReceipt.create({
 			data: {

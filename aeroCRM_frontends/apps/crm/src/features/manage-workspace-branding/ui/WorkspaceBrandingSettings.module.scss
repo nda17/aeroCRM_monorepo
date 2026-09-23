@@ -46,9 +46,13 @@
 }
 
 .preview {
-	@apply flex min-w-0 flex-col items-start justify-center gap-2 rounded-xl border border-crm-border bg-crm-surface-muted p-5;
+	@apply flex min-w-0 flex-col items-center justify-center gap-2 rounded-xl border border-crm-border bg-crm-surface-muted p-5;
+
+	> :first-child {
+		@apply w-48 max-w-full justify-center;
+	}
 }
 
 .previewName {
-	@apply block w-full truncate text-sm font-medium text-crm-muted;
+	@apply block w-48 max-w-full break-words text-center text-sm font-medium leading-5 text-crm-muted;
 }

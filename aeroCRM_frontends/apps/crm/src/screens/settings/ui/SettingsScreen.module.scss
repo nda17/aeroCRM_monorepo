@@ -10,6 +10,21 @@
 .panelTitle {
 	@apply mb-1 text-lg font-bold text-crm-text;
 }
+.builtinRoles {
+	@apply flex flex-col gap-4 border-b border-crm-border px-5 py-5 lg:px-6;
+}
+.builtinRoles h3 {
+	@apply text-base font-semibold text-crm-text;
+}
+.builtinRoleList {
+	@apply grid gap-3 md:grid-cols-2;
+}
+.builtinRoleList > div {
+	@apply rounded-xl border border-crm-border bg-crm-surface-muted p-4;
+}
+.builtinRoleList p {
+	@apply mt-1 text-sm leading-relaxed text-crm-muted;
+}
 .muted {
 	@apply text-sm leading-relaxed text-crm-muted;
 }

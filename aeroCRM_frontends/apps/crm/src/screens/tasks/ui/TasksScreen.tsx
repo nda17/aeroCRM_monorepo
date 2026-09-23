@@ -9,6 +9,7 @@ import {
 import {
 	Button,
 	DataTable,
+	HelpHint,
 	PageHeader,
 	ReadOnlyBanner,
 	ScreenState,
@@ -110,7 +111,16 @@ const TasksScreen = () => {
 			<PageHeader
 				eyebrow="Следующие действия"
 				title="Задачи"
-				description="Ближайшие и просроченные действия по открытым сделкам. После завершения запланируйте следующий шаг."
+				description={
+					<>
+						Ближайшие и просроченные действия по открытым сделкам. После
+						завершения запланируйте следующий шаг.{' '}
+						<HelpHint
+							label="Задачи по сделкам"
+							description="При завершении укажите результат и следующий шаг. Для задач вне сделок используйте Планировщик."
+						/>
+					</>
+				}
 				actions={
 					<>
 						<ExportRecordsControl entity="tasks" />

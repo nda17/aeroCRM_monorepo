@@ -83,6 +83,7 @@ export class EmailService {
 		const html = render(
 			CrmInvitationEmail({
 				invitationId,
+				email: to,
 				expiresAtLabel: new Date(expiresAt).toLocaleString('ru-RU', {
 					timeZone: 'Europe/Moscow'
 				})

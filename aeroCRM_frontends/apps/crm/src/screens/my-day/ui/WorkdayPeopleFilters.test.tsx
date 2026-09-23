@@ -33,7 +33,11 @@ vi.mock('@/shared/api/authenticated-http-client', async original => ({
 	authenticatedRequest: vi.fn()
 }))
 vi.mock('react-hot-toast', () => ({
-	default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() })
+	default: Object.assign(vi.fn(), {
+		success: vi.fn(),
+		error: vi.fn(),
+		dismiss: vi.fn()
+	})
 }))
 const workspaceId = '11111111-1111-4111-8111-111111111111'
 const ids = Array.from(

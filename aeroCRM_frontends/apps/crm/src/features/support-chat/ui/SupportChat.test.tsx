@@ -37,7 +37,11 @@ vi.mock('@/entities/support', async importOriginal => ({
 	}
 }))
 vi.mock('react-hot-toast', () => ({
-	default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() })
+	default: Object.assign(vi.fn(), {
+		success: vi.fn(),
+		error: vi.fn(),
+		dismiss: vi.fn()
+	})
 }))
 const id = '11111111-1111-4111-8111-111111111111'
 const conversation = {

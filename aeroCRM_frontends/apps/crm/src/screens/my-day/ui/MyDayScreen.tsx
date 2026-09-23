@@ -25,6 +25,7 @@ import { WorkdayExportControl } from '@/features/export-records'
 import {
 	Button,
 	ActionMenu,
+	HelpHint,
 	PageHeader,
 	ReadOnlyBanner,
 	ScreenState
@@ -168,7 +169,15 @@ const MyDayContent = ({
 				<div className={styles.screen}>
 					<PageHeader
 						title="Планировщик"
-						description="Задачи на день, просрочки и новые обращения."
+						description={
+							<>
+								Задачи на день, просрочки и новые обращения.{' '}
+								<HelpHint
+									label="Планировщик"
+									description="Фильтры меняют только список задач. Завершение задачи сохраняется отдельно; повторяющиеся задачи создаются по расписанию."
+								/>
+							</>
+						}
 						actions={
 							<>
 								{context.permissions.data?.permissions.includes(

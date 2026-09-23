@@ -12,7 +12,11 @@ import toast from 'react-hot-toast'
 import { PendingCommandProvider, useMemoryCommand } from './index'
 
 vi.mock('react-hot-toast', () => ({
-	default: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() })
+	default: Object.assign(vi.fn(), {
+		error: vi.fn(),
+		success: vi.fn(),
+		dismiss: vi.fn()
+	})
 }))
 afterEach(() => {
 	cleanup()

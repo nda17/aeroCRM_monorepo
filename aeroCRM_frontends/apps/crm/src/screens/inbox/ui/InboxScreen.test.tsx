@@ -50,7 +50,11 @@ vi.mock('@/features/manage-intake', () => ({
 	)
 }))
 vi.mock('react-hot-toast', () => ({
-	default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() })
+	default: Object.assign(vi.fn(), {
+		success: vi.fn(),
+		error: vi.fn(),
+		dismiss: vi.fn()
+	})
 }))
 vi.mock('@/features/export-records', () => ({
 	ExportRecordsControl: () => <button>Экспорт</button>

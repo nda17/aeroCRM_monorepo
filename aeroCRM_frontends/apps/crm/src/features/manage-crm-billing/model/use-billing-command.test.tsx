@@ -22,7 +22,11 @@ vi.mock('@/entities/crm-billing', async original => ({
 	recoverBillingOperation: vi.fn()
 }))
 vi.mock('react-hot-toast', () => ({
-	default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() })
+	default: Object.assign(vi.fn(), {
+		success: vi.fn(),
+		error: vi.fn(),
+		dismiss: vi.fn()
+	})
 }))
 const workspaceId = 'b531b13e-3624-4ec5-b66d-f24373b0b374'
 const referenceId = 'b1c1d3d9-dc5a-4a50-98ba-c79b3895db62'

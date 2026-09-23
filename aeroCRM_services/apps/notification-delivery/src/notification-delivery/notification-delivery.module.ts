@@ -1,3 +1,8 @@
+import {
+	WorkspaceClosureController,
+	WorkspaceClosureService,
+	WorkspaceClosureInternalGuard
+} from '../workspace-closure/workspace-closure.controller';
 import { SupportNotificationContextService } from './support-notification-context.service';
 import { TelegramSupportTransportService } from '../telegram/telegram-support-transport.service';
 import { EmailModule } from '../email/email.module';
@@ -42,6 +47,7 @@ import {
 	],
 	controllers: [
 		NotificationDeliveryHealthController,
+		WorkspaceClosureController,
 		CrmIntakeSlaReadinessController,
 		CrmTaskReminderReadinessController
 	],
@@ -62,13 +68,13 @@ import {
 		NotificationDeliveryWorkerService,
 		NotificationDeliveryOutboxPublisherService,
 		NotificationDeliveryRetentionService,
-		NotificationDeliveryHealthService
+		NotificationDeliveryHealthService,
+		WorkspaceClosureService,
+		WorkspaceClosureInternalGuard
 	]
 })
 export class NotificationDeliveryModule implements OnApplicationShutdown {
-	constructor(
-		private readonly prisma: NotificationDeliveryPrismaService
-	) {}
+	constructor(private readonly prisma: NotificationDeliveryPrismaService) {}
 
 	onApplicationShutdown() {
 		return this.prisma.disconnect();

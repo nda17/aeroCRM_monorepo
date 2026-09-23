@@ -510,6 +510,7 @@ export class IntakeService {
 							else await this.source(tx, context, receipt.entityId);
 							return receipt.response;
 						}
+						await tx.$executeRaw`SELECT crm_intake.assert_workspace_open(${context.workspaceId}::uuid)`;
 						const result = await apply(tx);
 						await tx.intakeActivity.create({
 							data: {
@@ -538,6 +539,10 @@ export class IntakeService {
 					{ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
 				);
 			} catch (error) {
+				if (String(error).includes('crm_workspace_closed'))
+					throw new ForbiddenException({
+						code: 'crm_workspace_closed', message: 'Workspace is closed'
+					});
 				if (
 					error instanceof Prisma.PrismaClientKnownRequestError &&
 					error.code === 'P2002' &&

@@ -1,6 +1,6 @@
 'use client'
 
-import { useSessionStore } from '@/entities/session'
+import { getCurrentAccount, useSessionStore } from '@/entities/session'
 import {
 	getWorkspaceInvitation,
 	type WorkspaceInvitation,
@@ -20,12 +20,49 @@ import styles from './InvitationFlow.module.scss'
 const safeUnavailable =
 	'Приглашение не найдено или недоступно этому аккаунту. Войдите с тем адресом, на который пришло письмо, и убедитесь, что он подтверждён. Данные других приглашений не раскрываются.'
 
+const InvitationNavigation = ({
+	invitationId,
+	accountLabel
+}: {
+	invitationId: string
+	accountLabel: string
+}) => (
+	<nav className={styles.navigation} aria-label="Аккаунт и переходы">
+		<p>Текущий аккаунт: {accountLabel}</p>
+		<div className={styles.actions}>
+			<a
+				href={`/logout?${new URLSearchParams({
+					returnPath: `/invitations/${invitationId}`
+				})}`}
+			>
+				Войти другим аккаунтом
+			</a>
+			<a href="/inbox">Вернуться в CRM</a>
+			<a href={getRuntimeConfig().mainAppOrigin}>На сайт</a>
+		</div>
+	</nav>
+)
+
 export const InvitationFlow = ({
 	invitationId
 }: {
 	invitationId: string
 }) => {
 	const { session, sessionRevision } = useSessionStore()
+	const account = useQuery({
+		queryKey: [
+			'invitation-current-account',
+			session?.userId,
+			sessionRevision
+		],
+		queryFn: () =>
+			getCurrentAccount(session!.accessToken, session!.userId),
+		enabled: !!session,
+		retry: false,
+		gcTime: 0
+	})
+	const accountLabel =
+		account.data?.email ?? session?.userId ?? 'неизвестен'
 	const [online, setOnline] = useState(true)
 	useEffect(() => {
 		const update = () => setOnline(navigator.onLine)
@@ -77,30 +114,36 @@ export const InvitationFlow = ({
 	}
 	if (!preview.data)
 		return (
-			<ScreenState
-				variant={
-					preview.error instanceof AuthenticatedApiError &&
-					preview.error.kind === 'notFound'
-						? 'permission'
-						: 'error'
-				}
-				title="Не удалось открыть приглашение"
-				description={
-					preview.error instanceof AuthenticatedApiError &&
-					preview.error.kind === 'notFound'
-						? safeUnavailable
-						: 'Сервис приглашений временно недоступен. Доступ к CRM не изменён.'
-				}
-				action={
-					<Button
-						onClick={reload}
-						disabled={!online}
-						isLoading={preview.isFetching}
-					>
-						Повторить проверку
-					</Button>
-				}
-			/>
+			<>
+				<ScreenState
+					variant={
+						preview.error instanceof AuthenticatedApiError &&
+						preview.error.kind === 'notFound'
+							? 'permission'
+							: 'error'
+					}
+					title="Не удалось открыть приглашение"
+					description={
+						preview.error instanceof AuthenticatedApiError &&
+						preview.error.kind === 'notFound'
+							? safeUnavailable
+							: 'Сервис приглашений временно недоступен. Доступ к CRM не изменён.'
+					}
+					action={
+						<Button
+							onClick={reload}
+							disabled={!online}
+							isLoading={preview.isFetching}
+						>
+							Повторить проверку
+						</Button>
+					}
+				/>
+				<InvitationNavigation
+					invitationId={invitationId}
+					accountLabel={accountLabel}
+				/>
+			</>
 		)
 	const accepted = () => {
 		// A replay proves the historical acceptance, not the current invitation
@@ -117,6 +160,7 @@ export const InvitationFlow = ({
 			online={online}
 			revalidating={preview.isFetching}
 			failed={preview.isError}
+			accountLabel={accountLabel}
 			onReload={reload}
 			onAccepted={accepted}
 		/>
@@ -128,6 +172,7 @@ const InvitationActions = ({
 	online,
 	revalidating,
 	failed,
+	accountLabel,
 	onReload,
 	onAccepted
 }: {
@@ -135,6 +180,7 @@ const InvitationActions = ({
 	online: boolean
 	revalidating: boolean
 	failed: boolean
+	accountLabel: string
 	onReload: () => void
 	onAccepted: (result: WorkspaceInvitationAcceptance) => void
 }) => {
@@ -305,12 +351,10 @@ const InvitationActions = ({
 					Обновить приглашение
 				</Button>
 			</div>
-			<a
-				href={getRuntimeConfig().mainAppOrigin}
-				className={styles.accountLink}
-			>
-				Перейти на основной сайт
-			</a>
+			<InvitationNavigation
+				invitationId={invitation.id}
+				accountLabel={accountLabel}
+			/>
 		</div>
 	)
 }

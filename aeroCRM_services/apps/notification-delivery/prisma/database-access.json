@@ -2,12 +2,42 @@
   "version": 1,
   "service": "notification-delivery",
   "tables": {
-    "delivery_receipts": ["SELECT", "INSERT", "UPDATE", "DELETE"],
-    "delivery_failures": ["SELECT", "INSERT", "UPDATE", "DELETE"],
-    "control_actions": ["SELECT", "INSERT", "UPDATE", "DELETE"],
-    "outbox_events": ["SELECT", "INSERT", "UPDATE", "DELETE"],
-    "heartbeats": ["SELECT", "INSERT", "UPDATE", "DELETE"],
-    "_prisma_migrations": []
+    "delivery_receipts": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "delivery_failures": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "control_actions": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "outbox_events": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "heartbeats": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "_prisma_migrations": [],
+    "workspace_closure_fences": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ]
   },
   "sequences": {},
   "types": [
@@ -18,5 +48,10 @@
     "NotificationDeliveryOutboxStatus",
     "NotificationDeliveryExchange"
   ],
-  "routines": []
+  "routines": [
+    "workspace_closure_fence_immutable",
+    "assert_workspace_open",
+    "guard_crm_dispatch_scope"
+  ],
+  "routineExecute": ["assert_workspace_open(uuid)"]
 }

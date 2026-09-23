@@ -64,8 +64,16 @@ export class SlaProcessor {
 				where: { id: event.jobId, workspaceId: event.workspaceId }
 			});
 			if (!job) throw new ConflictException('SLA job not found');
+			const fenced = Boolean((await tx.workspaceClosureFence.findUnique({
+				where: { workspaceId: event.workspaceId }
+			}))?.fencedAt);
+			if (fenced)
+				await tx.slaJob.updateMany({
+					where: { id: job.id, workspaceId: event.workspaceId, status: { in: ['PENDING', 'PROCESSING'] } },
+					data: { status: 'CANCELLED', generation: { increment: 1 } }
+				});
 			const done =
-				job.generation !== event.generation ||
+				fenced || job.generation !== event.generation ||
 				job.activeEventId !== event.eventId ||
 				!['PENDING', 'PROCESSING'].includes(job.status);
 			if (!done && job.dueAt > now) throw new SlaLeaseLost();

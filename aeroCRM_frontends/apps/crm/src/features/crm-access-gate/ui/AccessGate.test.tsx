@@ -17,6 +17,10 @@ import {
 	getCrmPermissions,
 	useCrmWorkspaceAccess
 } from '@/entities/crm-access'
+import {
+	listWorkspaceClosures,
+	type WorkspaceClosureView
+} from '@/entities/workspace-closure'
 import { CrmAppShell } from '@/widgets/crm-app-shell'
 import { AuthenticatedApiError } from '@/shared/api/authenticated-http-client'
 import { getRuntimeConfig } from '@/shared/config/runtime'
@@ -57,6 +61,12 @@ vi.mock('@/entities/crm-access', async importOriginal => ({
 	...(await importOriginal<typeof import('@/entities/crm-access')>()),
 	getCrmPermissions: vi.fn()
 }))
+vi.mock('@/entities/workspace-closure', async importOriginal => ({
+	...(await importOriginal<
+		typeof import('@/entities/workspace-closure')
+	>()),
+	listWorkspaceClosures: vi.fn()
+}))
 vi.mock('next/navigation', async () => {
 	const React = await import('react')
 	return {
@@ -82,12 +92,41 @@ vi.mock('react-hot-toast', () => ({
 	default: Object.assign(vi.fn(), {
 		loading: vi.fn(() => 'install-toast'),
 		success: vi.fn(),
-		error: vi.fn()
+		error: vi.fn(),
+		dismiss: vi.fn()
 	})
 }))
 
 const workspaceId = '11111111-1111-4111-8111-111111111111'
 const membershipId = '22222222-2222-4222-8222-222222222222'
+const closureId = '33333333-3333-4333-8333-333333333333'
+const closureView: WorkspaceClosureView = {
+	id: closureId,
+	workspaceId,
+	displayName: 'Старое пространство',
+	state: 'CLOSED' as const,
+	version: '8',
+	requestedAt: '2026-09-22T12:00:00.000Z',
+	closedAt: '2026-09-23T12:00:00.000Z',
+	steps: (
+		[
+			'crm-access',
+			'identity',
+			'billing',
+			'crm-customers',
+			'crm-sales',
+			'crm-intake',
+			'notification-delivery'
+		] as const
+	).map(service => ({
+		service,
+		state: 'SETTLED' as const,
+		lastErrorCode: null
+	})),
+	financialPendingCount: 0,
+	priorDispatchCount: 0,
+	lastErrorCode: null
+}
 const base = {
 	schemaVersion: 1 as const,
 	selectedWorkspaceId: workspaceId,
@@ -221,6 +260,36 @@ describe('AccessGate', () => {
 			)
 		)
 		expect(activateCrmTrial).not.toHaveBeenCalled()
+	})
+
+	it('offers closed workspace history to an owner instead of creating a replacement', async () => {
+		vi.mocked(getCrmAccessBootstrap).mockRejectedValue(
+			new CrmWorkspaceRequiredError()
+		)
+		vi.mocked(listWorkspaceClosures).mockResolvedValue({
+			schemaVersion: 1,
+			scope: { subject: 'user-1' },
+			items: [closureView]
+		})
+
+		render(
+			<AccessGate>
+				<div>workspace</div>
+			</AccessGate>,
+			{ wrapper: Wrapper }
+		)
+
+		await waitFor(() =>
+			expect(listWorkspaceClosures).toHaveBeenCalledWith('token', 'user-1')
+		)
+		await screen.findByRole('heading', { name: 'Закрытые пространства' })
+		expect(screen.getByText('Старое пространство')).toBeTruthy()
+		expect(screen.getByText(/Закрыто/)).toBeTruthy()
+		expect(
+			screen.queryByRole('button', {
+				name: 'Создать рабочее пространство'
+			})
+		).toBeNull()
 	})
 
 	it('keeps the workspace closed for a generic forbidden access error', async () => {
@@ -604,6 +673,11 @@ describe('AccessGate', () => {
 	)
 	beforeEach(() => {
 		vi.clearAllMocks()
+		vi.mocked(listWorkspaceClosures).mockResolvedValue({
+			schemaVersion: 1,
+			scope: { subject: 'user-1' },
+			items: []
+		})
 		vi.mocked(getRuntimeConfig).mockReturnValue({
 			mode: 'development',
 			appOrigin: 'http://localhost:3001',

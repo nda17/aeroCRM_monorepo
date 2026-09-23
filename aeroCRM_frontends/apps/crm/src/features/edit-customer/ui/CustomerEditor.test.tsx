@@ -38,7 +38,11 @@ vi.mock('@/entities/crm-access', async importOriginal => ({
 	getCrmPermissions: vi.fn()
 }))
 vi.mock('react-hot-toast', () => ({
-	default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() })
+	default: Object.assign(vi.fn(), {
+		success: vi.fn(),
+		error: vi.fn(),
+		dismiss: vi.fn()
+	})
 }))
 const workspaceId = '11111111-1111-4111-8111-111111111111'
 const contact: Customer = {
@@ -80,7 +84,8 @@ const company: Customer = {
 let client: QueryClient
 const submitEditor = (label = 'Сохранить') =>
 	fireEvent.submit(
-		(screen.getByRole('button', { name: label }) as HTMLButtonElement).form!
+		(screen.getByRole('button', { name: label }) as HTMLButtonElement)
+			.form!
 	)
 
 beforeEach(() => {
@@ -535,16 +540,25 @@ describe('CustomerEditor', () => {
 		fireEvent.change(screen.getByRole('textbox', { name: 'Имя' }), {
 			target: { value: 'Черновик контакта' }
 		})
-		fireEvent.change(screen.getByRole('textbox', { name: 'Найти компанию' }), {
-			target: { value: 'ООО Ромашка' }
+		fireEvent.change(
+			screen.getByRole('textbox', { name: 'Найти компанию' }),
+			{
+				target: { value: 'ООО Ромашка' }
+			}
+		)
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Создать компанию' })
+		)
+		const child = await screen.findByRole('dialog', {
+			name: 'Новая компания'
 		})
-		fireEvent.click(screen.getByRole('button', { name: 'Создать компанию' }))
-		const child = await screen.findByRole('dialog', { name: 'Новая компания' })
 		const childName = within(child).getByRole('textbox', {
 			name: 'Название компании'
 		})
 		expect(childName).toHaveProperty('value', 'ООО Ромашка')
-		fireEvent.click(within(child).getByRole('button', { name: 'Сохранить' }))
+		fireEvent.click(
+			within(child).getByRole('button', { name: 'Сохранить' })
+		)
 		await waitFor(() => expect(mutateCustomer).toHaveBeenCalledTimes(1))
 		expect(vi.mocked(mutateCustomer).mock.calls[0][1]).toMatchObject({
 			kind: 'companies',
@@ -553,7 +567,9 @@ describe('CustomerEditor', () => {
 		expect(callbacks.onSaved).not.toHaveBeenCalled()
 		expect(callbacks.onClose).not.toHaveBeenCalled()
 		await waitFor(() =>
-			expect(screen.queryByRole('dialog', { name: 'Новая компания' })).toBeNull()
+			expect(
+				screen.queryByRole('dialog', { name: 'Новая компания' })
+			).toBeNull()
 		)
 		expect(screen.getByRole('textbox', { name: 'Имя' })).toHaveProperty(
 			'value',
@@ -577,15 +593,23 @@ describe('CustomerEditor', () => {
 		mount(true, undefined, 'Исходный контакт')
 		const name = screen.getByRole('textbox', { name: 'Имя' })
 		fireEvent.change(name, { target: { value: 'Черновик контакта' } })
-		const companySelect = screen.getByRole('combobox', { name: 'Компания' })
+		const companySelect = screen.getByRole('combobox', {
+			name: 'Компания'
+		})
 		await waitFor(() => expect(companySelect).toHaveProperty('value', ''))
 		await screen.findByRole('option', { name: company.name })
 		fireEvent.change(companySelect, { target: { value: company.id } })
-		fireEvent.click(screen.getByRole('button', { name: 'Создать компанию' }))
-		const child = await screen.findByRole('dialog', { name: 'Новая компания' })
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Создать компанию' })
+		)
+		const child = await screen.findByRole('dialog', {
+			name: 'Новая компания'
+		})
 		fireEvent.click(within(child).getByRole('button', { name: 'Закрыть' }))
 		await waitFor(() =>
-			expect(screen.queryByRole('dialog', { name: 'Новая компания' })).toBeNull()
+			expect(
+				screen.queryByRole('dialog', { name: 'Новая компания' })
+			).toBeNull()
 		)
 		expect(screen.getByRole('textbox', { name: 'Имя' })).toHaveProperty(
 			'value',
@@ -603,12 +627,21 @@ describe('CustomerEditor', () => {
 		fireEvent.change(screen.getByRole('textbox', { name: 'Имя' }), {
 			target: { value: 'Черновик контакта' }
 		})
-		fireEvent.change(screen.getByRole('textbox', { name: 'Найти компанию' }), {
-			target: { value: 'ООО Ромашка' }
+		fireEvent.change(
+			screen.getByRole('textbox', { name: 'Найти компанию' }),
+			{
+				target: { value: 'ООО Ромашка' }
+			}
+		)
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Создать компанию' })
+		)
+		const child = await screen.findByRole('dialog', {
+			name: 'Новая компания'
 		})
-		fireEvent.click(screen.getByRole('button', { name: 'Создать компанию' }))
-		const child = await screen.findByRole('dialog', { name: 'Новая компания' })
-		fireEvent.click(within(child).getByRole('button', { name: 'Сохранить' }))
+		fireEvent.click(
+			within(child).getByRole('button', { name: 'Сохранить' })
+		)
 		const retry = await within(child).findByRole('button', {
 			name: 'Повторить запрос'
 		})
@@ -618,29 +651,31 @@ describe('CustomerEditor', () => {
 		).toHaveProperty('readOnly', true)
 		fireEvent.click(retry)
 		await waitFor(() => expect(mutateCustomer).toHaveBeenCalledTimes(2))
-		expect(vi.mocked(mutateCustomer).mock.calls[1][1]).toEqual(firstCommand)
+		expect(vi.mocked(mutateCustomer).mock.calls[1][1]).toEqual(
+			firstCommand
+		)
 		await waitFor(() =>
-			expect(screen.queryByRole('dialog', { name: 'Новая компания' })).toBeNull()
+			expect(
+				screen.queryByRole('dialog', { name: 'Новая компания' })
+			).toBeNull()
 		)
 		expect(callbacks.onSaved).not.toHaveBeenCalled()
 		expect(screen.getByRole('textbox', { name: 'Имя' })).toHaveProperty(
 			'value',
 			'Черновик контакта'
 		)
-		expect(screen.getByRole('combobox', { name: 'Компания' })).toHaveProperty(
-			'value',
-			company.id
-		)
+		expect(
+			screen.getByRole('combobox', { name: 'Компания' })
+		).toHaveProperty('value', company.id)
 	})
 	it('hides inline company creation when contact writing is unavailable', async () => {
 		mount(false, undefined, 'Только просмотр')
 		expect(
 			screen.queryByRole('button', { name: 'Создать компанию' })
 		).toBeNull()
-		expect(screen.getByRole('combobox', { name: 'Компания' })).toHaveProperty(
-			'disabled',
-			true
-		)
+		expect(
+			screen.getByRole('combobox', { name: 'Компания' })
+		).toHaveProperty('disabled', true)
 	})
 	it('loads real records and keeps read-only fields viewable without mutation controls', async () => {
 		mount(false, contact.id)

@@ -9,6 +9,9 @@
 }
 .notice {
 	@apply rounded-xl border border-crm-border bg-crm-surface-muted p-4 text-sm leading-relaxed text-crm-muted;
+	&:focus {
+		@apply outline-none ring-2 ring-primary;
+	}
 }
 .error {
 	@apply rounded-xl border border-crm-danger/20 bg-crm-danger/10 p-4 text-sm text-crm-danger;

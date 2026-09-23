@@ -852,6 +852,7 @@ export class CrmCommerceService {
 		}
 	}
 	private async accountForCommand(tx: Tx, dto: CrmCommerceCommand) {
+		await tx.$executeRaw`SELECT billing.assert_workspace_open(${dto.workspaceId}::uuid)`;
 		const current = await tx.crmCommerceAccount.findUnique({
 			where: { workspaceId: dto.workspaceId }
 		});
@@ -1283,6 +1284,9 @@ export class CrmCommerceService {
 					where: { workspaceId: order.workspaceId }
 				})
 			]);
+			const closureFence = await tx.workspaceClosureFence.findUnique({ where: { workspaceId: order.workspaceId } });
+			if (!closureFence?.fencedAt)
+				await tx.$executeRaw`SELECT billing.assert_workspace_open(${order.workspaceId}::uuid)`;
 			const capacityMatches =
 				!!command &&
 				command.status !== 'CANCELLED' &&
@@ -1303,6 +1307,7 @@ export class CrmCommerceService {
 					renewal.amountMinor === order.amountMinor);
 			if (
 				!crmPaymentsEnabled() ||
+				Boolean(closureFence?.fencedAt) ||
 				!capacityMatches ||
 				!renewalMatches ||
 				order.status !== 'PENDING' ||
@@ -2017,6 +2022,9 @@ export class CrmCommerceService {
 		provider: Record<string, unknown>
 	) {
 		if (order.status === 'SUCCEEDED') return;
+		const [closureTouch] = await tx.$queryRaw<Array<{ closed: boolean }>>`
+			SELECT billing.touch_workspace_fence(${order.workspaceId}::uuid) AS closed`;
+		const workspaceClosed = closureTouch.closed;
 		const now = new Date(),
 			account = await tx.crmCommerceAccount.findUniqueOrThrow({
 				where: { workspaceId: order.workspaceId }
@@ -2119,6 +2127,7 @@ export class CrmCommerceService {
 				data: {
 					workspaceId: order.workspaceId,
 					productCode: 'AEROCRM',
+					status: workspaceClosed ? 'SUSPENDED' : 'ACTIVE',
 					planCode: 'PAID',
 					seatLimit: order.totalSeats,
 					policyVersion: order.policyVersion,
@@ -2170,7 +2179,7 @@ export class CrmCommerceService {
 		const renewal = await tx.crmAutoRenewal.findUnique({
 			where: { workspaceId: order.workspaceId }
 		});
-		if (order.kind === 'RECURRING' && renewal) {
+		if (order.kind === 'RECURRING' && renewal && !workspaceClosed) {
 			await tx.crmAutoRenewal.update({
 				where: { workspaceId: order.workspaceId },
 				data: {
@@ -2184,6 +2193,7 @@ export class CrmCommerceService {
 				}
 			});
 		} else if (
+			!workspaceClosed &&
 			order.autoRenew &&
 			order.consentVersion &&
 			order.consentText &&

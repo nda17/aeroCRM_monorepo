@@ -106,6 +106,7 @@ export const TeamEditor = ({
 			: { name: '', permissions: [], dataScope: 'OWN' }
 	)
 	const [impactConfirmed, setImpactConfirmed] = useState(false)
+	const [roleNameAtSubmit, setRoleNameAtSubmit] = useState('')
 	const owner = context.permissions.data?.role === 'OWNER'
 	const roleChoices = useInfiniteQuery({
 		queryKey: ['crm-role-options', ...context.key],
@@ -152,6 +153,11 @@ export const TeamEditor = ({
 		'archive-role'
 	].includes(kind)
 	const locked = command.locked || reviewing || (roleOperation && !owner)
+	const roleNameError =
+		command.error?.kind === 'validation' &&
+		command.error.message.endsWith('Выберите другое название.')
+			? command.error.message
+			: undefined
 	const assignment = (): RoleAssignment => {
 		if (role !== 'CUSTOM') return { role }
 		const selectedRole = customRoles.find(item => item.id === customRoleId)
@@ -231,6 +237,8 @@ export const TeamEditor = ({
 			return
 		}
 		try {
+			if (kind === 'create-role' || kind === 'update-role')
+				setRoleNameAtSubmit(roleInput.name)
 			void command.execute(prepare())
 		} catch (error) {
 			toast.error(
@@ -303,6 +311,11 @@ export const TeamEditor = ({
 				{['create-role', 'update-role'].includes(kind) ? (
 					<CustomRoleFields
 						value={roleInput}
+						nameError={
+							roleInput.name === roleNameAtSubmit
+								? roleNameError
+								: undefined
+						}
 						onChange={value => {
 							setRoleInput(value)
 							setImpactConfirmed(false)
@@ -447,7 +460,7 @@ export const TeamEditor = ({
 						onChange={setTeamIds}
 					/>
 				) : null}
-				{command.error ? (
+				{command.error && !roleNameError ? (
 					<div className={styles.error} role="alert">
 						<p>{command.error.message}</p>
 						{command.uncertain ? (

@@ -40,6 +40,7 @@ import { CrmIntakeSlaContextService } from './crm-intake-sla-context.service';
 
 export type NotificationDeliverySkipReason =
 	| SupportNotificationSkipReason
+	| 'WORKSPACE_CLOSED'
 	| 'INVITATION_EXPIRED'
 	| 'INVITATION_UNAVAILABLE'
 	| 'TASK_REMINDER_UNAVAILABLE'
@@ -164,6 +165,8 @@ export class NotificationDeliveryAdapterService {
 					claim.leaseExpiresAt.getTime() <= Date.now()
 				)
 					throw new Error('aeroCRM Intake SLA claim is no longer active');
+				if (!(await this.permitCrmDispatch(eventId, kind, lockToken, event.reference.workspaceId)))
+					return { status: 'SKIPPED', reason: 'WORKSPACE_CLOSED' };
 				if (context.channel === 'EMAIL')
 					await this.emailService.sendCrmIntakeSla(
 						context.destination.email!,
@@ -213,6 +216,8 @@ export class NotificationDeliveryAdapterService {
 					throw new Error(
 						'aeroCRM task reminder claim is no longer active'
 					);
+				if (!(await this.permitCrmDispatch(eventId, kind, lockToken, event.reference.workspaceId)))
+					return { status: 'SKIPPED', reason: 'WORKSPACE_CLOSED' };
 				if (context.channel === 'EMAIL')
 					await this.emailService.sendCrmTaskReminder(
 						context.destination.email!,
@@ -240,6 +245,8 @@ export class NotificationDeliveryAdapterService {
 				// Eligibility can expire while its HTTP response is in flight.
 				if (Date.parse(event.content.expiresAt) <= Date.now())
 					return { status: 'SKIPPED', reason: 'INVITATION_EXPIRED' };
+				if (!(await this.permitCrmDispatch(eventId, kind, lockToken, event.reference.workspaceId)))
+					return { status: 'SKIPPED', reason: 'WORKSPACE_CLOSED' };
 				await this.emailService.sendCrmInvitation(
 					event.destination.email,
 					event.reference.id,
@@ -366,6 +373,47 @@ export class NotificationDeliveryAdapterService {
 			);
 		}
 		return value;
+	}
+
+	private async permitCrmDispatch(
+		eventId: string,
+		kind: NotificationDeliveryKind,
+		lockToken: string | undefined,
+		workspaceId: string
+	): Promise<boolean> {
+		if (!lockToken) throw new Error('CRM_DISPATCH_CLAIM_MISSING');
+		try {
+			return await this.prisma.$transaction(async tx => {
+				await tx.$executeRaw`SELECT notification_delivery.assert_workspace_open(${workspaceId}::uuid)`;
+				const permitted = await tx.$queryRaw<Array<{ id: string }>>`
+					UPDATE notification_delivery.delivery_receipts
+					SET crm_workspace_id = COALESCE(crm_workspace_id, ${workspaceId}::uuid),
+						crm_dispatch_started_at = COALESCE(crm_dispatch_started_at, clock_timestamp())
+					WHERE event_id = ${eventId}::uuid AND consumer = ${kind}
+						AND status = 'PROCESSING' AND lock_token = ${lockToken}::uuid
+						AND lease_expires_at > clock_timestamp()
+						AND (crm_workspace_id IS NULL OR crm_workspace_id = ${workspaceId}::uuid)
+					RETURNING id`;
+				if (permitted.length !== 1)
+					throw new Error('CRM_DISPATCH_CLAIM_LOST');
+				return true;
+			});
+		} catch (error) {
+			if (String(error).includes('crm_workspace_closed')) {
+				await this.prisma.notificationDeliveryReceipt.updateMany({
+					where: {
+						eventId,
+						consumer: kind,
+						status: NotificationDeliveryReceiptStatus.PROCESSING,
+						lockToken,
+						OR: [{ crmWorkspaceId: null }, { crmWorkspaceId: workspaceId }]
+					},
+					data: { crmWorkspaceId: workspaceId }
+				});
+				return false;
+			}
+			throw error;
+		}
 	}
 
 	private async sendCampaignEmail(

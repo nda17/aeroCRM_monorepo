@@ -1,3 +1,7 @@
 .tooltip {
 	@apply invisible fixed z-[100] w-72 overflow-auto break-words rounded-xl border border-crm-border-strong bg-crm-surface px-3 py-2.5 text-sm font-normal leading-5 text-crm-text shadow-xl;
 }
+
+.helpButton {
+	@apply inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-crm-border-strong bg-crm-surface text-xs font-bold text-primary hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+}

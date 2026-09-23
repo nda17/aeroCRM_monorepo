@@ -31,6 +31,7 @@ async function bootstrap(): Promise<void> {
 
 	app.setGlobalPrefix('api/v1', {
 		exclude: [
+			{ path: 'internal/v1/workspace-closures/fence', method: RequestMethod.POST },
 			{
 				path: 'internal/v1/notification-delivery/task-reminders/:id/delivery-context',
 				method: RequestMethod.POST

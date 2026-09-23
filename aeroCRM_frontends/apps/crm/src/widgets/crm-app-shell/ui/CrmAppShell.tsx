@@ -12,8 +12,10 @@ import {
 	type CrmPermissions,
 	useCrmWorkspaceAccess
 } from '@/entities/crm-access'
-import { useSessionStore } from '@/entities/session'
+import { getCurrentAccount, useSessionStore } from '@/entities/session'
+import { getEmployeeProfile } from '@/entities/crm-team'
 import { useWorkspaceBranding } from '@/entities/crm-workspace-branding'
+import { getRuntimeConfig } from '@/shared/config/runtime'
 import { ThemeSwitcher } from '@/shared/ui/theme-switcher/ThemeSwitcher'
 import { TaskNotificationCenter } from '@/features/manage-reminders'
 import { CrmNavigationLink } from './CrmNavigationLink'
@@ -21,12 +23,14 @@ import {
 	AppIcon,
 	BrandLogo,
 	Drawer,
+	HelpHint,
 	ReadOnlyBanner,
 	StatusBadge,
 	ScreenState,
 	useTooltip
 } from '@/shared/ui'
 import clsx from 'clsx'
+import { useQuery } from '@tanstack/react-query'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { type PropsWithChildren, useEffect, useId, useState } from 'react'
 
@@ -107,6 +111,12 @@ const CrmMobileNavigation = ({
 						ariaLabel="Мобильная навигация CRM"
 						onNavigate={() => setIsOpen(false)}
 					/>
+					<div className={styles.mobileExternalLinks}>
+						<a href={`${getRuntimeConfig().mainAppOrigin}/cabinet`}>
+							Личный кабинет
+						</a>
+						<a href={getRuntimeConfig().mainAppOrigin}>На сайт aeroCRM</a>
+					</div>
 					<p className={styles.mobileCaption}>
 						aeroCRM · рабочее пространство
 					</p>
@@ -150,6 +160,53 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 	}, [entryRedirect, home, router, searchParams])
 	const branding = useWorkspaceBranding()
 	const companyName = branding.data?.branding.displayName
+	const profile = useQuery({
+		queryKey: [
+			'crm-employee-profile',
+			access.workspaceId,
+			session?.userId,
+			sessionRevision,
+			authority?.role,
+			session?.userId
+		],
+		enabled: !!session && !!authority,
+		queryFn: () =>
+			getEmployeeProfile(session!.accessToken, {
+				workspaceId: access.workspaceId,
+				subject: session!.userId,
+				targetSubject: session!.userId
+			}),
+		retry: false,
+		staleTime: 0,
+		gcTime: 0
+	})
+	const ownProfile =
+		!profile.isError &&
+		profile.data?.workspaceId === access.workspaceId &&
+		profile.data.subject === session?.userId &&
+		profile.data.targetSubject === session?.userId
+			? profile.data.profile
+			: null
+	const account = useQuery({
+		queryKey: ['crm-current-account', session?.userId, sessionRevision],
+		enabled: !!session && !!authority,
+		queryFn: () =>
+			getCurrentAccount(session!.accessToken, session!.userId),
+		retry: false,
+		staleTime: 0,
+		gcTime: 0
+	})
+	const profileName = ownProfile
+		? [ownProfile.lastName, ownProfile.firstName, ownProfile.middleName]
+				.map(value => value?.trim())
+				.filter(Boolean)
+				.join(' ')
+		: ''
+	const accountName =
+		profileName ||
+		(!account.isError ? account.data?.email?.trim() : '') ||
+		'Текущий аккаунт'
+	const { mainAppOrigin } = getRuntimeConfig()
 	const sidebarId = useId()
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
 	const sidebarToggleLabel = isSidebarCollapsed
@@ -160,9 +217,10 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 			? 'Показать боковое меню с разделами CRM.'
 			: 'Скрыть боковое меню, чтобы освободить место для рабочей области.'
 	)
-	const section =
-		CRM_NAVIGATION.find(item => isNavigationItemActive(pathname, item))
-			?.label ?? 'Рабочее пространство'
+	const sectionItem = CRM_NAVIGATION.find(item =>
+		isNavigationItemActive(pathname, item)
+	)
+	const section = sectionItem?.label ?? 'Рабочее пространство'
 	const accessLabel =
 		access.state === 'READ_ONLY'
 			? 'Только чтение'
@@ -252,21 +310,38 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 						className={styles.sectionContext}
 						aria-label="Текущий раздел"
 					>
-						<BrandLogo size="compact" className={styles.mobileBrand} />
-						{companyName ? (
-							<span
-								className={styles.mobileCompanyName}
-								title={companyName}
-							>
-								{companyName}
-							</span>
-						) : null}
+						<div className={styles.mobileBrandGroup}>
+							<BrandLogo size="compact" className={styles.mobileBrand} />
+							{companyName ? (
+								<span
+									className={styles.mobileCompanyName}
+									title={companyName}
+								>
+									{companyName}
+								</span>
+							) : null}
+						</div>
 						<span className={styles.productName}>aeroCRM</span>
 						<span className={styles.sectionName}>{section}</span>
 					</div>
+					{sectionItem ? (
+						<HelpHint
+							label={section}
+							description={sectionItem.description}
+						/>
+					) : null}
 					<CrmProductSwitch />
 					<ThemeSwitcher />
 					<TaskNotificationCenter />
+					<a
+						className={styles.accountLink}
+						href={`${mainAppOrigin}/cabinet`}
+					>
+						Личный кабинет
+					</a>
+					<a className={styles.siteLink} href={mainAppOrigin}>
+						На сайт aeroCRM
+					</a>
 					<a className={styles.logoutLink} href="/logout">
 						Выйти
 					</a>
@@ -296,6 +371,9 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 									: 'Участник'}
 							</span>
 						</StatusBadge>
+						<span className={styles.accountName} title={accountName}>
+							{accountName}
+						</span>
 					</div>
 				</header>
 

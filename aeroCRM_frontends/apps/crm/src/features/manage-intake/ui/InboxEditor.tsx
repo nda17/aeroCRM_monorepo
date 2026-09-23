@@ -23,7 +23,7 @@ import {
 	TextareaField
 } from '@/shared/ui'
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import type { IntakeAccess } from '../model/use-intake-access'
@@ -138,6 +138,7 @@ export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 		},
 		`inbox:${id ?? 'new'}`
 	)
+	const pendingNotice = useRef<HTMLDivElement>(null)
 	const acceptance = useInboxAcceptance(access, id)
 	const denied =
 		!command.uncertain &&
@@ -152,9 +153,11 @@ export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 		!acceptance.blocksEntry
 	const close = () => {
 		if (command.locked || acceptance.command.locked) {
-			toast(
-				'Сначала повторите запрос с неизвестным результатом. Сохранены те же поля и ключ команды.'
-			)
+			if (command.locked) pendingNotice.current?.focus()
+			else
+				toast('Завершите сохранённый запрос принятия обращения.', {
+					id: `inbox-close:${access.workspaceId}:${id}`
+				})
 			return
 		}
 		onClose()
@@ -209,6 +212,28 @@ export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 			description="Данные сохраняются в выбранном рабочем пространстве aeroCRM."
 		>
 			<div className={styles.form}>
+				{command.locked ? (
+					<div
+						className={styles.notice}
+						role="status"
+						ref={pendingNotice}
+						tabIndex={-1}
+					>
+						<p>
+							{command.running
+								? 'Запрос выполняется. Дождитесь результата; поля и ключ команды сохранены.'
+								: 'Результат запроса пока неизвестен. Обращение могло сохраниться. Поля и ключ команды сохранены; новый запрос не создаётся.'}
+						</p>
+						{command.uncertain ? (
+							<Button
+								disabled={!access.canWrite || command.running}
+								onClick={() => void command.retry()}
+							>
+								Повторить тот же запрос
+							</Button>
+						) : null}
+					</div>
+				) : null}
 				{!access.canRead ? (
 					<ScreenState
 						variant={access.permissions.isError ? 'error' : 'permission'}
@@ -233,20 +258,6 @@ export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 					/>
 				) : (
 					<>
-						{id && command.uncertain ? (
-							<div className={styles.notice} role="alert">
-								<p>
-									Есть сохранённая команда с неподтверждённым результатом.
-									Новая команда не будет создана.
-								</p>
-								<Button
-									disabled={!access.canWrite || command.running}
-									onClick={() => void command.retry()}
-								>
-									Повторить тот же запрос
-								</Button>
-							</div>
-						) : null}
 						{entry ? (
 							<>
 								<dl className={styles.details}>
@@ -262,7 +273,7 @@ export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 												? 'Добавлено вручную'
 												: entry.origin === 'CSV'
 													? 'Импорт CSV'
-														: `API · ${entry.sourceId}`
+													: `API · ${entry.sourceId}`
 										],
 										[
 											'Получено',
@@ -429,36 +440,28 @@ export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 										})}
 									/>
 								)}
-								{command.uncertain ? (
-									<p className={styles.notice}>
-										Результат пока неизвестен. Поля зафиксированы; повтор
-										отправит ту же команду и не создаст дубль.
-									</p>
-								) : null}
-								<Button
-									type="submit"
-									tooltip={
-										command.uncertain
-											? 'Повторить прежний запрос с теми же данными, не создавая второе обращение.'
-											: id
+								{!command.uncertain ? (
+									<Button
+										type="submit"
+										tooltip={
+											id
 												? 'Отклонить обращение с указанной причиной. Запись и история сохранятся.'
 												: 'Сохранить обращение во входящих. Принятие в работу выполняется отдельно.'
-									}
-									isLoading={command.running}
-									disabled={
-										!access.canWrite ||
-										!!denied ||
-										conflict ||
-										(!id && !command.uncertain && !teams.validSelection) ||
-										acceptance.blocksEntry
-									}
-								>
-									{command.uncertain
-										? 'Повторить тот же запрос'
-										: id
-											? 'Подтвердить отклонение'
-											: 'Создать обращение'}
-								</Button>
+										}
+										isLoading={command.running}
+										disabled={
+											!access.canWrite ||
+											!!denied ||
+											conflict ||
+											(!id &&
+												!command.uncertain &&
+												!teams.validSelection) ||
+											acceptance.blocksEntry
+										}
+									>
+										{id ? 'Подтвердить отклонение' : 'Создать обращение'}
+									</Button>
+								) : null}
 							</form>
 						) : null}
 						{entry ? (
@@ -519,7 +522,7 @@ export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 						) : null}
 					</>
 				)}
-				{command.error ? (
+				{command.error && !command.uncertain ? (
 					<div className={styles.error} role="alert">
 						<p>{command.error.message}</p>
 						{conflict && id ? (

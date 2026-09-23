@@ -435,17 +435,27 @@ describe('Intake SLA adapter requires fresh authority and an active receipt leas
 		const findFirst = jest.fn().mockResolvedValue({
 			leaseExpiresAt: new Date(Date.now() + 60_000)
 		});
+		const tx = {
+			$executeRaw: jest.fn().mockResolvedValue(0),
+			$queryRaw: jest.fn().mockResolvedValue([{ id: 'receipt-1' }])
+		};
+		const prisma = {
+			notificationDeliveryReceipt: { findFirst },
+			$transaction: jest.fn(async (callback: (value: typeof tx) => unknown) =>
+				callback(tx)
+			)
+		};
 		return {
 			sendMail,
 			sendMessage,
 			resolve,
 			findFirst,
+			prisma,
+			tx,
 			adapter: new NotificationDeliveryAdapterService(
 				new EmailService({ sendMail } as unknown as Transporter),
 				{ sendMessage } as unknown as TelegramInfoTransportService,
-				{
-					notificationDeliveryReceipt: { findFirst }
-				} as unknown as NotificationDeliveryPrismaService,
+				prisma as unknown as NotificationDeliveryPrismaService,
 				{} as CrmInvitationContextService,
 				{} as CrmTaskReminderContextService,
 				{ resolve } as unknown as CrmIntakeSlaContextService
@@ -459,6 +469,12 @@ describe('Intake SLA adapter requires fresh authority and an active receipt leas
 			event,
 			event.eventId,
 			'claim'
+		);
+		expect(value.prisma.$transaction).toHaveBeenCalledTimes(1);
+		expect(value.tx.$executeRaw).toHaveBeenCalledTimes(1);
+		expect(value.tx.$queryRaw).toHaveBeenCalledTimes(1);
+		expect(String(value.tx.$executeRaw.mock.calls[0][0])).toContain(
+			'notification_delivery.assert_workspace_open'
 		);
 		expect(value.sendMail).toHaveBeenCalledWith(
 			expect.objectContaining({

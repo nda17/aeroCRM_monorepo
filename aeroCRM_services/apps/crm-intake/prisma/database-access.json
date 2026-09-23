@@ -97,6 +97,11 @@
       "SELECT",
       "INSERT",
       "UPDATE"
+    ],
+    "workspace_closure_fences": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
     ]
   },
   "sequences": {},
@@ -106,6 +111,13 @@
     "sla_immutable",
     "check_csv_import_integrity",
     "notify_live_change",
-    "record_inbox_notification"
-  ]
+    "record_inbox_notification",
+    "workspace_closure_fence_immutable",
+    "assert_workspace_open",
+    "guard_workspace_business_write",
+    "guard_workspace_inbox_entry",
+    "guard_acceptance_admission",
+    "guard_acceptance_outbox"
+  ],
+  "routineExecute": ["assert_workspace_open(uuid)"]
 }

@@ -75,6 +75,33 @@ export class CrmAccessService {
 		private readonly prisma: CrmAccessPrismaService
 	) {}
 
+	async displaySummaries(authorization: string | undefined) {
+		const context = await this.identity.authContext(authorization, getCrmAccessCorrelationId());
+		const workspaceIds = context.memberships.map(item => item.workspaceId);
+		if (!workspaceIds.length)
+			return { schemaVersion: 1 as const, scope: { subject: context.subject }, items: [] };
+		const [brandings, localMembers] = await Promise.all([
+			this.prisma.crmWorkspaceBranding.findMany({
+				where: { workspaceId: { in: workspaceIds } },
+				select: { workspaceId: true, displayName: true }
+			}),
+			this.prisma.crmWorkspaceMember.findMany({
+				where: { workspaceId: { in: workspaceIds }, subject: context.subject, disabledAt: null },
+				select: { workspaceId: true, membershipId: true }
+			})
+		]);
+		const names = new Map(brandings.map(row => [row.workspaceId, row.displayName]));
+		const members = new Set(localMembers.map(row => `${row.workspaceId}:${row.membershipId}`));
+		return {
+			schemaVersion: 1 as const,
+			scope: { subject: context.subject },
+			items: context.memberships
+				.filter(item => item.role === 'OWNER' || members.has(`${item.workspaceId}:${item.membershipId}`))
+				.map(item => ({ workspaceId: item.workspaceId, membershipRole: item.role,
+					displayName: names.get(item.workspaceId) ?? null }))
+		};
+	}
+
 	async bootstrap(
 		authorization: string | undefined,
 		workspaceId?: string
@@ -361,6 +388,13 @@ export class CrmAccessService {
 		entitlement: CrmEntitlementDetails | null,
 		storedAccess: CrmAccessProfile | null
 	): Promise<CrmAccessProfile> {
+		if (storedAccess?.lifecycle === CrmAccessLifecycle.SUSPENDED) return storedAccess;
+		if (!storedAccess) {
+			const fence = await this.prisma.workspaceClosureFence.findUnique({ where: { workspaceId } });
+			if (fence?.fencedAt) {
+				throw new ForbiddenException({ code: 'crm_workspace_closed', message: 'Workspace is closed' });
+			}
+		}
 		if (!entitlement || entitlement.workspaceId !== workspaceId) {
 			throw new ServiceUnavailableException(
 				'Billing service returned incomplete aeroCRM provisioning data'

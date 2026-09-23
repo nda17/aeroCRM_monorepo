@@ -107,6 +107,10 @@ export class IntakeIngestionRateLimiter {
 			});
 		} catch (error) {
 			if (error instanceof HttpException) throw error;
+			if (String(error).includes('crm_workspace_closed'))
+				throw new ForbiddenException({
+					code: 'crm_workspace_closed', message: 'Workspace is closed'
+				});
 			throw new ServiceUnavailableException(
 				'Intake limits could not be confirmed'
 			);

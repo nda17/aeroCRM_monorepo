@@ -123,7 +123,11 @@ vi.mock('@/entities/sales', async () => ({
 	listSalesDeals: vi.fn()
 }))
 vi.mock('react-hot-toast', () => ({
-	default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() })
+	default: Object.assign(vi.fn(), {
+		success: vi.fn(),
+		error: vi.fn(),
+		dismiss: vi.fn()
+	})
 }))
 
 const owner = () => {

@@ -27,6 +27,7 @@ import {
 	Button,
 	DataTable,
 	Drawer,
+	HelpHint,
 	PageHeader,
 	ReadOnlyBanner,
 	ScreenState,
@@ -373,13 +374,22 @@ const CatalogWorkspace = ({ context }: { context: CommerceContext }) => {
 		<div className={styles.screen}>
 			<PageHeader
 				title="Каталог"
-				description="Общие товары и услуги для всех воронок рабочего пространства."
+				description={
+					<>
+						Общие товары и услуги для всех воронок рабочего пространства.{' '}
+						<HelpHint
+							label="Каталог"
+							description="Позиция каталога — шаблон товара или услуги для будущих сделок. Изменение цены здесь не переписывает ранее сохранённые сделки и КП."
+						/>
+					</>
+				}
 				actions={
 					<>
 						<ActionMenu>
 							<CommerceExportControl />
 							<Button
 								variant="secondary"
+								tooltip="Посмотреть изменения каталога и воронок; история конкретной сделки находится в её карточке"
 								disabled={!context.canRead}
 								onClick={() => setHistoryOpen(true)}
 							>
@@ -395,6 +405,7 @@ const CatalogWorkspace = ({ context }: { context: CommerceContext }) => {
 						</ActionMenu>
 						<Button
 							variant="secondary"
+							tooltip="Проверить Excel или CSV перед добавлением позиций в каталог"
 							disabled={!context.canWrite}
 							onClick={() => setImportOpen(true)}
 						>

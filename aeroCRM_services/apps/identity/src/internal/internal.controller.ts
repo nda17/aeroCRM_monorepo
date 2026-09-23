@@ -183,6 +183,54 @@ export class IdentityInternalController {
 		);
 	}
 
+	@Post('crm-access/closure-owner-context')
+	@HttpCode(200)
+	@Header('Cache-Control', 'no-store')
+	@InternalServices('crm-access')
+	closureOwnerContext(@Body() body: unknown) {
+		return this.internal.closureOwnerContext(this.closureOwnerBody(body));
+	}
+
+	@Post('workspace-closures/fence')
+	@HttpCode(200)
+	@Header('Cache-Control', 'no-store')
+	@InternalServices('crm-access')
+	closureFence(@Body() body: unknown) {
+		return this.internal.fenceWorkspace(this.closureFenceBody(body));
+	}
+
+	private closureOwnerBody(value: unknown) {
+		if (!value || typeof value !== 'object' || Array.isArray(value))
+			throw new BadRequestException('Invalid closure owner context');
+		const row = value as Record<string, unknown>;
+		if (Object.keys(row).sort().join(',') !== 'closureId,schemaVersion,subject,workspaceId' ||
+			row.schemaVersion !== 1 || !this.uuid(row.workspaceId) || !this.uuid(row.closureId) ||
+			!this.subject(row.subject)) throw new BadRequestException('Invalid closure owner context');
+		return row as { schemaVersion: 1; workspaceId: string; closureId: string; subject: string };
+	}
+
+	private closureFenceBody(value: unknown) {
+		if (!value || typeof value !== 'object' || Array.isArray(value))
+			throw new BadRequestException('Invalid closure envelope');
+		const row = value as Record<string, unknown>;
+		if (Object.keys(row).sort().join(',') !== 'closureId,generation,ownerSubject,requestedAt,schemaVersion,workspaceId' ||
+			row.schemaVersion !== 1 || row.generation !== '1' ||
+			!this.uuid(row.workspaceId) || !this.uuid(row.closureId) ||
+			!this.subject(row.ownerSubject) || typeof row.requestedAt !== 'string' ||
+			!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(row.requestedAt) ||
+			!Number.isFinite(Date.parse(row.requestedAt))) throw new BadRequestException('Invalid closure envelope');
+		return row as { schemaVersion: 1; workspaceId: string; closureId: string; generation: '1'; ownerSubject: string; requestedAt: string };
+	}
+
+	private uuid(value: unknown): value is string {
+		return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+	}
+
+	private subject(value: unknown): value is string {
+		return typeof value === 'string' && value.length > 0 && value.length <= 256 &&
+			/^[^\s\x00-\x1f\x7f\uD800-\uDFFF\uFFFD]+$/u.test(value);
+	}
+
 	@Post('operations/audit-snapshots')
 	@HttpCode(200)
 	@InternalServices('operations')

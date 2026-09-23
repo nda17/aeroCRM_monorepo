@@ -15,6 +15,7 @@ import { AuthenticatedApiError } from '@/shared/api/authenticated-http-client'
 import {
 	AppIcon,
 	Button,
+	HelpHint,
 	PageHeader,
 	ScreenState,
 	SelectField,
@@ -260,7 +261,15 @@ const AnalyticsScreen = () => {
 		<div className={styles.screen}>
 			<PageHeader
 				title="Аналитика"
-				description="Результаты сделок и задачи, требующие внимания."
+				description={
+					<>
+						Результаты сделок и задачи, требующие внимания.{' '}
+						<HelpHint
+							label="Аналитика"
+							description="Показатели считаются по доступным вам сделкам. Фильтр дат относится к созданию сделок; область данных зависит от вашей роли."
+						/>
+					</>
+				}
 				actions={
 					<Button
 						variant="secondary"
@@ -292,6 +301,12 @@ const AnalyticsScreen = () => {
 					</SelectField>
 					<SelectField
 						label="Создание сделок"
+						hint={
+							<HelpHint
+								label="Период аналитики"
+								description="Фильтр выбирает сделки по дате создания. Показатели их текущего состояния и оплаты могут измениться позже."
+							/>
+						}
 						value={preset}
 						onChange={event => changePreset(event.target.value)}
 					>

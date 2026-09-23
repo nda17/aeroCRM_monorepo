@@ -75,6 +75,8 @@ const command = {
 describe('IntakeService', () => {
 	const setup = () => {
 		const tx = {
+			$queryRaw: jest.fn().mockResolvedValue([]),
+			workspaceClosureFence: { findUnique: jest.fn().mockResolvedValue(null) },
 			acceptance: { findFirst: jest.fn().mockResolvedValue(null) },
 			$executeRaw: jest.fn(),
 			inboxEntry: {

@@ -6,6 +6,7 @@ import {
 	Button,
 	DataTable,
 	Drawer,
+	HelpHint,
 	ScreenState,
 	StatusBadge,
 	type DataTableColumn
@@ -106,6 +107,7 @@ export const SourcesPanel = ({ access }: { access: IntakeAccess }) => {
 						<Button
 							size="sm"
 							variant="secondary"
+							tooltip="Открыть настройки передачи заявок из форм Tilda для этого источника"
 							onClick={() => {
 								setTildaSourceId(item.id)
 								toast('Открыта настройка Tilda для источника')
@@ -116,6 +118,7 @@ export const SourcesPanel = ({ access }: { access: IntakeAccess }) => {
 						<Button
 							size="sm"
 							variant="secondary"
+							tooltip="Выпустить новый ключ. Прежний ключ перестанет принимать новые заявки; история обращений сохранится."
 							disabled={!access.canManageSources || query.isFetching}
 							onClick={() =>
 								setSelected({ operation: 'rotate', source: item })
@@ -126,6 +129,7 @@ export const SourcesPanel = ({ access }: { access: IntakeAccess }) => {
 						<Button
 							size="sm"
 							variant="danger"
+							tooltip="Остановить приём новых заявок через этот источник. Уже полученные обращения сохранятся."
 							disabled={!access.canManageSources || query.isFetching}
 							onClick={() =>
 								setSelected({ operation: 'revoke', source: item })
@@ -142,6 +146,10 @@ export const SourcesPanel = ({ access }: { access: IntakeAccess }) => {
 			<div className={styles.header}>
 				<div>
 					<h2 className={styles.title}>API-источники и формы</h2>
+					<HelpHint
+						label="Источники обращений"
+						description="Источник выдаёт отдельный ключ для приёма заявок из Tilda, сайта или API. Замена ключа отключит прежний ключ; уже принятые обращения останутся в истории."
+					/>
 					<p className={styles.description}>
 						Подключайте формы Tilda, серверные формы и внешние системы.
 						Секретные ключи никогда не показываются в списке.

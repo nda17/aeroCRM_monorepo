@@ -115,6 +115,7 @@ const operation = (changes: Record<string, unknown> = {}) => ({
 function fixture(current = operation()) {
 	const tx = {
 		$executeRaw: jest.fn().mockResolvedValue(1),
+		$queryRaw: jest.fn().mockResolvedValue([]),
 		crmProviderOperation: {
 			findUnique: jest.fn().mockResolvedValue(current),
 			findUniqueOrThrow: jest.fn().mockResolvedValue(current),
@@ -164,6 +165,7 @@ function fixture(current = operation()) {
 				paymentMethodCiphertext: 'v1:immutable:cipher:text'
 			})
 		},
+		workspaceClosureFence: { findUnique: jest.fn().mockResolvedValue(null) },
 		billingCommandReceipt: {
 			findUnique: jest.fn().mockResolvedValue(null),
 			create: jest.fn().mockResolvedValue({})

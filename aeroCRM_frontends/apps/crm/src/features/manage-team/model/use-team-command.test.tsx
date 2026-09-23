@@ -16,7 +16,11 @@ import type { useTeamSession } from './use-team-session'
 vi.mock('@/entities/crm-access', () => ({ getCrmPermissions: vi.fn() }))
 vi.mock('@/entities/crm-team', () => ({ mutateTeam: vi.fn() }))
 vi.mock('react-hot-toast', () => ({
-	default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() })
+	default: Object.assign(vi.fn(), {
+		success: vi.fn(),
+		error: vi.fn(),
+		dismiss: vi.fn()
+	})
 }))
 let queryClient: QueryClient
 const TestProvider = ({ children }: PropsWithChildren) => {

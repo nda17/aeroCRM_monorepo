@@ -139,6 +139,7 @@ export class CrmEntitlementService {
 								hashtextextended(${`billing-crm-entitlement:${dto.workspaceId}`}, 0)
 							)
 						`);
+						await transaction.$executeRaw`SELECT billing.assert_workspace_open(${dto.workspaceId}::uuid)`;
 						const existing = await transaction.crmEntitlement.findUnique({
 							where: { workspaceId: dto.workspaceId }
 						});

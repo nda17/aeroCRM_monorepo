@@ -43,7 +43,11 @@ vi.mock('../api/crm-notifications.api', () => ({
 	readCrmNotification: vi.fn()
 }))
 vi.mock('react-hot-toast', () => ({
-	default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() })
+	default: Object.assign(vi.fn(), {
+		success: vi.fn(),
+		error: vi.fn(),
+		dismiss: vi.fn()
+	})
 }))
 vi.mock('@/shared/ui', async original => ({
 	...(await original<object>()),

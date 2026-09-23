@@ -57,6 +57,12 @@ export class TaskSeriesGenerationService {
 		});
 		for (const row of rows) {
 			if (!stillOwned()) throw new Error('SERIES_JOB_LEASE_LOST');
+			if (
+				(await this.prisma.workspaceClosureFence.findUnique({
+					where: { workspaceId: row.workspaceId }
+				}))?.fencedAt
+			)
+				continue;
 			await this.generate(
 				row,
 				{ jobId: job.id, token: leaseToken },
@@ -92,6 +98,12 @@ export class TaskSeriesGenerationService {
 		stillOwned: () => boolean,
 		now = new Date()
 	) {
+		if (
+			(await this.prisma.workspaceClosureFence.findUnique({
+				where: { workspaceId: row.workspaceId }
+			}))?.fencedAt
+		)
+			return;
 		const occurrence = currentRecurrence(
 			seriesSchedule(row),
 			row.nextIndex,

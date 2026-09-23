@@ -1,3 +1,10 @@
+import { APP_FILTER } from '@nestjs/core';
+import {
+	WorkspaceClosureController,
+	WorkspaceClosureErrorFilter,
+	WorkspaceClosureService,
+	WorkspaceClosureInternalGuard
+} from './workspace-closure/workspace-closure.controller';
 import { InboxNotificationsController } from './notifications/inbox-notifications.controller';
 import { InboxNotificationsService } from './notifications/inbox-notifications.service';
 import { LiveChangesService } from './live/live-changes.service';
@@ -59,6 +66,7 @@ const slaPublisher = sla && role === 'sla-publisher';
 	imports: [config, CrmIntakePrismaModule],
 	controllers: [
 		CrmIntakeHealthController,
+		...(api ? [WorkspaceClosureController] : []),
 		...(api && sla ? [SlaController, SlaDeliveryController] : []),
 		...(api
 			? [
@@ -74,6 +82,13 @@ const slaPublisher = sla && role === 'sla-publisher';
 	],
 	providers: [
 		CrmIntakeHealthService,
+		...(api
+			? [
+					WorkspaceClosureService,
+					WorkspaceClosureInternalGuard,
+					{ provide: APP_FILTER, useClass: WorkspaceClosureErrorFilter }
+				]
+			: []),
 		...(sla && (api || slaWorker || slaPublisher)
 			? [SlaAuthorityClient, SlaRecipientsClient, SlaReadinessService]
 			: []),
@@ -82,9 +97,7 @@ const slaPublisher = sla && role === 'sla-publisher';
 		...(slaWorker || slaPublisher ? [SlaRabbit] : []),
 		...(slaWorker ? [SlaProcessor, SlaWorker] : []),
 		...(slaPublisher ? [SlaPublisher] : []),
-		...(api || worker
-			? [IntakeAuthorizationClient]
-			: []),
+		...(api || worker ? [IntakeAuthorizationClient] : []),
 		...(api
 			? [
 					IntakeService,
@@ -97,6 +110,7 @@ const slaPublisher = sla && role === 'sla-publisher';
 					AcceptanceService
 				]
 			: []),
+		...(api ? [AcceptanceOperationsClient] : []),
 		...(worker || publisher ? [AcceptanceRabbit] : []),
 		...(worker
 			? [AcceptanceOperationsClient, AcceptanceProcessor, AcceptanceWorker]

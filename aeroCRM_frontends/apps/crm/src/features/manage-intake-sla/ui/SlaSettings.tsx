@@ -23,6 +23,7 @@ import {
 } from '@/shared/lib/pending-command'
 import {
 	Button,
+	HelpHint,
 	ReadOnlyBanner,
 	ScreenState,
 	StatusBadge,
@@ -164,71 +165,109 @@ const SlaForm = ({
 				Включить правило SLA
 			</label>
 			<div className={styles.fields}>
-				<TextField
-					label="Время на принятие в работу, рабочих минут"
-					type="number"
-					min={1}
-					max={1440}
-					step={1}
-					value={config.workingMinutes}
+				<div className={styles.fieldWithHelp}>
+					<TextField
+						label="Время на принятие в работу, рабочих минут"
+						type="number"
+						min={1}
+						max={1440}
+						step={1}
+						value={config.workingMinutes}
+						disabled={disabled}
+						onChange={event =>
+							set('workingMinutes', Number(event.target.value))
+						}
+					/>
+					<HelpHint
+						label="Рабочие минуты"
+						description="Считается только время внутри выбранных рабочих дней и часов. Вне графика отсчёт ждёт следующего рабочего периода."
+					/>
+				</div>
+				<div className={styles.fieldWithHelp}>
+					<TimeZoneSelect
+						value={config.timeZone}
+						disabled={disabled}
+						onChange={value => set('timeZone', value)}
+					/>
+					<HelpHint
+						label="Часовой пояс"
+						description="По этому часовому поясу определяются начало и конец рабочих дней для расчёта SLA."
+					/>
+				</div>
+				<div className={styles.fieldWithHelp}>
+					<TextField
+						label="Начало рабочего дня"
+						type="time"
+						value={config.workStart}
+						disabled={disabled}
+						onChange={event => set('workStart', event.target.value)}
+					/>
+					<HelpHint
+						label="Начало рабочего дня"
+						description="Время, с которого рабочие минуты учитываются в выбранные дни."
+					/>
+				</div>
+				<div className={styles.fieldWithHelp}>
+					<TextField
+						label="Конец рабочего дня"
+						type="time"
+						value={config.workEnd}
+						disabled={disabled}
+						onChange={event => set('workEnd', event.target.value)}
+					/>
+					<HelpHint
+						label="Конец рабочего дня"
+						description="После этого времени отсчёт рабочих минут продолжится в следующий рабочий день."
+					/>
+				</div>
+			</div>
+			<div className={styles.fieldsetHelp}>
+				<HelpHint
+					label="Рабочие дни"
+					description="Отметьте дни, в которые течёт срок принятия обращения в работу. В остальные дни рабочие минуты не считаются."
+				/>
+				<fieldset className={styles.checks} disabled={disabled}>
+					<legend>Рабочие дни</legend>
+					{weekdayLabels.map((label, index) => (
+						<label key={label} className={styles.check}>
+							<input
+								type="checkbox"
+								checked={config.weekdays.includes(index + 1)}
+								onChange={event =>
+									set(
+										'weekdays',
+										event.target.checked
+											? [...config.weekdays, index + 1].sort(
+													(a, b) => a - b
+												)
+											: config.weekdays.filter(day => day !== index + 1)
+									)
+								}
+							/>
+							{label}
+						</label>
+					))}
+				</fieldset>
+			</div>
+			<div className={styles.fieldWithHelp}>
+				<AssigneeSelect
+					options={options}
+					value={selected ?? binding}
 					disabled={disabled}
-					onChange={event =>
-						set('workingMinutes', Number(event.target.value))
+					label="Ответственный за SLA"
+					onChange={option =>
+						set('responsibleBinding', {
+							subject: option.subject,
+							membershipId:
+								option.role === 'OWNER' ? null : option.membershipId
+						})
 					}
 				/>
-				<TimeZoneSelect
-					value={config.timeZone}
-					disabled={disabled}
-					onChange={value => set('timeZone', value)}
-				/>
-				<TextField
-					label="Начало рабочего дня"
-					type="time"
-					value={config.workStart}
-					disabled={disabled}
-					onChange={event => set('workStart', event.target.value)}
-				/>
-				<TextField
-					label="Конец рабочего дня"
-					type="time"
-					value={config.workEnd}
-					disabled={disabled}
-					onChange={event => set('workEnd', event.target.value)}
+				<HelpHint
+					label="Ответственный за SLA"
+					description="Выбранный сотрудник получает напоминания по новым обращениям. Без него правило можно включить только с уведомлением руководителей."
 				/>
 			</div>
-			<fieldset className={styles.checks} disabled={disabled}>
-				<legend>Рабочие дни</legend>
-				{weekdayLabels.map((label, index) => (
-					<label key={label} className={styles.check}>
-						<input
-							type="checkbox"
-							checked={config.weekdays.includes(index + 1)}
-							onChange={event =>
-								set(
-									'weekdays',
-									event.target.checked
-										? [...config.weekdays, index + 1].sort((a, b) => a - b)
-										: config.weekdays.filter(day => day !== index + 1)
-								)
-							}
-						/>
-						{label}
-					</label>
-				))}
-			</fieldset>
-			<AssigneeSelect
-				options={options}
-				value={selected ?? binding}
-				disabled={disabled}
-				label="Ответственный за SLA"
-				onChange={option =>
-					set('responsibleBinding', {
-						subject: option.subject,
-						membershipId:
-							option.role === 'OWNER' ? null : option.membershipId
-					})
-				}
-			/>
 			{binding ? (
 				<Button
 					variant="secondary"
@@ -250,26 +289,32 @@ const SlaForm = ({
 				/>
 				Уведомлять руководителей
 			</label>
-			<fieldset className={styles.checks} disabled={disabled}>
-				<legend>Каналы SLA-напоминаний</legend>
-				{(['EMAIL', 'TELEGRAM'] as const).map(channel => (
-					<label key={channel} className={styles.check}>
-						<input
-							type="checkbox"
-							checked={config.channels.includes(channel)}
-							onChange={event =>
-								set(
-									'channels',
-									event.target.checked
-										? [...config.channels, channel]
-										: config.channels.filter(value => value !== channel)
-								)
-							}
-						/>
-						{channel === 'EMAIL' ? 'Email' : 'Telegram'}
-					</label>
-				))}
-			</fieldset>
+			<div className={styles.fieldsetHelp}>
+				<HelpHint
+					label="Каналы SLA-напоминаний"
+					description="Email и Telegram выбираются для получателей правила. Канал сработает, если он настроен у получателя и доставка SLA активирована."
+				/>
+				<fieldset className={styles.checks} disabled={disabled}>
+					<legend>Каналы SLA-напоминаний</legend>
+					{(['EMAIL', 'TELEGRAM'] as const).map(channel => (
+						<label key={channel} className={styles.check}>
+							<input
+								type="checkbox"
+								checked={config.channels.includes(channel)}
+								onChange={event =>
+									set(
+										'channels',
+										event.target.checked
+											? [...config.channels, channel]
+											: config.channels.filter(value => value !== channel)
+									)
+								}
+							/>
+							{channel === 'EMAIL' ? 'Email' : 'Telegram'}
+						</label>
+					))}
+				</fieldset>
+			</div>
 			<p className={styles.notice}>
 				Выбор канала не подключает его автоматически: у получателя должен
 				быть настроен соответствующий канал уведомлений.

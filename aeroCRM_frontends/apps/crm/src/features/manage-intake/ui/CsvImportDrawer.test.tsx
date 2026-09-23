@@ -42,7 +42,11 @@ vi.mock('@/entities/crm-team/api/team.api', async original => ({
 	listTeamOptions: vi.fn()
 }))
 vi.mock('react-hot-toast', () => ({
-	default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() })
+	default: Object.assign(vi.fn(), {
+		success: vi.fn(),
+		error: vi.fn(),
+		dismiss: vi.fn()
+	})
 }))
 const workspaceId = '11111111-1111-4111-8111-111111111111'
 const secondWorkspace = '22222222-2222-4222-8222-222222222222'

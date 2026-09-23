@@ -1,3 +1,9 @@
+import { APP_FILTER } from '@nestjs/core';
+import {
+	WorkspaceClosureController,
+	WorkspaceClosureErrorFilter,
+	WorkspaceClosureService
+} from './workspace-closure/workspace-closure.controller';
 import { LiveChangesService } from './live/live-changes.service';
 import { LiveChangesController } from './live/live-changes.controller';
 import { Module } from '@nestjs/common';
@@ -44,10 +50,7 @@ import { CommerceFinanceService } from './commerce/commerce-finance.service';
 import { CommerceImportService } from './commerce/commerce-import.service';
 
 @Module({
-	imports: [
-		ConfigModule.forRoot({ isGlobal: true }),
-		CrmSalesPrismaModule
-	],
+	imports: [ConfigModule.forRoot({ isGlobal: true }), CrmSalesPrismaModule],
 	controllers: [
 		LiveChangesController,
 		CrmSalesHealthController,
@@ -61,7 +64,8 @@ import { CommerceImportService } from './commerce/commerce-import.service';
 		ReminderDeliveryController,
 		SalesExportController,
 		IntakeOperationController,
-		CommerceController
+		CommerceController,
+		WorkspaceClosureController
 	],
 	providers: [
 		LiveChangesService,
@@ -90,7 +94,9 @@ import { CommerceImportService } from './commerce/commerce-import.service';
 		IntakeOperationService,
 		CommerceService,
 		CommerceFinanceService,
-		CommerceImportService
+		CommerceImportService,
+		WorkspaceClosureService,
+		{ provide: APP_FILTER, useClass: WorkspaceClosureErrorFilter }
 	]
 })
 export class CrmSalesModule {}

@@ -23,19 +23,23 @@
 }
 
 .sidebarBrand {
-	@apply flex min-h-16 min-w-0 shrink-0 flex-col items-start justify-center gap-1 border-b border-crm-border px-4 py-3;
+	@apply flex min-h-16 min-w-0 shrink-0 flex-col items-center justify-center gap-1 border-b border-crm-border px-4 py-3;
 }
 
 .sidebarBrand > a {
-	@apply w-44;
+	@apply w-48 justify-center;
 }
 
 .companyName {
-	@apply block w-full truncate text-sm font-medium text-crm-muted;
+	@apply block w-48 max-w-full break-words text-center text-sm font-medium leading-5 text-crm-muted;
 }
 
 .mobileCompanyName {
-	@apply block w-full truncate text-xs font-medium text-crm-muted lg:hidden;
+	@apply block w-full break-words text-center text-xs font-medium leading-4 text-crm-muted lg:hidden;
+}
+
+.mobileBrandGroup {
+	@apply flex w-28 max-w-full flex-col items-center gap-0.5 lg:hidden;
 }
 
 .sidebarNavigation {
@@ -99,7 +103,11 @@
 }
 
 .sectionContext .mobileBrand {
-	@apply inline-flex py-0.5 lg:hidden;
+	@apply inline-flex w-full justify-center py-0.5 lg:hidden;
+
+	svg {
+		@apply w-full;
+	}
 }
 
 .sectionName {
@@ -160,6 +168,19 @@
 	@apply flex max-w-full basis-full flex-wrap items-center gap-2 border-t border-crm-border pt-3 xl:ml-auto xl:basis-auto xl:border-0 xl:pt-0;
 }
 
+.accountName {
+	@apply max-w-full break-words text-sm font-semibold text-crm-text xl:max-w-56;
+}
+
+.accountLink,
+.siteLink {
+	@apply inline-flex min-h-10 shrink-0 items-center rounded-lg px-2 text-sm font-semibold text-primary hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+}
+
+.siteLink {
+	@apply hidden sm:inline-flex;
+}
+
 .content {
 	@apply flex min-w-0 flex-col gap-4 p-4 outline-none sm:p-5 xl:p-6;
 }
@@ -170,6 +191,14 @@
 
 .mobileNavigation {
 	@apply flex min-h-full flex-col gap-6;
+}
+
+.mobileExternalLinks {
+	@apply flex flex-col gap-2 border-t border-crm-border pt-4;
+
+	a {
+		@apply rounded-lg px-3 py-2 text-sm font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+	}
 }
 
 .mobileCaption {

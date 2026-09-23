@@ -15,7 +15,8 @@
     ],
     "workspaces": [
       "SELECT",
-      "INSERT"
+      "INSERT",
+      "UPDATE"
     ],
     "workspace_members": [
       "SELECT",
@@ -124,6 +125,7 @@
       "UPDATE",
       "DELETE"
     ],
+    "workspace_closure_fences": ["SELECT", "INSERT", "UPDATE"],
     "heartbeats": [
       "SELECT",
       "INSERT",
@@ -153,6 +155,11 @@
     "WebhookReceiptStatus"
   ],
   "routines": [
-    "enforce_service_identity_integrity"
-  ]
+    "enforce_service_identity_integrity",
+    "assert_workspace_open",
+    "guard_workspace_admission",
+    "guard_workspace_reactivation",
+    "enforce_workspace_closure_fence"
+  ],
+  "routineExecute": ["assert_workspace_open(uuid)"]
 }

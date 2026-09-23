@@ -13,6 +13,9 @@
 .actions {
 	@apply flex flex-wrap gap-3;
 }
-.accountLink {
-	@apply self-start text-primary underline underline-offset-4;
+.navigation {
+	@apply mt-5 flex flex-col gap-3 border-t border-crm-border pt-4 text-sm text-crm-muted;
+}
+.navigation a {
+	@apply text-primary underline underline-offset-4;
 }

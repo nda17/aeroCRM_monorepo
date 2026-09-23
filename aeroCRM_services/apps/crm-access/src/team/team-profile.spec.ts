@@ -33,6 +33,7 @@ const setup = (role = 'OWNER', state = 'ACTIVE') => {
 	const receipts = new Map<string, Record<string, unknown>>();
 	const prisma = {
 		$executeRaw: jest.fn(),
+		$queryRaw: jest.fn().mockResolvedValue([]),
 		$transaction: jest.fn(),
 		crmWorkspaceMember: {
 			findUnique: jest.fn().mockImplementation(async ({ where }) => ({

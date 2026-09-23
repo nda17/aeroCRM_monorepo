@@ -303,3 +303,8 @@ broker topology, exact-SHA start, health и открытие Gateway после�
 Не выполнять image-only rollback: helper хранит согласованные snapshots,
 восстанавливает constraints/topology/env только при отсутствии нового evidence
 и оставляет pending marker до безопасного resume. Данные и сообщения не очищаются.
+
+## Workspace closure (WS-01)
+
+The loopback-only `POST /internal/v1/workspace-closures/fence` endpoint accepts only the `crm-access` caller authenticated with `NOTIFICATION_DELIVERY_CRM_ACCESS_TOKEN`. It commits an immutable local fence binding before returning its ACK. Business admission and transport permits write the same workspace fence row, so a stale transaction cannot commit new work after the ACK. The token is a target-specific secret and must not be reused from the reverse service call.
+CRM invitation, task reminder and Intake SLA receipts retain the workspace and the first dispatch permit timestamp. A queued attempt after fencing is terminally skipped; a prior permitted attempt remains visible as an unknown external outcome.

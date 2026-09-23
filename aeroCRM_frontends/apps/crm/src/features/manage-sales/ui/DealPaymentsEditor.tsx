@@ -2,6 +2,7 @@
 
 import {
 	Button,
+	HelpHint,
 	SelectField,
 	StatusBadge,
 	TextareaField,
@@ -201,6 +202,10 @@ export const DealPaymentsEditor = ({
 		>
 			<div className={styles.heading}>
 				<h3 id="deal-payments-title">Оплаты клиента</h3>
+				<HelpHint
+					label="Учёт оплат клиента"
+					description="Записи об оплатах и возвратах по сделке вводятся вручную. Это учёт фактов, а не приём денег через CRM; исправление оставляет прежнюю запись в истории."
+				/>
 				<StatusBadge tone={data.balanceMinor > 0 ? 'info' : 'success'}>
 					{status}
 				</StatusBadge>
@@ -231,6 +236,7 @@ export const DealPaymentsEditor = ({
 			{canWrite && !editing && (
 				<Button
 					variant="secondary"
+					tooltip="Вручную записать поступление или возврат клиента по этой сделке; деньги через CRM не списываются"
 					disabled={locked}
 					onClick={() => setEditing('new')}
 				>
@@ -281,6 +287,7 @@ export const DealPaymentsEditor = ({
 									<Button
 										size="sm"
 										variant="ghost"
+										tooltip="Добавить исправление с сохранением прежней записи в истории"
 										disabled={locked}
 										onClick={() => setEditing(item)}
 									>

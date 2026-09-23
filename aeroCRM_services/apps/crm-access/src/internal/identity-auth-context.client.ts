@@ -1,4 +1,5 @@
 import {
+	ForbiddenException,
 	Injectable,
 	ServiceUnavailableException,
 	UnauthorizedException
@@ -38,6 +39,16 @@ export interface CrmIdentitySourceContext {
 
 export interface CrmIdentityOwnerContext extends CrmIdentitySourceContext {
 	ownerSubject: string | null;
+}
+
+export interface CrmIdentityClosureOwnerContext {
+	schemaVersion: 1;
+	workspaceId: string;
+	closureId: string;
+	subject: string;
+	membershipId: string;
+	ownerSubject: string;
+	workspaceStatus: 'ACTIVE' | 'INACTIVE';
 }
 
 const IDENTITY_TOKEN_PLACEHOLDERS = [
@@ -259,6 +270,34 @@ export class IdentityAuthContextClient {
 			throw new ServiceUnavailableException(
 				'CRM owner identity is unavailable'
 			);
+		}
+	}
+
+	async closureOwnerContext(workspaceId: string, closureId: string, subject: string,
+		correlationId: string): Promise<CrmIdentityClosureOwnerContext> {
+		try {
+			const response = await fetch(`${this.baseUrl}/internal/v1/crm-access/closure-owner-context`, {
+				method: 'POST', redirect: 'error', cache: 'no-store',
+				headers: { 'x-aerocrm-service': 'crm-access', 'x-aerocrm-internal-token': this.token,
+					'x-correlation-id': correlationId, 'content-type': 'application/json', accept: 'application/json' },
+				body: JSON.stringify({ schemaVersion: 1, workspaceId, closureId, subject }),
+				signal: AbortSignal.timeout(this.timeoutMs)
+			});
+			if (response.status === 403) {
+				await response.body?.cancel();
+				throw new ForbiddenException('Closure owner authority was revoked');
+			}
+			if (response.status !== 200 || response.redirected) throw new Error('CLOSURE_OWNER_RESPONSE');
+			const value = await readBoundedJson(response);
+			if (!isRecord(value) || !hasExactKeys(value, ['schemaVersion','workspaceId','closureId','subject',
+				'membershipId','ownerSubject','workspaceStatus']) || value.schemaVersion !== 1 ||
+				value.workspaceId !== workspaceId || value.closureId !== closureId ||
+				value.subject !== subject || value.ownerSubject !== subject || !isUuidV4(value.membershipId) ||
+				!['ACTIVE','INACTIVE'].includes(String(value.workspaceStatus))) throw new Error('CLOSURE_OWNER_CONTRACT');
+			return value as unknown as CrmIdentityClosureOwnerContext;
+		} catch (error) {
+			if (error instanceof ForbiddenException) throw error;
+			throw new ServiceUnavailableException('Closure owner identity is unavailable');
 		}
 	}
 

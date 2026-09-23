@@ -47,7 +47,11 @@ vi.mock('@/entities/crm-team/api/team.api', async original => ({
 	listTeamOptions: vi.fn()
 }))
 vi.mock('react-hot-toast', () => ({
-	default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() })
+	default: Object.assign(vi.fn(), {
+		success: vi.fn(),
+		error: vi.fn(),
+		dismiss: vi.fn()
+	})
 }))
 const workspaceId = '11111111-1111-4111-8111-111111111111'
 const entry: InboxEntry = {
@@ -343,6 +347,20 @@ describe('InboxEditor real command states', () => {
 		expect(
 			screen.getByRole('textbox', { name: 'Тема обращения' })
 		).toHaveProperty('readOnly', true)
+		const dialog = screen.getByRole('dialog')
+		for (let attempt = 0; attempt < 2; attempt++) {
+			fireEvent.click(
+				screen.getByRole('button', { name: 'Закрыть панель' })
+			)
+			dialog.dispatchEvent(new Event('cancel', { cancelable: true }))
+			fireEvent.click(dialog)
+		}
+		expect(onClose).not.toHaveBeenCalled()
+		expect(mutateInbox).toHaveBeenCalledOnce()
+		expect(toast).not.toHaveBeenCalled()
+		expect(screen.getByRole('status').textContent).toMatch(
+			/Результат запроса пока неизвестен/
+		)
 		fireEvent.click(
 			screen.getByRole('button', { name: 'Повторить тот же запрос' })
 		)

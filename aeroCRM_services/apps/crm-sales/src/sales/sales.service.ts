@@ -784,6 +784,7 @@ export class SalesService {
 							await this.visible(transaction, access, prior.dealId, true);
 							return prior.result;
 						}
+						await transaction.$executeRaw`SELECT crm_sales.assert_workspace_open(${access.workspaceId}::uuid)`;
 						const dealId = await action(transaction);
 						const result = {
 							schemaVersion: 1 as const,
@@ -819,6 +820,10 @@ export class SalesService {
 					}
 				);
 			} catch (error) {
+				if (String(error).includes('crm_workspace_closed'))
+					throw new ForbiddenException({
+						code: 'crm_workspace_closed', message: 'Workspace is closed'
+					});
 				if (
 					attempt === 3 ||
 					!error ||

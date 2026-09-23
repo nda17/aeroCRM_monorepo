@@ -60,6 +60,8 @@ function setup() {
 	let stored = { ...record };
 	const tx = {
 		$executeRaw: jest.fn(),
+		$queryRaw: jest.fn().mockResolvedValue([]),
+		workspaceClosureFence: { findUnique: jest.fn().mockResolvedValue(null) },
 		company: {
 			findFirst: jest
 				.fn()
