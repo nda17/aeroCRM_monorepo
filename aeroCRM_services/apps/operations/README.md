@@ -111,6 +111,9 @@ read-only учётными данными. Worker проверяет dump чер
 и manifest в приватный S3. Манифест миграций backup находится в
 `backup-manifests/database-backup-migrations.json`; ключи проверки подписи —
 в `backup-manifests/database-backup-provenance-public-keys.json`.
+После изменения service-owned миграций обновите inventory штатным генератором
+`node scripts/database-backup-migration-manifests.mjs --write` и проверьте его
+командой с `--check`. Закоммитьте manifest вместе с миграцией до выпуска.
 
 Восстановление баз данных пока не поддерживается для нового PostgreSQL 18
 cluster и S3 backup. `DATABASE_RESTORE_ENABLED` должен оставаться `false`;
