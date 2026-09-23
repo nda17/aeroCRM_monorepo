@@ -29,7 +29,8 @@ export const quantityInput = (input: string) => {
 		throw new Error(
 			'Количество должно быть больше нуля, до трёх знаков после запятой.'
 		)
-	return value
+	const [whole, fraction = ''] = value.split('.')
+	return `${whole}.${fraction.padEnd(3, '0')}`
 }
 
 export const commerceFormError = (error: unknown) =>
