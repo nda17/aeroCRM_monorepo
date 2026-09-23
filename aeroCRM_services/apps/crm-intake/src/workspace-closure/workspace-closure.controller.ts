@@ -340,7 +340,6 @@ export class WorkspaceClosureService {
 		});
 		return {
 			schemaVersion: 1,
-			service: 'crm-intake',
 			closureId: binding.closureId,
 			workspaceId: binding.workspaceId,
 			generation: '1',

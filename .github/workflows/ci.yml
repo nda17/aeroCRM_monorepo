@@ -817,13 +817,18 @@ jobs:
         with:
           node-version: '20'
           cache: pnpm
-          cache-dependency-path: aeroCRM_services/apps/crm-customers/pnpm-lock.yaml
+          cache-dependency-path: |
+            aeroCRM_services/apps/crm-customers/pnpm-lock.yaml
+            aeroCRM_services/apps/identity/pnpm-lock.yaml
       - name: Install closure PostgreSQL test dependency
         working-directory: aeroCRM_services/apps/crm-customers
         run: pnpm install --frozen-lockfile
       - name: Generate and build CRM Customers Prisma client for runtime regression
         working-directory: aeroCRM_services/apps/crm-customers
         run: pnpm prisma:generate && pnpm build
+      - name: Install and build Identity Prisma client for closure transaction regression
+        working-directory: aeroCRM_services/apps/identity
+        run: pnpm install --frozen-lockfile && pnpm prisma:generate && pnpm build
       - name: Apply seven isolated closure migrations and service ACL
         working-directory: aeroCRM_services
         env:

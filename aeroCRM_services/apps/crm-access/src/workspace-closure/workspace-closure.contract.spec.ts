@@ -96,6 +96,7 @@ describe('workspace closure wire contracts', () => {
 		const settled = { ...settling, state: 'SETTLED', remaining: 0 };
 		expect(parseIntakeSettlementAck(settling, binding)).toEqual(settling);
 		expect(parseIntakeSettlementAck(settled, binding)).toEqual(settled);
+		expect(parseIntakeSettlementAck({ ...settled, service: 'crm-intake' }, binding)).toBeNull();
 		expect(parseIntakeSettlementAck({ ...settled, remaining: 1 }, binding)).toBeNull();
 		expect(parseIntakeSettlementAck({ ...settling, remaining: 0 }, binding)).toBeNull();
 		expect(parseIntakeSettlementAck({ ...settling, closureId: commandId }, binding)).toBeNull();

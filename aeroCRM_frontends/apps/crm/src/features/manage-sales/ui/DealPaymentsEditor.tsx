@@ -201,11 +201,14 @@ export const DealPaymentsEditor = ({
 			aria-labelledby="deal-payments-title"
 		>
 			<div className={styles.heading}>
-				<h3 id="deal-payments-title">Оплаты клиента</h3>
-				<HelpHint
-					label="Учёт оплат клиента"
-					description="Записи об оплатах и возвратах по сделке вводятся вручную. Это учёт фактов, а не приём денег через CRM; исправление оставляет прежнюю запись в истории."
-				/>
+				<h3 id="deal-payments-title">
+					<HelpHint
+						label="Учёт оплат клиента"
+						description="Записи об оплатах и возвратах по сделке вводятся вручную. Это учёт фактов, а не приём денег через CRM; исправление оставляет прежнюю запись в истории."
+					>
+						Оплаты клиента
+					</HelpHint>
+				</h3>
 				<StatusBadge tone={data.balanceMinor > 0 ? 'info' : 'success'}>
 					{status}
 				</StatusBadge>

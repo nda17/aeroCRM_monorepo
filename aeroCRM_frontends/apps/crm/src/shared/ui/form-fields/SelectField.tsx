@@ -8,6 +8,7 @@ import { joinDescriptionIds } from './field-a11y'
 
 export interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement> {
 	label: ReactNode
+	labelHelp?: ReactNode
 	hint?: ReactNode
 	error?: ReactNode
 	labelHidden?: boolean
@@ -18,6 +19,7 @@ export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(
 	(
 		{
 			label,
+			labelHelp,
 			hint,
 			error,
 			labelHidden = false,
@@ -44,19 +46,30 @@ export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(
 			errorId
 		)
 
+		const fieldLabel = (
+			<label
+				htmlFor={fieldId}
+				className={clsx(styles.label, labelHidden && styles.labelHidden)}
+			>
+				{label}
+				{required ? (
+					<span className={styles.requiredMark} aria-hidden="true">
+						*
+					</span>
+				) : null}
+			</label>
+		)
+
 		return (
 			<div className={clsx(styles.field, containerClassName)}>
-				<label
-					htmlFor={fieldId}
-					className={clsx(styles.label, labelHidden && styles.labelHidden)}
-				>
-					{label}
-					{required ? (
-						<span className={styles.requiredMark} aria-hidden="true">
-							*
-						</span>
-					) : null}
-				</label>
+				{labelHelp ? (
+					<div className={styles.labelRow}>
+						{fieldLabel}
+						{labelHelp}
+					</div>
+				) : (
+					fieldLabel
+				)}
 				<div className={styles.selectWrapper}>
 					<select
 						ref={ref}

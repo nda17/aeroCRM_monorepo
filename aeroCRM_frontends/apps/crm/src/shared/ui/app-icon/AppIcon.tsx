@@ -11,6 +11,7 @@ export const appIconNames = [
 	'deals',
 	'tasks',
 	'contacts',
+	'user',
 	'analytics',
 	'settings',
 	'moon',
@@ -107,6 +108,12 @@ const iconRegistry: Record<AppIconName, ReactNode> = {
 			<path d="M8 4h8v3H8z" />
 			<path d="M7 5.5H5.5v15h13v-15H17" />
 			<path d="m8.25 13 2 2 5-5" />
+		</>
+	),
+	user: (
+		<>
+			<circle cx="12" cy="8" r="3.5" />
+			<path d="M5 20c.4-4 2.8-6 7-6s6.6 2 7 6" />
 		</>
 	),
 	contacts: (

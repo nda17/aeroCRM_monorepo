@@ -53,3 +53,7 @@
 .error {
 	@apply text-xs font-medium leading-5 text-crm-danger;
 }
+
+.labelRow {
+	@apply flex min-w-0 items-center gap-1.5;
+}

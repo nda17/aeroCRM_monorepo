@@ -312,6 +312,123 @@ async function verifyPrismaCustomersFence(runtimeUrl, fencedWorkspaceId, migrati
 	}
 }
 
+async function verifyPrismaIdentityFence(runtimeUrl, migration, runtimeRole) {
+	const requireIdentity = createRequire(new URL('../apps/identity/prisma/schema.prisma', import.meta.url));
+	requireIdentity('reflect-metadata');
+	const { PrismaClient } = requireIdentity('@prisma/identity-client');
+	const imported = await import(new URL('../apps/identity/dist/src/internal/internal.service.js', import.meta.url));
+	const IdentityInternalService = imported.IdentityInternalService || imported.default?.IdentityInternalService;
+	assert.ok(IdentityInternalService, 'Compiled IdentityInternalService is required for the Prisma closure regression');
+	const runtime = new PrismaClient({ datasources: { db: { url: runtimeUrl } } });
+	try {
+		const privilege = await migration.query(
+			`SELECT has_table_privilege($1, 'identity.workspaces', 'UPDATE') AS can_update`,
+			[runtimeRole]
+		);
+		assert.equal(privilege.rows[0].can_update, true, 'Identity runtime requires UPDATE on identity.workspaces for the closure transaction');
+
+		const workspaceId = randomUUID();
+		const ownerSubject = `closure-owner-${randomUUID()}`;
+		const closureId = randomUUID();
+		const requestedAt = new Date().toISOString();
+		await migration.query(
+			`INSERT INTO identity.users(id, name, password, updated_at) VALUES ($1, 'Closure Owner', 'integration-only-hash', now())`,
+			[ownerSubject]
+		);
+		await migration.query(
+			`INSERT INTO identity.workspaces(id, type, status, personal_owner_user_id, updated_at) VALUES ($1, 'ORGANIZATION', 'ACTIVE', NULL, now())`,
+			[workspaceId]
+		);
+		await migration.query(
+			`INSERT INTO identity.workspace_members(id, workspace_id, user_id, role, status, created_at, updated_at) VALUES ($1, $2, $3, 'OWNER', 'ACTIVE', now(), now())`,
+			[randomUUID(), workspaceId, ownerSubject]
+		);
+
+		const service = new IdentityInternalService(runtime, {}, {});
+		const input = { closureId, workspaceId, generation: '1', ownerSubject, requestedAt };
+		try {
+			await migration.query('REVOKE UPDATE ON TABLE identity.workspaces FROM ' + qid(runtimeRole));
+			const revoked = await migration.query(
+				`SELECT has_table_privilege($1, 'identity.workspaces', 'UPDATE') AS can_update`,
+				[runtimeRole]
+			);
+			assert.equal(revoked.rows[0].can_update, false, 'Identity runtime UPDATE privilege must be revoked in the regression fixture');
+			const probe = await connect(runtimeUrl);
+			try {
+				await assert.rejects(
+					probe.query(`UPDATE identity.workspaces SET status='INACTIVE' WHERE id=$1`, [workspaceId]),
+					error => error?.code === '42501'
+				);
+			} finally {
+				await probe.end();
+			}
+			await assert.rejects(service.fenceWorkspace(input));
+			const unchanged = await migration.query(
+				`SELECT w.status, f.fenced_at FROM identity.workspaces w LEFT JOIN identity.workspace_closure_fences f ON f.workspace_id=w.id WHERE w.id=$1`,
+				[workspaceId]
+			);
+			assert.equal(unchanged.rows[0].status, 'ACTIVE', 'Failed Identity closure transaction must leave the workspace active');
+			assert.equal(unchanged.rows[0].fenced_at, null, 'Failed Identity closure transaction must roll back its fence');
+		} finally {
+			// Always restore the fixture's manifest ACL, even when the denied-path assertion fails.
+			await migration.query('GRANT UPDATE ON TABLE identity.workspaces TO ' + qid(runtimeRole));
+		}
+		const restored = await migration.query(
+			`SELECT has_table_privilege($1, 'identity.workspaces', 'UPDATE') AS can_update`,
+			[runtimeRole]
+		);
+		assert.equal(restored.rows[0].can_update, true, 'Identity runtime UPDATE privilege must be restored after the denied-path regression');
+
+		const firstAck = await service.fenceWorkspace(input);
+		assert.deepEqual(firstAck, {
+			schemaVersion: 1,
+			service: 'identity',
+			closureId,
+			workspaceId,
+			generation: '1',
+			state: 'FENCED',
+			fencedAt: firstAck.fencedAt,
+			financialPendingCount: 0,
+			priorDispatchCount: 0
+		});
+		const firstState = await migration.query(
+			`SELECT w.status, f.closure_id, f.generation, f.owner_subject, f.requested_at, f.fenced_at, f.revision
+			 FROM identity.workspaces w JOIN identity.workspace_closure_fences f ON f.workspace_id=w.id
+			 WHERE w.id=$1`, [workspaceId]
+		);
+		assert.equal(firstState.rowCount, 1);
+		assert.equal(firstState.rows[0].status, 'INACTIVE');
+		assert.equal(firstState.rows[0].closure_id, closureId);
+		assert.equal(firstState.rows[0].generation, '1');
+		assert.equal(firstState.rows[0].owner_subject, ownerSubject);
+		assert.equal(firstState.rows[0].requested_at.toISOString(), requestedAt);
+		assert.ok(firstState.rows[0].fenced_at instanceof Date);
+
+		const replay = await service.fenceWorkspace(input);
+		assert.deepEqual(replay, firstAck, 'Exact Identity closure replay must return the persisted ACK');
+		await assert.rejects(
+			service.fenceWorkspace({ ...input, closureId: randomUUID() }),
+			error => error?.status === 409
+		);
+		const replayState = await migration.query(
+			`SELECT w.status, f.closure_id, f.generation, f.owner_subject, f.requested_at, f.fenced_at, f.revision
+			 FROM identity.workspaces w JOIN identity.workspace_closure_fences f ON f.workspace_id=w.id
+			 WHERE w.id=$1`, [workspaceId]
+		);
+		assert.deepEqual(replayState.rows[0], firstState.rows[0], 'Exact replay must not mutate the durable closure state');
+		await assert.rejects(
+			migration.query(
+				`UPDATE identity.workspace_closure_fences SET revision=revision+1, closure_id=$2 WHERE workspace_id=$1`,
+				[workspaceId, randomUUID()]
+			),
+			error => immutableFenceError(error)
+		);
+		console.log('PASS IDENTITY Prisma runtime workspace closure fence, exact replay, and immutability');
+	} finally {
+		await runtime.$disconnect();
+	}
+}
+
 async function raceFencing(service, runtimeUrl, migration, connections) {
 	const rtA = await connect(runtimeUrl);
 	const rtB = await connect(runtimeUrl);
@@ -374,6 +491,8 @@ async function main() {
 				assert.ok(roleName, `Missing ${service.prefix}_TEST_RUNTIME_ROLE`);
 				assert.equal(target.runtime.user, roleName);
 				await catalogCheck(service, runtime, migration, roleName);
+				if (service.prefix === 'IDENTITY')
+					await verifyPrismaIdentityFence(target.runtime.value, migration, roleName);
 				await verifyFencedMutation(service, runtime, migration);
 				await raceFencing(service, target.runtime.value, migration, connections);
 				console.log(`PASS ${service.prefix} PostgreSQL 18 closure ACL, inventory, fence, and race checks`);

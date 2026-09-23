@@ -145,11 +145,14 @@ export const SourcesPanel = ({ access }: { access: IntakeAccess }) => {
 		<div className={styles.panel}>
 			<div className={styles.header}>
 				<div>
-					<h2 className={styles.title}>API-источники и формы</h2>
-					<HelpHint
-						label="Источники обращений"
-						description="Источник выдаёт отдельный ключ для приёма заявок из Tilda, сайта или API. Замена ключа отключит прежний ключ; уже принятые обращения останутся в истории."
-					/>
+					<h2 className={styles.title}>
+						<HelpHint
+							label="Источники обращений"
+							description="Источник выдаёт отдельный ключ для приёма заявок из Tilda, сайта или API. Замена ключа отключит прежний ключ; уже принятые обращения останутся в истории."
+						>
+							API-источники и формы
+						</HelpHint>
+					</h2>
 					<p className={styles.description}>
 						Подключайте формы Tilda, серверные формы и внешние системы.
 						Секретные ключи никогда не показываются в списке.

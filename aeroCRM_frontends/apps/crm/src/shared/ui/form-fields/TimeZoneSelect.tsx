@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useSyncExternalStore } from 'react'
+import { useMemo, useSyncExternalStore, type ReactNode } from 'react'
 import {
 	browserWorkdayTimeZones,
 	isIanaTimeZone,
@@ -13,11 +13,13 @@ export const TimeZoneSelect = ({
 	value,
 	onChange,
 	disabled,
+	labelHelp,
 	hint = 'Сроки рассчитываются по выбранному часовому поясу.'
 }: {
 	value: string
 	onChange: (value: string) => void
 	disabled?: boolean
+	labelHelp?: ReactNode
 	hint?: string
 }) => {
 	const hydrated = useSyncExternalStore(
@@ -36,6 +38,7 @@ export const TimeZoneSelect = ({
 	return (
 		<SelectField
 			label="Часовой пояс"
+			labelHelp={labelHelp}
 			value={value}
 			disabled={disabled}
 			hint={hint}

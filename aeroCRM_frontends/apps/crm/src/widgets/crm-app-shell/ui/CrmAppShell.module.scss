@@ -165,14 +165,33 @@
 }
 
 .accessContext {
-	@apply flex max-w-full basis-full flex-wrap items-center gap-2 border-t border-crm-border pt-3 xl:ml-auto xl:basis-auto xl:border-0 xl:pt-0;
+	@apply flex max-w-full basis-full items-center justify-between gap-3 border-t border-crm-border pt-3 xl:ml-auto xl:basis-auto xl:border-0 xl:pt-0;
+}
+
+.accessBadges {
+	@apply flex shrink-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2;
+}
+
+.accountCard {
+	@apply flex min-w-0 max-w-[55%] items-center gap-2 rounded-xl p-1 text-crm-text hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:max-w-64;
+}
+
+.accountAvatar {
+	@apply flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-crm-border bg-crm-surface-muted text-crm-muted;
+}
+
+.accountDetails {
+	@apply flex min-w-0 flex-col text-left;
 }
 
 .accountName {
-	@apply max-w-full break-words text-sm font-semibold text-crm-text xl:max-w-56;
+	@apply block truncate text-sm font-semibold leading-5 text-crm-text;
 }
 
-.accountLink,
+.accountEmail {
+	@apply block truncate text-xs leading-4 text-crm-muted;
+}
+
 .siteLink {
 	@apply inline-flex min-h-10 shrink-0 items-center rounded-lg px-2 text-sm font-semibold text-primary hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
 }

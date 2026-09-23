@@ -126,10 +126,6 @@ const CrmMobileNavigation = ({
 	)
 }
 
-const CrmProductSwitch = () => (
-	<span className={styles.productSwitchName}>aeroCRM</span>
-)
-
 const CrmAppShell = ({ children }: PropsWithChildren) => {
 	const pathname = usePathname()
 	const access = useCrmWorkspaceAccess()
@@ -202,10 +198,12 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 				.filter(Boolean)
 				.join(' ')
 		: ''
+	const accountEmail = !account.isError ? account.data?.email?.trim() : ''
 	const accountName =
 		profileName ||
-		(!account.isError ? account.data?.email?.trim() : '') ||
-		'Текущий аккаунт'
+		(!account.isError ? account.data?.name?.trim() : '') ||
+		accountEmail ||
+		'Личный кабинет'
 	const { mainAppOrigin } = getRuntimeConfig()
 	const sidebarId = useId()
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
@@ -321,24 +319,21 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 								</span>
 							) : null}
 						</div>
-						<span className={styles.productName}>aeroCRM</span>
-						<span className={styles.sectionName}>{section}</span>
+						<span className={styles.sectionName}>
+							{sectionItem ? (
+								<HelpHint
+									label={section}
+									description={sectionItem.description}
+								>
+									{section}
+								</HelpHint>
+							) : (
+								section
+							)}
+						</span>
 					</div>
-					{sectionItem ? (
-						<HelpHint
-							label={section}
-							description={sectionItem.description}
-						/>
-					) : null}
-					<CrmProductSwitch />
 					<ThemeSwitcher />
 					<TaskNotificationCenter />
-					<a
-						className={styles.accountLink}
-						href={`${mainAppOrigin}/cabinet`}
-					>
-						Личный кабинет
-					</a>
 					<a className={styles.siteLink} href={mainAppOrigin}>
 						На сайт aeroCRM
 					</a>
@@ -350,30 +345,54 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 						className={styles.accessContext}
 						aria-label="Доступ к рабочему пространству"
 					>
-						<StatusBadge
-							tone={
-								access.state === 'ACTIVE'
-									? 'success'
-									: access.state === 'GRACE'
-										? 'warning'
-										: 'neutral'
-							}
+						<div className={styles.accessBadges}>
+							<StatusBadge
+								tone={
+									access.state === 'ACTIVE'
+										? 'success'
+										: access.state === 'GRACE'
+											? 'warning'
+											: 'neutral'
+								}
+							>
+								{accessLabel}
+							</StatusBadge>
+							<StatusBadge tone="neutral" showDot={false}>
+								<span className={styles.membershipFull}>
+									{membershipLabel}
+								</span>
+								<span
+									className={styles.membershipShort}
+									aria-hidden="true"
+								>
+									{access.membership.role === 'OWNER'
+										? 'Владелец'
+										: 'Участник'}
+								</span>
+							</StatusBadge>
+						</div>
+						<a
+							className={styles.accountCard}
+							href={`${mainAppOrigin}/cabinet`}
+							aria-label={`Личный кабинет — ${accountName}`}
 						>
-							{accessLabel}
-						</StatusBadge>
-						<StatusBadge tone="neutral" showDot={false}>
-							<span className={styles.membershipFull}>
-								{membershipLabel}
+							<span className={styles.accountAvatar} aria-hidden="true">
+								<AppIcon name="user" size={24} />
 							</span>
-							<span className={styles.membershipShort} aria-hidden="true">
-								{access.membership.role === 'OWNER'
-									? 'Владелец'
-									: 'Участник'}
+							<span className={styles.accountDetails}>
+								<span className={styles.accountName} title={accountName}>
+									{accountName}
+								</span>
+								{accountEmail && accountEmail !== accountName ? (
+									<span
+										className={styles.accountEmail}
+										title={accountEmail}
+									>
+										{accountEmail}
+									</span>
+								) : null}
 							</span>
-						</StatusBadge>
-						<span className={styles.accountName} title={accountName}>
-							{accountName}
-						</span>
+						</a>
 					</div>
 				</header>
 

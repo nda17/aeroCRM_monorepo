@@ -29,6 +29,14 @@ const acknowledgement = {
 	financialPendingCount: 0,
 	priorDispatchCount: 0
 };
+const settlementAcknowledgement = {
+	schemaVersion: 1,
+	closureId,
+	workspaceId,
+	generation: '1',
+	state: 'SETTLED',
+	remaining: 0
+};
 const settlement = {
 	...binding,
 	customersFencedAt: acknowledgement.fencedAt,
@@ -74,17 +82,17 @@ describe('CRM Intake workspace closure HTTP contract', () => {
 
 	beforeEach(() => {
 		fence.mockReset().mockResolvedValue(acknowledgement);
-		settle.mockReset().mockResolvedValue(acknowledgement);
+		settle.mockReset().mockResolvedValue(settlementAcknowledgement);
 	});
 
 	it.each([
-		['fence', binding, fence],
-		['settle', settlement, settle]
-	] as const)('serves internal %s at the unprefixed path with a 200 no-store ACK', async (path, body, service) => {
+		['fence', binding, fence, acknowledgement],
+		['settle', settlement, settle, settlementAcknowledgement]
+	] as const)('serves internal %s at the unprefixed path with a 200 no-store ACK', async (path, body, service, expected) => {
 		const response = await post(path, body);
 		expect(response.status).toBe(200);
 		expect(response.headers.get('cache-control')).toBe('no-store');
-		expect(await response.json()).toEqual(acknowledgement);
+		expect(await response.json()).toEqual(expected);
 		expect(service).toHaveBeenCalledWith(body);
 	});
 });

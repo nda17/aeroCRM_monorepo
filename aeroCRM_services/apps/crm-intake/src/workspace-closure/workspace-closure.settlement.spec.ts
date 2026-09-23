@@ -110,13 +110,28 @@ function setup() {
 describe('CRM Intake workspace closure settlement proofs', () => {
 	it('completes only a matching exact committed contact and sales proof after fencing', async () => {
 		const c = setup();
-		await expect(
-			c.service.settle({
-				...binding,
-				customersFencedAt: closedAt.toISOString(),
-				salesFencedAt: closedAt.toISOString()
-			} as unknown as ClosureEnvelope)
-		).resolves.toMatchObject({ state: 'SETTLED', remaining: 0 });
+		const result = await c.service.settle({
+			...binding,
+			customersFencedAt: closedAt.toISOString(),
+			salesFencedAt: closedAt.toISOString()
+		} as unknown as ClosureEnvelope);
+		expect(result).toMatchObject({ state: 'SETTLED', remaining: 0 });
+		expect(result).toEqual({
+			schemaVersion: 1,
+			closureId,
+			workspaceId,
+			generation: '1',
+			state: 'SETTLED',
+			remaining: 0
+		});
+		expect(Object.keys(result).sort()).toEqual([
+			'closureId',
+			'generation',
+			'remaining',
+			'schemaVersion',
+			'state',
+			'workspaceId'
+		]);
 		expect(c.operations.request.mock.calls.map(call => `${call[0]}:${call[1]}`)).toEqual([
 			'sales:read',
 			'customers:read'
@@ -134,6 +149,34 @@ describe('CRM Intake workspace closure settlement proofs', () => {
 		expect(c.tx.inboxEntry.updateMany).toHaveBeenCalledWith(
 			expect.objectContaining({ data: expect.objectContaining({ status: 'ACCEPTED' }) })
 		);
+	});
+
+	it('returns the exact binding and pending count in a parser-accepted SETTLING ACK', async () => {
+		const c = setup();
+		c.prisma.acceptance.findMany.mockResolvedValue([]);
+		c.prisma.acceptance.count.mockResolvedValue(2);
+		const result = await c.service.settle({
+			...binding,
+			customersFencedAt: closedAt.toISOString(),
+			salesFencedAt: closedAt.toISOString()
+		} as unknown as ClosureEnvelope);
+
+		expect(result).toEqual({
+			schemaVersion: 1,
+			closureId,
+			workspaceId,
+			generation: '1',
+			state: 'SETTLING',
+			remaining: 2
+		});
+		expect(Object.keys(result).sort()).toEqual([
+			'closureId',
+			'generation',
+			'remaining',
+			'schemaVersion',
+			'state',
+			'workspaceId'
+		]);
 	});
 
 	it('does not terminalize when a committed Sales proof names a different existing contact', async () => {

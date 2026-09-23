@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
-import type { HTMLAttributes } from 'react'
+import type { HTMLAttributes, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import styles from './Tooltip.module.scss'
 
@@ -219,14 +219,19 @@ export const useTooltip = <T extends HTMLElement>(
 
 export const HelpHint = ({
 	label,
-	description
+	description,
+	children
 }: {
 	label: string
 	description: string
+	children?: ReactNode
 }) => {
 	const hint = useTooltip<HTMLButtonElement>(description)
 	return (
-		<>
+		<span className={styles.helpWithText}>
+			{children ? (
+				<span className={styles.helpText}>{children}</span>
+			) : null}
 			<button
 				{...hint.triggerProps}
 				type="button"
@@ -234,9 +239,11 @@ export const HelpHint = ({
 				aria-label={`Пояснение: ${label}`}
 				onClick={event => hint.open(event.currentTarget)}
 			>
-				?
+				<span className={styles.helpGlyph} aria-hidden="true">
+					?
+				</span>
 			</button>
 			{hint.tooltip}
-		</>
+		</span>
 	)
 }

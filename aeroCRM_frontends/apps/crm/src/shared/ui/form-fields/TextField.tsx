@@ -10,6 +10,7 @@ export interface TextFieldProps extends Omit<
 	'size'
 > {
 	label: ReactNode
+	labelHelp?: ReactNode
 	hint?: ReactNode
 	error?: ReactNode
 	labelHidden?: boolean
@@ -20,6 +21,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
 	(
 		{
 			label,
+			labelHelp,
 			hint,
 			error,
 			labelHidden = false,
@@ -46,19 +48,30 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
 			errorId
 		)
 
+		const fieldLabel = (
+			<label
+				htmlFor={fieldId}
+				className={clsx(styles.label, labelHidden && styles.labelHidden)}
+			>
+				{label}
+				{required ? (
+					<span className={styles.requiredMark} aria-hidden="true">
+						*
+					</span>
+				) : null}
+			</label>
+		)
+
 		return (
 			<div className={clsx(styles.field, containerClassName)}>
-				<label
-					htmlFor={fieldId}
-					className={clsx(styles.label, labelHidden && styles.labelHidden)}
-				>
-					{label}
-					{required ? (
-						<span className={styles.requiredMark} aria-hidden="true">
-							*
-						</span>
-					) : null}
-				</label>
+				{labelHelp ? (
+					<div className={styles.labelRow}>
+						{fieldLabel}
+						{labelHelp}
+					</div>
+				) : (
+					fieldLabel
+				)}
 				<input
 					ref={ref}
 					id={fieldId}

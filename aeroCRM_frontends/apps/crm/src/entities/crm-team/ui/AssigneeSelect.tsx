@@ -1,5 +1,7 @@
 'use client'
 
+import type { ReactNode } from 'react'
+
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { Button, SelectField, TextField } from '@/shared/ui'
@@ -17,12 +19,14 @@ export interface AssigneeSelectProps {
 	onChange: (option: AssigneeOption) => void
 	disabled?: boolean
 	label?: string
+	labelHelp?: ReactNode
 }
 export const AssigneeSelect = ({
 	options,
 	value,
 	onChange,
 	disabled = false,
+	labelHelp,
 	label = 'Ответственный'
 }: AssigneeSelectProps) => {
 	const [draft, setDraft] = useState({
@@ -80,6 +84,7 @@ export const AssigneeSelect = ({
 			</div>
 			<SelectField
 				label={label}
+				labelHelp={labelHelp}
 				value={
 					selected?.membershipId ?? (value ? 'current-unavailable' : '')
 				}

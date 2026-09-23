@@ -63,6 +63,14 @@ on:
       workspace_closure_migration_env_hash:
         description: SHA-256 of sorted checksums for the seven fixed private migration env files
         required: false
+      workspace_closure_identity_acl_repair:
+        description: Backend target only; repair the reviewed Identity workspace UPDATE grant during a closure-enabled upgrade
+        type: boolean
+        default: false
+        required: true
+      workspace_closure_identity_env_hash:
+        description: SHA-256 of the private Identity migration env file; required only for the Identity ACL repair
+        required: false
       workspace_closure_enable:
         description: Backend target only; enable the closure gate in three CRM Access env files before the same-SHA release
         type: boolean
@@ -123,6 +131,8 @@ jobs:
           INTAKE_NOTIFICATIONS_MIGRATION_HASH: ${{ inputs.crm_intake_notifications_migration_env_hash }}
           CLOSURE_MIGRATION: ${{ inputs.workspace_closure_migration && 'true' || 'false' }}
           CLOSURE_MIGRATION_HASH: ${{ inputs.workspace_closure_migration_env_hash }}
+          IDENTITY_ACL_REPAIR: ${{ inputs.workspace_closure_identity_acl_repair && 'true' || 'false' }}
+          IDENTITY_ENV_HASH: ${{ inputs.workspace_closure_identity_env_hash }}
           CLOSURE_ENABLE: ${{ inputs.workspace_closure_enable && 'true' || 'false' }}
           BACK_BEFORE_HASH: ${{ inputs.backend_env_before_hash }}
           CUTOVER: ${{ inputs.crm_contracts_cutover && 'true' || 'false' }}
@@ -174,6 +184,15 @@ jobs:
           else
             [[ -z "$CLOSURE_MIGRATION_HASH" ]]
           fi
+          if [[ "$IDENTITY_ACL_REPAIR" == true ]]; then
+            [[ "$GITHUB_REF" == refs/heads/prod_0.1.0 && "$TARGET" == backend &&
+              "$CUTOVER" == false && "$BILLING_MIGRATION" == false &&
+              "$CUSTOM_ROLES_MIGRATION" == false && "$SALES_COMMERCE_MIGRATION" == false &&
+              "$INTAKE_NOTIFICATIONS_MIGRATION" == false && "$CLOSURE_MIGRATION" == false &&
+              "$CLOSURE_ENABLE" == false && "$IDENTITY_ENV_HASH" =~ ^[a-f0-9]{64}$ ]]
+          else
+            [[ -z "$IDENTITY_ENV_HASH" ]]
+          fi
           if [[ "$CLOSURE_ENABLE" == true ]]; then
             [[ "$GITHUB_REF" == refs/heads/prod_0.1.0 && "$TARGET" == backend && "$CUTOVER" == false && "$BILLING_MIGRATION" == false &&
               "$CUSTOM_ROLES_MIGRATION" == false && "$SALES_COMMERCE_MIGRATION" == false &&
@@ -216,6 +235,7 @@ jobs:
       - name: Validate reviewed release scripts
         run: |
           bash -n infra/scripts/release.sh
+          bash infra/scripts/release.sh --policy-self-test
           bash -n infra/scripts/aerocrm-nginx-release.sh
           bash -n infra/scripts/ensure-cutover-node.sh
           node --check infra/scripts/billing-capacity-migration.mjs
@@ -267,6 +287,8 @@ jobs:
           INTAKE_NOTIFICATIONS_MIGRATION_HASH: ${{ inputs.crm_intake_notifications_migration_env_hash }}
           CLOSURE_MIGRATION: ${{ inputs.workspace_closure_migration && 'true' || 'false' }}
           CLOSURE_MIGRATION_HASH: ${{ inputs.workspace_closure_migration_env_hash }}
+          IDENTITY_ACL_REPAIR: ${{ inputs.workspace_closure_identity_acl_repair && 'true' || 'false' }}
+          IDENTITY_ENV_HASH: ${{ inputs.workspace_closure_identity_env_hash }}
           CLOSURE_ENABLE: ${{ inputs.workspace_closure_enable && 'true' || 'false' }}
           BACK_BEFORE_HASH: ${{ inputs.backend_env_before_hash }}
           KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
@@ -336,7 +358,7 @@ jobs:
             node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'bash /opt/aerocrm/scripts/ensure-cutover-node.sh --crm-intake-notifications')
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
           fi
-          if [ "$ROLE" = backend ] && [ "$CLOSURE_MIGRATION" = true ]; then
+          if [ "$ROLE" = backend ] && { [ "$CLOSURE_MIGRATION" = true ] || [ "$IDENTITY_ACL_REPAIR" = true ]; }; then
             scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/workspace-closure-migration.mjs "$dest:/opt/aerocrm/scripts/"
           fi
           if [ "$ROLE" = backend ] && [ "$CLOSURE_ENABLE" = true ]; then
@@ -354,7 +376,7 @@ jobs:
             if [ "$RESUME" = true ]; then resume_arg=' --resume'; fi
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && '$node_bin' scripts/crm-contract-cutover.mjs '$SHA' '$STAGED_DIR' '$DEFINITIONS_FILE'$resume_arg"
           elif [ "$ROLE" = backend ]; then
-            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH' '$INTAKE_NOTIFICATIONS_MIGRATION' '$INTAKE_NOTIFICATIONS_MIGRATION_HASH' '$CLOSURE_MIGRATION' '$CLOSURE_MIGRATION_HASH'"
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH' '$INTAKE_NOTIFICATIONS_MIGRATION' '$INTAKE_NOTIFICATIONS_MIGRATION_HASH' '$CLOSURE_MIGRATION' '$CLOSURE_MIGRATION_HASH' '$IDENTITY_ACL_REPAIR' '$IDENTITY_ENV_HASH'"
           else
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash'"
           fi

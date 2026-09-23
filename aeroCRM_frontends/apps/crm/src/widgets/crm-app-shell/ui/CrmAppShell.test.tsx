@@ -32,6 +32,7 @@ const fixture = vi.hoisted(() => ({
 	}
 }))
 const profileRequest = vi.hoisted(() => vi.fn())
+const currentAccountRequest = vi.hoisted(() => vi.fn())
 vi.mock('next/navigation', () => ({
 	usePathname: () => fixture.pathname,
 	useRouter: () => fixture.router,
@@ -70,6 +71,7 @@ vi.mock('@/entities/crm-access', async original => ({
 	})
 }))
 vi.mock('@/entities/session', () => ({
+	getCurrentAccount: currentAccountRequest,
 	useSessionStore: () => ({
 		session: { userId: fixture.userId, accessToken: 'session-token' },
 		sessionRevision: 1
@@ -122,6 +124,7 @@ beforeEach(() => {
 					}
 				: null
 	}))
+	currentAccountRequest.mockResolvedValue({ name: null, email: null })
 	fixture.pathname = '/inbox'
 	fixture.userId = 'owner'
 	fixture.workspaceId = '11111111-1111-4111-8111-111111111111'
@@ -544,9 +547,11 @@ describe('aeroCRM application shell', () => {
 			/CRM_ADMIN|Менеджер|Администратор/
 		)
 	})
-	it('uses the current workspace profile and falls back to the current account when it is empty', async () => {
+	it('uses the current workspace profile and falls back to a neutral account label when empty', async () => {
 		const view = mount()
-		await screen.findByText('Текущий аккаунт')
+		await screen.findByRole('link', {
+			name: 'Личный кабинет — Личный кабинет'
+		})
 		fixture.userId = 'named-user'
 		fixture.workspaceId = '22222222-2222-4222-8222-222222222222'
 		view.rerender(renderShell(<h1>Содержимое раздела</h1>))
@@ -558,10 +563,111 @@ describe('aeroCRM application shell', () => {
 			})
 		)
 		await screen.findByText('Иванова Анна')
+		expect(
+			screen.getByRole('link', { name: 'Личный кабинет — Иванова Анна' })
+		).toBeTruthy()
 		expect(profileRequest).toHaveBeenLastCalledWith('session-token', {
 			workspaceId: '22222222-2222-4222-8222-222222222222',
 			subject: 'named-user',
 			targetSubject: 'named-user'
+		})
+	})
+	it('uses the Identity account name and keeps its email visible without a workspace profile', async () => {
+		currentAccountRequest.mockResolvedValue({
+			name: 'Личный кабинет владельца',
+			email: 'owner@example.com'
+		})
+		profileRequest.mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId: fixture.workspaceId,
+			subject: fixture.userId,
+			targetSubject: fixture.userId,
+			profile: null
+		})
+
+		mount()
+		const accountLink = await screen.findByRole('link', {
+			name: 'Личный кабинет — Личный кабинет владельца'
+		})
+		expect(within(accountLink).getByText('owner@example.com')).toBeTruthy()
+	})
+	it('prefers the workspace profile name over Identity name and email', async () => {
+		currentAccountRequest.mockResolvedValue({
+			name: 'Identity account name',
+			email: 'owner@example.com'
+		})
+		fixture.userId = 'named-user'
+
+		mount()
+		const accountLink = await screen.findByRole('link', {
+			name: 'Личный кабинет — Иванова Анна'
+		})
+		expect(within(accountLink).getByText('owner@example.com')).toBeTruthy()
+		expect(
+			within(accountLink).queryByText('Identity account name')
+		).toBeNull()
+	})
+	it('uses the Identity email when both names are unavailable', async () => {
+		currentAccountRequest.mockResolvedValue({
+			name: null,
+			email: 'owner@example.com'
+		})
+		profileRequest.mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId: fixture.workspaceId,
+			subject: fixture.userId,
+			targetSubject: fixture.userId,
+			profile: null
+		})
+
+		mount()
+		const accountLink = await screen.findByRole('link', {
+			name: 'Личный кабинет — owner@example.com'
+		})
+		expect(within(accountLink).getByText('owner@example.com')).toBeTruthy()
+	})
+	it('does not keep a previous account name after the session user changes', async () => {
+		let resolveNextAccount:
+			| ((account: { name: string; email: string }) => void)
+			| undefined
+		currentAccountRequest.mockImplementation((_token, userId: string) =>
+			userId === 'owner'
+				? Promise.resolve({
+						name: 'Первый владелец',
+						email: 'first@example.com'
+					})
+				: new Promise(resolve => {
+						resolveNextAccount = resolve
+					})
+		)
+		profileRequest.mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId: fixture.workspaceId,
+			subject: fixture.userId,
+			targetSubject: fixture.userId,
+			profile: null
+		})
+
+		const view = mount()
+		await screen.findByRole('link', {
+			name: 'Личный кабинет — Первый владелец'
+		})
+		fixture.userId = 'next-owner'
+		view.rerender(renderShell(<h1>Содержимое раздела</h1>))
+		await waitFor(() =>
+			expect(
+				screen.getByRole('link', {
+					name: 'Личный кабинет — Личный кабинет'
+				})
+			).toBeTruthy()
+		)
+		expect(screen.queryByText('Первый владелец')).toBeNull()
+		resolveNextAccount?.({
+			name: 'Новый владелец',
+			email: 'next@example.com'
+		})
+		await screen.findByRole('link', {
+			name: 'Личный кабинет — Новый владелец'
 		})
 	})
 	it('preserves GRACE status, allowance and backend deadline', () => {

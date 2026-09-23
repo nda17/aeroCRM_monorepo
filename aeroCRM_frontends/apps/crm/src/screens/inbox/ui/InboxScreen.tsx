@@ -211,13 +211,12 @@ const InboxContent = ({
 			<PageHeader
 				title="Входящие"
 				description={
-					<>
-						Новые заявки и история работы с обращениями.{' '}
-						<HelpHint
-							label="Входящие"
-							description="Новое обращение ещё не стало клиентом или сделкой. При принятии CRM связывает его с контактом и создаёт работу; отклонение сохраняет историю обращения."
-						/>
-					</>
+					<HelpHint
+						label="Входящие"
+						description="Новое обращение ещё не стало клиентом или сделкой. При принятии CRM связывает его с контактом и создаёт работу; отклонение сохраняет историю обращения."
+					>
+						Новые заявки и история работы с обращениями.
+					</HelpHint>
 				}
 				actions={
 					<div className={styles.tabs}>
@@ -309,11 +308,14 @@ const InboxContent = ({
 					aria-label="Список входящих обращений"
 				>
 					<div className={styles.panelHeader}>
-						<h2 className={styles.panelTitle}>Обращения</h2>
-						<HelpHint
-							label="Статусы обращений"
-							description="Новое ждёт решения. Принятое связано с клиентом и сделкой; отклонённое остаётся в истории без создания сделки."
-						/>
+						<h2 className={styles.panelTitle}>
+							<HelpHint
+								label="Статусы обращений"
+								description="Новое ждёт решения. Принятое связано с клиентом и сделкой; отклонённое остаётся в истории без создания сделки."
+							>
+								Обращения
+							</HelpHint>
+						</h2>
 						<form className={styles.search} onSubmit={searchSubmit}>
 							<TextField
 								label="Поиск обращений"
