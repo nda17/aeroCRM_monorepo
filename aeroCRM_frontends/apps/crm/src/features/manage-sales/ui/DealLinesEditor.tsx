@@ -60,6 +60,7 @@ const draftLine = (line: DealLineRecord): Draft => ({
 export const DealLinesEditor = ({
 	context,
 	data,
+	confirmedLineVersion,
 	locked,
 	onReplace,
 	onSaveCatalog,
@@ -67,6 +68,7 @@ export const DealLinesEditor = ({
 }: {
 	context: CommerceContext
 	data: DealLinesRecord
+	confirmedLineVersion: number | null
 	locked: boolean
 	onReplace: (input: {
 		expectedVersion: number
@@ -83,6 +85,7 @@ export const DealLinesEditor = ({
 	const [rows, setRows] = useState<Draft[]>(() =>
 		data.items.map(draftLine)
 	)
+	const [baseline, setBaseline] = useState(data)
 	const [manual, setManual] = useState(moneyInput(data.amountMinor))
 	const [error, setError] = useState<string | null>(null)
 	const [search, setSearch] = useState('')
@@ -91,8 +94,20 @@ export const DealLinesEditor = ({
 	const [catalogSave, setCatalogSave] = useState<string | null>(null)
 	const [code, setCode] = useState('')
 	const dirty =
-		JSON.stringify(rows) !== JSON.stringify(data.items.map(draftLine)) ||
-		(rows.length === 0 && manual !== moneyInput(data.amountMinor))
+		JSON.stringify(rows) !==
+			JSON.stringify(baseline.items.map(draftLine)) ||
+		(rows.length === 0 && manual !== moneyInput(baseline.amountMinor))
+	if (
+		baseline.dealVersion !== data.dealVersion &&
+		(!dirty || confirmedLineVersion === data.dealVersion)
+	) {
+		setBaseline(data)
+		setRows(data.items.map(draftLine))
+		setManual(moneyInput(data.amountMinor))
+		setError(null)
+		setCatalogSave(null)
+		setSelected('')
+	}
 	useEffect(() => {
 		onDirtyChange(dirty)
 		return () => onDirtyChange(false)
@@ -148,7 +163,7 @@ export const DealLinesEditor = ({
 				throw new Error('Укажите название и единицу каждой позиции.')
 			setError(null)
 			onReplace({
-				expectedVersion: data.dealVersion,
+				expectedVersion: baseline.dealVersion,
 				lines,
 				...(lines.length === 0
 					? { manualAmountMinor: parseMoneyInput(manual)! }
@@ -285,7 +300,7 @@ export const DealLinesEditor = ({
 			) : (
 				<ol className={styles.stack} aria-label="Состав сделки">
 					{rows.map((row, index) => {
-						const saved = data.items.find(item => item.id === row.id)
+						const saved = baseline.items.find(item => item.id === row.id)
 						const unchanged =
 							saved &&
 							JSON.stringify(draftLine(saved)) === JSON.stringify(row)
@@ -447,8 +462,9 @@ export const DealLinesEditor = ({
 			</div>
 			{dirty && (
 				<p className={styles.notice}>
-					Есть несохранённые изменения состава. Итог будет рассчитан после
-					сохранения.
+					{baseline.dealVersion !== data.dealVersion
+						? 'Сделка изменилась. Сохранение этого черновика потребует обновления данных.'
+						: 'Есть несохранённые изменения состава. Итог будет рассчитан после сохранения.'}
 				</p>
 			)}
 			<p className={styles.muted}>
@@ -466,6 +482,7 @@ export const DealLinesEditor = ({
 							variant="ghost"
 							disabled={locked}
 							onClick={() => {
+								setBaseline(data)
 								setRows(data.items.map(draftLine))
 								setManual(moneyInput(data.amountMinor))
 								setError(null)

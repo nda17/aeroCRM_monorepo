@@ -4,6 +4,7 @@ import {
 	invalidContractError
 } from '@/shared/api/authenticated-http-client'
 import axios from 'axios'
+import { hasExactKeys } from '@/shared/lib/contract'
 import {
 	isCommerceMoney,
 	isCommerceQuantity,
@@ -55,6 +56,12 @@ const isText = (value: unknown, max: number) =>
 	value.trim().length > 0 &&
 	value.trim().length <= max &&
 	!/[\x00-\x1f\x7f]/.test(value)
+const isMultilineText = (value: unknown, max: number) =>
+	typeof value === 'string' &&
+	value.length <= max &&
+	!/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)
+const normalizeMultiline = (value: string) =>
+	value.replace(/\r\n?/g, '\n').trim()
 const validPrice = (value: unknown) =>
 	value === undefined || value === null || isCommerceMoney(value)
 const validKind = (value: unknown): value is CommerceKind =>
@@ -62,16 +69,26 @@ const validKind = (value: unknown): value is CommerceKind =>
 const validMoney = (value: unknown) =>
 	isCommerceMoney(value) && Number(value) <= MAX_MINOR
 const validate: (condition: unknown) => asserts condition = condition => {
+	if (!condition)
+		throw new AuthenticatedApiError(
+			'validation',
+			'Проверьте введённые данные и повторите действие.'
+		)
+}
+const validateResponse: (
+	condition: unknown
+) => asserts condition = condition => {
 	if (!condition) throw invalidContractError()
 }
 
 const boundedServiceMessage = (data: unknown): string | undefined => {
-	if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined
+	if (!data || typeof data !== 'object' || Array.isArray(data))
+		return undefined
 	const raw = (data as Record<string, unknown>).message
 	const candidates = Array.isArray(raw) ? raw.slice(0, 3) : [raw]
 	const messages = candidates.filter(
 		(message): message is string =>
-		typeof message === 'string' &&
+			typeof message === 'string' &&
 			message.trim().length > 0 &&
 			message.length <= 240 &&
 			!/\x00|[\x01-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(message) &&
@@ -907,32 +924,43 @@ export const createDealQuote = async (
 			isUuid(dealId) &&
 			isUuid(command.commandId) &&
 			isText(command.sellerName, 200) &&
-			(command.sellerDetails === undefined || isText(command.sellerDetails, 1000)) &&
-			(command.customerDetails === undefined || isText(command.customerDetails, 1000))
+			(command.sellerDetails === undefined ||
+				isMultilineText(command.sellerDetails, 1000)) &&
+			(command.customerDetails === undefined ||
+				isMultilineText(command.customerDetails, 1000))
 	)
-	const result = parseCommerceQuote(
-		await post(
-			accessToken,
-			workspaceId,
-			command.commandId,
-			`/crm/sales/commerce/deals/${dealId}/quotes`,
-			{
-				sellerName: command.sellerName.trim(),
-				...(command.sellerDetails !== undefined
-					? { sellerDetails: command.sellerDetails.trim() }
-					: {}),
-				...(command.customerDetails !== undefined
-					? { customerDetails: command.customerDetails.trim() }
-					: {})
-			}
-		),
-		dealId
+	const response = await post(
+		accessToken,
+		workspaceId,
+		command.commandId,
+		`/crm/sales/commerce/deals/${dealId}/quotes`,
+		{
+			sellerName: command.sellerName.trim(),
+			...(command.sellerDetails !== undefined
+				? { sellerDetails: normalizeMultiline(command.sellerDetails) }
+				: {}),
+			...(command.customerDetails !== undefined
+				? { customerDetails: normalizeMultiline(command.customerDetails) }
+				: {})
+		}
 	)
+	const result =
+		isRecord(response) &&
+		hasExactKeys(response, ['schemaVersion', 'quote']) &&
+		response.schemaVersion === 1
+			? parseCommerceQuote(response.quote, dealId)
+			: null
 	if (
 		!result ||
 		result.snapshot.sellerName !== command.sellerName.trim() ||
-		result.snapshot.sellerDetails !== (command.sellerDetails?.trim() ?? '') ||
-		result.snapshot.customerDetails !== (command.customerDetails?.trim() ?? '')
+		result.snapshot.sellerDetails !==
+			(command.sellerDetails === undefined
+				? ''
+				: normalizeMultiline(command.sellerDetails)) ||
+		result.snapshot.customerDetails !==
+			(command.customerDetails === undefined
+				? ''
+				: normalizeMultiline(command.customerDetails))
 	)
 		throw invalidContractError()
 	return result
@@ -1155,7 +1183,7 @@ export const downloadCommerceExport = async (
 	})
 	let contents: string
 	if (format === 'json') {
-		validate(
+		validateResponse(
 			isRecord(response) &&
 				Object.keys(response).sort().join(',') ===
 					'catalog,createdAt,deals,lines,payments,schemaVersion,workspaceId' &&
@@ -1172,14 +1200,15 @@ export const downloadCommerceExport = async (
 		)
 		contents = JSON.stringify(response)
 	} else {
-		validate(
+		validateResponse(
 			typeof response === 'string' &&
 				response.startsWith('\uFEFF"kind","dealId"')
 		)
 		contents = response
 	}
-	validate(
-		new TextEncoder().encode(contents).byteLength <= MAX_COMMERCE_EXPORT_BYTES
+	validateResponse(
+		new TextEncoder().encode(contents).byteLength <=
+			MAX_COMMERCE_EXPORT_BYTES
 	)
 	const mimeType =
 		format === 'json'
@@ -1200,7 +1229,9 @@ export const downloadCommerceExport = async (
 }
 
 type ImportFile = { filename: string; contentBase64: string }
-const isValidImportContent = (contentBase64: unknown): contentBase64 is string => {
+const isValidImportContent = (
+	contentBase64: unknown
+): contentBase64 is string => {
 	if (
 		typeof contentBase64 !== 'string' ||
 		contentBase64.length === 0 ||

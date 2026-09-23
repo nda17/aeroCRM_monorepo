@@ -186,10 +186,10 @@ const isCounter = (value: unknown): value is number =>
 	Number(value) >= 0 &&
 	Number(value) <= MAX_MINOR
 const isMinor = (value: unknown): value is number => isCounter(value)
-const isOptionalText = (value: unknown, max: number) =>
+const isMultilineText = (value: unknown, max: number) =>
 	typeof value === 'string' &&
 	value.length <= max &&
-	!/\x00|[\x01-\x1f\x7f]/.test(value)
+	!/[\x00-\x08\x0b-\x1f\x7f]/.test(value)
 const isNullableMinor = (value: unknown): value is number | null =>
 	value === null || isMinor(value)
 const isNullableDate = (value: unknown) =>
@@ -580,9 +580,9 @@ export const parseCommerceQuote = (
 		!isVersion(value.snapshot.dealVersion) ||
 		value.snapshot.dealId !== dealId ||
 		!isNonEmptyString(value.snapshot.sellerName, 200) ||
-		!isOptionalText(value.snapshot.sellerDetails, 1000) ||
+		!isMultilineText(value.snapshot.sellerDetails, 1000) ||
 		!isNonEmptyString(value.snapshot.customerName, 200) ||
-		!isOptionalText(value.snapshot.customerDetails, 1000) ||
+		!isMultilineText(value.snapshot.customerDetails, 1000) ||
 		!isNonEmptyString(value.snapshot.dealTitle, 200) ||
 		value.snapshot.currency !== 'RUB' ||
 		!isMinor(value.snapshot.amountMinor) ||
@@ -662,7 +662,9 @@ export const parseCommerceHistory = (
 				!isUuidV4(item.id) ||
 				!isNonEmptyString(item.kind, 40) ||
 				!(item.dealId === null || isUuidV4(item.dealId)) ||
-				(dealId !== undefined ? item.dealId !== dealId : item.dealId !== null) ||
+				(dealId !== undefined
+					? item.dealId !== dealId
+					: item.dealId !== null) ||
 				!isNonEmptyString(item.actorSubject, 256) ||
 				!isRecord(item.details) ||
 				!isIsoDate(item.createdAt)

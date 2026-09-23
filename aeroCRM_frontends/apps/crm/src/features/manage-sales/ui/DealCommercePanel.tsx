@@ -23,7 +23,11 @@ import {
 import { useSalesAssignees } from '../model/use-sales-assignees'
 import { commerceFormError } from '../model/commerce-form'
 import { CommerceCommandState } from './CommerceCommandState'
-import { DealLinesEditor, type DealLineInput } from './DealLinesEditor'
+import {
+	DealLinesEditor,
+	type DealLineInput,
+	type DealLinesRecord
+} from './DealLinesEditor'
 import {
 	DealPaymentsEditor,
 	type DealPaymentInput
@@ -93,6 +97,9 @@ export const DealCommercePanel = ({
 }) => {
 	const client = useQueryClient()
 	const [revision, setRevision] = useState(0)
+	const [confirmedLineVersion, setConfirmedLineVersion] = useState<
+		number | null
+	>(null)
 	const [sellerName, setSellerName] = useState('')
 	const [sellerDetails, setSellerDetails] = useState('')
 	const [customerDetails, setCustomerDetails] = useState('')
@@ -194,7 +201,20 @@ export const DealCommercePanel = ({
 					})
 			}
 		},
-		() => {
+		result => {
+			if (
+				result &&
+				typeof result === 'object' &&
+				'mode' in result &&
+				'dealVersion' in result
+			) {
+				const saved = result as DealLinesRecord
+				client.setQueryData(
+					['sales', 'commerce-lines', ...context.key, dealId],
+					saved
+				)
+				setConfirmedLineVersion(saved.dealVersion)
+			}
 			setRevision(value => value + 1)
 			setLinesDirty(false)
 			onSaved()
@@ -250,9 +270,9 @@ export const DealCommercePanel = ({
 				/>
 			) : (
 				<DealLinesEditor
-					key={`${lines.data.dealVersion}:${revision}`}
 					context={context}
 					data={lines.data}
+					confirmedLineVersion={confirmedLineVersion}
 					locked={command.locked || lines.isFetching}
 					onDirtyChange={setLinesDirty}
 					onReplace={input =>

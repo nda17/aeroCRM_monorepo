@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
 	parseCommerceCatalogItem,
+	parseCommerceQuote,
 	parseDealCommerce,
 	parseManagedPipelines
 } from './commerce.contract'
@@ -66,6 +67,38 @@ const dealCommerce = {
 	mode: 'LINES',
 	amountMinor: 100,
 	items: [line]
+}
+const quote = {
+	id: '88888888-8888-4888-8888-888888888888',
+	dealId,
+	version: 1,
+	snapshot: {
+		schemaVersion: 1,
+		quoteVersion: 1,
+		dealVersion: 3,
+		dealId,
+		sellerName: 'Исполнитель',
+		sellerDetails: 'ИНН\t123\nАдрес: Москва',
+		customerName: 'Клиент',
+		customerDetails: 'Адрес доставки\nМосква',
+		dealTitle: 'Монтаж',
+		currency: 'RUB',
+		amountMinor: 100,
+		lines: [
+			{
+				id: line.id,
+				kind: line.kind,
+				name: line.name,
+				unit: line.unit,
+				quantity: line.quantity,
+				unitPriceMinor: line.unitPriceMinor,
+				discountMinor: line.discountMinor,
+				totalMinor: line.totalMinor
+			}
+		]
+	},
+	createdBySubject: 'actor',
+	createdAt: date
 }
 
 describe('commerce exact contracts', () => {
@@ -164,6 +197,33 @@ describe('commerce exact contracts', () => {
 
 	it('accepts bound deal lines with validated money and quantity', () => {
 		expect(parseDealCommerce(dealCommerce, dealId)).toEqual(dealCommerce)
+	})
+	it('accepts bounded multiline quote details and rejects unsupported controls', () => {
+		expect(parseCommerceQuote(quote, dealId)?.snapshot).toMatchObject({
+			sellerDetails: 'ИНН\t123\nАдрес: Москва',
+			customerDetails: 'Адрес доставки\nМосква'
+		})
+		expect(
+			parseCommerceQuote(
+				{
+					...quote,
+					snapshot: { ...quote.snapshot, sellerDetails: `bad\u0001text` }
+				},
+				dealId
+			)
+		).toBeNull()
+		expect(
+			parseCommerceQuote(
+				{
+					...quote,
+					snapshot: {
+						...quote.snapshot,
+						customerDetails: 'x'.repeat(1001)
+					}
+				},
+				dealId
+			)
+		).toBeNull()
 	})
 	it.each([
 		{ ...dealCommerce, extra: true },

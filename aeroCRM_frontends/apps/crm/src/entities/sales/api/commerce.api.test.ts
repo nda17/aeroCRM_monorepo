@@ -1,11 +1,16 @@
-import { authenticatedRequest } from '@/shared/api/authenticated-http-client'
+import {
+	AuthenticatedApiError,
+	authenticatedRequest
+} from '@/shared/api/authenticated-http-client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
 	createManagedPipeline,
+	createDealQuote,
 	getCommerceAnalytics,
 	getDealCommerce,
 	listCatalogItems,
 	listCommerceHistory,
+	replaceDealLines,
 	saveCatalogItem,
 	updateCatalogItem
 } from './commerce.api'
@@ -146,10 +151,96 @@ describe('commerce API boundaries', () => {
 			getDealCommerce('token', workspaceId, dealId)
 		).rejects.toMatchObject({ kind: 'temporary' })
 	})
+	it('classifies invalid replace-line input before HTTP and keeps response mismatches uncertain', async () => {
+		const invalidInput = {
+			commandId,
+			expectedVersion: 1,
+			lines: [
+				{
+					kind: 'PRODUCT' as const,
+					name: 'Кабель',
+					unit: 'м',
+					quantity: '1.5',
+					unitPriceMinor: 100,
+					discountMinor: 0
+				}
+			]
+		}
+
+		const invalidError = await replaceDealLines(
+			'token',
+			workspaceId,
+			dealId,
+			invalidInput
+		).catch(error => error)
+		expect(invalidError).toBeInstanceOf(AuthenticatedApiError)
+		expect(invalidError).toMatchObject({ kind: 'validation' })
+		expect(request).not.toHaveBeenCalled()
+
+		request.mockResolvedValue({})
+		await expect(
+			replaceDealLines('token', workspaceId, dealId, {
+				...invalidInput,
+				lines: [{ ...invalidInput.lines[0], quantity: '1.500' }]
+			})
+		).rejects.toMatchObject({ kind: 'temporary' })
+		expect(request).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining({ method: 'POST' })
+		)
+	})
+	it('accepts the quote response wrapper and keeps malformed responses uncertain', async () => {
+		const quote = {
+			id: '99999999-9999-4999-8999-999999999999',
+			dealId,
+			version: 1,
+			snapshot: {
+				schemaVersion: 1,
+				quoteVersion: 1,
+				dealVersion: 2,
+				dealId,
+				sellerName: 'Seller',
+				sellerDetails: '',
+				customerName: 'Customer',
+				customerDetails: '',
+				dealTitle: 'Install',
+				currency: 'RUB',
+				amountMinor: 500,
+				lines: [
+					{
+						id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+						kind: 'SERVICE',
+						name: 'Монтаж',
+						unit: 'час',
+						quantity: '1.000',
+						unitPriceMinor: 500,
+						discountMinor: 0,
+						totalMinor: 500
+					}
+				]
+			},
+			createdBySubject: 'seller-subject',
+			createdAt: '2026-09-23T00:00:00.000Z'
+		}
+		const command = {
+			commandId,
+			sellerName: 'Seller'
+		}
+
+		request.mockResolvedValueOnce({ schemaVersion: 1, quote })
+		await expect(
+			createDealQuote('token', workspaceId, dealId, command)
+		).resolves.toMatchObject({ id: quote.id, snapshot: quote.snapshot })
+
+		request.mockResolvedValueOnce(quote)
+		await expect(
+			createDealQuote('token', workspaceId, dealId, command)
+		).rejects.toMatchObject({ kind: 'temporary' })
+		expect(request).toHaveBeenCalledTimes(2)
+	})
 	it('validates list arguments before issuing HTTP', async () => {
 		await expect(
 			listCatalogItems('token', workspaceId, { page: 1, pageSize: 101 })
-		).rejects.toMatchObject({ kind: 'temporary' })
+		).rejects.toMatchObject({ kind: 'validation' })
 		expect(request).not.toHaveBeenCalled()
 	})
 	it('sends the analytics pipeline filter and rejects malformed filter values before HTTP', async () => {
@@ -180,7 +271,7 @@ describe('commerce API boundaries', () => {
 				to,
 				pipelineId: 'invalid'
 			})
-		).rejects.toMatchObject({ kind: 'temporary' })
+		).rejects.toMatchObject({ kind: 'validation' })
 		expect(request).toHaveBeenCalledTimes(1)
 	})
 	it('returns deal-bound history events using the current API signature', async () => {
