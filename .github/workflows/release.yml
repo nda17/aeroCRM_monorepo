@@ -39,6 +39,14 @@ on:
       crm_custom_roles_migration_env_hash:
         description: SHA-256 of the private VPS migrations/crm-access.env file; required only for the CRM custom-role migration
         required: false
+      crm_sales_commerce_migration:
+        description: Backend target only; apply the reviewed CRM Sales commerce migration before switching images
+        type: boolean
+        default: false
+        required: true
+      crm_sales_commerce_migration_env_hash:
+        description: SHA-256 of the private VPS migrations/crm-sales.env file; required only for the CRM Sales commerce migration
+        required: false
       crm_contracts_cutover:
         description: Backend target only; release frontend separately after a successful CRM contract cutover
         type: boolean
@@ -85,6 +93,8 @@ jobs:
           BILLING_MIGRATION_HASH: ${{ inputs.billing_migration_env_hash }}
           CUSTOM_ROLES_MIGRATION: ${{ inputs.crm_custom_roles_migration && 'true' || 'false' }}
           CUSTOM_ROLES_MIGRATION_HASH: ${{ inputs.crm_custom_roles_migration_env_hash }}
+          SALES_COMMERCE_MIGRATION: ${{ inputs.crm_sales_commerce_migration && 'true' || 'false' }}
+          SALES_COMMERCE_MIGRATION_HASH: ${{ inputs.crm_sales_commerce_migration_env_hash }}
           CUTOVER: ${{ inputs.crm_contracts_cutover && 'true' || 'false' }}
           RESUME: ${{ inputs.crm_contracts_cutover_resume && 'true' || 'false' }}
           STAGED_DIR: ${{ inputs.crm_contracts_staged_env_dir }}
@@ -116,6 +126,11 @@ jobs:
             [[ "$TARGET" == backend && "$CUTOVER" == false && "$CUSTOM_ROLES_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
           else
             [[ -z "$CUSTOM_ROLES_MIGRATION_HASH" ]]
+          fi
+          if [[ "$SALES_COMMERCE_MIGRATION" == true ]]; then
+            [[ "$TARGET" == backend && "$CUTOVER" == false && "$SALES_COMMERCE_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
+          else
+            [[ -z "$SALES_COMMERCE_MIGRATION_HASH" ]]
           fi
           case "$TARGET" in
             all)
@@ -154,7 +169,10 @@ jobs:
           bash -n infra/scripts/ensure-cutover-node.sh
           node --check infra/scripts/billing-capacity-migration.mjs
           node --check infra/scripts/crm-custom-roles-migration.mjs
+          node --check infra/scripts/crm-sales-commerce-migration.mjs
           node --check infra/scripts/backend-rollback-compatibility-guard.mjs
+          node infra/scripts/crm-sales-commerce-migration.mjs --policy-self-test
+          node infra/scripts/backend-rollback-compatibility-guard.mjs --policy-self-test
       - name: Download exact CI artifacts
         env:
           GH_TOKEN: ${{ github.token }}
@@ -186,6 +204,8 @@ jobs:
           BILLING_MIGRATION_HASH: ${{ inputs.billing_migration_env_hash }}
           CUSTOM_ROLES_MIGRATION: ${{ inputs.crm_custom_roles_migration && 'true' || 'false' }}
           CUSTOM_ROLES_MIGRATION_HASH: ${{ inputs.crm_custom_roles_migration_env_hash }}
+          SALES_COMMERCE_MIGRATION: ${{ inputs.crm_sales_commerce_migration && 'true' || 'false' }}
+          SALES_COMMERCE_MIGRATION_HASH: ${{ inputs.crm_sales_commerce_migration_env_hash }}
           KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
           CUTOVER: ${{ inputs.crm_contracts_cutover && 'true' || 'false' }}
           RESUME: ${{ inputs.crm_contracts_cutover_resume && 'true' || 'false' }}
@@ -235,6 +255,11 @@ jobs:
             node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'bash /opt/aerocrm/scripts/ensure-cutover-node.sh --crm-custom-roles')
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
           fi
+          if [ "$ROLE" = backend ] && [ "$SALES_COMMERCE_MIGRATION" = true ]; then
+            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/crm-sales-commerce-migration.mjs infra/scripts/ensure-cutover-node.sh "$dest:/opt/aerocrm/scripts/"
+            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'bash /opt/aerocrm/scripts/ensure-cutover-node.sh --crm-sales-commerce')
+            [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
+          fi
           for app in $APPS; do
             gzip -dc "images/$app/$app.tar.gz" | ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'docker load >/dev/null'
           done
@@ -242,12 +267,8 @@ jobs:
             resume_arg=
             if [ "$RESUME" = true ]; then resume_arg=' --resume'; fi
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && '$node_bin' scripts/crm-contract-cutover.mjs '$SHA' '$STAGED_DIR' '$DEFINITIONS_FILE'$resume_arg"
-          elif [ "$ROLE" = backend ] && [ "$BILLING_MIGRATION" = true ] && [ "$CUSTOM_ROLES_MIGRATION" = true ]; then
-            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash' true '$BILLING_MIGRATION_HASH' true '$CUSTOM_ROLES_MIGRATION_HASH'"
-          elif [ "$ROLE" = backend ] && [ "$BILLING_MIGRATION" = true ]; then
-            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash' true '$BILLING_MIGRATION_HASH'"
-          elif [ "$ROLE" = backend ] && [ "$CUSTOM_ROLES_MIGRATION" = true ]; then
-            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash' false '' true '$CUSTOM_ROLES_MIGRATION_HASH'"
+          elif [ "$ROLE" = backend ]; then
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH'"
           else
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash'"
           fi
