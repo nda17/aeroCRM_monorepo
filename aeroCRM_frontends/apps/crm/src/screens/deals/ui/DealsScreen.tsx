@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyFormGuard } from '@/shared/lib/dirty-form'
+
 import {
 	listSalesDeals,
 	listSalesPipelines,
@@ -91,8 +93,9 @@ const DealsWorkspaceScreen = ({
 			setPage(1)
 		}
 	}
+	const draftGuard = useDirtyFormGuard()
 	const setSelected = (id: string | null) =>
-		writeDealViewLocation(filters, id)
+		draftGuard.confirmDiscard(() => writeDealViewLocation(filters, id))
 	const setFilters = (next: DealView) =>
 		writeDealViewLocation(next, selected)
 	const updateFilters = (patch: Partial<DealView>) => {

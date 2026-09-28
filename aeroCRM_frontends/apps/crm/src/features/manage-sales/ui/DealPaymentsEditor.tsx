@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyValue } from '@/shared/lib/dirty-form'
+
 import {
 	Button,
 	HelpHint,
@@ -70,6 +72,10 @@ const PaymentForm = ({
 		localInput(payment?.occurredAt || new Date().toISOString())
 	)
 	const [comment, setComment] = useState(payment?.comment || '')
+	const draftGuard = useDirtyValue(
+		{ kind, amount, occurredAt, comment },
+		'Денежная операция'
+	)
 	const [error, setError] = useState<string | null>(null)
 	return (
 		<form
@@ -155,7 +161,10 @@ const PaymentForm = ({
 					<Button type="submit">
 						{payment ? 'Сохранить исправление' : 'Записать операцию'}
 					</Button>
-					<Button variant="ghost" onClick={onCancel}>
+					<Button
+						variant="ghost"
+						onClick={() => draftGuard.confirmDiscard(onCancel)}
+					>
 						Отмена
 					</Button>
 				</div>

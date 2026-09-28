@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyValue } from '@/shared/lib/dirty-form'
+
 import {
 	useMemo,
 	useState,
@@ -71,6 +73,7 @@ export const ReminderRuleForm = ({
 				recipients: { kind: scope === 'PERSONAL' ? 'SELF' : 'ASSIGNEE' }
 			}
 	)
+	const draftGuard = useDirtyValue(rule, 'Правило напоминаний')
 	const [attempted, setAttempted] = useState(false)
 	const hydrated = useSyncExternalStore(
 		subscribe,
@@ -491,7 +494,10 @@ export const ReminderRuleForm = ({
 						Архивировать правило
 					</Button>
 				) : null}
-				<Button variant="secondary" onClick={onClose}>
+				<Button
+					variant="secondary"
+					onClick={() => draftGuard.confirmDiscard(onClose)}
+				>
 					Закрыть правило
 				</Button>
 			</div>

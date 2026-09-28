@@ -40,6 +40,62 @@
       "SELECT",
       "INSERT",
       "UPDATE"
+    ],
+    "mail_connections": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_mailboxes": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_mailbox_grants": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_folders": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_contact_links": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_attachments": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_send_intents": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_jobs": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_messages": [
+      "SELECT",
+      "INSERT"
+    ],
+    "mail_send_attachments": [
+      "SELECT",
+      "INSERT"
+    ],
+    "mail_commands": [
+      "SELECT",
+      "INSERT"
+    ],
+    "mail_audit": [
+      "SELECT",
+      "INSERT"
     ]
   },
   "sequences": {},
@@ -49,7 +105,10 @@
     "enforce_service_identity_integrity",
     "workspace_closure_fence_immutable",
     "assert_workspace_open",
-    "guard_workspace_business_write"
+    "guard_workspace_business_write",
+    "mail_write_guard"
   ],
-  "routineExecute": ["assert_workspace_open(uuid)"]
+  "routineExecute": [
+    "assert_workspace_open(uuid)"
+  ]
 }

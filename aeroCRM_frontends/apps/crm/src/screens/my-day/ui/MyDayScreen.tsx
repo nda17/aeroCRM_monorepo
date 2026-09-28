@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyFormGuard } from '@/shared/lib/dirty-form'
+
 import { useState } from 'react'
 import Link from 'next/link'
 import { useQueryClient } from '@tanstack/react-query'
@@ -45,6 +47,7 @@ const MyDayContent = ({
 	initialTaskId: string | null
 }) => {
 	const context = useWorkdaySession()
+	const draftGuard = useDirtyFormGuard()
 	const client = useQueryClient()
 	const [filters, setFilters] = useState<Filters>(initialWorkdayFilters)
 	const [view, setView] = useState<WorkdayView>('list')
@@ -401,7 +404,8 @@ const MyDayContent = ({
 						view={view}
 						canWrite={context.canWrite && !command.locked}
 						onOpen={task => {
-							if (command.canClose()) setSelected(task.id)
+							if (command.canClose())
+								draftGuard.confirmDiscard(() => setSelected(task.id))
 						}}
 						onStatus={updateStatus}
 						onPage={page => {

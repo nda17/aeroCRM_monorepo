@@ -1,5 +1,8 @@
 'use client'
 
+import { AuthenticatedApiError } from '@/shared/api/authenticated-http-client'
+import { useDirtyForm, useDirtyFormGuard } from '@/shared/lib/dirty-form'
+
 import {
 	getDealCommerce,
 	replaceDealLines,
@@ -112,6 +115,19 @@ export const DealCommercePanel = ({
 	const [download, setDownload] = useState<string | null>(null)
 	const [downloadError, setDownloadError] = useState<string | null>(null)
 	const [linesDirty, setLinesDirty] = useState(false)
+	const [quoteBaseline, setQuoteBaseline] = useState({
+		sellerName: '',
+		sellerDetails: '',
+		customerDetails: ''
+	})
+	useDirtyForm({
+		dirty:
+			sellerName !== quoteBaseline.sellerName ||
+			sellerDetails !== quoteBaseline.sellerDetails ||
+			customerDetails !== quoteBaseline.customerDetails,
+		label: 'Коммерческое предложение'
+	})
+	const draftGuard = useDirtyFormGuard()
 	const token = context.session?.accessToken || ''
 	const workspaceId = context.workspace.workspaceId
 	const lines = useQuery({
@@ -220,15 +236,17 @@ export const DealCommercePanel = ({
 					saved
 				)
 				setConfirmedLineVersion(saved.dealVersion)
+				setLinesDirty(false)
 			}
-			setRevision(value => value + 1)
-			setLinesDirty(false)
+			if (result && typeof result === 'object' && 'snapshot' in result)
+				setQuoteBaseline({ sellerName, sellerDetails, customerDetails })
+			if (result && typeof result === 'object' && 'netPaidMinor' in result)
+				setRevision(value => value + 1)
 			onSaved()
 			void client.invalidateQueries({ queryKey: ['sales'] })
 		}
 	)
-	const busy =
-		command.running || command.uncertain || !!download || linesDirty
+	const busy = command.running || command.uncertain || !!download
 	useEffect(() => {
 		onBusyChange(busy)
 		return () => onBusyChange(false)
@@ -250,11 +268,27 @@ export const DealCommercePanel = ({
 			setDownload(null)
 		}
 	}
+	const transientLinesError =
+		lines.error instanceof AuthenticatedApiError &&
+		lines.error.kind === 'temporary'
+	const retainLines = lines.isError && transientLinesError && !!lines.data
+	const transientPaymentError =
+		payments.error instanceof AuthenticatedApiError &&
+		payments.error.kind === 'temporary'
+	const retainPayments =
+		payments.isError && transientPaymentError && !!payments.data
 	if (!context.canRead) return null
 	return (
 		<div className={styles.stack}>
-			<CommerceCommandState command={command} onReview={reload} />
-			{lines.isError ? (
+			<CommerceCommandState
+				command={command}
+				onReview={async () => {
+					draftGuard.confirmDiscard(() => {
+						void reload()
+					})
+				}}
+			/>
+			{lines.isError && !retainLines ? (
 				<ScreenState
 					variant="error"
 					compact
@@ -279,7 +313,9 @@ export const DealCommercePanel = ({
 					context={context}
 					data={lines.data}
 					confirmedLineVersion={confirmedLineVersion}
-					locked={command.locked || lines.isFetching}
+					locked={command.locked || lines.isFetching || lines.isError}
+					readError={retainLines}
+					onRetry={() => void lines.refetch()}
 					onDirtyChange={setLinesDirty}
 					onReplace={input =>
 						void command.execute({ action: 'lines', ...input })
@@ -319,6 +355,7 @@ export const DealCommercePanel = ({
 							if (
 								!command.locked &&
 								!linesDirty &&
+								!lines.isError &&
 								lines.data?.items.length
 							)
 								void command.execute({
@@ -334,6 +371,7 @@ export const DealCommercePanel = ({
 							disabled={
 								command.locked ||
 								linesDirty ||
+								lines.isError ||
 								lines.isFetching ||
 								!lines.data?.items.length
 							}
@@ -441,7 +479,7 @@ export const DealCommercePanel = ({
 					не выполняется.
 				</p>
 			</section>
-			{payments.isError ? (
+			{payments.isError && !retainPayments ? (
 				<ScreenState
 					variant="error"
 					compact
@@ -460,10 +498,15 @@ export const DealCommercePanel = ({
 				<ScreenState variant="loading" compact title="Загружаем оплаты" />
 			) : (
 				<DealPaymentsEditor
-					key={`${payments.data.dealVersion}:${revision}`}
+					key={revision}
 					data={payments.data}
 					canWrite={context.canWrite}
-					locked={command.locked || payments.isFetching || linesDirty}
+					locked={
+						command.locked ||
+						payments.isFetching ||
+						payments.isError ||
+						linesDirty
+					}
 					authorName={authorName}
 					onAdd={payment =>
 						void command.execute({ action: 'payment', payment })

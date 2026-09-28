@@ -98,6 +98,140 @@ on:
       crm_contracts_definitions_file:
         description: Absolute private VPS path to reviewed RabbitMQ definitions JSON
         required: false
+  workflow_call:
+    inputs:
+      target:
+        description: Deployment target
+        type: string
+        default: backend
+        required: true
+      ci_run_id:
+        type: string
+        description: Green CI run ID for this exact commit
+        required: true
+      sha:
+        type: string
+        description: Full 40-character commit SHA
+        required: true
+      frontend_env_hash:
+        type: string
+        description: SHA-256 of sorted frontend env-file hashes on VPS
+        required: false
+      infra_sha:
+        type: string
+        description: Full commit SHA of reviewed private infra repo
+        required: true
+      backend_env_hash:
+        type: string
+        description: SHA-256 of sorted backend env-file hashes on VPS
+        required: false
+      billing_capacity_migration:
+        description: Backend target only; apply reviewed Billing capacity and administrative-seat migrations before switching images
+        type: boolean
+        default: false
+        required: true
+      billing_migration_env_hash:
+        type: string
+        description: SHA-256 of the private VPS migrations/billing.env file; required only for Billing capacity migration
+        required: false
+      crm_custom_roles_migration:
+        description: Backend target only; apply reviewed CRM Access custom-role and administrative-seat migrations with the write gate disabled
+        type: boolean
+        default: false
+        required: true
+      crm_custom_roles_migration_env_hash:
+        type: string
+        description: SHA-256 of the private VPS migrations/crm-access.env file; required only for the CRM custom-role migration
+        required: false
+      crm_sales_commerce_migration:
+        description: Backend target only; apply the reviewed CRM Sales commerce migration before switching images
+        type: boolean
+        default: false
+        required: true
+      crm_sales_commerce_migration_env_hash:
+        type: string
+        description: SHA-256 of the private VPS migrations/crm-sales.env file; required only for the CRM Sales commerce migration
+        required: false
+      crm_intake_notifications_migration:
+        description: Backend target only; apply the reviewed CRM Intake inbox notification ID default migration before switching images
+        type: boolean
+        default: false
+        required: true
+      crm_intake_notifications_migration_env_hash:
+        type: string
+        description: SHA-256 of the private VPS migrations/crm-intake.env file; required only for the CRM Intake notification migration
+        required: false
+      crm_mail_env_install:
+        description: Install only the three reviewed Customers env files as part of the canonical transaction
+        required: false
+        type: boolean
+        default: false
+      crm_mail_env_before_hash:
+        description: Approved aggregate backend env hash before the scoped Customers change
+        required: false
+        type: string
+      crm_mail_env_bundle_hash:
+        description: Approved SHA-256 of canonical CRM_CUSTOMERS_MAIL_ENV_BUNDLE secret
+        required: false
+        type: string
+      crm_corporate_mail_migration:
+        description: Backend target only; apply the reviewed fenced corporate mail migration and ACL with a full verified image manifest
+        required: false
+        type: boolean
+        default: false
+      crm_corporate_mail_migration_env_hash:
+        description: SHA-256 of the private VPS migrations/crm-customers.env file; required only for corporate mail migration
+        required: false
+        type: string
+      workspace_closure_migration:
+        description: Backend target only; apply the reviewed seven-service workspace closure migration with the closure gate OFF
+        type: boolean
+        default: false
+        required: true
+      workspace_closure_migration_env_hash:
+        type: string
+        description: SHA-256 of sorted checksums for the seven fixed private migration env files
+        required: false
+      workspace_closure_identity_acl_repair:
+        description: Backend target only; repair the reviewed Identity workspace UPDATE grant during a closure-enabled upgrade
+        type: boolean
+        default: false
+        required: true
+      workspace_closure_identity_env_hash:
+        type: string
+        description: SHA-256 of the private Identity migration env file; required only for the Identity ACL repair
+        required: false
+      workspace_closure_enable:
+        description: Backend target only; enable the closure gate in three CRM Access env files before the same-SHA release
+        type: boolean
+        default: false
+        required: true
+      backend_env_before_hash:
+        type: string
+        description: Approved aggregate backend env hash with the three closure gate values false; required only when enabling
+        required: false
+      crm_contracts_cutover:
+        description: Backend target only; release frontend separately after a successful CRM contract cutover
+        type: boolean
+        default: false
+        required: true
+      crm_contracts_cutover_resume:
+        description: Resume the same reviewed cutover after a guarded rollback
+        type: boolean
+        default: false
+        required: true
+      crm_contracts_staged_env_dir:
+        type: string
+        description: Absolute private VPS directory containing backend/ and migrations/
+        required: false
+      crm_contracts_staged_env_hash:
+        type: string
+        description: SHA-256 of sorted staged backend env-file hashes on VPS
+        required: false
+      crm_contracts_definitions_file:
+        type: string
+        description: Absolute private VPS path to reviewed RabbitMQ definitions JSON
+        required: false
 permissions:
   contents: read
   actions: read
@@ -129,6 +263,11 @@ jobs:
           SALES_COMMERCE_MIGRATION_HASH: ${{ inputs.crm_sales_commerce_migration_env_hash }}
           INTAKE_NOTIFICATIONS_MIGRATION: ${{ inputs.crm_intake_notifications_migration && 'true' || 'false' }}
           INTAKE_NOTIFICATIONS_MIGRATION_HASH: ${{ inputs.crm_intake_notifications_migration_env_hash }}
+          MAIL_MIGRATION: ${{ inputs.crm_corporate_mail_migration && 'true' || 'false' }}
+          MAIL_ENV_INSTALL: ${{ inputs.crm_mail_env_install && 'true' || 'false' }}
+          MAIL_ENV_BEFORE_HASH: ${{ inputs.crm_mail_env_before_hash }}
+          MAIL_ENV_BUNDLE_HASH: ${{ inputs.crm_mail_env_bundle_hash }}
+          MAIL_MIGRATION_HASH: ${{ inputs.crm_corporate_mail_migration_env_hash }}
           CLOSURE_MIGRATION: ${{ inputs.workspace_closure_migration && 'true' || 'false' }}
           CLOSURE_MIGRATION_HASH: ${{ inputs.workspace_closure_migration_env_hash }}
           IDENTITY_ACL_REPAIR: ${{ inputs.workspace_closure_identity_acl_repair && 'true' || 'false' }}
@@ -168,6 +307,22 @@ jobs:
             [[ "$TARGET" == backend && "$CUTOVER" == false && "$CUSTOM_ROLES_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
           else
             [[ -z "$CUSTOM_ROLES_MIGRATION_HASH" ]]
+          fi
+          if [[ "$MAIL_ENV_INSTALL" == true ]]; then
+            [[ "$TARGET" == backend && "$CUTOVER" == false && "$CLOSURE_ENABLE" == false &&
+              "$CLOSURE_MIGRATION" == false && "$IDENTITY_ACL_REPAIR" == false &&
+              "$BILLING_MIGRATION" == false && "$CUSTOM_ROLES_MIGRATION" == false &&
+              "$SALES_COMMERCE_MIGRATION" == false && "$INTAKE_NOTIFICATIONS_MIGRATION" == false &&
+              "$MAIL_ENV_BEFORE_HASH" =~ ^[a-f0-9]{64}$ && "$MAIL_ENV_BUNDLE_HASH" =~ ^[a-f0-9]{64}$ ]]
+          else
+            [[ -z "$MAIL_ENV_BEFORE_HASH" && -z "$MAIL_ENV_BUNDLE_HASH" ]]
+          fi
+          if [[ "$MAIL_MIGRATION" == true ]]; then
+            [[ "$TARGET" == backend && "$CUTOVER" == false && "$CLOSURE_ENABLE" == false &&
+              "$CLOSURE_MIGRATION" == false && "$IDENTITY_ACL_REPAIR" == false &&
+              "$MAIL_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
+          else
+            [[ "$MAIL_MIGRATION" == false && -z "$MAIL_MIGRATION_HASH" ]]
           fi
           if [[ "$SALES_COMMERCE_MIGRATION" == true ]]; then
             [[ "$TARGET" == backend && "$CUTOVER" == false && "$SALES_COMMERCE_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
@@ -263,12 +418,14 @@ jobs:
           node --check infra/scripts/backend-release.mjs
           node --check infra/scripts/backend-release-state.mjs
           node --check infra/scripts/backend-release-transaction.mjs
+          node --check infra/scripts/backend-mail-env.mjs
           bash -n infra/scripts/release.sh
           bash infra/scripts/release.sh --policy-self-test
           bash -n infra/scripts/aerocrm-nginx-release.sh
           bash -n infra/scripts/ensure-cutover-node.sh
           node --check infra/scripts/billing-capacity-migration.mjs
           node --check infra/scripts/crm-custom-roles-migration.mjs
+          node --check infra/scripts/crm-corporate-mail-migration.mjs
           node --check infra/scripts/crm-sales-commerce-migration.mjs
           node --check infra/scripts/crm-intake-notifications-migration.mjs
           node --check infra/scripts/workspace-closure-migration.mjs
@@ -280,7 +437,16 @@ jobs:
           node infra/scripts/workspace-closure-enable.mjs --policy-self-test
           node infra/scripts/backend-rollback-compatibility-guard.mjs --policy-self-test
           # This release gate covers the introduced state, transaction and real Compose regressions.
-          REQUIRE_DOCKER_COMPOSE_TEST=true node --test infra/scripts/backend-release*.test.mjs
+          REQUIRE_DOCKER_COMPOSE_TEST=true node --test infra/scripts/backend-release*.test.mjs infra/scripts/backend-mail-env.test.mjs
+      - name: Stage reviewed private Customers env bundle
+        if: inputs.crm_mail_env_install
+        env:
+          CRM_CUSTOMERS_MAIL_ENV_BUNDLE: ${{ secrets.CRM_CUSTOMERS_MAIL_ENV_BUNDLE }}
+          MAIL_ENV_BUNDLE_HASH: ${{ inputs.crm_mail_env_bundle_hash }}
+        run: |
+          set -euo pipefail
+          umask 077
+          node infra/scripts/backend-mail-env.mjs --stage "$RUNNER_TEMP/crm-customers-mail-env.json" "$MAIL_ENV_BUNDLE_HASH"
       - name: Download exact CI frontend artifacts
         if: matrix.role == 'frontend'
         env:
@@ -300,7 +466,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ inputs.ci_run_id }}
           SHA: ${{ needs.verify.outputs.sha }}
-          REQUIRE_UNIFORM: ${{ (inputs.billing_capacity_migration || inputs.crm_custom_roles_migration || inputs.crm_sales_commerce_migration || inputs.crm_intake_notifications_migration || inputs.workspace_closure_migration || inputs.workspace_closure_identity_acl_repair || inputs.workspace_closure_enable || inputs.crm_contracts_cutover) && 'true' || 'false' }}
+          REQUIRE_UNIFORM: ${{ (inputs.billing_capacity_migration || inputs.crm_custom_roles_migration || inputs.crm_sales_commerce_migration || inputs.crm_intake_notifications_migration || inputs.crm_corporate_mail_migration || inputs.workspace_closure_migration || inputs.workspace_closure_identity_acl_repair || inputs.workspace_closure_enable || inputs.crm_contracts_cutover) && 'true' || 'false' }}
         run: |
           set -euo pipefail
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name backend-manifest --dir manifest
@@ -331,6 +497,11 @@ jobs:
           SALES_COMMERCE_MIGRATION_HASH: ${{ inputs.crm_sales_commerce_migration_env_hash }}
           INTAKE_NOTIFICATIONS_MIGRATION: ${{ inputs.crm_intake_notifications_migration && 'true' || 'false' }}
           INTAKE_NOTIFICATIONS_MIGRATION_HASH: ${{ inputs.crm_intake_notifications_migration_env_hash }}
+          MAIL_MIGRATION: ${{ inputs.crm_corporate_mail_migration && 'true' || 'false' }}
+          MAIL_ENV_INSTALL: ${{ inputs.crm_mail_env_install && 'true' || 'false' }}
+          MAIL_ENV_BEFORE_HASH: ${{ inputs.crm_mail_env_before_hash }}
+          MAIL_ENV_BUNDLE_HASH: ${{ inputs.crm_mail_env_bundle_hash }}
+          MAIL_MIGRATION_HASH: ${{ inputs.crm_corporate_mail_migration_env_hash }}
           CLOSURE_MIGRATION: ${{ inputs.workspace_closure_migration && 'true' || 'false' }}
           CLOSURE_MIGRATION_HASH: ${{ inputs.workspace_closure_migration_env_hash }}
           IDENTITY_ACL_REPAIR: ${{ inputs.workspace_closure_identity_acl_repair && 'true' || 'false' }}
@@ -373,9 +544,12 @@ jobs:
             rm -f "$backend_key"
           fi
           if [ "$ROLE" = backend ]; then
-            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "mkdir -p /opt/aerocrm/releases/staging && mkdir '$stage'"
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "umask 077; mkdir -p /opt/aerocrm/releases/staging && mkdir '$stage'"
             scp -r -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/compose infra/scripts "$dest:$stage/"
             scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes manifest/backend-manifest.json "$dest:$stage/"
+            if [ "$MAIL_ENV_INSTALL" = true ]; then
+              scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes "$RUNNER_TEMP/crm-customers-mail-env.json" "$dest:$stage/crm-customers-mail-env.json"
+            fi
             if [ "$CUTOVER" = true ] || [ "$CLOSURE_ENABLE" = true ]; then
               ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" \
                 "flock -n /opt/aerocrm/release.lock bash -c 'set -euo pipefail; test ! -e /opt/aerocrm/releases/backend-state.json; mkdir -p /opt/aerocrm/compose /opt/aerocrm/scripts; cp \"$stage/compose/backend.yml\" /opt/aerocrm/compose/backend.yml; cp \"$stage/compose/rabbitmq.conf\" /opt/aerocrm/compose/rabbitmq.conf; cp \"$stage/scripts/\"* /opt/aerocrm/scripts/'"
@@ -405,6 +579,10 @@ jobs:
             node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --crm-sales-commerce")
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
           fi
+          if [ "$ROLE" = backend ] && [ "$MAIL_MIGRATION" = true ]; then
+            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --crm-corporate-mail")
+            [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
+          fi
           if [ "$ROLE" = backend ] && [ "$INTAKE_NOTIFICATIONS_MIGRATION" = true ]; then
             node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --crm-intake-notifications")
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
@@ -427,8 +605,14 @@ jobs:
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && REVIEWED_INFRA_DIR='$stage' '$node_bin' '$stage/scripts/crm-contract-cutover.mjs' '$SHA' '$STAGED_DIR' '$DEFINITIONS_FILE'$resume_arg"
           elif [ "$ROLE" = backend ]; then
             manifest_env="BACKEND_MANIFEST_PATH='$stage/backend-manifest.json' INFRA_SHA='$INFRA_SHA' CI_RUN_ID='$RUN_ID'"
+            if [ "$MAIL_ENV_INSTALL" = true ]; then
+              manifest_env="$manifest_env CRM_MAIL_ENV_INSTALL='true' CRM_MAIL_ENV_BEFORE_HASH='$MAIL_ENV_BEFORE_HASH' CRM_MAIL_ENV_BUNDLE_HASH='$MAIL_ENV_BUNDLE_HASH'"
+            fi
             if [ "$CLOSURE_ENABLE" = true ]; then manifest_env=; fi
-            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && $manifest_env REVIEWED_INFRA_DIR='$stage' '$stage/scripts/release.sh' '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH' '$INTAKE_NOTIFICATIONS_MIGRATION' '$INTAKE_NOTIFICATIONS_MIGRATION_HASH' '$CLOSURE_MIGRATION' '$CLOSURE_MIGRATION_HASH' '$IDENTITY_ACL_REPAIR' '$IDENTITY_ENV_HASH'"
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && $manifest_env REVIEWED_INFRA_DIR='$stage' '$stage/scripts/release.sh' '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH' '$INTAKE_NOTIFICATIONS_MIGRATION' '$INTAKE_NOTIFICATIONS_MIGRATION_HASH' '$CLOSURE_MIGRATION' '$CLOSURE_MIGRATION_HASH' '$IDENTITY_ACL_REPAIR' '$IDENTITY_ENV_HASH' '$MAIL_MIGRATION' '$MAIL_MIGRATION_HASH'"
           else
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash'"
           fi
+      - name: Remove runner private Customers bundle
+        if: always() && inputs.crm_mail_env_install
+        run: rm -f "$RUNNER_TEMP/crm-customers-mail-env.json"

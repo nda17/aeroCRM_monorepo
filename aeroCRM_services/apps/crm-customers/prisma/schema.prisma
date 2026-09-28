@@ -11,28 +11,28 @@ datasource db {
 }
 
 model WorkspaceClosureFence {
-  workspaceId String @id @map("workspace_id") @db.Uuid
-  revision BigInt @default(0)
-  closureId String? @map("closure_id") @db.Uuid
-  generation BigInt?
-  ownerSubject String? @map("owner_subject")
-  requestedAt DateTime? @map("requested_at")
-  fencedAt DateTime? @map("fenced_at")
+  workspaceId  String    @id @map("workspace_id") @db.Uuid
+  revision     BigInt    @default(0)
+  closureId    String?   @map("closure_id") @db.Uuid
+  generation   BigInt?
+  ownerSubject String?   @map("owner_subject")
+  requestedAt  DateTime? @map("requested_at")
+  fencedAt     DateTime? @map("fenced_at")
 
   @@map("workspace_closure_fences")
   @@schema("crm_customers")
 }
 
 model ExportAudit {
-  id String @id @default(uuid()) @db.Uuid
-  workspaceId String @map("workspace_id") @db.Uuid
-  actorSubject String @map("actor_subject") @db.VarChar(256)
-  entity String @db.VarChar(16)
-  format String @db.VarChar(4)
-  rowCount Int @map("row_count")
-  byteCount Int @map("byte_count")
-  snapshotAt DateTime @map("snapshot_at")
-  preparedAt DateTime @default(now()) @map("prepared_at")
+  id           String   @id @default(uuid()) @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  actorSubject String   @map("actor_subject") @db.VarChar(256)
+  entity       String   @db.VarChar(16)
+  format       String   @db.VarChar(4)
+  rowCount     Int      @map("row_count")
+  byteCount    Int      @map("byte_count")
+  snapshotAt   DateTime @map("snapshot_at")
+  preparedAt   DateTime @default(now()) @map("prepared_at")
 
   @@index([workspaceId, preparedAt, id], map: "export_audit_workspace_prepared_idx")
   @@map("export_audit")
@@ -80,23 +80,26 @@ model Company {
 }
 
 model Contact {
-  id               String    @id @default(uuid()) @db.Uuid
-  workspaceId      String    @map("workspace_id") @db.Uuid
-  name             String    @db.VarChar(200)
-  phone            String?   @db.VarChar(16)
-  email            String?   @db.VarChar(254)
-  companyId        String?   @map("company_id") @db.Uuid
-  timeZone         String?   @map("time_zone") @db.VarChar(100)
-  preferredCallStart String? @map("preferred_call_start") @db.VarChar(5)
-  preferredCallEnd  String?  @map("preferred_call_end") @db.VarChar(5)
-  notes            String?   @db.VarChar(5000)
-  createdBySubject String    @map("created_by_subject") @db.VarChar(256)
-  teamId           String?   @map("team_id") @db.Uuid
-  version          Int       @default(1)
-  archivedAt       DateTime? @map("archived_at")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
-  company          Company?  @relation(fields: [workspaceId, companyId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  mailContactLink_contactId MailContactLink[] @relation("MailContactLink_contactId")
+  mailAttachment_contactId  MailAttachment[]  @relation("MailAttachment_contactId")
+  mailSendIntent_contactId  MailSendIntent[]  @relation("MailSendIntent_contactId")
+  id                        String            @id @default(uuid()) @db.Uuid
+  workspaceId               String            @map("workspace_id") @db.Uuid
+  name                      String            @db.VarChar(200)
+  phone                     String?           @db.VarChar(16)
+  email                     String?           @db.VarChar(254)
+  companyId                 String?           @map("company_id") @db.Uuid
+  timeZone                  String?           @map("time_zone") @db.VarChar(100)
+  preferredCallStart        String?           @map("preferred_call_start") @db.VarChar(5)
+  preferredCallEnd          String?           @map("preferred_call_end") @db.VarChar(5)
+  notes                     String?           @db.VarChar(5000)
+  createdBySubject          String            @map("created_by_subject") @db.VarChar(256)
+  teamId                    String?           @map("team_id") @db.Uuid
+  version                   Int               @default(1)
+  archivedAt                DateTime?         @map("archived_at")
+  createdAt                 DateTime          @default(now()) @map("created_at")
+  updatedAt                 DateTime          @updatedAt @map("updated_at")
+  company                   Company?          @relation(fields: [workspaceId, companyId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
 
   @@unique([workspaceId, id])
   @@index([workspaceId, archivedAt, createdAt, id])
@@ -167,5 +170,293 @@ model IntakeOperationCommand {
   createdAt    DateTime @default(now()) @map("created_at")
 
   @@map("intake_operation_commands")
+  @@schema("crm_customers")
+}
+
+model MailConnection {
+  mailMailbox_connectionId MailMailbox[] @relation("MailMailbox_connectionId")
+  id                       String        @id @default(uuid()) @db.Uuid
+  workspaceId              String        @map("workspace_id") @db.Uuid
+  delegatedSubject         String        @map("delegated_subject") @db.VarChar(256)
+  delegatedMembershipId    String        @map("delegated_membership_id") @db.Uuid
+  provider                 String        @db.VarChar(16)
+  transport                Json
+  authMode                 String        @map("auth_mode") @db.VarChar(16)
+  credentialPrincipal      String        @map("credential_principal") @db.VarChar(254)
+  encryptedSecret          String?       @map("encrypted_secret")
+  keyId                    String        @map("key_id") @db.VarChar(80)
+  state                    String        @db.VarChar(24)
+  generation               Int           @default(1)
+  version                  Int           @default(1)
+  createdAt                DateTime      @default(now()) @map("created_at")
+  updatedAt                DateTime      @updatedAt @map("updated_at")
+
+  @@unique([workspaceId, id])
+  @@map("mail_connections")
+  @@schema("crm_customers")
+}
+
+model MailMailbox {
+  connection                 MailConnection     @relation("MailMailbox_connectionId", fields: [workspaceId, connectionId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  mailMailboxGrant_mailboxId MailMailboxGrant[] @relation("MailMailboxGrant_mailboxId")
+  mailFolder_mailboxId       MailFolder[]       @relation("MailFolder_mailboxId")
+  mailMessage_mailboxId      MailMessage[]      @relation("MailMessage_mailboxId")
+  mailContactLink_mailboxId  MailContactLink[]  @relation("MailContactLink_mailboxId")
+  mailAttachment_mailboxId   MailAttachment[]   @relation("MailAttachment_mailboxId")
+  mailSendIntent_mailboxId   MailSendIntent[]   @relation("MailSendIntent_mailboxId")
+  mailJob_mailboxId          MailJob[]          @relation("MailJob_mailboxId")
+  mailAudit_mailboxId        MailAudit[]        @relation("MailAudit_mailboxId")
+  id                         String             @id @default(uuid()) @db.Uuid
+  workspaceId                String             @map("workspace_id") @db.Uuid
+  connectionId               String             @map("connection_id") @db.Uuid
+  kind                       String             @db.VarChar(16)
+  ownerSubject               String?            @map("owner_subject") @db.VarChar(256)
+  ownerMembershipId          String?            @map("owner_membership_id") @db.Uuid
+  canonicalAddress           String             @map("canonical_address") @db.VarChar(254)
+  displayName                String             @map("display_name") @db.VarChar(200)
+  imapLogin                  String             @map("imap_login") @db.VarChar(254)
+  smtpLogin                  String             @map("smtp_login") @db.VarChar(254)
+  sendMode                   String             @map("send_mode") @db.VarChar(16)
+  enabled                    Boolean            @default(false)
+  generation                 Int                @default(1)
+  version                    Int                @default(1)
+  disconnectedAt             DateTime?          @map("disconnected_at")
+  lastSyncAt                 DateTime?          @map("last_sync_at")
+  safeErrorCode              String?            @map("safe_error_code") @db.VarChar(80)
+  createdAt                  DateTime           @default(now()) @map("created_at")
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, canonicalAddress])
+  @@map("mail_mailboxes")
+  @@schema("crm_customers")
+}
+
+model MailMailboxGrant {
+  mailbox      MailMailbox @relation("MailMailboxGrant_mailboxId", fields: [workspaceId, mailboxId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  id           String      @id @default(uuid()) @db.Uuid
+  workspaceId  String      @map("workspace_id") @db.Uuid
+  mailboxId    String      @map("mailbox_id") @db.Uuid
+  subject      String      @db.VarChar(256)
+  membershipId String      @map("membership_id") @db.Uuid
+  canRead      Boolean     @map("can_read")
+  canSend      Boolean     @map("can_send")
+  canManage    Boolean     @map("can_manage")
+  revokedAt    DateTime?   @map("revoked_at")
+
+  @@unique([workspaceId, mailboxId, subject, membershipId])
+  @@map("mail_mailbox_grants")
+  @@schema("crm_customers")
+}
+
+model MailFolder {
+  mailbox              MailMailbox   @relation("MailFolder_mailboxId", fields: [workspaceId, mailboxId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  mailMessage_folderId MailMessage[] @relation("MailMessage_folderId")
+  id                   String        @id @default(uuid()) @db.Uuid
+  workspaceId          String        @map("workspace_id") @db.Uuid
+  mailboxId            String        @map("mailbox_id") @db.Uuid
+  exactPath            String        @map("exact_path") @db.VarChar(500)
+  kind                 String        @db.VarChar(16)
+  selected             Boolean       @default(true)
+  uidValidity          BigInt?       @map("uid_validity")
+  liveLastUid          BigInt        @default(0) @map("live_last_uid")
+  backfillLastUid      BigInt        @default(0) @map("backfill_last_uid")
+  backfillUpperUid     BigInt?       @map("backfill_upper_uid")
+  importStartedAt      DateTime?     @map("import_started_at")
+  cutoff               DateTime?
+  completedAt          DateTime?     @map("completed_at")
+  generation           Int           @default(1)
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, mailboxId, exactPath])
+  @@map("mail_folders")
+  @@schema("crm_customers")
+}
+
+model MailMessage {
+  mailbox                   MailMailbox       @relation("MailMessage_mailboxId", fields: [workspaceId, mailboxId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  folder                    MailFolder        @relation("MailMessage_folderId", fields: [workspaceId, folderId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  mailContactLink_messageId MailContactLink[] @relation("MailContactLink_messageId")
+  mailAttachment_messageId  MailAttachment[]  @relation("MailAttachment_messageId")
+  id                        String            @id @default(uuid()) @db.Uuid
+  workspaceId               String            @map("workspace_id") @db.Uuid
+  mailboxId                 String            @map("mailbox_id") @db.Uuid
+  folderId                  String            @map("folder_id") @db.Uuid
+  folderGeneration          Int               @map("folder_generation")
+  uidValidity               BigInt            @map("uid_validity")
+  uid                       BigInt
+  direction                 String            @db.VarChar(16)
+  messageId                 String?           @map("message_id") @db.VarChar(998)
+  inReplyTo                 String?           @map("in_reply_to") @db.VarChar(998)
+  references                String[]
+  from                      Json
+  to                        Json
+  cc                        Json
+  bcc                       Json
+  subject                   String            @db.VarChar(300)
+  sentAt                    DateTime?         @map("sent_at")
+  receivedAt                DateTime          @map("received_at")
+  plainText                 String?           @map("plain_text")
+  bodyStatus                String            @map("body_status") @db.VarChar(24)
+  sourceHash                String?           @map("source_hash") @db.VarChar(64)
+  createdAt                 DateTime          @default(now()) @map("created_at")
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, folderId, folderGeneration, uidValidity, uid], map: "mail_messages_source_uid_key")
+  @@index([workspaceId, mailboxId, createdAt, id])
+  @@map("mail_messages")
+  @@schema("crm_customers")
+}
+
+model MailContactLink {
+  mailbox       MailMailbox @relation("MailContactLink_mailboxId", fields: [workspaceId, mailboxId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  message       MailMessage @relation("MailContactLink_messageId", fields: [workspaceId, messageId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  contact       Contact?    @relation("MailContactLink_contactId", fields: [workspaceId, contactId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  id            String      @id @default(uuid()) @db.Uuid
+  workspaceId   String      @map("workspace_id") @db.Uuid
+  mailboxId     String      @map("mailbox_id") @db.Uuid
+  messageId     String      @map("message_id") @db.Uuid
+  externalEmail String      @map("external_email") @db.VarChar(254)
+  contactId     String?     @map("contact_id") @db.Uuid
+  state         String      @db.VarChar(16)
+  method        String      @db.VarChar(16)
+  actorSubject  String      @map("actor_subject") @db.VarChar(256)
+  version       Int         @default(1)
+
+  @@unique([workspaceId, messageId, externalEmail])
+  @@index([workspaceId, contactId, messageId])
+  @@map("mail_contact_links")
+  @@schema("crm_customers")
+}
+
+model MailAttachment {
+  mailbox                         MailMailbox          @relation("MailAttachment_mailboxId", fields: [workspaceId, mailboxId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  message                         MailMessage?         @relation("MailAttachment_messageId", fields: [workspaceId, messageId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  contact                         Contact?             @relation("MailAttachment_contactId", fields: [workspaceId, contactId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  mailSendAttachment_attachmentId MailSendAttachment[] @relation("MailSendAttachment_attachmentId")
+  id                              String               @id @default(uuid()) @db.Uuid
+  workspaceId                     String               @map("workspace_id") @db.Uuid
+  mailboxId                       String               @map("mailbox_id") @db.Uuid
+  messageId                       String?              @map("message_id") @db.Uuid
+  contactId                       String?              @map("contact_id") @db.Uuid
+  uploadActor                     String?              @map("upload_actor") @db.VarChar(256)
+  uploadMembershipId              String?              @map("upload_membership_id") @db.Uuid
+  sourcePart                      String?              @map("source_part") @db.VarChar(32)
+  safeFileName                    String               @map("safe_file_name") @db.VarChar(200)
+  declaredMime                    String               @map("declared_mime") @db.VarChar(200)
+  detectedMime                    String?              @map("detected_mime") @db.VarChar(200)
+  byteSize                        Int                  @map("byte_size")
+  sha256                          String?              @db.VarChar(64)
+  privateObjectKey                String?              @map("private_object_key") @db.VarChar(500)
+  state                           String               @db.VarChar(24)
+  validationVersion               Int                  @default(1) @map("validation_version")
+  expiresAt                       DateTime?            @map("expires_at")
+  createdAt                       DateTime             @default(now()) @map("created_at")
+
+  @@unique([workspaceId, id])
+  @@map("mail_attachments")
+  @@schema("crm_customers")
+}
+
+model MailSendIntent {
+  mailbox                   MailMailbox          @relation("MailSendIntent_mailboxId", fields: [workspaceId, mailboxId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  contact                   Contact              @relation("MailSendIntent_contactId", fields: [workspaceId, contactId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  mailSendAttachment_sendId MailSendAttachment[] @relation("MailSendAttachment_sendId")
+  id                        String               @id @default(uuid()) @db.Uuid
+  workspaceId               String               @map("workspace_id") @db.Uuid
+  mailboxId                 String               @map("mailbox_id") @db.Uuid
+  contactId                 String               @map("contact_id") @db.Uuid
+  actorSubject              String               @map("actor_subject") @db.VarChar(256)
+  membershipId              String               @map("membership_id") @db.Uuid
+  commandId                 String               @map("command_id") @db.Uuid
+  requestHash               String               @map("request_hash") @db.VarChar(64)
+  mailboxGeneration         Int                  @map("mailbox_generation")
+  to                        Json
+  cc                        Json
+  bcc                       Json
+  subject                   String               @db.VarChar(300)
+  text                      String
+  replyToMessageId          String?              @map("reply_to_message_id") @db.Uuid
+  attachmentIds             String[]             @map("attachment_ids") @db.Uuid
+  messageId                 String               @map("message_id") @db.VarChar(998)
+  mimeObjectKey             String?              @map("mime_object_key") @db.VarChar(500)
+  mimeHash                  String?              @map("mime_hash") @db.VarChar(64)
+  envelope                  Json?
+  state                     String               @db.VarChar(24)
+  dispatchAdmittedAt        DateTime?            @map("dispatch_admitted_at")
+  accepted                  String[]             @default([])
+  rejected                  String[]             @default([])
+  safeErrorCode             String?              @map("safe_error_code") @db.VarChar(80)
+  version                   Int                  @default(1)
+  createdAt                 DateTime             @default(now()) @map("created_at")
+  settledAt                 DateTime?            @map("settled_at")
+
+  @@unique([workspaceId, id])
+  @@unique([commandId])
+  @@unique([messageId])
+  @@index([workspaceId, state, createdAt])
+  @@map("mail_send_intents")
+  @@schema("crm_customers")
+}
+
+model MailSendAttachment {
+  send         MailSendIntent @relation("MailSendAttachment_sendId", fields: [workspaceId, sendId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  attachment   MailAttachment @relation("MailSendAttachment_attachmentId", fields: [workspaceId, attachmentId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  workspaceId  String         @map("workspace_id") @db.Uuid
+  sendId       String         @map("send_id") @db.Uuid
+  attachmentId String         @map("attachment_id") @db.Uuid
+
+  @@id([workspaceId, sendId, attachmentId])
+  @@map("mail_send_attachments")
+  @@schema("crm_customers")
+}
+
+model MailJob {
+  mailbox       MailMailbox @relation("MailJob_mailboxId", fields: [workspaceId, mailboxId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  id            String      @id @default(uuid()) @db.Uuid
+  workspaceId   String      @map("workspace_id") @db.Uuid
+  mailboxId     String      @map("mailbox_id") @db.Uuid
+  generation    Int
+  kind          String      @db.VarChar(24)
+  targetId      String?     @map("target_id") @db.Uuid
+  workKey       String      @map("work_key") @db.VarChar(200)
+  state         String      @db.VarChar(16)
+  dueAt         DateTime    @default(now()) @map("due_at")
+  leaseOwner    String?     @map("lease_owner") @db.Uuid
+  leaseUntil    DateTime?   @map("lease_until")
+  leaseVersion  Int         @default(0) @map("lease_version")
+  attempts      Int         @default(0)
+  safeErrorCode String?     @map("safe_error_code") @db.VarChar(80)
+
+  @@unique([workKey])
+  @@index([state, dueAt])
+  @@map("mail_jobs")
+  @@schema("crm_customers")
+}
+
+model MailCommand {
+  commandId    String   @id @default(uuid()) @map("command_id") @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  actorSubject String   @map("actor_subject") @db.VarChar(256)
+  requestHash  String   @map("request_hash") @db.VarChar(64)
+  response     Json
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("mail_commands")
+  @@schema("crm_customers")
+}
+
+model MailAudit {
+  mailbox      MailMailbox? @relation("MailAudit_mailboxId", fields: [workspaceId, mailboxId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  id           String       @id @default(uuid()) @db.Uuid
+  workspaceId  String       @map("workspace_id") @db.Uuid
+  mailboxId    String?      @map("mailbox_id") @db.Uuid
+  actorSubject String       @map("actor_subject") @db.VarChar(256)
+  action       String       @db.VarChar(40)
+  entityId     String       @map("entity_id") @db.Uuid
+  commandId    String?      @map("command_id") @db.Uuid
+  occurredAt   DateTime     @default(now()) @map("occurred_at")
+  metadata     Json
+
+  @@map("mail_audit")
   @@schema("crm_customers")
 }

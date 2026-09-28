@@ -603,8 +603,18 @@ describe('AccessGate', () => {
 				)
 				.mockResolvedValueOnce({ id: 'saved' })
 			const saved = vi.fn()
+			vi.mocked(getCrmPermissions).mockResolvedValue({
+				subject: 'user-1',
+				role: 'OWNER'
+			} as never)
 			vi.mocked(getCrmAccessBootstrap)
 				.mockResolvedValueOnce(activeAccess)
+				.mockRejectedValueOnce(
+					new AuthenticatedApiError(
+						'forbidden',
+						'Workspace access revoked'
+					)
+				)
 				.mockImplementationOnce(
 					() =>
 						new Promise(resolve => {
@@ -661,6 +671,8 @@ describe('AccessGate', () => {
 				await Promise.resolve()
 			})
 			expect(saved).not.toHaveBeenCalled()
+			fireEvent.click(screen.getByRole('button', { name: 'Повторить' }))
+			await waitFor(() => expect(reopen).toBeDefined())
 			act(() => reopen())
 			const retry = await screen.findByRole('button', {
 				name: 'Повторить команду'

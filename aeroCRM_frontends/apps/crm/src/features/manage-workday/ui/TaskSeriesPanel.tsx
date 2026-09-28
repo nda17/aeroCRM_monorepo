@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyValue } from '@/shared/lib/dirty-form'
+
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -480,6 +482,19 @@ const SeriesForm = ({
 		),
 		[checking, setChecking] = useState(false),
 		[error, setError] = useState<string | null>(null)
+	const draftGuard = useDirtyValue(
+		{
+			title,
+			localTime,
+			timeZone,
+			frequency,
+			startDate,
+			linked,
+			teamId,
+			assignee
+		},
+		'Серия задач'
+	)
 	const linkedDeal = useQuery({
 		queryKey: ['task-series-deal', ...context.key, series?.dealId],
 		enabled: !!series?.dealId && context.canRead,
@@ -753,7 +768,7 @@ const SeriesForm = ({
 				<Button
 					variant="secondary"
 					disabled={checking || command.running || command.uncertain}
-					onClick={onBack}
+					onClick={() => draftGuard.confirmDiscard(onBack)}
 				>
 					К списку серий
 				</Button>

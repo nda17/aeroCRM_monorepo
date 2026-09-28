@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyForm } from '@/shared/lib/dirty-form'
+
 import { useLayoutEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import {
@@ -157,6 +159,10 @@ const TaskEditor = ({
 		!!assignee &&
 		(assignee.subject !== draft.baseline.assignedToSubject ||
 			assignee.membershipId !== draft.baseline.assignedToMembershipId)
+	const draftGuard = useDirtyForm({
+		dirty: edited || assigneeEdited,
+		label: 'Задача'
+	})
 	const newer = initial.version > draft.baseline.version
 	const baseline =
 		!edited &&
@@ -198,7 +204,7 @@ const TaskEditor = ({
 	const close = () => {
 		if (command.canClose()) {
 			mounted.current = false
-			onClose()
+			draftGuard.confirmDiscard(onClose)
 		}
 	}
 	const reload = async () => {
@@ -222,6 +228,7 @@ const TaskEditor = ({
 	}
 	return (
 		<Drawer
+			dirtyFormIds={[draftGuard.id]}
 			isOpen
 			onClose={close}
 			title="Задача"
@@ -270,7 +277,11 @@ const TaskEditor = ({
 									command.ambiguous ||
 									read.query.isFetching
 								}
-								onClick={() => void reload()}
+								onClick={() =>
+									draftGuard.confirmDiscard(() => {
+										void reload()
+									})
+								}
 							>
 								Загрузить актуальную задачу
 							</Button>

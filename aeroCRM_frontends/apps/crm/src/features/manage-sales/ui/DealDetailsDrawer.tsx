@@ -1,5 +1,8 @@
 'use client'
 
+import { AuthenticatedApiError } from '@/shared/api/authenticated-http-client'
+import { useDirtyForm, useDirtyFormGuard } from '@/shared/lib/dirty-form'
+
 import { getCustomer } from '@/entities/customer'
 import Link from 'next/link'
 import {
@@ -62,11 +65,20 @@ const DealEditor = ({
 	command: ReturnType<typeof useSalesCommand>
 }) => {
 	const [expectedVersion] = useState(deal.version)
+	const [initialStageId] = useState(deal.stageId)
 	const [targetStageId, setTargetStageId] = useState(deal.stageId)
 	const [outcome, setOutcome] = useState('')
 	const [taskTitle, setTaskTitle] = useState('')
 	const [due, setDue] = useState('')
 	const [confirmArchive, setConfirmArchive] = useState(false)
+	useDirtyForm({
+		dirty:
+			targetStageId !== initialStageId ||
+			!!outcome ||
+			!!taskTitle ||
+			!!due,
+		label: 'Результат сделки'
+	})
 	const target = pipeline?.stages.find(stage => stage.id === targetStageId)
 	const submit = (event: FormEvent) => {
 		event.preventDefault()
@@ -234,7 +246,13 @@ export const DealDetailsDrawer = ({
 		retry: false,
 		gcTime: 0
 	})
-	const deal = detail.data
+	const draftGuard = useDirtyFormGuard()
+	const transientDetailError =
+		detail.error instanceof AuthenticatedApiError &&
+		detail.error.kind === 'temporary'
+	const showDetail =
+		!detail.isError || (transientDetailError && !!detail.data)
+	const deal = showDetail ? detail.data : undefined
 	const pipeline = pipelines.find(item => item.id === deal?.pipelineId)
 	const assigneeLabel = useSalesAssignees(
 		context,
@@ -303,21 +321,20 @@ export const DealDetailsDrawer = ({
 				if (command.canClose()) onClose()
 			}}
 			title={
-				context.canRead && !detail.isError
-					? deal?.title || 'Сделка'
-					: 'Сделка'
+				context.canRead && showDetail ? deal?.title || 'Сделка' : 'Сделка'
 			}
 			description={
-				context.canRead && !detail.isError ? pipeline?.name : undefined
+				context.canRead && showDetail ? pipeline?.name : undefined
 			}
 			footer={
-				context.canRead && !detail.isError && deal ? (
+				context.canRead && showDetail && deal ? (
 					<Button
 						type="submit"
 						form="deal-result-form"
 						disabled={
 							!context.canWrite ||
 							detail.isFetching ||
+							detail.isError ||
 							!pipeline ||
 							commerceBusy ||
 							command.locked
@@ -334,8 +351,10 @@ export const DealDetailsDrawer = ({
 				command={command}
 				onReview={async () => {
 					await reload()
-					command.resetAfterReview()
-					setEditorRevision(value => value + 1)
+					draftGuard.confirmDiscard(() => {
+						command.resetAfterReview()
+						setEditorRevision(value => value + 1)
+					})
 				}}
 			/>
 			{!context.canRead ? (
@@ -344,7 +363,7 @@ export const DealDetailsDrawer = ({
 						context.permissions.isPending ? 'loading' : 'permission'
 					}
 				/>
-			) : detail.isError ? (
+			) : detail.isError && !showDetail ? (
 				<ScreenState
 					variant="error"
 					description="Карточка недоступна. Данные не показаны до успешной проверки."
@@ -358,6 +377,18 @@ export const DealDetailsDrawer = ({
 				<ScreenState variant="loading" />
 			) : (
 				<div className={styles.content}>
+					{detail.isError ? (
+						<ScreenState
+							compact
+							variant="error"
+							description="Не удалось обновить карточку. Черновик сохранён. Повторите загрузку перед сохранением."
+							action={
+								<Button onClick={() => void detail.refetch()}>
+									Повторить
+								</Button>
+							}
+						/>
+					) : null}
 					<section className={styles.summary} aria-label="Клиент и сделка">
 						<div className={styles.summaryHeading}>
 							{canReadContact ? (
@@ -461,7 +492,6 @@ export const DealDetailsDrawer = ({
 						dealId={deal.id}
 						onBusyChange={setCommerceBusy}
 						onSaved={() => {
-							setEditorRevision(value => value + 1)
 							onSaved()
 							void detail.refetch()
 						}}
@@ -473,6 +503,7 @@ export const DealDetailsDrawer = ({
 						enabled={
 							context.canWrite &&
 							!detail.isFetching &&
+							!detail.isError &&
 							!commerceBusy &&
 							!!pipeline
 						}

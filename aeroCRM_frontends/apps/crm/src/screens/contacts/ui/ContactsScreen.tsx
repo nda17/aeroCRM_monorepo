@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyFormGuard } from '@/shared/lib/dirty-form'
+
 import {
 	useCrmPermissions,
 	useCrmWorkspaceAccess,
@@ -36,18 +38,22 @@ const ContactsScreen = ({
 }) => {
 	const { workspaceId, canWrite: subscriptionCanWrite } =
 		useCrmWorkspaceAccess()
+	const draftGuard = useDirtyFormGuard()
 	const session = useSessionStore(state => state.session)
 	const revision = useSessionStore(state => state.sessionRevision)
 	const permissions = useCrmPermissions(workspaceId, session, revision)
 	const scopeKey = crmPermissionScope(permissions.data)
-	const confirmed = permissions.isSuccess && !permissions.isFetching
+	const confirmed = permissions.isSuccess
+	const revalidating = permissions.isFetching
 	const canRead =
 		confirmed &&
+		permissions.data.workspaceId === workspaceId &&
 		permissions.data.subject === session?.userId &&
 		permissions.data.permissions.includes('customers:read')
 	const canWrite =
 		canRead &&
 		subscriptionCanWrite &&
+		!revalidating &&
 		permissions.data!.permissions.includes('customers:write')
 	const linkBinding = JSON.stringify([
 		workspaceId,
@@ -129,7 +135,11 @@ const ContactsScreen = ({
 				<button
 					type="button"
 					className={styles.contactButton}
-					onClick={() => setSelected({ id: item.id, kind })}
+					onClick={() =>
+						draftGuard.confirmDiscard(() =>
+							setSelected({ id: item.id, kind })
+						)
+					}
 				>
 					<span className={styles.avatar} aria-hidden="true">
 						{item.name
@@ -183,13 +193,14 @@ const ContactsScreen = ({
 		setSearch(searchDraft.trim())
 		setPage(1)
 	}
-	const switchKind = (next: CustomerKind) => {
-		setKind(next)
-		setPage(1)
-		setSearch('')
-		setSearchDraft('')
-		closeEditor()
-	}
+	const switchKind = (next: CustomerKind) =>
+		draftGuard.confirmDiscard(() => {
+			setKind(next)
+			setPage(1)
+			setSearch('')
+			setSearchDraft('')
+			closeEditor()
+		})
 	const totalPages = Math.max(
 		1,
 		Math.ceil((records.data?.total ?? 0) / 25)
@@ -222,7 +233,9 @@ const ContactsScreen = ({
 							}
 							disabled={!canWrite || permissionError}
 							leadingIcon={<AppIcon name="plus" size={18} />}
-							onClick={() => setSelected({ kind })}
+							onClick={() =>
+								draftGuard.confirmDiscard(() => setSelected({ kind }))
+							}
 						>
 							{kind === 'contacts' ? 'Новый контакт' : 'Новая компания'}
 						</Button>
@@ -369,7 +382,11 @@ const ContactsScreen = ({
 												? 'Открыть форму для добавления клиента и его контактных данных'
 												: 'Открыть форму для добавления компании и её реквизитов'
 										}
-										onClick={() => setSelected({ kind })}
+										onClick={() =>
+											draftGuard.confirmDiscard(() =>
+												setSelected({ kind })
+											)
+										}
 									>
 										{kind === 'contacts'
 											? 'Добавить контакт'

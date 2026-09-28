@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyForm } from '@/shared/lib/dirty-form'
+
 import { TeamSelect, useTeamOptions } from '@/entities/crm-team'
 import {
 	csvImportCommandError,
@@ -68,6 +70,10 @@ const CsvImportPanel = ({ access, onClose, onSaved }: Props) => {
 	const [reading, setReading] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const [summary, setSummary] = useState<CsvImportSummary | null>(null)
+	const draftGuard = useDirtyForm({
+		dirty: rows.length > 0 && !summary,
+		label: 'Импорт обращений'
+	})
 	const live = useRef({ mounted: false, canWrite: access.canWrite })
 	const fileRevision = useRef(0)
 	useLayoutEffect(() => {
@@ -147,7 +153,7 @@ const CsvImportPanel = ({ access, onClose, onSaved }: Props) => {
 			)
 			return
 		}
-		onClose()
+		draftGuard.confirmDiscard(onClose)
 	}
 	const downloadTemplate = () => {
 		let url: string | undefined
@@ -196,6 +202,7 @@ const CsvImportPanel = ({ access, onClose, onSaved }: Props) => {
 	}
 	return (
 		<Drawer
+			dirtyFormIds={[draftGuard.id]}
 			isOpen
 			onClose={close}
 			title="Импорт CSV"

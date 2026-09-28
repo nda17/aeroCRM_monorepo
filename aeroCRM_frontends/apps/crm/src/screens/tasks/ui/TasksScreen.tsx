@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyFormGuard } from '@/shared/lib/dirty-form'
+
 import { listSalesTasks, type SalesTask } from '@/entities/sales'
 import {
 	CompleteTaskDrawer,
@@ -29,6 +31,7 @@ const TasksScreen = () => {
 	const [page, setPage] = useState(1)
 	const [searchInput, setSearchInput] = useState('')
 	const [search, setSearch] = useState('')
+	const draftGuard = useDirtyFormGuard()
 	const [selected, setSelected] = useState<SalesTask | null>(null)
 	const tasks = useQuery({
 		queryKey: ['sales', 'tasks', ...context.key, page, search],
@@ -99,7 +102,9 @@ const TasksScreen = () => {
 					disabled={!context.canWrite || tasks.isFetching}
 					tooltip="Указать результат действия по сделке и запланировать следующий шаг."
 					disabledTooltip="Завершение доступно при правах на изменение после загрузки актуальных задач."
-					onClick={() => setSelected(task)}
+					onClick={() =>
+						draftGuard.confirmDiscard(() => setSelected(task))
+					}
 				>
 					Завершить действие
 				</Button>

@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyFormGuard } from '@/shared/lib/dirty-form'
+
 import {
 	useMutation,
 	useQuery,
@@ -146,20 +148,22 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 	const workspaceId =
 		requestedWorkspaceId ??
 		(selection.owner === selectionOwner ? selection.id : undefined)
-	const selectWorkspace = (selected?: string) => {
-		setSelection({
-			owner: selectionOwner,
-			id: selected,
-			query: requestedWorkspaceId
+	const draftGuard = useDirtyFormGuard()
+	const selectWorkspace = (selected?: string) =>
+		draftGuard.confirmDiscard(() => {
+			setSelection({
+				owner: selectionOwner,
+				id: selected,
+				query: requestedWorkspaceId
+			})
+			const nextParams = new URLSearchParams(searchParams.toString())
+			if (selected) nextParams.set('workspaceId', selected)
+			else nextParams.delete('workspaceId')
+			router.replace(
+				`${pathname}${nextParams.size ? `?${nextParams.toString()}` : ''}`,
+				{ scroll: false }
+			)
 		})
-		const nextParams = new URLSearchParams(searchParams.toString())
-		if (selected) nextParams.set('workspaceId', selected)
-		else nextParams.delete('workspaceId')
-		router.replace(
-			`${pathname}${nextParams.size ? `?${nextParams.toString()}` : ''}`,
-			{ scroll: false }
-		)
-	}
 	const choiceScope = JSON.stringify([selectionOwner, workspaceId])
 	const [choice, setChoice] = useState({ scope: choiceScope, value: '' })
 	const commandIdRef = useRef<string | undefined>(undefined)
@@ -491,7 +495,14 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 		)
 
 	const data = access.data
-	if (access.isError && data.state !== 'ONBOARDING')
+	const transientAccessError =
+		access.error instanceof AuthenticatedApiError &&
+		access.error.kind === 'temporary'
+	if (
+		access.isError &&
+		data.state !== 'ONBOARDING' &&
+		!transientAccessError
+	)
 		return (
 			<div className={styles.gate}>
 				<RetryState
@@ -611,15 +622,23 @@ const WorkspaceAccessGate = ({ children }: PropsWithChildren) => {
 	}
 
 	if (canOpenCrmWorkspace(data))
-		return access.isFetching ? (
-			<div className={styles.gate}>
-				<ScreenState
-					variant="loading"
-					title="Подтверждаем доступ к aeroCRM"
-				/>
-			</div>
-		) : (
-			<CrmWorkspaceAccessProvider access={data}>
+		return (
+			<CrmWorkspaceAccessProvider
+				access={data}
+				revalidating={access.isFetching || access.isError}
+			>
+				{access.isError ? (
+					<ScreenState
+						compact
+						variant="error"
+						description="Не удалось подтвердить актуальный доступ. Черновики сохранены; изменения недоступны до повторной проверки."
+						action={
+							<Button onClick={() => void access.refetch()}>
+								Повторить проверку доступа
+							</Button>
+						}
+					/>
+				) : null}
 				{children}
 			</CrmWorkspaceAccessProvider>
 		)

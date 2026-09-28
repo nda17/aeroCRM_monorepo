@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyValue } from '@/shared/lib/dirty-form'
+
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -64,6 +66,10 @@ const CreateForm = ({
 	const [assignee, setAssignee] = useState<AssigneeBinding | null>(null)
 	const [checking, setChecking] = useState(false)
 	const [error, setError] = useState<string | null>(null)
+	const draftGuard = useDirtyValue(
+		{ title, due, linked, deal: deal?.id, teamId, assignee },
+		'Новая задача'
+	)
 	const mounted = useRef(true)
 	useLayoutEffect(() => {
 		mounted.current = true
@@ -107,7 +113,7 @@ const CreateForm = ({
 	const close = () => {
 		if (command.canClose()) {
 			mounted.current = false
-			onClose()
+			draftGuard.confirmDiscard(onClose)
 		}
 	}
 	const save = async () => {
@@ -169,6 +175,7 @@ const CreateForm = ({
 	}
 	return (
 		<Drawer
+			dirtyFormIds={[draftGuard.id]}
 			isOpen
 			onClose={close}
 			title="Новая задача"

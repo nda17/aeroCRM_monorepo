@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyValue } from '@/shared/lib/dirty-form'
+
 import {
 	listTeamRecords,
 	crmRoleLabels,
@@ -135,6 +137,10 @@ export const TeamEditor = ({
 			.filter((row): row is CrmCustomRoleRow => row.kind === 'role') ?? []
 	const [teamIds, setTeamIds] = useState<string[]>(
 		record && 'teamIds' in record ? record.teamIds : []
+	)
+	const draftGuard = useDirtyValue(
+		{ name, email, profile, role, customRoleId, roleInput, teamIds },
+		'Сотрудники и роли'
 	)
 	const [reviewing, setReviewing] = useState(false)
 	const { kind } = selection
@@ -287,9 +293,10 @@ export const TeamEditor = ({
 	}
 	return (
 		<Drawer
+			dirtyFormIds={[draftGuard.id]}
 			isOpen
 			onClose={() => {
-				if (command.canClose()) onClose()
+				if (command.canClose()) draftGuard.confirmDiscard(onClose)
 			}}
 			title={titles[kind]}
 			description={descriptions[kind]}
@@ -482,7 +489,11 @@ export const TeamEditor = ({
 							<Button
 								variant="secondary"
 								isLoading={reviewing}
-								onClick={() => void review()}
+								onClick={() =>
+									draftGuard.confirmDiscard(() => {
+										void review()
+									})
+								}
 							>
 								Перечитать и проверить
 							</Button>
@@ -493,7 +504,7 @@ export const TeamEditor = ({
 					<Button
 						variant="secondary"
 						onClick={() => {
-							if (command.canClose()) onClose()
+							if (command.canClose()) draftGuard.confirmDiscard(onClose)
 						}}
 					>
 						Отмена

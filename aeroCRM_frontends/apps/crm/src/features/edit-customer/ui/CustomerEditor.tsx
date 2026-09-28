@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyForm } from '@/shared/lib/dirty-form'
+
 import { useSessionStore } from '@/entities/session'
 import { getCrmPermissions } from '@/entities/crm-access'
 import {
@@ -44,6 +46,7 @@ import toast from 'react-hot-toast'
 import styles from './CustomerEditor.module.scss'
 import { CompanyLookup } from './CompanyLookup'
 import { ContactCallPanel } from './ContactCallPanel'
+import { CustomerMailPanel } from '@/features/manage-mail/ui/CustomerMailPanel'
 
 interface EditorProps {
 	workspaceId: string
@@ -231,6 +234,10 @@ const CustomerForm = ({
 				record?.kind === 'companies' ? (record.entityType ?? '') : ''
 		}
 	})
+	const draftGuard = useDirtyForm({
+		dirty: form.formState.isDirty,
+		label: 'Карточка клиента'
+	})
 	const companies = useQuery({
 		queryKey: [
 			'crm-company-picker',
@@ -351,7 +358,7 @@ const CustomerForm = ({
 			)
 			return
 		}
-		onClose()
+		draftGuard.confirmDiscard(onClose)
 	}
 	const dispatch = (pending: CustomerMutation) => {
 		if (!canWrite || authorizationDenied || !session || memory.running)
@@ -455,6 +462,7 @@ const CustomerForm = ({
 	})
 	const editor = (
 		<Drawer
+			dirtyFormIds={[draftGuard.id]}
 			isOpen
 			onClose={close}
 			title={title}
@@ -960,6 +968,9 @@ const CustomerForm = ({
 					</div>
 				) : null}
 			</form>
+			{record?.kind === 'contacts' ? (
+				<CustomerMailPanel contactId={record.id} email={record.email} />
+			) : null}
 		</Drawer>
 	)
 	return (

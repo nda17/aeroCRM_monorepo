@@ -17,7 +17,7 @@ export const useSalesSession = () => {
 	)
 	const canRead =
 		!!session &&
-		!permissions.isFetching &&
+		permissions.data?.workspaceId === workspace.workspaceId &&
 		permissions.data?.subject === session?.userId &&
 		!!permissions.data &&
 		!permissions.isError &&

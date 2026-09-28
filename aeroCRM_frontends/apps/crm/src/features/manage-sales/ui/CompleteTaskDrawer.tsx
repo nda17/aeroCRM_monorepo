@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyValue } from '@/shared/lib/dirty-form'
+
 import { getSalesDeal, type SalesTask } from '@/entities/sales'
 import { Button, Drawer, ScreenState, TextareaField } from '@/shared/ui'
 import { useQuery } from '@tanstack/react-query'
@@ -43,6 +45,10 @@ export const CompleteTaskDrawer = ({
 		!detail.isError &&
 		!detail.isFetching &&
 		current?.id === task.id
+	const draftGuard = useDirtyValue(
+		{ outcome, title, due },
+		'Результат задачи'
+	)
 	const command = useSalesCommand(
 		context.workspace.workspaceId,
 		context.session?.accessToken || '',
@@ -81,9 +87,10 @@ export const CompleteTaskDrawer = ({
 	}
 	return (
 		<Drawer
+			dirtyFormIds={[draftGuard.id]}
 			isOpen
 			onClose={() => {
-				if (command.canClose()) onClose()
+				if (command.canClose()) draftGuard.confirmDiscard(onClose)
 			}}
 			title="Завершить действие"
 			description={

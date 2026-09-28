@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyForm, useDirtyFormGuard } from '@/shared/lib/dirty-form'
+
 import {
 	listManagedPipelines,
 	createManagedPipeline,
@@ -76,6 +78,7 @@ const StageNameEditor = ({
 	onSave: (name: string) => void
 }) => {
 	const [name, setName] = useState(stage.name)
+	useDirtyForm({ dirty: name !== stage.name, label: 'Название этапа' })
 	return (
 		<form
 			className={styles.actions}
@@ -122,6 +125,14 @@ const PipelineEditor = ({
 	const changed = order.some(
 		(id, index) => pipeline.stages[index]?.id !== id
 	)
+	useDirtyForm({
+		dirty:
+			name !== pipeline.name ||
+			!!newName ||
+			newState !== 'OPEN' ||
+			changed,
+		label: 'Воронка и этапы'
+	})
 	const move = (index: number, offset: number) => {
 		setOrder(current => {
 			const next = [...current]
@@ -308,10 +319,15 @@ export const PipelineManager = ({
 	onClose: () => void
 	onSaved: () => void
 }) => {
+	const draftGuard = useDirtyFormGuard()
 	const [selectedId, setSelectedId] = useState('')
 	const [creating, setCreating] = useState(false)
 	const [name, setName] = useState('')
 	const [template, setTemplate] = useState('')
+	const newPipelineDraft = useDirtyForm({
+		dirty: creating && (!!name || !!template),
+		label: 'Новая воронка'
+	})
 	const [revision, setRevision] = useState(0)
 	const pipelines = useQuery({
 		queryKey: ['sales', 'managed-pipelines', ...context.key],
@@ -401,6 +417,7 @@ export const PipelineManager = ({
 	if (!context.canRead)
 		return (
 			<Drawer
+				dirtyFormIds={[newPipelineDraft.id]}
 				isOpen
 				title="Управление воронками"
 				onClose={() => {
@@ -445,8 +462,11 @@ export const PipelineManager = ({
 								value={pipeline?.id || ''}
 								disabled={command.locked}
 								onChange={event => {
-									setSelectedId(event.target.value)
-									setCreating(false)
+									const id = event.target.value
+									draftGuard.confirmDiscard(() => {
+										setSelectedId(id)
+										setCreating(false)
+									})
 								}}
 							>
 								{pipelines.data.items.map(item => (
@@ -459,7 +479,11 @@ export const PipelineManager = ({
 								<Button
 									variant="secondary"
 									disabled={command.locked}
-									onClick={() => setCreating(value => !value)}
+									onClick={() =>
+										draftGuard.confirmDiscard(() =>
+											setCreating(value => !value)
+										)
+									}
 								>
 									{creating
 										? 'К существующей воронке'

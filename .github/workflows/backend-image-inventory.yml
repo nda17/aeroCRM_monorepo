@@ -1,0 +1,57 @@
+name: aeroCRM backend image inventory (read only)
+on:
+  workflow_dispatch:
+    inputs:
+      infra_sha:
+        description: Exact reviewed infrastructure commit SHA
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: aerocrm-backend-image-inventory
+  cancel-in-progress: false
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate reviewed infrastructure identity
+        env:
+          INFRA_SHA: ${{ inputs.infra_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/prod_0.1.0 ]]
+          [[ "$INFRA_SHA" =~ ^[a-f0-9]{40}$ ]]
+      - uses: actions/checkout@v4
+        with:
+          repository: nda17/aeroCRM_infra
+          ref: ${{ inputs.infra_sha }}
+          ssh-key: ${{ secrets.INFRA_DEPLOY_KEY }}
+          path: infra
+          persist-credentials: false
+      - name: Read image inventory under the shared release lock
+        env:
+          INFRA_SHA: ${{ inputs.infra_sha }}
+          BACK_HOST: ${{ secrets.BACKEND_SSH_HOST }}
+          BACK_USER: ${{ secrets.BACKEND_SSH_USER }}
+          BACK_PORT: ${{ secrets.BACKEND_SSH_PORT }}
+          BACK_KEY: ${{ secrets.BACKEND_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test "$(git -C infra rev-parse HEAD)" = "$INFRA_SHA"
+          node --check infra/scripts/backend-image-inventory.mjs
+          [[ "$BACK_HOST" =~ ^[a-zA-Z0-9.-]+$ && "$BACK_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          [[ "${BACK_PORT:-22}" =~ ^[0-9]+$ ]]
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$BACK_KEY" > ~/.ssh/inventory_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/inventory_key ~/.ssh/known_hosts
+          cat infra/scripts/backend-image-inventory.mjs | ssh -i ~/.ssh/inventory_key -p "${BACK_PORT:-22}" -o StrictHostKeyChecking=yes -o BatchMode=yes "$BACK_USER@$BACK_HOST" \
+            'cd /opt/aerocrm && flock -n release.lock /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node --input-type=module -' > backend-image-inventory.json
+          node -e "const report=require('./backend-image-inventory.json'); if(report.mode!=='READ_ONLY') process.exit(1); console.log('Unreferenced reviewed candidates:',report.candidates.length)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-image-inventory
+          path: backend-image-inventory.json
+          retention-days: 7

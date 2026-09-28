@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyForm } from '@/shared/lib/dirty-form'
+
 import { listCatalogItems } from '@/entities/sales/api/commerce.api'
 import { Button, ScreenState, SelectField, TextField } from '@/shared/ui'
 import { useQuery } from '@tanstack/react-query'
@@ -62,6 +64,8 @@ export const DealLinesEditor = ({
 	data,
 	confirmedLineVersion,
 	locked,
+	readError = false,
+	onRetry,
 	onReplace,
 	onSaveCatalog,
 	onDirtyChange
@@ -70,6 +74,8 @@ export const DealLinesEditor = ({
 	data: DealLinesRecord
 	confirmedLineVersion: number | null
 	locked: boolean
+	readError?: boolean
+	onRetry?: () => void
 	onReplace: (input: {
 		expectedVersion: number
 		lines: DealLineInput[]
@@ -97,6 +103,7 @@ export const DealLinesEditor = ({
 		JSON.stringify(rows) !==
 			JSON.stringify(baseline.items.map(draftLine)) ||
 		(rows.length === 0 && manual !== moneyInput(baseline.amountMinor))
+	const draftGuard = useDirtyForm({ dirty, label: 'Состав сделки' })
 	if (
 		baseline.dealVersion !== data.dealVersion &&
 		(!dirty || confirmedLineVersion === data.dealVersion)
@@ -175,6 +182,14 @@ export const DealLinesEditor = ({
 	}
 	return (
 		<section className={styles.section} aria-labelledby="deal-lines-title">
+			{readError ? (
+				<ScreenState
+					compact
+					variant="error"
+					description="Не удалось обновить состав. Черновик сохранён. Повторите загрузку перед сохранением."
+					action={<Button onClick={onRetry}>Повторить</Button>}
+				/>
+			) : null}
 			<h3 id="deal-lines-title">Товары и услуги</h3>
 			<p className={styles.muted}>
 				Можно объединять товары и услуги, добавлять разовые строки или
@@ -481,13 +496,15 @@ export const DealLinesEditor = ({
 						<Button
 							variant="ghost"
 							disabled={locked}
-							onClick={() => {
-								setBaseline(data)
-								setRows(data.items.map(draftLine))
-								setManual(moneyInput(data.amountMinor))
-								setError(null)
-								setCatalogSave(null)
-							}}
+							onClick={() =>
+								draftGuard.confirmDiscard(() => {
+									setBaseline(data)
+									setRows(data.items.map(draftLine))
+									setManual(moneyInput(data.amountMinor))
+									setError(null)
+									setCatalogSave(null)
+								})
+							}
 						>
 							Отменить изменения состава
 						</Button>

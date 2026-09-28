@@ -1,5 +1,7 @@
 'use client'
 
+import { useGuardedRouter } from '@/shared/lib/dirty-form'
+
 import {
 	billingHref,
 	parseBillingRoute,
@@ -9,12 +11,12 @@ import { useSessionStore } from '@/entities/session'
 import { BillingFlow } from '@/features/manage-crm-billing'
 import { ScreenState } from '@/shared/ui'
 import { getRuntimeConfig } from '@/shared/config/runtime'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState } from 'react'
 import styles from './BillingScreen.module.scss'
 
 const BillingReturnRedirect = ({ route }: { route: BillingRoute }) => {
-	const router = useRouter()
+	const router = useGuardedRouter()
 	useEffect(() => {
 		const href = route.orderId
 			? billingHref(route.workspaceId, { orderId: route.orderId })

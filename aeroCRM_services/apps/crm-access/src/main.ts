@@ -67,6 +67,15 @@ async function bootstrap(): Promise<void> {
 				method: RequestMethod.POST
 			},
 			{
+				path: 'internal/v1/crm-access/authorize-mail',
+				method: RequestMethod.POST
+			},
+			{
+				path: 'internal/v1/crm-access/authorize-mail-workflow',
+				method: RequestMethod.POST
+			},
+
+			{
 				path: 'internal/v1/crm-access/authorize',
 				method: RequestMethod.POST
 			},
@@ -106,15 +115,9 @@ async function bootstrap(): Promise<void> {
 	const runtime = app.get(CrmAccessRuntimeService);
 	await app.listen(
 		runtime.port,
-		getCrmAccessListenHost(
-			process.env.MODE,
-			process.env.CRM_ACCESS_LISTEN_HOST
-		)
+		getCrmAccessListenHost(process.env.MODE, process.env.CRM_ACCESS_LISTEN_HOST)
 	);
-	Logger.log(
-		`CRM Access service started port=${runtime.port}`,
-		'Bootstrap'
-	);
+	Logger.log(`CRM Access service started port=${runtime.port}`, 'Bootstrap');
 }
 
 void bootstrap().catch(() => {

@@ -1,5 +1,7 @@
 'use client'
 
+import { useGuardedRouter } from '@/shared/lib/dirty-form'
+
 import styles from '@/widgets/crm-app-shell/ui/CrmAppShell.module.scss'
 import {
 	CRM_NAVIGATION,
@@ -31,7 +33,7 @@ import {
 } from '@/shared/ui'
 import clsx from 'clsx'
 import { useQuery } from '@tanstack/react-query'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { type PropsWithChildren, useEffect, useId, useState } from 'react'
 
 interface CrmNavigationProps {
@@ -129,7 +131,7 @@ const CrmMobileNavigation = ({
 const CrmAppShell = ({ children }: PropsWithChildren) => {
 	const pathname = usePathname()
 	const access = useCrmWorkspaceAccess()
-	const router = useRouter()
+	const router = useGuardedRouter()
 	const searchParams = useSearchParams()
 	const { session, sessionRevision } = useSessionStore()
 	const permissions = useCrmPermissions(

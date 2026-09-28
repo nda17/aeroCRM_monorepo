@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyForm } from '@/shared/lib/dirty-form'
+
 import { mutateIntakeSource, type IntakeSource } from '@/entities/intake'
 import { Button, Drawer, ScreenState, TextField } from '@/shared/ui'
 import { useState } from 'react'
@@ -39,6 +41,10 @@ export const SourceEditor = ({
 	const form = useForm<{ name: string }>({
 		defaultValues: { name: integration === 'tilda' ? 'Tilda' : '' }
 	})
+	const draftGuard = useDirtyForm({
+		dirty: form.formState.isDirty,
+		label: 'Источник обращений'
+	})
 	const command = useIntakeCommand(
 		access,
 		'intake:manage-sources',
@@ -50,6 +56,7 @@ export const SourceEditor = ({
 				onClose()
 				return
 			}
+			form.reset(form.getValues())
 			setCredential({ source: result, token: sent.token })
 			toast.success(
 				sent.operation === 'create'
@@ -77,7 +84,7 @@ export const SourceEditor = ({
 			if (!access.sourceManager) {
 				setCredential(null)
 				setRevealed(false)
-				onClose()
+				draftGuard.confirmDiscard(onClose)
 				return
 			}
 			toast(
@@ -85,7 +92,7 @@ export const SourceEditor = ({
 			)
 			return
 		}
-		onClose()
+		draftGuard.confirmDiscard(onClose)
 	}
 	const copy = async (value: string, isSecret: boolean) => {
 		try {
@@ -140,6 +147,7 @@ export const SourceEditor = ({
 	)
 	return (
 		<Drawer
+			dirtyFormIds={[draftGuard.id]}
 			isOpen
 			onClose={close}
 			title={

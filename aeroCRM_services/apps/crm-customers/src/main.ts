@@ -1,3 +1,4 @@
+import { mailRole } from './mail/mail.config';
 import { Logger, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { EXPORT_EXPOSE_HEADERS } from './exports/export-format';
@@ -18,15 +19,27 @@ async function bootstrap(): Promise<void> {
 		process.env.MODE
 	);
 	const port = parseCrmCustomersPort(process.env.CRM_CUSTOMERS_PORT);
-	const origins = parseCrmCustomersCorsAllowedOrigins(
-		process.env.CORS_ALLOWED_ORIGINS
-	);
+	const origins =
+		mailRole() === 'api'
+			? parseCrmCustomersCorsAllowedOrigins(process.env.CORS_ALLOWED_ORIGINS)
+			: [];
 	const app = await NestFactory.create<NestExpressApplication>(
 		CrmCustomersModule,
 		{ forceCloseConnections: true }
 	);
 	application = app;
 	app.useBodyParser('json', { limit: '32kb' });
+	app.use(
+		'/api/v1/crm/customers/mail',
+		(
+			_request: unknown,
+			response: import('express').Response,
+			next: () => void
+		) => {
+			response.setHeader('Cache-Control', 'private,no-store');
+			next();
+		}
+	);
 	app.useGlobalPipes(
 		new ValidationPipe({
 			transform: true,
@@ -38,7 +51,10 @@ async function bootstrap(): Promise<void> {
 
 	app.setGlobalPrefix('api/v1', {
 		exclude: [
-			{ path: 'internal/v1/workspace-closures/fence', method: RequestMethod.POST },
+			{
+				path: 'internal/v1/workspace-closures/fence',
+				method: RequestMethod.POST
+			},
 			{
 				path: 'internal/v1/crm-customers/intake-operations/verify',
 				method: RequestMethod.POST
@@ -64,15 +80,11 @@ async function bootstrap(): Promise<void> {
 		origin: origins,
 		credentials: true,
 		exposedHeaders:
-			'set-cookie, x-request-id, x-correlation-id, ' +
-			EXPORT_EXPOSE_HEADERS
+			'set-cookie, x-request-id, x-correlation-id, ' + EXPORT_EXPOSE_HEADERS
 	});
 	app.enableShutdownHooks();
 	await app.listen(port, host);
-	Logger.log(
-		`CRM Customers started host=${host} port=${port}`,
-		'Bootstrap'
-	);
+	Logger.log(`CRM Customers started host=${host} port=${port}`, 'Bootstrap');
 }
 
 void bootstrap().catch(() => {

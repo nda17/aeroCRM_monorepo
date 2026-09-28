@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyForm } from '@/shared/lib/dirty-form'
+
 import {
 	getCrmPermissions,
 	useCrmPermissions
@@ -78,6 +80,10 @@ const BrandingForm = ({
 	const { session, sessionRevision, workspace } = context
 	const [baseline, setBaseline] = useState(initial.branding)
 	const [draft, setDraft] = useState(initial.branding.displayName ?? '')
+	const draftGuard = useDirtyForm({
+		dirty: draft !== (baseline.displayName ?? ''),
+		label: 'Название рабочего пространства'
+	})
 	const queryClient = useQueryClient()
 	const permissions = useCrmPermissions(
 		workspace.workspaceId,
@@ -297,7 +303,11 @@ const BrandingForm = ({
 						<Button
 							variant="secondary"
 							disabled={context.query.isFetching || !canWrite}
-							onClick={() => void reload()}
+							onClick={() =>
+								draftGuard.confirmDiscard(() => {
+									void reload()
+								})
+							}
 						>
 							Загрузить актуальное название
 						</Button>

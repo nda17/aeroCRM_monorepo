@@ -33,8 +33,12 @@ const CrmWorkspaceAccessContext = createContext<CrmWorkspaceAccess | null>(
 /** Mount only after AccessGate has successfully validated the current session. */
 export const CrmWorkspaceAccessProvider = ({
 	access,
+	revalidating = false,
 	children
-}: PropsWithChildren<{ access: CrmResolvedAccessResponse }>) => {
+}: PropsWithChildren<{
+	access: CrmResolvedAccessResponse
+	revalidating?: boolean
+}>) => {
 	if (!canOpenCrmWorkspace(access) || !access.entitlement) {
 		throw new Error('Confirmed workspace access is required')
 	}
@@ -48,7 +52,7 @@ export const CrmWorkspaceAccessProvider = ({
 				state: access.state as CrmWorkspaceAccessState,
 				membership: access.membership,
 				entitlement: access.entitlement,
-				canWrite: !isReadOnly,
+				canWrite: !isReadOnly && !revalidating,
 				isReadOnly,
 				canExport: access.membership.role === 'OWNER'
 			}}

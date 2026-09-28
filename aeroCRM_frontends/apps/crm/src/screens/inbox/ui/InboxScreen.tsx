@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyFormGuard } from '@/shared/lib/dirty-form'
+
 import {
 	listInbox,
 	type InboxEntry,
@@ -46,6 +48,7 @@ const InboxContent = ({
 	access: ReturnType<typeof useIntakeAccess>
 	initialEntryId: string | null
 }) => {
+	const draftGuard = useDirtyFormGuard()
 	const client = useQueryClient()
 	const [tab, setTab] = useState<'inbox' | 'sources'>('inbox')
 	const [searchDraft, setSearchDraft] = useState('')
@@ -122,7 +125,9 @@ const InboxContent = ({
 				<button
 					type="button"
 					className={styles.entryButton}
-					onClick={() => setSelected({ id: entry.id })}
+					onClick={() =>
+						draftGuard.confirmDiscard(() => setSelected({ id: entry.id }))
+					}
 				>
 					<strong>{entry.title}</strong>
 					<span>{entry.name ?? 'Имя не передано'}</span>
@@ -246,7 +251,9 @@ const InboxContent = ({
 							tooltip="Внести обращение вручную, чтобы затем принять его в работу или отклонить."
 							disabledTooltip="Создание доступно на вкладке обращений при подтверждённых правах на изменение."
 							leadingIcon={<AppIcon name="plus" size={18} />}
-							onClick={() => setSelected({})}
+							onClick={() =>
+								draftGuard.confirmDiscard(() => setSelected({}))
+							}
 						>
 							Новое обращение
 						</Button>
@@ -262,7 +269,7 @@ const InboxContent = ({
 					variant={tab === 'inbox' ? 'primary' : 'secondary'}
 					tooltip="Просматривать поступившие заявки, принимать их в работу и отслеживать результат обработки."
 					aria-pressed={tab === 'inbox'}
-					onClick={() => setTab('inbox')}
+					onClick={() => draftGuard.confirmDiscard(() => setTab('inbox'))}
 				>
 					Обращения
 				</Button>
@@ -270,7 +277,9 @@ const InboxContent = ({
 					variant={tab === 'sources' ? 'primary' : 'secondary'}
 					tooltip="Настроить поступление заявок из форм сайта, Tilda и внешних API."
 					aria-pressed={tab === 'sources'}
-					onClick={() => setTab('sources')}
+					onClick={() =>
+						draftGuard.confirmDiscard(() => setTab('sources'))
+					}
 				>
 					Источники
 				</Button>

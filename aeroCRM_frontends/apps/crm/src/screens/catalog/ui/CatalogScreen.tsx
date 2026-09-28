@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyValue } from '@/shared/lib/dirty-form'
+
 import {
 	listCatalogItems,
 	saveCatalogItem,
@@ -87,6 +89,10 @@ const CatalogEditor = ({
 	)
 	const [error, setError] = useState<string | null>(null)
 	const [confirmArchive, setConfirmArchive] = useState(false)
+	const draftGuard = useDirtyValue(
+		{ name, code, kind, unit, price },
+		'Позиция каталога'
+	)
 	const command = useCommerceCommand<CatalogMutation, unknown>(
 		context,
 		`catalog:${item?.id || 'new'}`,
@@ -148,10 +154,11 @@ const CatalogEditor = ({
 	if (!context.canRead)
 		return (
 			<Drawer
+				dirtyFormIds={[draftGuard.id]}
 				isOpen
 				title="Позиция каталога"
 				onClose={() => {
-					if (command.canClose()) onClose()
+					if (command.canClose()) draftGuard.confirmDiscard(onClose)
 				}}
 			>
 				<ScreenState
@@ -163,10 +170,11 @@ const CatalogEditor = ({
 		)
 	return (
 		<Drawer
+			dirtyFormIds={[draftGuard.id]}
 			isOpen
 			title={item ? 'Позиция каталога' : 'Новая позиция'}
 			onClose={() => {
-				if (command.canClose()) onClose()
+				if (command.canClose()) draftGuard.confirmDiscard(onClose)
 			}}
 			footer={
 				!item?.archivedAt ? (

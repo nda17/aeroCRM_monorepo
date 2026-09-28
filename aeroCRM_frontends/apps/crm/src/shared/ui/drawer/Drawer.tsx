@@ -1,6 +1,7 @@
 'use client'
 
 import clsx from 'clsx'
+import { useDirtyFormGuard, DirtyFormScope } from '@/shared/lib/dirty-form'
 import { useEffect, useId, useRef } from 'react'
 import type { MouseEvent, ReactNode, RefObject } from 'react'
 
@@ -13,6 +14,7 @@ export type DrawerSize = 'sm' | 'md' | 'lg'
 
 export interface DrawerProps {
 	isOpen: boolean
+	dirtyFormIds?: readonly string[]
 	onClose: () => void
 	title: ReactNode
 	description?: ReactNode
@@ -46,6 +48,7 @@ const releaseBodyLock = () => {
 
 export const Drawer = ({
 	isOpen,
+	dirtyFormIds,
 	onClose,
 	title,
 	description,
@@ -57,6 +60,10 @@ export const Drawer = ({
 	initialFocusRef,
 	className
 }: DrawerProps) => {
+	const guard = useDirtyFormGuard()
+	const scopeId = useId()
+	const close = () =>
+		guard.confirmDiscard(onClose, [scopeId, ...(dirtyFormIds ?? [])])
 	const dialogRef = useRef<HTMLDialogElement>(null)
 	const closeButtonRef = useRef<HTMLButtonElement>(null)
 	const previouslyFocusedElementRef = useRef<HTMLElement | null>(null)
@@ -101,7 +108,7 @@ export const Drawer = ({
 	}, [initialFocusRef, isOpen, registerToastHost])
 
 	const handleBackdropClick = (event: MouseEvent<HTMLDialogElement>) => {
-		if (event.target === event.currentTarget) onClose()
+		if (event.target === event.currentTarget) close()
 	}
 
 	return (
@@ -118,7 +125,7 @@ export const Drawer = ({
 			onCancel={event => {
 				if (event.target !== event.currentTarget) return
 				event.preventDefault()
-				onClose()
+				close()
 			}}
 			onClick={handleBackdropClick}
 		>
@@ -138,16 +145,18 @@ export const Drawer = ({
 						ref={closeButtonRef}
 						type="button"
 						className={styles.closeButton}
-						onClick={onClose}
+						onClick={close}
 						aria-label={closeLabel}
 					>
 						<AppIcon name="close" size={20} />
 					</button>
 				</header>
-				<div className={styles.content}>{children}</div>
-				{footer ? (
-					<footer className={styles.footer}>{footer}</footer>
-				) : null}
+				<DirtyFormScope id={scopeId}>
+					<div className={styles.content}>{children}</div>
+					{footer ? (
+						<footer className={styles.footer}>{footer}</footer>
+					) : null}
+				</DirtyFormScope>
 			</div>
 		</dialog>
 	)

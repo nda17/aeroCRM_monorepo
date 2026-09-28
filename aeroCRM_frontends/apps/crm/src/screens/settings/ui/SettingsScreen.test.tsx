@@ -30,6 +30,9 @@ vi.mock('@/features/manage-intake-sla', () => ({
 vi.mock('@/features/manage-crm-billing', () => ({
 	BillingEntryCard: () => <div>Управление оплатой владельца</div>
 }))
+vi.mock('@/features/manage-mail/ui/MailSettings', () => ({
+	MailSettings: () => null
+}))
 vi.mock('@/entities/crm-team', async original => ({
 	...(await original<object>()),
 	listTeamRecords: vi.fn()

@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyValue } from '@/shared/lib/dirty-form'
+
 import {
 	getEmployeeProfile,
 	normalizeEmployeeName,
@@ -168,6 +170,7 @@ const EmployeeProfileForm = ({
 	const [version, setVersion] = useState(initial.profile?.version ?? 0)
 	const [error, setError] = useState('')
 	const [reviewing, setReviewing] = useState(false)
+	const draftGuard = useDirtyValue(draft, 'ФИО сотрудника')
 	const command = useEmployeeProfileCommand(
 		context,
 		initial.targetSubject,
@@ -176,7 +179,7 @@ const EmployeeProfileForm = ({
 	)
 	const locked = command.locked || reviewing
 	const close = () => {
-		if (command.canClose()) onClose()
+		if (command.canClose()) draftGuard.confirmDiscard(onClose)
 	}
 	const submit = (event: FormEvent) => {
 		event.preventDefault()
@@ -197,6 +200,7 @@ const EmployeeProfileForm = ({
 			const fresh = await onReview()
 			if (command.reset()) {
 				setDraft(names(fresh))
+				draftGuard.resetBaseline(names(fresh))
 				setVersion(fresh.profile?.version ?? 0)
 				setError('')
 				toast('Данные обновлены. Проверьте ФИО перед сохранением.')
@@ -211,6 +215,7 @@ const EmployeeProfileForm = ({
 	}
 	return (
 		<Drawer
+			dirtyFormIds={[draftGuard.id]}
 			isOpen
 			title="ФИО сотрудника"
 			description={description}
@@ -256,7 +261,11 @@ const EmployeeProfileForm = ({
 								variant="secondary"
 								disabled={reviewing}
 								isLoading={reviewing}
-								onClick={() => void review()}
+								onClick={() =>
+									draftGuard.confirmDiscard(() => {
+										void review()
+									})
+								}
 							>
 								Перечитать и проверить
 							</Button>

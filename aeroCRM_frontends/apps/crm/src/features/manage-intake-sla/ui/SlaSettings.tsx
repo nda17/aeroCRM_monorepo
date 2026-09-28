@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyValue } from '@/shared/lib/dirty-form'
+
 import { useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -58,6 +60,7 @@ const SlaForm = ({
 	const [config, setConfig] = useState<SlaConfig>(() =>
 		structuredClone(response.rule?.config ?? initialConfig)
 	)
+	const draftGuard = useDirtyValue(config, 'Правило SLA')
 	const options = useAssigneeOptions(context.directory, {
 		purpose: 'SLA_RECIPIENT',
 		selectedSubject: config.responsibleBinding?.subject
@@ -113,6 +116,7 @@ const SlaForm = ({
 		saveSlaRule,
 		() => {
 			toast.success('Настройки SLA сохранены')
+			draftGuard.resetBaseline()
 			onSaved()
 		}
 	)
@@ -343,10 +347,12 @@ const SlaForm = ({
 				{command.error?.kind === 'conflict' ? (
 					<Button
 						variant="secondary"
-						onClick={() => {
-							command.reset()
-							onSaved()
-						}}
+						onClick={() =>
+							draftGuard.confirmDiscard(() => {
+								command.reset()
+								onSaved()
+							})
+						}
 					>
 						Загрузить актуальную версию SLA
 					</Button>

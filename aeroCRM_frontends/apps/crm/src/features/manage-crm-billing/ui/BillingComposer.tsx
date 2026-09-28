@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyValue } from '@/shared/lib/dirty-form'
+
 import {
 	getBillingQuote,
 	type BillingContext,
@@ -61,6 +63,7 @@ export const BillingComposer = ({
 	const [loading, setLoading] = useState(false)
 	const [failure, setFailure] = useState<string | null>(null)
 	const [now, setNow] = useState(0)
+	useDirtyValue({ cycle, seats, autoRenew }, 'Условия подписки')
 	const mounted = useRef(true)
 	const requestSequence = useRef(0)
 	const loadingToastId = useRef<string | null>(null)

@@ -44,6 +44,9 @@ vi.mock('react-hot-toast', () => ({
 		dismiss: vi.fn()
 	})
 }))
+vi.mock('@/features/manage-mail/ui/CustomerMailPanel', () => ({
+	CustomerMailPanel: () => null
+}))
 const workspaceId = '11111111-1111-4111-8111-111111111111'
 const contact: Customer = {
 	kind: 'contacts',

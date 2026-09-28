@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyValue } from '@/shared/lib/dirty-form'
+
 import { canAcceptInbox } from '@/entities/crm-access'
 
 import { listCustomers, type Customer } from '@/entities/customer'
@@ -347,6 +349,19 @@ const AcceptanceForm = ({
 	const [stageId, setStageId] = useState('')
 	const [taskTitle, setTaskTitle] = useState('Связаться с клиентом')
 	const [dueAt, setDueAt] = useState('')
+	const draftGuard = useDirtyValue(
+		{
+			mode,
+			selected: selected?.id,
+			title,
+			amount,
+			pipelineId,
+			stageId,
+			taskTitle,
+			dueAt
+		},
+		'Принятие обращения в работу'
+	)
 	const scope = [
 		access.workspaceId,
 		access.session?.userId,
@@ -646,7 +661,7 @@ const AcceptanceForm = ({
 				<Button
 					variant="secondary"
 					disabled={context.command.locked}
-					onClick={onCancel}
+					onClick={() => draftGuard.confirmDiscard(onCancel)}
 				>
 					Вернуться к обращению
 				</Button>

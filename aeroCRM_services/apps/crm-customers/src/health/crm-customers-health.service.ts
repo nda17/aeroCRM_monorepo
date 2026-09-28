@@ -1,12 +1,21 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { MailConfig, mailRole } from '../mail/mail.config';
+import {
+	Injectable,
+	Optional,
+	ServiceUnavailableException
+} from '@nestjs/common';
 import { CrmCustomersPrismaService } from '../prisma/crm-customers-prisma.service';
 
-const SERVICE_NAME = 'crm-customers';
+const SERVICE_NAME =
+	mailRole() === 'api' ? 'crm-customers' : `crm-customers-${mailRole()}`;
 const DATABASE_SERVICE_NAME = 'crm-customers-service';
 
 @Injectable()
 export class CrmCustomersHealthService {
-	constructor(private readonly prisma: CrmCustomersPrismaService) {}
+	constructor(
+		private readonly prisma: CrmCustomersPrismaService,
+		@Optional() private readonly mailConfig?: MailConfig
+	) {}
 
 	liveness() {
 		return {
@@ -26,6 +35,16 @@ export class CrmCustomersHealthService {
 	async readiness() {
 		try {
 			await this.prisma.$queryRaw`SELECT 1`;
+			void this.mailConfig?.enabled;
+			await this.prisma
+				.$queryRaw`SELECT m.id,g.id,f.id,l.id,a.id,c.command_id,s.send_id,d.id FROM crm_customers.mail_mailboxes m CROSS JOIN crm_customers.mail_mailbox_grants g CROSS JOIN crm_customers.mail_folders f CROSS JOIN crm_customers.mail_contact_links l CROSS JOIN crm_customers.mail_attachments a CROSS JOIN crm_customers.mail_commands c CROSS JOIN crm_customers.mail_send_attachments s CROSS JOIN crm_customers.mail_audit d LIMIT 0`;
+
+			await this.prisma
+				.$queryRaw`SELECT id, workspace_id, transport, encrypted_secret, generation FROM crm_customers.mail_connections LIMIT 0`;
+			await this.prisma
+				.$queryRaw`SELECT id, workspace_id, state, dispatch_admitted_at, mime_hash FROM crm_customers.mail_send_intents LIMIT 0`;
+			await this.prisma
+				.$queryRaw`SELECT id, workspace_id, state, lease_version, lease_until FROM crm_customers.mail_jobs LIMIT 0`;
 			await this.prisma
 				.$queryRaw`SELECT id, workspace_id, actor_subject, entity, format, row_count, byte_count, snapshot_at, prepared_at FROM crm_customers.export_audit LIMIT 0`;
 			await this.prisma

@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyFormGuard } from '@/shared/lib/dirty-form'
+
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
@@ -94,15 +96,18 @@ export const ReminderSettingsBody = ({
 		command.error.kind !== 'validation'
 	const locked = command.locked || blocked
 	const visible = ready && records.isSuccess && !records.isFetching
+	const draftGuard = useDirtyFormGuard()
 	const change = (action: () => void) => {
 		if (command.locked) {
 			toast('Сначала подтвердите результат сохранённой команды.')
 			return
 		}
 		if (!context.current()) return
-		setEditor(null)
-		command.reset()
-		action()
+		draftGuard.confirmDiscard(() => {
+			setEditor(null)
+			command.reset()
+			action()
+		})
 	}
 	const canEdit = writable && visible && !locked
 	const pages = Math.max(1, Math.ceil((records.data?.total ?? 0) / 10))

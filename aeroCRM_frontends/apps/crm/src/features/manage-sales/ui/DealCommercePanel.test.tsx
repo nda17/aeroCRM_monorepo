@@ -8,6 +8,7 @@ import {
 	waitFor
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AuthenticatedApiError } from '@/shared/api/authenticated-http-client'
 import type { CommerceContext } from '../model/use-commerce-command'
 import { DealCommercePanel } from './DealCommercePanel'
 
@@ -241,5 +242,77 @@ describe('DealCommercePanel version refreshes', () => {
 			expectedVersion: 1,
 			lines: [expect.objectContaining({ name: 'Черновой монтаж' })]
 		})
+	})
+
+	it('keeps the unsaved lines draft and original CAS version after a transient refresh failure', async () => {
+		mountPanel()
+		const name = await screen.findByRole('textbox', {
+			name: 'Название позиции'
+		})
+		fireEvent.change(name, { target: { value: 'Черновой монтаж' } })
+
+		panelMocks.getDealCommerce.mockRejectedValueOnce(
+			new AuthenticatedApiError('temporary', 'Network unavailable')
+		)
+		const linesKey = ['sales', 'commerce-lines', ...context.key, dealId]
+		await act(async () => {
+			await client.refetchQueries({ queryKey: linesKey, exact: true })
+		})
+		expect(client.getQueryState(linesKey)?.status).toBe('error')
+		expect(client.getQueryState(linesKey)?.error).toBeInstanceOf(
+			AuthenticatedApiError
+		)
+
+		const retainedName = screen.getByRole('textbox', {
+			name: 'Название позиции'
+		}) as HTMLInputElement
+		expect(retainedName.value).toBe('Черновой монтаж')
+		expect(panelMocks.getDealCommerce).toHaveBeenCalledTimes(2)
+		await screen.findByRole('button', { name: 'Повторить' })
+		expect(
+			screen.getByRole('button', { name: 'Сохранить состав' })
+		).toHaveProperty('disabled', true)
+
+		fireEvent.click(screen.getByRole('button', { name: 'Повторить' }))
+		await waitFor(() =>
+			expect(
+				screen.getByRole('button', { name: 'Сохранить состав' })
+			).toHaveProperty('disabled', false)
+		)
+
+		panelMocks.autoConfirm = false
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Сохранить состав' })
+		)
+		await waitFor(() => expect(panelMocks.submitted).toHaveLength(1))
+		expect(panelMocks.submitted[0]).toMatchObject({
+			action: 'lines',
+			expectedVersion: 1,
+			lines: [expect.objectContaining({ name: 'Черновой монтаж' })]
+		})
+	})
+
+	it('drops cached draft fields when the server revokes access to the deal composition', async () => {
+		mountPanel()
+		fireEvent.change(
+			await screen.findByRole('textbox', { name: 'Название позиции' }),
+			{ target: { value: 'Не показывать после отзыва прав' } }
+		)
+		panelMocks.getDealCommerce.mockRejectedValueOnce(
+			new AuthenticatedApiError('forbidden', 'Access revoked')
+		)
+		const linesKey = ['sales', 'commerce-lines', ...context.key, dealId]
+		await act(async () => {
+			await client.refetchQueries({ queryKey: linesKey, exact: true })
+		})
+		expect(client.getQueryState(linesKey)?.status).toBe('error')
+
+		await waitFor(() =>
+			expect(
+				screen.queryByRole('textbox', { name: 'Название позиции' })
+			).toBeNull()
+		)
+		expect(screen.getByText('Состав сделки недоступен')).toBeTruthy()
+		expect(panelMocks.submitted).toHaveLength(0)
 	})
 })

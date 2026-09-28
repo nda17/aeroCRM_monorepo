@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { PropsWithChildren } from 'react'
 import { useState } from 'react'
+import { DirtyFormProvider } from '@/shared/lib/dirty-form'
 import { ToastProvider } from '@/shared/ui/toast-provider'
 import { useSessionStore } from '@/entities/session'
 import {
@@ -49,7 +50,13 @@ const AppProviders = ({ children }: PropsWithChildren) => {
 					readOwner={readCommandOwner}
 					subscribeOwner={subscribeCommandOwner}
 				>
-					{children}
+					<DirtyFormProvider
+						owner={owner}
+						readOwner={readCommandOwner}
+						subscribeOwner={subscribeCommandOwner}
+					>
+						{children}
+					</DirtyFormProvider>
 				</PendingCommandProvider>
 			</ToastProvider>
 		</QueryClientProvider>

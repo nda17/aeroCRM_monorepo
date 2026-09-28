@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyFormGuard } from '@/shared/lib/dirty-form'
+
 import {
 	crmRoleLabels,
 	crmRoles,
@@ -12,6 +14,7 @@ import { CrmCommercialPolicyCard } from '@/features/view-crm-commercial-policy'
 import { WorkspaceBrandingSettings } from '@/features/manage-workspace-branding'
 import { ReminderSettings } from '@/features/manage-reminders'
 import { SlaSettings } from '@/features/manage-intake-sla'
+import { MailSettings } from '@/features/manage-mail/ui/MailSettings'
 import { BillingEntryCard } from '@/features/manage-crm-billing'
 import {
 	WorkspaceClosureCard,
@@ -91,6 +94,7 @@ const SettingsScreen = () => {
 	const reasonPrefix = useId()
 	const context = useTeamSession()
 	const { workspace, session, sessionRevision } = context
+	const draftGuard = useDirtyFormGuard()
 	const [tab, setTab] = useState<TeamCollection>('members')
 	const [page, setPage] = useState(1)
 	const [selected, setSelected] = useState<TeamEditorSelection | null>(
@@ -144,7 +148,7 @@ const SettingsScreen = () => {
 	const reasonId = (row: TeamRow) =>
 		`${reasonPrefix}-${row.kind}-${row.id}`
 	const open = (kind: TeamEditorSelection['kind'], record?: TeamRow) =>
-		setSelected({ kind, record })
+		draftGuard.confirmDiscard(() => setSelected({ kind, record }))
 	const refresh = async () => {
 		await Promise.all([
 			queryClient.invalidateQueries({
@@ -453,6 +457,9 @@ const SettingsScreen = () => {
 			<WorkspaceBrandingSettings />
 			<ReminderSettings />
 			<SlaSettings />
+			<MailSettings
+				key={`${session?.userId}:${sessionRevision}:${workspace.workspaceId}`}
+			/>
 			<CrmCommercialPolicyCard />
 			{workspace.membership.role === 'OWNER' &&
 			getRuntimeConfig().crmBillingEnabled ? (
@@ -554,11 +561,13 @@ const SettingsScreen = () => {
 									key={value}
 									variant={tab === value ? 'primary' : 'secondary'}
 									aria-pressed={tab === value}
-									onClick={() => {
-										setTab(value)
-										setPage(1)
-										setSelected(null)
-									}}
+									onClick={() =>
+										draftGuard.confirmDiscard(() => {
+											setTab(value)
+											setPage(1)
+											setSelected(null)
+										})
+									}
 								>
 									{tabs[value]}
 								</Button>

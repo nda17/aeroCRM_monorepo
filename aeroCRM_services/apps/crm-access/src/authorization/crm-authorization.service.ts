@@ -3,10 +3,7 @@ import {
 	Injectable,
 	ServiceUnavailableException
 } from '@nestjs/common';
-import {
-	CrmAccessLifecycle,
-	type Prisma
-} from '@prisma/crm-access-client';
+import { CrmAccessLifecycle, type Prisma } from '@prisma/crm-access-client';
 import { getCrmAccessCorrelationId } from '../common/crm-access-request-context';
 import { BillingEntitlementClient } from '../internal/billing-entitlement.client';
 import {
@@ -67,7 +64,7 @@ export class CrmAuthorizationService {
 			correlationId
 		);
 		const membership = identity.memberships.find(
-			item => item.workspaceId === workspaceId
+			(item) => item.workspaceId === workspaceId
 		);
 		return this.resolve(
 			workspaceId,
@@ -125,10 +122,7 @@ export class CrmAuthorizationService {
 			!['crm-intake', 'crm-customers', 'crm-sales'].includes(caller)
 		)
 			throw new ForbiddenException('Unsupported workflow authority');
-		const context = await this.authorizeSubject(
-			workspaceId,
-			subject
-		);
+		const context = await this.authorizeSubject(workspaceId, subject);
 		const required = [
 			'intake:read',
 			'intake:write',
@@ -140,15 +134,13 @@ export class CrmAuthorizationService {
 		if (
 			context.state === 'READ_ONLY' ||
 			context.role === 'ANALYST' ||
-			!required.every(permission =>
-				context.permissions.includes(permission)
-			)
+			!required.every((permission) => context.permissions.includes(permission))
 		)
 			throw new ForbiddenException('Workflow execution is not permitted');
 		const namespace = caller.replace('crm-', '');
 		return {
 			...context,
-			permissions: context.permissions.filter(permission =>
+			permissions: context.permissions.filter((permission) =>
 				permission.startsWith(`${namespace}:`)
 			)
 		};
@@ -175,6 +167,94 @@ export class CrmAuthorizationService {
 			caller
 		);
 		return { ...context, membershipId: identity.membership!.membershipId };
+	}
+
+	async authorizeMail(
+		authorization: string | undefined,
+		workspaceId: string,
+		caller: CrmCaller
+	) {
+		if (caller !== 'crm-customers')
+			throw new ForbiddenException('Mail authority requires CRM Customers');
+		const correlationId = getCrmAccessCorrelationId();
+		const identity = await this.identity.authContext(
+			authorization,
+			correlationId
+		);
+		const membership = identity.memberships.find(
+			(item) => item.workspaceId === workspaceId
+		);
+		const customer = await this.resolve(
+			workspaceId,
+			identity.subject,
+			membership,
+			correlationId,
+			caller
+		);
+		return this.mailAuthority(customer, membership!.membershipId);
+	}
+
+	async authorizeMailWorkflow(
+		workspaceId: string,
+		subject: string,
+		membershipId: string,
+		purpose: string,
+		caller: CrmCaller
+	) {
+		if (
+			caller !== 'crm-customers' ||
+			!['MAIL_SYNC', 'MAIL_SEND'].includes(purpose)
+		)
+			throw new ForbiddenException('Unsupported mail authority');
+		const correlationId = getCrmAccessCorrelationId();
+		const identity = await this.identity.sourceContext(
+			workspaceId,
+			subject,
+			correlationId
+		);
+		if (
+			identity.subject !== subject ||
+			identity.membership?.membershipId !== membershipId
+		)
+			throw new ForbiddenException('Mail membership is no longer active');
+		const customer = await this.resolve(
+			workspaceId,
+			subject,
+			identity.membership,
+			correlationId,
+			caller
+		);
+		const authority = this.mailAuthority(customer, membershipId);
+		if (
+			!authority.mailPermissions.includes(
+				purpose === 'MAIL_SEND' ? 'mail:send' : 'mail:read'
+			)
+		)
+			throw new ForbiddenException('Mail delegation is no longer active');
+		return authority;
+	}
+
+	private mailAuthority(
+		customer: Awaited<ReturnType<CrmAuthorizationService['authorize']>>,
+		membershipId: string
+	) {
+		const mailPermissions: string[] = [];
+		if (customer.permissions.includes('customers:read'))
+			mailPermissions.push('mail:read');
+		if (
+			customer.state !== 'READ_ONLY' &&
+			customer.permissions.includes('customers:read') &&
+			customer.permissions.includes('customers:write')
+		) {
+			mailPermissions.push('mail:send');
+			mailPermissions.push('mail:manage');
+		}
+		return {
+			schemaVersion: 1 as const,
+			customer,
+			membershipId,
+			mailPermissions
+		};
 	}
 
 	private async resolve(
@@ -231,8 +311,7 @@ export class CrmAuthorizationService {
 		) {
 			throw new ForbiddenException('An active CRM role is required');
 		}
-		const role: CrmRole =
-			membership.role === 'OWNER' ? 'OWNER' : member!.role;
+		const role: CrmRole = membership.role === 'OWNER' ? 'OWNER' : member!.role;
 		const customRole = member?.customRole;
 		if (
 			role === 'CUSTOM' &&
@@ -244,7 +323,7 @@ export class CrmAuthorizationService {
 		// teamIds also bounds assignment in every domain service. Administrative
 		// roles must use current, service-owned teams from this workspace, not an
 		// absent OWNER member row or arbitrary team IDs supplied by the client.
-		let teamIds = member?.teams.map(team => team.teamId) ?? [];
+		let teamIds = member?.teams.map((team) => team.teamId) ?? [];
 		if (
 			role === 'OWNER' ||
 			role === 'CRM_ADMIN' ||
@@ -262,7 +341,7 @@ export class CrmAuthorizationService {
 				throw new ServiceUnavailableException(
 					'CRM team authority exceeds the supported contract limit'
 				);
-			teamIds = teams.map(team => team.id);
+			teamIds = teams.map((team) => team.id);
 		}
 		const state =
 			workspace.lifecycle === CrmAccessLifecycle.READ_ONLY ||
@@ -273,7 +352,7 @@ export class CrmAuthorizationService {
 		let permissions: string[];
 		if (role === 'CUSTOM') {
 			permissions = customRole!.permissions.filter(
-				permission => state !== 'READ_ONLY' || !permission.endsWith(':write')
+				(permission) => state !== 'READ_ONLY' || !permission.endsWith(':write')
 			);
 		} else {
 			permissions =
@@ -298,13 +377,13 @@ export class CrmAuthorizationService {
 				role === 'CUSTOM'
 					? (customRole!.dataScope as 'OWN' | 'TEAM' | 'ALL')
 					: role === 'MANAGER'
-					? ('OWN' as const)
-					: role === 'TEAM_LEAD'
-						? ('TEAM' as const)
-						: ('ALL' as const),
+						? ('OWN' as const)
+						: role === 'TEAM_LEAD'
+							? ('TEAM' as const)
+							: ('ALL' as const),
 			teamIds,
 			permissions: (namespace
-				? permissions.filter(permission =>
+				? permissions.filter((permission) =>
 						permission.startsWith(`${namespace}:`)
 					)
 				: permissions

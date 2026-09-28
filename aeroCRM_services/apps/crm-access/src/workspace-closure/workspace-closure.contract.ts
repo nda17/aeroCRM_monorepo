@@ -74,12 +74,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const hasExactKeys = (value: Record<string, unknown>, keys: string[]) => {
 	const actual = Object.keys(value);
-	return actual.length === keys.length && keys.every(key => Object.hasOwn(value, key));
+	return (
+		actual.length === keys.length &&
+		keys.every((key) => Object.hasOwn(value, key))
+	);
 };
 
 const isUuid = (value: unknown): value is string =>
 	typeof value === 'string' &&
-	/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+	/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+		value
+	);
 
 const isIsoDate = (value: unknown): value is string =>
 	typeof value === 'string' &&
@@ -168,7 +173,9 @@ export const parseClosureFence = (
 	};
 };
 
-export const parseClosureView = (value: unknown): WorkspaceClosureView | null => {
+export const parseClosureView = (
+	value: unknown
+): WorkspaceClosureView | null => {
 	if (
 		!isRecord(value) ||
 		!hasExactKeys(value, [
@@ -222,8 +229,8 @@ export const parseClosureView = (value: unknown): WorkspaceClosureView | null =>
 	}
 	if (
 		value.state === 'CLOSED' &&
-		(steps.some(step => step.state === 'PENDING') ||
-			steps.find(step => step.service === 'crm-intake')?.state !== 'SETTLED')
+		(steps.some((step) => step.state === 'PENDING') ||
+			steps.find((step) => step.service === 'crm-intake')?.state !== 'SETTLED')
 	) {
 		return null;
 	}
@@ -274,7 +281,8 @@ export const parseParticipantAck = (
 		!isCount(value.financialPendingCount) ||
 		!isCount(value.priorDispatchCount) ||
 		(expectedService !== 'billing' && value.financialPendingCount !== 0) ||
-		(expectedService !== 'notification-delivery' && value.priorDispatchCount !== 0)
+		(!['notification-delivery', 'crm-customers'].includes(expectedService) &&
+			value.priorDispatchCount !== 0)
 	) {
 		return null;
 	}

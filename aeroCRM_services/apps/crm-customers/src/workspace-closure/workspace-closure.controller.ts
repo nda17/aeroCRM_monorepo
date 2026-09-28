@@ -85,7 +85,7 @@ function envelope(value: unknown, settlement = false): ClosureEnvelope {
 		new Date(v.requestedAt).toISOString() !== v.requestedAt ||
 		(settlement &&
 			['customersFencedAt', 'salesFencedAt'].some(
-				k =>
+				(k) =>
 					typeof v[k] !== 'string' ||
 					!Number.isFinite(Date.parse(String(v[k]))) ||
 					new Date(String(v[k])).toISOString() !== v[k]
@@ -99,7 +99,7 @@ function envelope(value: unknown, settlement = false): ClosureEnvelope {
 export class WorkspaceClosureService {
 	constructor(private readonly prisma: CrmCustomersPrismaService) {}
 	async fence(binding: ClosureEnvelope) {
-		const fencedAt = await this.prisma.$transaction(async tx => {
+		const result = await this.prisma.$transaction(async (tx) => {
 			await tx.$executeRaw`SET LOCAL lock_timeout = '3000ms'`;
 			const rows = await tx.$queryRaw<Array<{ fenced_at: Date }>>`
         INSERT INTO crm_customers.workspace_closure_fences (workspace_id, closure_id, generation, owner_subject, requested_at, fenced_at)
@@ -111,7 +111,48 @@ export class WorkspaceClosureService {
         WHERE workspace_closure_fences.fenced_at IS NULL
         RETURNING fenced_at`;
 			if (rows.length) {
-				return rows[0].fenced_at;
+				const count = await tx.mailSendIntent.count({
+					where: {
+						workspaceId: binding.workspaceId,
+						dispatchAdmittedAt: { not: null }
+					}
+				});
+				await tx.mailConnection.updateMany({
+					where: {
+						workspaceId: binding.workspaceId,
+						state: { not: 'DISCONNECTED' }
+					},
+					data: {
+						state: 'DISCONNECTED',
+						encryptedSecret: null,
+						generation: { increment: 1 },
+						version: { increment: 1 }
+					}
+				});
+				await tx.mailMailbox.updateMany({
+					where: { workspaceId: binding.workspaceId, enabled: true },
+					data: {
+						enabled: false,
+						disconnectedAt: new Date(),
+						generation: { increment: 1 },
+						version: { increment: 1 },
+						safeErrorCode: 'MAIL_WORKSPACE_CLOSED'
+					}
+				});
+				await tx.mailSendIntent.updateMany({
+					where: {
+						workspaceId: binding.workspaceId,
+						state: 'QUEUED',
+						dispatchAdmittedAt: null
+					},
+					data: {
+						state: 'CANCELLED',
+						settledAt: new Date(),
+						version: { increment: 1 },
+						safeErrorCode: 'MAIL_WORKSPACE_CLOSED'
+					}
+				});
+				return { fencedAt: rows[0].fenced_at, priorDispatchCount: count };
 			}
 			const current = await tx.workspaceClosureFence.findUnique({
 				where: { workspaceId: binding.workspaceId }
@@ -124,8 +165,19 @@ export class WorkspaceClosureService {
 				current.requestedAt?.toISOString() !== binding.requestedAt ||
 				!current.fencedAt
 			)
-				throw new ConflictException({ code: 'crm_workspace_closure_binding_conflict', message: 'Workspace closure binding differs' });
-			return current.fencedAt;
+				throw new ConflictException({
+					code: 'crm_workspace_closure_binding_conflict',
+					message: 'Workspace closure binding differs'
+				});
+			return {
+				fencedAt: current.fencedAt,
+				priorDispatchCount: await tx.mailSendIntent.count({
+					where: {
+						workspaceId: binding.workspaceId,
+						dispatchAdmittedAt: { not: null }
+					}
+				})
+			};
 		});
 		return {
 			schemaVersion: 1,
@@ -134,9 +186,9 @@ export class WorkspaceClosureService {
 			workspaceId: binding.workspaceId,
 			generation: '1',
 			state: 'FENCED',
-			fencedAt: fencedAt.toISOString(),
+			fencedAt: result.fencedAt.toISOString(),
 			financialPendingCount: 0,
-			priorDispatchCount: 0
+			priorDispatchCount: result.priorDispatchCount
 		};
 	}
 }

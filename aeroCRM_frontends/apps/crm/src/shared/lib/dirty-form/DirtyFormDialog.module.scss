@@ -1,0 +1,27 @@
+.dialog {
+	width: min(32rem, calc(100vw - 2rem));
+	max-height: calc(100dvh - 2rem);
+	overflow: auto;
+	margin: auto;
+	padding: 1.5rem;
+	border: 1px solid var(--color-border, #e5e7eb);
+	border-radius: 1rem;
+	color: var(--color-text, #111827);
+	background: var(--color-surface, #fff);
+	box-shadow: 0 24px 64px rgb(0 0 0 / 20%);
+	&::backdrop {
+		background: rgb(15 23 42 / 45%);
+	}
+	h2 {
+		margin: 0 0 0.75rem;
+		font-size: 1.25rem;
+	}
+	p {
+		margin: 0 0 1.25rem;
+	}
+}
+.actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+}

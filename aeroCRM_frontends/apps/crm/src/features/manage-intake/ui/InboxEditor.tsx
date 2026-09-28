@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyForm } from '@/shared/lib/dirty-form'
+
 import { TeamSelect, useTeamOptions } from '@/entities/crm-team'
 import {
 	CRM_PHONE_INPUT_ERROR,
@@ -75,6 +77,10 @@ export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 			teamId: '',
 			reason: ''
 		}
+	})
+	const draftGuard = useDirtyForm({
+		dirty: form.formState.isDirty,
+		label: 'Обращение'
 	})
 	const teamId = useWatch({ control: form.control, name: 'teamId' })
 	const teams = useTeamOptions(
@@ -160,7 +166,7 @@ export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 				})
 			return
 		}
-		onClose()
+		draftGuard.confirmDiscard(onClose)
 	}
 	const submit = form.handleSubmit(
 		draft => {
@@ -206,6 +212,7 @@ export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 	const entry = record.isError ? undefined : record.data
 	return (
 		<Drawer
+			dirtyFormIds={[draftGuard.id]}
 			isOpen
 			onClose={close}
 			title={id ? 'Входящее обращение' : 'Новое обращение'}

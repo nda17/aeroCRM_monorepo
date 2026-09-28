@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyForm } from '@/shared/lib/dirty-form'
+
 import {
 	inspectCatalogImport,
 	previewCatalogImport,
@@ -136,6 +138,10 @@ export const CatalogImportDrawer = ({
 	} | null>(null)
 	const [busy, setBusy] = useState(false)
 	const [error, setError] = useState<string | null>(null)
+	const draftGuard = useDirtyForm({
+		dirty: !!file && !result,
+		label: 'Импорт каталога'
+	})
 	const sequence = useRef(0)
 	const live = useRef(false)
 	useLayoutEffect(() => {
@@ -257,6 +263,7 @@ export const CatalogImportDrawer = ({
 	if (!context.canRead)
 		return (
 			<Drawer
+				dirtyFormIds={[draftGuard.id]}
 				isOpen
 				title="Импорт каталога"
 				onClose={() => {

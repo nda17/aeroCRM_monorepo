@@ -1,3 +1,4 @@
+import { MailWorkflowDto } from './mail-authorization.dto';
 import {
 	Body,
 	Controller,
@@ -68,6 +69,32 @@ export class CrmPermissionsController {
 @UseGuards(CrmInternalGuard)
 export class CrmAuthorizationController {
 	constructor(private readonly authorization: CrmAuthorizationService) {}
+	@Post('authorize-mail')
+	@HttpCode(200)
+	@Header('Cache-Control', 'no-store')
+	authorizeMail(
+		@Headers('authorization') token: string | undefined,
+		@Headers('x-aerocrm-service') caller: CrmCaller,
+		@Body() dto: CrmAuthorizeDto
+	) {
+		return this.authorization.authorizeMail(token, dto.workspaceId, caller);
+	}
+	@Post('authorize-mail-workflow')
+	@HttpCode(200)
+	@Header('Cache-Control', 'no-store')
+	authorizeMailWorkflow(
+		@Headers('x-aerocrm-service') caller: CrmCaller,
+		@Body() dto: MailWorkflowDto
+	) {
+		return this.authorization.authorizeMailWorkflow(
+			dto.workspaceId,
+			dto.subject,
+			dto.membershipId,
+			dto.purpose,
+			caller
+		);
+	}
+
 	@Post('authorize-workflow')
 	@HttpCode(200)
 	@Header('Cache-Control', 'no-store')
@@ -102,10 +129,6 @@ export class CrmAuthorizationController {
 			throw new ForbiddenException(
 				'Only CRM Intake can authorize a durable source'
 			);
-		return this.authorization.authorizeSource(
-			dto.workspaceId,
-			dto.subject
-		);
+		return this.authorization.authorizeSource(dto.workspaceId, dto.subject);
 	}
-
 }

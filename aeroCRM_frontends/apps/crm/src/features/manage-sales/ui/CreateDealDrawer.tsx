@@ -1,5 +1,7 @@
 'use client'
 
+import { useDirtyValue } from '@/shared/lib/dirty-form'
+
 import { listCustomers, type Customer } from '@/entities/customer'
 import { CustomerEditor } from '@/features/edit-customer'
 import type { SalesPipeline } from '@/entities/sales'
@@ -105,6 +107,18 @@ export const CreateDealDrawer = ({
 		'deal:new',
 		context.scopeKey
 	)
+	const draftGuard = useDirtyValue(
+		{
+			pipelineId,
+			stageId,
+			title,
+			amount,
+			taskTitle,
+			due,
+			selected: selected?.id
+		},
+		'Новая сделка'
+	)
 	const options = contacts.data?.items || []
 	const choosePipeline = (id: string) => {
 		setPipelineId(id)
@@ -154,9 +168,10 @@ export const CreateDealDrawer = ({
 	return (
 		<>
 			<Drawer
+				dirtyFormIds={[draftGuard.id]}
 				isOpen={!creatingContact}
 				onClose={() => {
-					if (command.canClose()) onClose()
+					if (command.canClose()) draftGuard.confirmDiscard(onClose)
 				}}
 				title="Новая сделка"
 				description="Выберите клиента и запланируйте первое действие. Вы будете ответственным за сделку."
