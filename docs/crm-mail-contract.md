@@ -411,12 +411,36 @@ retention, original commandId after lost response, узкий viewport.
 Production acceptance отдельно подтверждает реальные выбранные Inbox/Sent,
 90-day boundary, shared/personal permissions, входящее и явную контрольную
 отправку/reply с вложением на согласованного адресата. AUTH, readiness и CI
-этого не доказывают. Уже зафиксированы ограничения restore и диска3.4 GiB;
-не добавлять clamd image/полный mail mirror и не ослаблять disk preflight.
-Timeweb не использовать по прямому указанию пользователя. Сейчас разрешённый
-живой контрольный аккаунт не предоставлен: generic adapter/unit mocks,
-проверка DNS/TLS и CI не подменяют реальный IMAP/SMTP pilot.
+этого не доказывают. Ограничение restore остаётся в backlog; не добавлять
+clamd image/полный mail mirror и не ослаблять disk preflight.
+28.09.2026 владелец отдельно разрешил Timeweb: контрольный ящик
+info@aerocrm.space и S3 с отдельным почтовым ключом. Реальный MailTransport
+подтвердил TLS AUTH IMAP, SMTP verify и доступность Inbox/Sent; писем ещё
+не отправляли, подключение ящика к CRM и полный pilot ещё не выполнены.
 Если необходимые S3/credential настройки или разрешённый аккаунт отсутствуют,
 код можно выпустить
 с недоступной соответствующей capability, но INT-04 нельзя назвать полностью
 включённой и проверенной функцией; границу зафиксировать в backlog/release.
+
+## Production: первый выпуск при выключенной почте, 28.09.2026
+
+Приложение выпущено на точном SHA `83a8fa3c3c4941bcb1bd8e43a10b8f5b738c1e18`
+из полного [CI 36415270434](https://github.com/nda17/aeroCRM_monorepo/actions/runs/36415270434),
+infra `538bd0fba1e1c80808ace32d1b696001f0c53e53`.
+[Backend release 36423073996](https://github.com/nda17/aeroCRM_monorepo/actions/runs/36423073996)
+и [frontend release 36424524671](https://github.com/nda17/aeroCRM_monorepo/actions/runs/36424524671)
+успешны. Read-only runtime проверка подтвердила 32/32 backend и 3/3 frontend
+readiness, точные версии образов, отсутствие рестартов/OOM и pending release.
+Схема совпадает с frozen SQL: 12 mail tables, 17 составных FK, 12 write guards.
+Подключений пока 0. Encryption key/id установлен; все три mail flags выключены.
+
+Перед выпуском отдельный согласованный
+[cleanup 36420566807](https://github.com/nda17/aeroCRM_monorepo/actions/runs/36420566807)
+удалил 105 проверенных неиспользуемых образов, сохранив 27 защищённых CRM-образов
+и все контейнеры; свободное место выросло до 34,6 GiB до загрузки нового релиза.
+
+Для включения остаются отдельный S3 user с доступом только к `mail/*`,
+проверка изоляции хранилища, CI/CD enable с прежним encryption key/id и живая
+приёмка выше. В доступной браузерной сессии Timeweb нужное хранилище aeroCRM
+отсутствует; требуется аккаунт, которому оно принадлежит. CRM-04 также выпущен,
+но production-проверка формы и Back/Forward ожидает авторизованной сессии CRM.
