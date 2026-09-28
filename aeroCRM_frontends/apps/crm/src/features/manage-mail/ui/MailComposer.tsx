@@ -18,13 +18,8 @@ import {
 	type MailSendState
 } from '@/entities/mail/model/mail.contract'
 import { useDirtyForm } from '@/shared/lib/dirty-form'
-import {
-	Button,
-	Drawer,
-	SelectField,
-	TextField,
-	TextareaField
-} from '@/shared/ui'
+import { Button, Drawer, SelectField, TextField } from '@/shared/ui'
+import { RichMailEditor } from './RichMailEditor'
 import {
 	newMailCommand,
 	useMailCommand,
@@ -60,17 +55,24 @@ export const MailComposer = ({
 	email,
 	mailboxes,
 	reply,
+	replyContacts = [],
+	accessBlocked = false,
+	onRecheckAccess,
 	onClose,
 	onQueued
 }: {
-	contactId: string
+	contactId: string | null
 	email: string | null
 	mailboxes: MailMailbox[]
 	reply?: MailMessageDetail
+	replyContacts?: { id: string; label: string }[]
+	accessBlocked?: boolean
+	onRecheckAccess?: () => void
 	onClose: () => void
 	onQueued: () => void
 }) => {
 	const context = useMailContext()
+	const [chosenContactId, setChosenContactId] = useState(contactId)
 	const [mailboxId, setMailboxId] = useState(
 		reply?.mailboxId ?? mailboxes[0]?.id ?? ''
 	)
@@ -91,6 +93,7 @@ export const MailComposer = ({
 			: ''
 	)
 	const [text, setText] = useState('')
+	const [html, setHtml] = useState<string | undefined>()
 	const [attachments, setAttachments] = useState<MailAttachment[]>([])
 	const [sendId, setSendId] = useState<string | null>(null)
 	const [attachmentPending, setAttachmentPending] = useState(false)
@@ -100,42 +103,51 @@ export const MailComposer = ({
 		dirty:
 			!sendId &&
 			(!!text ||
+				!!html ||
 				!!cc ||
 				!!bcc ||
 				!!attachments.length ||
 				to !== initial.to ||
 				subject !== initial.subject ||
 				mailboxId !== initial.mailboxId),
-		label: 'Письмо клиенту'
+		label: contactId ? 'Письмо клиенту' : 'Письмо'
 	})
 	const command = useMailCommand(
 		context,
-		`mail-compose:${contactId}:${reply?.id ?? 'new'}`,
+		`mail-compose:${chosenContactId ?? 'mailbox'}:${reply?.id ?? 'new'}`,
 		'mail:send',
 		(token, data: MailSendCommand) =>
 			mailCommand(token, '/send', data, parseMailSendResult),
 		result => {
 			setSendId(result.sendId)
 			setText('')
+			setHtml(undefined)
 			setAttachments([])
 			form.markClean()
 			onQueued()
-		}
+		},
+		!accessBlocked
 	)
 	const build = (): MailSendCommand => ({
 		...newMailCommand(context.workspace.workspaceId),
 		mailboxId,
-		contactId,
+		contactId: chosenContactId,
 		to: addresses(to)!,
 		cc: addresses(cc)!,
 		bcc: addresses(bcc)!,
 		subject,
 		text,
+		...(html ? { html } : {}),
 		attachmentIds: attachments.map(item => item.id),
 		replyToMessageId: reply?.id ?? null
 	})
 	const submit = () => {
+		if (accessBlocked || !command.enabled) return
 		setValidation(null)
+		if (replyContacts.length > 1 && !chosenContactId) {
+			setValidation('Выберите контакт, к которому будет привязан ответ.')
+			return
+		}
 		if (attachmentPending) {
 			setValidation(
 				'Дождитесь прикрепления выбранного файла или уберите его.'
@@ -157,9 +169,14 @@ export const MailComposer = ({
 			)
 			return
 		}
-		if (new TextEncoder().encode(text).byteLength > 24 * 1024) {
+		const encoder = new TextEncoder()
+		if (
+			encoder.encode(text).byteLength +
+				encoder.encode(html ?? '').byteLength >
+			24 * 1024
+		) {
 			setValidation(
-				'Слишком длинное письмо. Сократите текст или прикрепите его файлом.'
+				'Слишком длинное письмо с форматированием. Сократите текст или прикрепите его файлом.'
 			)
 			return
 		}
@@ -179,17 +196,45 @@ export const MailComposer = ({
 			)
 			return
 		}
-		void command.execute(build)
+		const data = build()
+		if (encoder.encode(JSON.stringify(data)).byteLength > 32 * 1024) {
+			setValidation(
+				'Письмо с получателями и форматированием превышает допустимый размер. Сократите его или прикрепите текст файлом.'
+			)
+			return
+		}
+		void command.execute(() => data)
 	}
 	return (
 		<Drawer
 			isOpen
-			title={reply ? 'Ответить клиенту' : 'Новое письмо'}
+			title={reply ? 'Ответить на письмо' : 'Новое письмо'}
 			onClose={onClose}
 			dirtyFormIds={[form.id]}
 		>
+			{accessBlocked ? (
+				<div className={styles.stack} role="status">
+					<p>
+						Доступ к отправке пока не подтверждён. Локальный текст письма
+						сохранён; отправка и прикрепление файлов приостановлены.
+					</p>
+					{onRecheckAccess ? (
+						<Button
+							variant="secondary"
+							disabled={context.capabilities.isFetching}
+							onClick={onRecheckAccess}
+						>
+							Проверить доступ
+						</Button>
+					) : null}
+				</div>
+			) : null}
 			{sendId ? (
-				<SendStatus id={sendId} onClose={onClose} />
+				<SendStatus
+					id={sendId}
+					accessBlocked={accessBlocked}
+					onClose={onClose}
+				/>
 			) : (
 				<form
 					className={styles.stack}
@@ -200,6 +245,32 @@ export const MailComposer = ({
 				>
 					<fieldset className={styles.fieldset} disabled={command.locked}>
 						<div className={styles.stack}>
+							{replyContacts.length > 1 ? (
+								<SelectField
+									label="Контакт для ответа"
+									required
+									value={chosenContactId ?? ''}
+									disabled={attachmentPending}
+									hint="Письмо связано с несколькими контактами. Выберите, к кому привязать ответ. При смене контакта вложения нужно прикрепить заново."
+									onChange={event => {
+										const next = event.target.value || null
+										const change = () => {
+											setChosenContactId(next)
+											setAttachments([])
+											setValidation(null)
+										}
+										if (attachments.length) form.confirmDiscard(change)
+										else change()
+									}}
+								>
+									<option value="">Выберите контакт</option>
+									{replyContacts.map(item => (
+										<option key={item.id} value={item.id}>
+											{item.label}
+										</option>
+									))}
+								</SelectField>
+							) : null}
 							<SelectField
 								label="Отправитель"
 								value={mailboxId}
@@ -248,12 +319,14 @@ export const MailComposer = ({
 								value={subject}
 								onChange={event => setSubject(event.target.value)}
 							/>
-							<TextareaField
-								label="Письмо"
-								rows={10}
-								maxLength={24576}
-								value={text}
-								onChange={event => setText(event.target.value)}
+							<RichMailEditor
+								text={text}
+								html={html}
+								disabled={command.locked}
+								onChange={content => {
+									setText(content.text)
+									setHtml(content.html)
+								}}
 							/>
 							{attachments.length ? (
 								<ul
@@ -288,11 +361,15 @@ export const MailComposer = ({
 					</fieldset>
 					{context.capabilities.data?.attachmentsAvailable ? (
 						<AttachmentUpload
-							key={`${context.key.join(':')}:${mailboxId}:${contactId}`}
+							key={`${context.key.join(':')}:${mailboxId}:${chosenContactId}`}
 							mailboxId={mailboxId}
-							contactId={contactId}
+							contactId={chosenContactId}
 							current={attachments}
-							disabled={command.locked}
+							disabled={
+								command.locked ||
+								accessBlocked ||
+								(replyContacts.length > 1 && !chosenContactId)
+							}
 							onPendingChange={setAttachmentPending}
 							onAttached={attachment =>
 								setAttachments(previous => [...previous, attachment])
@@ -304,11 +381,13 @@ export const MailComposer = ({
 						</p>
 					)}
 					{validation ? <p role="alert">{validation}</p> : null}
-					<MailCommandNotice command={command} />
+					{!accessBlocked ? <MailCommandNotice command={command} /> : null}
 					<Button
 						type="submit"
 						disabled={
 							command.locked ||
+							!command.enabled ||
+							(replyContacts.length > 1 && !chosenContactId) ||
 							attachmentPending ||
 							!context.capabilities.data?.mailPermissions.includes(
 								'mail:send'
@@ -332,7 +411,7 @@ const AttachmentUpload = ({
 	onAttached
 }: {
 	mailboxId: string
-	contactId: string
+	contactId: string | null
 	current: MailAttachment[]
 	disabled: boolean
 	onPendingChange: (pending: boolean) => void
@@ -376,7 +455,8 @@ const AttachmentUpload = ({
 				setExpired(false)
 				setTracked({ item: result.item, deadline: Date.now() + 60_000 })
 			}
-		}
+		},
+		!disabled
 	)
 	const intermediate = (state: MailAttachment['state']) =>
 		['DEFERRED', 'UPLOADING', 'QUARANTINED'].includes(state)
@@ -546,15 +626,17 @@ const AttachmentUpload = ({
 
 const SendStatus = ({
 	id,
+	accessBlocked,
 	onClose
 }: {
 	id: string
+	accessBlocked: boolean
 	onClose: () => void
 }) => {
 	const context = useMailContext()
 	const status = useQuery({
 		queryKey: ['mail-send', ...context.key, id],
-		enabled: !!context.session,
+		enabled: !!context.session && !accessBlocked,
 		queryFn: () =>
 			getMailSend(
 				context.session!.accessToken,
@@ -562,6 +644,7 @@ const SendStatus = ({
 				id
 			),
 		refetchInterval: query =>
+			!accessBlocked &&
 			!query.state.error &&
 			(!query.state.data ||
 				['QUEUED', 'SENDING'].includes(query.state.data.item.state))
@@ -570,6 +653,18 @@ const SendStatus = ({
 		gcTime: 0,
 		retry: false
 	})
+	if (accessBlocked)
+		return (
+			<div className={styles.stack}>
+				<p role="status">
+					Письмо уже поставлено в очередь. Проверка статуса приостановлена
+					до подтверждения доступа.
+				</p>
+				<Button variant="secondary" onClick={onClose}>
+					Закрыть
+				</Button>
+			</div>
+		)
 	return (
 		<div className={styles.stack}>
 			<p role="status">

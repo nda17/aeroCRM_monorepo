@@ -3,7 +3,8 @@ import {
 	parseMailLinkResult,
 	parseMailMailboxPage,
 	parseMailMailboxResult,
-	parseMailMessageResult
+	parseMailMessageResult,
+	parseMailRichMessageResult
 } from './mail.contract'
 
 const workspaceId = '11111111-1111-4111-8111-111111111111'
@@ -102,8 +103,10 @@ describe('mailbox sync status contract', () => {
 			)?.items
 		).toEqual([item])
 		expect(
-			parseMailMailboxResult({ schemaVersion: 1, workspaceId, item }, workspaceId)
-			?.item
+			parseMailMailboxResult(
+				{ schemaVersion: 1, workspaceId, item },
+				workspaceId
+			)?.item
 		).toEqual(item)
 	})
 
@@ -116,22 +119,31 @@ describe('mailbox sync status contract', () => {
 			)
 		).toBeNull()
 		expect(
-			parseMailMailboxResult({ schemaVersion: 1, workspaceId, item }, workspaceId)
+			parseMailMailboxResult(
+				{ schemaVersion: 1, workspaceId, item },
+				workspaceId
+			)
 		).toBeNull()
 	})
 })
 
 describe('mail message body contract', () => {
-	it.each(['', '  \n\t'])('accepts an empty or whitespace-only body %j', text => {
-		const item = { ...message, text }
-		expect(
-			parseMailMessageResult({ schemaVersion: 1, workspaceId, item }, workspaceId)
-			?.item.text
-		).toBe(text)
-	})
+	it.each(['', '  \n\t'])(
+		'accepts an empty or whitespace-only body %j',
+		text => {
+			const item = { ...message, text }
+			expect(
+				parseMailMessageResult(
+					{ schemaVersion: 1, workspaceId, item },
+					workspaceId
+				)?.item.text
+			).toBe(text)
+		}
+	)
 
 	it.each(['x'.repeat(262_145), 42, { text: 'invalid' }])(
-		'rejects an oversized or non-string body %#', text => {
+		'rejects an oversized or non-string body %#',
+		text => {
 			expect(
 				parseMailMessageResult(
 					{ schemaVersion: 1, workspaceId, item: { ...message, text } },
@@ -140,4 +152,23 @@ describe('mail message body contract', () => {
 			).toBeNull()
 		}
 	)
+})
+
+describe('mail detail HTML opt-in compatibility', () => {
+	it('keeps legacy exact keys and requires html on the new contract', () => {
+		const plain = { schemaVersion: 1, workspaceId, item: message }
+		expect(parseMailMessageResult(plain, workspaceId)).not.toBeNull()
+		expect(parseMailRichMessageResult(plain, workspaceId)).toBeNull()
+		for (const html of [null, '<p>Hello</p>']) {
+			const rich = { ...plain, item: { ...message, html } }
+			expect(parseMailMessageResult(rich, workspaceId)).toBeNull()
+			expect(parseMailRichMessageResult(rich, workspaceId)).not.toBeNull()
+		}
+		expect(
+			parseMailRichMessageResult(
+				{ ...plain, item: { ...message, html: 3 } },
+				workspaceId
+			)
+		).toBeNull()
+	})
 })

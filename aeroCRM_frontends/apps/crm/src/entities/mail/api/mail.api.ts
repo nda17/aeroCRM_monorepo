@@ -90,6 +90,33 @@ export const listContactMail = async (
 			workspaceId
 		)
 	)
+export const listMailboxMessages = async (
+	token: string,
+	workspaceId: string,
+	mailboxId: string,
+	folder: 'INBOX' | 'SENT',
+	cursor?: string
+) => {
+	const result = checked(
+		contract.parseMailMessagePage(
+			await read(token, workspaceId, '/messages', {
+				mailboxId,
+				folder,
+				...(cursor ? { cursor } : {})
+			}),
+			workspaceId
+		)
+	)
+	if (
+		result.items.some(
+			item =>
+				item.mailboxId !== mailboxId ||
+				item.direction !== (folder === 'INBOX' ? 'INBOUND' : 'OUTBOUND')
+		)
+	)
+		throw invalidContractError()
+	return result
+}
 export const listUnmatchedMail = async (
 	token: string,
 	workspaceId: string,
@@ -115,6 +142,19 @@ export const getMailMessage = async (
 	checked(
 		contract.parseMailMessageResult(
 			await read(token, workspaceId, `/messages/${id}`),
+			workspaceId
+		)
+	)
+export const getRichMailMessage = async (
+	token: string,
+	workspaceId: string,
+	id: string
+) =>
+	checked(
+		contract.parseMailRichMessageResult(
+			await read(token, workspaceId, `/messages/${id}`, {
+				bodyFormat: 'html'
+			}),
 			workspaceId
 		)
 	)
@@ -184,13 +224,13 @@ export const uploadMailAttachment = async (
 		workspaceId: string
 		commandId: string
 		mailboxId: string
-		contactId: string
+		contactId: string | null
 		file: File
 	}
 ) => {
 	const data = new FormData()
 	for (const [key, value] of Object.entries(command)) {
-		if (key === 'file') continue
+		if (key === 'file' || value === null) continue
 		data.append(key, String(value))
 	}
 	data.append('file', command.file)
@@ -204,7 +244,9 @@ export const uploadMailAttachment = async (
 					'Idempotency-Key': command.commandId,
 					'x-mail-workspace-id': command.workspaceId,
 					'x-mail-mailbox-id': command.mailboxId,
-					'x-mail-contact-id': command.contactId
+					...(command.contactId
+						? { 'x-mail-contact-id': command.contactId }
+						: {})
 				},
 				data
 			}),

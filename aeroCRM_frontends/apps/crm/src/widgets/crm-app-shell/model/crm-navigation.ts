@@ -1,6 +1,7 @@
 export type CrmNavigationIcon =
 	| 'clock'
 	| 'inbox'
+	| 'mail'
 	| 'deals'
 	| 'tasks'
 	| 'contacts'
@@ -29,6 +30,13 @@ export const CRM_NAVIGATION = [
 		label: 'Входящие',
 		description:
 			'Новые обращения поступают сюда из подключённых источников или создаются вручную. Принятие в работу выполняется отдельно.'
+	},
+	{
+		href: '/mail',
+		icon: 'mail',
+		label: 'Почта',
+		description:
+			'Читайте входящие и отправленные письма подключённых ящиков, отвечайте и пишите новые письма прямо в CRM.'
 	},
 	{
 		href: '/deals',

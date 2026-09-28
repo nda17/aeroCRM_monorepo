@@ -214,6 +214,7 @@ try {
       workspaceId,
       mailboxId: ids.mailbox,
       safeFileName: "fixture.txt",
+      contactId,
       declaredMime: "text/plain",
       detectedMime: "text/plain",
       byteSize: 8,
@@ -850,6 +851,129 @@ try {
       `${label} must not create an intent`,
     );
   }
+
+  // Standalone mail uses the same mailbox ACL without treating hidden linked
+  // mail as unlinked. Use real relational filters, cursor, command and guards.
+  const standaloneSource = randomUUID();
+  const standaloneLink = randomUUID();
+  const hiddenSource = randomUUID();
+  const hiddenContact = randomUUID();
+  const localUpload = randomUUID();
+  const ownAuthority = {
+    ...commandAuthority,
+    customer: { ...commandAuthority.customer, role: "MANAGER", dataScope: "OWN" },
+  };
+  await runtime.contact.create({ data: {
+    id: hiddenContact, workspaceId, name: "Standalone hidden contact",
+    createdBySubject: "another-employee",
+  } });
+  for (const [id, uid, createdAt] of [
+    [standaloneSource, 301n, "2030-01-01T00:00:00.000Z"],
+    [hiddenSource, 302n, "2030-01-02T00:00:00.000Z"],
+  ]) await runtime.mailMessage.create({ data: {
+    id, workspaceId, mailboxId: ids.mailbox, folderId: ids.folder,
+    folderGeneration: 1, uidValidity: 7n, uid, direction: "INBOUND",
+    references: [], from: [{ email: "standalone@example.org", name: null }],
+    to: [{ email: "mail@example.org", name: null }], cc: [], bcc: [],
+    subject: "Standalone source", plainText: "Synthetic source",
+    receivedAt: new Date(createdAt), createdAt: new Date(createdAt), bodyStatus: "COMPLETE",
+  } });
+  await runtime.mailContactLink.create({ data: {
+    id: standaloneLink, workspaceId, mailboxId: ids.mailbox,
+    messageId: standaloneSource, externalEmail: "standalone@example.org",
+    state: "UNMATCHED", method: "EXACT", actorSubject: subject,
+  } });
+  await runtime.mailContactLink.create({ data: {
+    workspaceId, mailboxId: ids.mailbox, messageId: hiddenSource,
+    externalEmail: "standalone@example.org", contactId: hiddenContact,
+    state: "LINKED", method: "MANUAL", actorSubject: subject,
+  } });
+  const standaloneQuery = { workspaceId, mailboxId: ids.mailbox, folder: "INBOX", limit: 1 };
+  const standalonePage = await mail.messages(ownAuthority, standaloneQuery);
+  assert.deepEqual(standalonePage.items.map(row => row.id), [standaloneSource],
+    "hidden newer mail must be filtered before LIMIT, not create an empty visible page");
+  assert(standalonePage.nextCursor);
+  const nextStandalonePage = await mail.messages(ownAuthority, {
+    ...standaloneQuery, cursor: standalonePage.nextCursor,
+  });
+  assert(!nextStandalonePage.items.some(row => [standaloneSource, hiddenSource].includes(row.id)));
+  await assert.rejects(() => mail.messages(ownAuthority, {
+    ...standaloneQuery, folder: "SENT", cursor: standalonePage.nextCursor,
+  }), "a cursor cannot be reused for another mail folder");
+  await assert.rejects(() => mail.message(ownAuthority, hiddenSource));
+  assert.equal((await mail.message(ownAuthority, standaloneSource)).item.id, standaloneSource);
+
+  await runtime.mailAttachment.create({ data: {
+    id: localUpload, workspaceId, mailboxId: ids.mailbox, contactId: null,
+    uploadActor: subject, uploadMembershipId: membershipId,
+    safeFileName: "standalone.txt", declaredMime: "text/plain", detectedMime: "text/plain",
+    byteSize: 8, sha256: "e".repeat(64),
+    privateObjectKey: `mail/${workspaceId}/${ids.mailbox}/${localUpload}`, state: "VALIDATED",
+  } });
+  const otherReader = { ...commandAuthority, membershipId: randomUUID(),
+    customer: { ...commandAuthority.customer, subject: "standalone-reader" } };
+  await runtime.mailMailboxGrant.create({ data: {
+    workspaceId, mailboxId: ids.mailbox, subject: otherReader.customer.subject,
+    membershipId: otherReader.membershipId, canRead: true, canSend: false, canManage: false,
+  } });
+  await assert.rejects(() => mail.attachmentMetadata(otherReader, localUpload),
+    "mailbox readers cannot read another author's unbound upload");
+  const standaloneDto = replyDto(standaloneSource, { contactId: null, attachmentIds: [localUpload] });
+  const standaloneReply = await mail.send(commandAuthority, standaloneDto);
+  assert.deepEqual(await mail.send(commandAuthority, standaloneDto), standaloneReply);
+  await assert.rejects(() => mail.send(commandAuthority, replyDto(null, {
+    contactId: null, attachmentIds: [localUpload],
+  })), "a bound reply upload cannot be reused to discard its inherited contact scope");
+  await assert.rejects(() => mail.send(commandAuthority, { ...standaloneDto, contactId }),
+    "the same command cannot change its nullable contact binding");
+  const standaloneChild = await mail.send(commandAuthority, replyDto(standaloneReply.sendId, { contactId: null }));
+  for (const sendId of [standaloneReply.sendId, standaloneChild.sendId]) {
+    const row = await runtime.mailSendIntent.findUniqueOrThrow({ where: { id: sendId } });
+    assert.equal(row.contactId, null);
+    assert.equal(row.scopeMessageId, standaloneSource);
+    assert.equal((await mail.sendStatus(ownAuthority, sendId)).item.state, "QUEUED");
+  }
+  assert.equal((await mail.attachmentMetadata(otherReader, localUpload)).item.id, localUpload,
+    "bound files follow the readable intent rather than remaining uploader-private");
+  await assert.rejects(() => mail.send(commandAuthority, replyDto(ids.message, { contactId: null })),
+    "null contact cannot downgrade a linked reply source");
+  await assert.rejects(() => mail.send(commandAuthority, replyDto(null, {
+    contactId: null, attachmentIds: [ids.attachment],
+  })), "null send cannot copy a contact-bound file into mailbox-wide scope");
+  await assert.rejects(() => runtime.mailSendIntent.update({
+    where: { id: standaloneReply.sendId },
+    data: { scopeMessageId: null, version: { increment: 1 } },
+  }), "SQL protects the immutable inherited source binding");
+
+  await mail.link(commandAuthority, standaloneSource, {
+    schemaVersion: 1, workspaceId, commandId: randomUUID(),
+    expectedVersion: 1, externalEmail: "standalone@example.org", contactId: hiddenContact,
+  });
+  for (const sendId of [standaloneReply.sendId, standaloneChild.sendId])
+    await assert.rejects(() => mail.sendStatus(ownAuthority, sendId),
+      "later source linking must hide every inherited reply from out-of-scope staff");
+  await assert.rejects(() => mail.attachmentMetadata(ownAuthority, localUpload),
+    "even the uploader cannot bypass lost source scope after binding");
+  const ownSent = await mail.messages(ownAuthority, {
+    workspaceId, mailboxId: ids.mailbox, folder: "SENT", limit: 100,
+  });
+  assert(!ownSent.items.some(row => [standaloneReply.sendId, standaloneChild.sendId].includes(row.id)));
+  await assert.rejects(() => mail.replySource(commandAuthority, ids.mailbox, null, standaloneSource),
+    "queued null replies require source-context revalidation before admission");
+  console.log("Standalone mail actual database checks passed: pre-pagination scope, nullable replies, flat inherited ACL, upload binding and immutable guard");
+
+  const richDto = replyDto(null, { contactId: null, text: "client fallback", html: '<p><strong>Привет</strong><img src="https://tracker.example/x"></p>' });
+  const richReceipt = await mail.send(commandAuthority, richDto);
+  assert.deepEqual(await mail.send(commandAuthority, richDto), richReceipt);
+  const richRow = await runtime.mailSendIntent.findUniqueOrThrow({ where: { id: richReceipt.sendId } });
+  assert.equal(richRow.html, "<p><strong>Привет</strong></p>");
+  assert.equal(richRow.text, "Привет");
+  assert(!Object.hasOwn((await mail.message(commandAuthority, richReceipt.sendId)).item, "html"));
+  assert.equal((await mail.message(commandAuthority, richReceipt.sendId, undefined, "html")).item.html, richRow.html);
+  assert.equal((await mail.message(commandAuthority, standaloneSource, undefined, "html")).item.html, null);
+  await assert.rejects(() => mail.send(commandAuthority, { ...richDto, html: "<p>Changed</p>" }));
+  await assert.rejects(() => runtime.mailSendIntent.update({ where: { id: richReceipt.sendId }, data: { html: "<p>Changed</p>", version: { increment: 1 } } }));
+  console.log("HTML mail actual database checks passed: normalization, immutable body, idempotency and opt-in legacy-compatible detail");
 
   const foreignWorkspaceContactId = randomUUID();
   const foreignWorkspaceConnectionId = randomUUID();

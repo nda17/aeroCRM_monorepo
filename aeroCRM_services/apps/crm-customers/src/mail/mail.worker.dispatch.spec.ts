@@ -40,6 +40,8 @@ const harness = (
     workspaceId,
     mailboxId,
     contactId,
+    scopeMessageId: null,
+    html: null,
     actorSubject: "sender",
     membershipId: authority.membershipId,
     mailboxGeneration: options.mailboxGeneration ?? 1,

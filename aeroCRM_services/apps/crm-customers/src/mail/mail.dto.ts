@@ -20,6 +20,7 @@ import {
   MinLength,
   Matches,
   Validate,
+  ValidateIf,
   ValidateNested,
   ValidatorConstraint,
   type ValidationArguments,
@@ -52,9 +53,14 @@ class MailSendRequiresRead implements ValidatorConstraintInterface {
 
 @ValidatorConstraint({ name: "mailUtf8TextWithinLimit", async: false })
 class MailUtf8TextWithinLimit implements ValidatorConstraintInterface {
-  validate(value: unknown) {
+  validate(value: unknown, args: ValidationArguments) {
+    const body = args.object as { html?: unknown };
     return (
-      typeof value === "string" && Buffer.byteLength(value, "utf8") <= 24 * 1024
+      typeof value === "string" &&
+      (body.html === undefined || typeof body.html === "string") &&
+      Buffer.byteLength(value, "utf8") +
+        (typeof body.html === "string" ? Buffer.byteLength(body.html, "utf8") : 0) <= 24 * 1024 &&
+      Buffer.byteLength(JSON.stringify(args.object), "utf8") <= 32 * 1024
     );
   }
 }
@@ -148,6 +154,15 @@ export class MailQueryDto {
   @IsOptional() @IsString() @MinLength(1) @MaxLength(2048) cursor?: string;
   @IsOptional() @IsUUID("4") mailboxId?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit?: number;
+}
+
+export class MailMessagesQuery extends MailQueryDto {
+  @IsIn(["INBOX", "SENT"]) folder!: "INBOX" | "SENT";
+}
+
+export class MailMessageQuery extends MailQueryDto {
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsIn(["html"]) bodyFormat?: "html";
 }
 
 export class MailNotificationsQuery {
@@ -290,7 +305,8 @@ export class MailUploadDto {
   @IsUUID("4") workspaceId!: string;
   @IsUUID("4") commandId!: string;
   @IsUUID("4") mailboxId!: string;
-  @IsUUID("4") contactId!: string;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsUUID("4") contactId?: string;
 }
 
 export class MailAddressDto {
@@ -300,7 +316,7 @@ export class MailAddressDto {
 
 export class MailSendDto extends MailCommandBaseDto {
   @IsUUID("4") mailboxId!: string;
-  @IsUUID("4") contactId!: string;
+  @Validate(MailNullableUuid) contactId!: string | null;
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(20)
@@ -320,6 +336,8 @@ export class MailSendDto extends MailCommandBaseDto {
   bcc!: MailAddressDto[];
   @IsString() @MaxLength(300) @Matches(HEADER_TEXT) subject!: string;
   @IsString() @Validate(MailUtf8TextWithinLimit) text!: string;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString() @MaxLength(24576) html?: string;
   @IsArray()
   @ArrayMaxSize(10)
   @ArrayUnique()

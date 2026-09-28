@@ -11,7 +11,7 @@ import {
 	useMemoryCommand
 } from '@/shared/lib/pending-command'
 
-export const useMailContext = () => {
+export const useMailContext = ({ pollAfterError = false } = {}) => {
 	const workspace = useCrmWorkspaceAccess()
 	const { session, sessionRevision } = useSessionStore()
 	const key = [
@@ -45,7 +45,8 @@ export const useMailContext = () => {
 			getMailCapabilities(session!.accessToken, workspace.workspaceId),
 		gcTime: 0,
 		staleTime: 15_000,
-		refetchInterval: query => (!query.state.error ? 15_000 : false),
+		refetchInterval: query =>
+			!query.state.error || pollAfterError ? 15_000 : false,
 		retry: false
 	})
 	return {
@@ -63,10 +64,12 @@ export const useMailCommand = <C extends { commandId: string }, R>(
 	view: string,
 	permission: 'mail:read' | 'mail:send' | 'mail:manage',
 	send: (token: string, command: C) => Promise<R>,
-	success: (result: R, command: C) => void
+	success: (result: R, command: C) => void,
+	accessEnabled = true
 ) => {
 	const { session, sessionRevision, workspace, capabilities } = context
 	const enabled =
+		accessEnabled &&
 		!!session &&
 		!capabilities.isError &&
 		!capabilities.isFetching &&

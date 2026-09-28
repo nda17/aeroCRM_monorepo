@@ -2,9 +2,13 @@ import { BadRequestException } from "@nestjs/common";
 import { lookup } from "node:dns/promises";
 import {
   endpoint,
+  MailTransport,
   publicMailAddress,
   resolveMailEndpoint,
 } from "./mail.transport";
+
+import { simpleParser } from "mailparser";
+import { prepareMailBody } from "./mail.body";
 
 jest.mock("node:dns/promises", () => ({ lookup: jest.fn() }));
 
@@ -105,5 +109,27 @@ describe("mail transport network boundary", () => {
     await expect(resolveMailEndpoint("imap.example.org")).rejects.toThrow(
       "MAIL_HOST_NOT_PUBLIC",
     );
+  });
+});
+
+
+describe("mail MIME alternatives", () => {
+  it("builds safe HTML, derived plain text and attachment without connecting", async () => {
+    const transport = new MailTransport({} as never);
+    const body = prepareMailBody({ text: "untrusted client fallback", html: '<p><strong>Привет</strong> <a href="https://example.org">документ</a><img src="https://tracker.example/x"></p>' });
+    const bytes = await transport.mime({ canonicalAddress: "team@example.org", displayName: "Sales" } as never, {
+      to: [{ address: "customer@example.org" }], cc: [], bcc: [{ address: "private@example.org" }],
+      subject: "Rich mail", text: body.text, html: body.html!, messageId: "<rich@example.org>",
+      attachments: [{ filename: "offer.txt", content: Buffer.from("offer"), contentType: "text/plain" }],
+    });
+    const parsed = await simpleParser(bytes);
+    expect(parsed.text).toContain("Привет");
+    expect(parsed.text).toContain("https://example.org");
+    expect(parsed.text).not.toContain("untrusted client fallback");
+    expect(parsed.html).toBe(body.html);
+    expect(parsed.html).not.toContain("tracker");
+    expect(parsed.bcc).toBeUndefined();
+    expect(parsed.attachments[0].content.toString()).toBe("offer");
+    expect(bytes.toString()).toContain("multipart/alternative");
   });
 });

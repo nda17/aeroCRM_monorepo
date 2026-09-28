@@ -71,12 +71,13 @@ export type MailSendCommand = {
 	workspaceId: string
 	commandId: string
 	mailboxId: string
-	contactId: string
+	contactId: string | null
 	to: MailAddress[]
 	cc: MailAddress[]
 	bcc: MailAddress[]
 	subject: string
 	text: string
+	html?: string
 	attachmentIds: string[]
 	replyToMessageId: string | null
 }
@@ -622,6 +623,34 @@ export const parseMailMessageResult = (
 	)
 		return null
 	return value as MailItem<MailMessageDetail>
+}
+
+export type MailRichMessageDetail = MailMessageDetail & {
+	html: string | null
+}
+
+export const parseMailRichMessageResult = (
+	value: unknown,
+	workspaceId: string
+): MailItem<MailRichMessageDetail> | null => {
+	if (
+		!isRecord(value) ||
+		!hasExactKeys(value, ['schemaVersion', 'workspaceId', 'item']) ||
+		!parseEnvelope(value, workspaceId) ||
+		!isRecord(value.item) ||
+		!Object.hasOwn(value.item, 'html') ||
+		(value.item.html !== null &&
+			(typeof value.item.html !== 'string' ||
+				value.item.html.length > 262_144))
+	)
+		return null
+	const { html, ...legacy } = value.item
+	if (!parseMessageDetail(legacy)) return null
+	return {
+		schemaVersion: 1,
+		workspaceId,
+		item: { ...legacy, html }
+	} as MailItem<MailRichMessageDetail>
 }
 
 export const parseMailLinkResult = (

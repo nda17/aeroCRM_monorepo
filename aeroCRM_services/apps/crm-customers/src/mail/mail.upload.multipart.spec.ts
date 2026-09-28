@@ -77,7 +77,7 @@ describe('CRM mail upload multipart parser route', () => {
 		return body;
 	};
 
-	const upload = (body: FormData) =>
+	const upload = (body: FormData, contactHeader: string | null = contactId) =>
 		fetch(`${origin}/api/v1/crm/customers/mail/attachments`, {
 			method: 'POST',
 			headers: {
@@ -85,7 +85,7 @@ describe('CRM mail upload multipart parser route', () => {
 				'idempotency-key': commandId,
 				'x-mail-workspace-id': workspaceId,
 				'x-mail-mailbox-id': mailboxId,
-				'x-mail-contact-id': contactId
+				...(contactHeader === null ? {} : { 'x-mail-contact-id': contactHeader })
 			},
 			body
 		});
@@ -120,6 +120,18 @@ describe('CRM mail upload multipart parser route', () => {
 		});
 		expect(file.buffer).toHaveLength(73);
 	});
+
+	it('accepts omitted contact in both multipart and header and rejects inconsistent scope', async () => {
+    const unbound = form();
+    unbound.delete('contactId');
+    expect((await upload(unbound, null)).status).toBe(200);
+    expect(mail.upload.mock.calls[0][1].contactId).toBeUndefined();
+    expect(mail.contact).not.toHaveBeenCalled();
+    mail.upload.mockClear();
+    expect((await upload(form(), null)).status).toBe(400);
+    expect((await upload(unbound)).status).toBe(400);
+    expect(mail.upload).not.toHaveBeenCalled();
+  });
 
 	it('rejects a sixth text field and a second file before invoking the mail service', async () => {
 		const extraField = await upload(form(undefined, [['unexpected', 'value']]));

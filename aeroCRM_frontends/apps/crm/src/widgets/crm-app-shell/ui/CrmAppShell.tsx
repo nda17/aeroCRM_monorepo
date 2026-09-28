@@ -20,6 +20,7 @@ import { useWorkspaceBranding } from '@/entities/crm-workspace-branding'
 import { getRuntimeConfig } from '@/shared/config/runtime'
 import { ThemeSwitcher } from '@/shared/ui/theme-switcher/ThemeSwitcher'
 import { TaskNotificationCenter } from '@/features/manage-reminders'
+import { useMailAvailability } from '@/features/manage-mail/model/use-mail-availability'
 import { CrmNavigationLink } from './CrmNavigationLink'
 import {
 	AppIcon,
@@ -55,6 +56,7 @@ const CrmNavigation = ({
 	authority
 }: CrmNavigationProps) => {
 	const pathname = usePathname()
+	const mail = useMailAvailability()
 
 	return (
 		<nav aria-label={ariaLabel}>
@@ -70,6 +72,11 @@ const CrmNavigation = ({
 								item={item}
 								isActive={isActive}
 								enabled={enabled}
+								disabledReason={
+									item.href === '/mail' && !mail.enabled
+										? mail.reason
+										: undefined
+								}
 								onNavigate={onNavigate}
 							/>
 						</li>

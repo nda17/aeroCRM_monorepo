@@ -273,6 +273,7 @@ model MailFolder {
 }
 
 model MailMessage {
+  scopedIntents             MailSendIntent[]   @relation("MailIntentScope")
   notifications             MailNotification[]
   mailbox                   MailMailbox        @relation("MailMessage_mailboxId", fields: [workspaceId, mailboxId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
   folder                    MailFolder         @relation("MailMessage_folderId", fields: [workspaceId, folderId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
@@ -360,12 +361,14 @@ model MailAttachment {
 
 model MailSendIntent {
   mailbox                   MailMailbox          @relation("MailSendIntent_mailboxId", fields: [workspaceId, mailboxId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
-  contact                   Contact              @relation("MailSendIntent_contactId", fields: [workspaceId, contactId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  contact                   Contact?             @relation("MailSendIntent_contactId", fields: [workspaceId, contactId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  scopeMessage              MailMessage?         @relation("MailIntentScope", fields: [workspaceId, scopeMessageId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  scopeMessageId            String?              @map("scope_message_id") @db.Uuid
   mailSendAttachment_sendId MailSendAttachment[] @relation("MailSendAttachment_sendId")
   id                        String               @id @default(uuid()) @db.Uuid
   workspaceId               String               @map("workspace_id") @db.Uuid
   mailboxId                 String               @map("mailbox_id") @db.Uuid
-  contactId                 String               @map("contact_id") @db.Uuid
+  contactId                 String?              @map("contact_id") @db.Uuid
   actorSubject              String               @map("actor_subject") @db.VarChar(256)
   membershipId              String               @map("membership_id") @db.Uuid
   commandId                 String               @map("command_id") @db.Uuid
@@ -375,6 +378,7 @@ model MailSendIntent {
   cc                        Json
   bcc                       Json
   subject                   String               @db.VarChar(300)
+  html                      String?
   text                      String
   replyToMessageId          String?              @map("reply_to_message_id") @db.Uuid
   attachmentIds             String[]             @map("attachment_ids") @db.Uuid
@@ -395,6 +399,7 @@ model MailSendIntent {
   @@unique([commandId])
   @@unique([messageId])
   @@index([workspaceId, state, createdAt])
+  @@index([workspaceId, mailboxId, createdAt, id])
   @@map("mail_send_intents")
   @@schema("crm_customers")
 }

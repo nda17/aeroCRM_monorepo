@@ -148,7 +148,7 @@
 			]
 		},
 		"crm-customers": {
-			"manifestSha256": "c8e6fb84c99bdd568e4a5a19051995c864211bb58dbc232333b6d1f57486db3a",
+			"manifestSha256": "8473e653763e743ce28ec1e68368391b2eae0539aa150cb65f219b88a72c6b96",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -169,6 +169,10 @@
 				{
 					"name": "20260928020000_mail_notifications",
 					"checksum": "ca04041709feb4ab1f9c612460d53efe2cc0dbf53d30e08cf36310a17ec3facc"
+				},
+				{
+					"name": "20260929000000_mail_workspace",
+					"checksum": "464b7b587b3cbb14fa44f6d6f46539941fd1a48723e902b177ffc7647b6a013c"
 				}
 			]
 		},

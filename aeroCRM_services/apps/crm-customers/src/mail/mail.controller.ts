@@ -32,6 +32,8 @@ import {
 	MailLinkDto,
 	MailPrepareAttachmentDto,
 	MailQueryDto,
+	MailMessagesQuery,
+	MailMessageQuery,
 	MailSendDto,
 	MailUploadDto,
 	MailNotificationsQuery,
@@ -46,14 +48,14 @@ export class MailUploadScopeGuard implements CanActivate {
 		const workspace = request.header('x-mail-workspace-id'),
 			mailbox = request.header('x-mail-mailbox-id'),
 			contact = request.header('x-mail-contact-id');
-		if (!workspace || !mailbox || !contact)
+		if (!workspace || !mailbox)
 			throw new BadRequestException({ code: 'crm_mail_upload_scope_required' });
 		const a = await this.mail.authority(
 			request.header('authorization'),
 			workspace
 		);
 		await this.mail.mailbox(a, mailbox, 'send');
-		await this.mail.contact(a, contact);
+		if (contact !== undefined) await this.mail.contact(a, contact);
 		return true;
 	}
 }
@@ -201,14 +203,30 @@ export class MailController {
 			query
 		);
 	}
-	@Get('messages/:id') async message(
+	@Get('messages') @Header('Cache-Control', 'no-store') async messages(
 		@Headers('authorization') token: string | undefined,
-		@Query() query: MailQueryDto,
+		@Query() query: MailMessagesQuery
+	) {
+		const a = await this.mail.authority(token, query.workspaceId);
+		const result = await this.mail.messages(a, query);
+		if (
+			JSON.stringify(await this.mail.authority(token, query.workspaceId)) !==
+			JSON.stringify(a)
+		)
+			throw new ForbiddenException();
+		return result;
+	}
+
+	@Get('messages/:id') @Header('Cache-Control', 'no-store') async message(
+		@Headers('authorization') token: string | undefined,
+		@Query() query: MailMessageQuery,
 		@Param('id', new ParseUUIDPipe({ version: '4' })) id: string
 	) {
 		return this.mail.message(
 			await this.mail.authority(token, query.workspaceId),
-			id
+			id,
+			undefined,
+			query.bodyFormat
 		);
 	}
 	@Get('mailboxes/:id/unmatched') async unmatched(
@@ -263,7 +281,7 @@ export class MailController {
 		@Headers('idempotency-key') key: string | undefined,
 		@Headers('x-mail-workspace-id') workspace: string,
 		@Headers('x-mail-mailbox-id') mailbox: string,
-		@Headers('x-mail-contact-id') contact: string,
+		@Headers('x-mail-contact-id') contact: string | undefined,
 		@Body() dto: MailUploadDto,
 		@UploadedFile()
 		file: {
@@ -276,7 +294,7 @@ export class MailController {
 		if (
 			dto.workspaceId !== workspace ||
 			dto.mailboxId !== mailbox ||
-			dto.contactId !== contact
+			(dto.contactId ?? null) !== (contact ?? null)
 		)
 			throw new BadRequestException({ code: 'crm_mail_upload_scope_mismatch' });
 		return this.mail.upload(await this.command(token, key, dto), dto, file);

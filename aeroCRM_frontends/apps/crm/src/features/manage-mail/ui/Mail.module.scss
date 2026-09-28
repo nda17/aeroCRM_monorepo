@@ -63,6 +63,51 @@
 	margin: 0;
 	overflow-wrap: anywhere;
 }
+
+.editorToolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+}
+
+.richEditor {
+	@apply rounded-lg border border-crm-border bg-crm-surface;
+}
+
+.richEditorContent,
+.richPreview {
+	min-height: 15rem;
+	max-height: 32rem;
+	overflow: auto;
+	padding: 0.75rem;
+	outline: none;
+	overflow-wrap: anywhere;
+	&:focus-visible {
+		@apply ring-2 ring-primary;
+	}
+	& p {
+		margin: 0 0 0.75rem;
+	}
+	& ul,
+	& ol {
+		padding-left: 1.5rem;
+		margin: 0.75rem 0;
+	}
+	& ul {
+		list-style: disc;
+	}
+	& ol {
+		list-style: decimal;
+	}
+	& a {
+		@apply text-primary underline;
+	}
+}
+
+.richPreview {
+	min-height: 0;
+	padding: 0;
+}
 .fieldset {
 	margin: 0;
 	padding: 1rem;

@@ -22,6 +22,7 @@ const fixture = vi.hoisted(() => ({
 	router: { replace: vi.fn() },
 	searchParams: new URLSearchParams(),
 	companyName: null as string | null,
+	mailEnabled: true,
 	access: {
 		state: 'ACTIVE' as 'ACTIVE' | 'GRACE' | 'READ_ONLY',
 		isReadOnly: false,
@@ -40,6 +41,12 @@ vi.mock('next/navigation', () => ({
 }))
 vi.mock('@/features/manage-reminders', () => ({
 	TaskNotificationCenter: () => <button>Уведомления</button>
+}))
+vi.mock('@/features/manage-mail/model/use-mail-availability', () => ({
+	useMailAvailability: () => ({
+		enabled: fixture.mailEnabled,
+		reason: 'Подключите ящик в настройках почты.'
+	})
 }))
 vi.mock('@/entities/crm-access', async original => ({
 	...(await original<object>()),
@@ -131,6 +138,7 @@ beforeEach(() => {
 	fixture.router.replace.mockReset()
 	fixture.searchParams = new URLSearchParams()
 	fixture.companyName = null
+	fixture.mailEnabled = true
 	fixture.access.state = 'ACTIVE'
 	fixture.access.isReadOnly = false
 	fixture.access.membership.role = 'OWNER'
@@ -190,6 +198,29 @@ const pointer = (
 }
 
 describe('CRM navigation descriptions', () => {
+	it('keeps mail unavailable without a mailbox and enables the same entry after connection', () => {
+		fixture.mailEnabled = false
+		const view = mount()
+		const nav = within(mainNavigation())
+		expect(nav.queryByRole('link', { name: 'Почта' })).toBeNull()
+		const disabled = nav.getByRole('button', { name: /^Почта\./ })
+		expect(disabled.getAttribute('aria-disabled')).toBe('true')
+		expect(disabled.hasAttribute('href')).toBe(false)
+		fireEvent.click(disabled)
+		expect(fixture.router.replace).not.toHaveBeenCalled()
+		fireEvent.focus(disabled)
+		expect(screen.getByRole('tooltip').textContent).toContain(
+			'Подключите ящик'
+		)
+		fixture.mailEnabled = true
+		view.rerender(renderShell())
+		expect(
+			within(mainNavigation())
+				.getByRole('link', { name: 'Почта' })
+				.getAttribute('href')
+		).toBe('/mail')
+	})
+
 	it('describes all seven sections on keyboard focus without changing names, links or current state', () => {
 		mount()
 		for (const item of CRM_NAVIGATION) {
@@ -260,7 +291,7 @@ describe('CRM navigation descriptions', () => {
 		expect(screen.getAllByRole('tooltip')).toHaveLength(1)
 		expect(first.hasAttribute('aria-describedby')).toBe(false)
 		expect(screen.getByRole('tooltip').textContent).toBe(
-			CRM_NAVIGATION[2].description
+			CRM_NAVIGATION.find(item => item.href === '/deals')?.description
 		)
 	})
 	it('cancels a pending hover on Escape without consuming the enclosing drawer escape', () => {

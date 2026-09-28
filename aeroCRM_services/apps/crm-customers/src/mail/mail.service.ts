@@ -27,6 +27,7 @@ import {
 	digest,
 	canonicalMailJson
 } from './mail.config';
+import { prepareMailBody } from './mail.body';
 import { MailTransport, endpoint } from './mail.transport';
 import { MailObjects, safeMailFilename } from './mail.objects';
 import {
@@ -40,6 +41,7 @@ import {
 	MailSendDto,
 	MailUploadDto,
 	MailQueryDto,
+	MailMessagesQuery,
 	MailNotificationsQuery,
 	MailNotificationReadDto
 } from './mail.dto';
@@ -1057,8 +1059,131 @@ export class MailService {
 					: null
 		};
 	}
-	async messageSummary(m: MailMessage) {
-		const attachmentCount = await this.prisma.mailAttachment.count({
+	async messages(a: MailAuthority, query: MailMessagesQuery) {
+		this.enabled();
+		const filter = `workspace:${query.folder}:${query.mailboxId || '-'}`;
+		const cursor = this.parseCursor(a, filter, query.cursor);
+		const limit = query.limit || 50;
+		return this.prisma.$transaction(
+			async (tx) => {
+				const mailboxIds = await this.visibleMailboxIds(a, 'read', tx);
+				if (query.mailboxId) {
+					await this.mailbox(a, query.mailboxId, 'read', tx);
+					mailboxIds.splice(0, mailboxIds.length, query.mailboxId);
+				}
+				const before = cursor
+					? {
+							OR: [
+								{ createdAt: { lt: cursor.createdAt } },
+								{ createdAt: cursor.createdAt, id: { lt: cursor.id } }
+							]
+						}
+					: {};
+				const binding = {
+					workspaceId: a.customer.workspaceId,
+					mailboxId: { in: mailboxIds },
+					...before
+				};
+				const [imported, sent] = await Promise.all([
+					tx.mailMessage.findMany({
+						where: {
+							AND: [
+								binding,
+								{
+									direction: query.folder === 'INBOX' ? 'INBOUND' : 'OUTBOUND',
+									OR: [
+										{
+											mailContactLink_messageId: { none: { state: 'LINKED' } }
+										},
+										{
+											mailContactLink_messageId: {
+												some: {
+													state: 'LINKED',
+													contact: customerScope(a.customer)
+												}
+											}
+										}
+									]
+								}
+							]
+						},
+						orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+						take: limit + 1
+					}),
+					query.folder === 'SENT'
+						? tx.mailSendIntent.findMany({
+								where: {
+									AND: [
+										binding,
+										{
+											OR: [
+												{
+													contactId: null,
+													OR: [
+														{ scopeMessageId: null },
+														{
+															scopeMessage: {
+																OR: [
+																	{
+																		mailContactLink_messageId: {
+																			none: { state: 'LINKED' }
+																		}
+																	},
+																	{
+																		mailContactLink_messageId: {
+																			some: {
+																				state: 'LINKED',
+																				contact: customerScope(a.customer)
+																			}
+																		}
+																	}
+																]
+															}
+														}
+													]
+												},
+												{ contact: customerScope(a.customer) }
+											]
+										}
+									]
+								},
+								orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+								take: limit + 1
+							})
+						: Promise.resolve([])
+				]);
+				const rows = [
+					...imported.map((row) => ({ row, source: 'IMAP' as const })),
+					...sent.map((row) => ({ row, source: 'CRM_SEND' as const }))
+				].sort(
+					(a, b) =>
+						b.row.createdAt.getTime() - a.row.createdAt.getTime() ||
+						(a.row.id < b.row.id ? 1 : a.row.id > b.row.id ? -1 : 0)
+				);
+				const items = await Promise.all(
+					rows
+						.slice(0, limit)
+						.map((item) =>
+							item.source === 'IMAP'
+								? this.messageSummary(item.row, tx)
+								: this.intentSummary(item.row, tx)
+						)
+				);
+				const last = rows[limit - 1]?.row;
+				return {
+					schemaVersion: 1,
+					workspaceId: a.customer.workspaceId,
+					items,
+					nextCursor:
+						rows.length > limit && last ? this.cursor(a, filter, last) : null
+				};
+			},
+			{ isolationLevel: 'RepeatableRead' }
+		);
+	}
+
+	async messageSummary(m: MailMessage, tx: MailTx = this.prisma) {
+		const attachmentCount = await tx.mailAttachment.count({
 			where: { workspaceId: m.workspaceId, messageId: m.id }
 		});
 		return {
@@ -1077,8 +1202,8 @@ export class MailService {
 			createdAt: m.createdAt.toISOString()
 		};
 	}
-	async intentSummary(s: MailSendIntent) {
-		const m = await this.prisma.mailMailbox.findUniqueOrThrow({
+	async intentSummary(s: MailSendIntent, tx: MailTx = this.prisma) {
+		const m = await tx.mailMailbox.findUniqueOrThrow({
 			where: { id: s.mailboxId }
 		});
 		return {
@@ -1117,7 +1242,7 @@ export class MailService {
 			}
 		});
 		if (
-			!links.length ||
+			links.length &&
 			!(await tx.contact.findFirst({
 				where: {
 					...customerScope(a.customer),
@@ -1135,10 +1260,17 @@ export class MailService {
 		});
 		if (!s) throw new NotFoundException();
 		await this.mailbox(a, s.mailboxId, 'read', tx);
-		await this.contact(a, s.contactId, tx);
+		if (s.contactId) await this.contact(a, s.contactId, tx);
+		else if (s.scopeMessageId)
+			await this.readableMessage(a, s.scopeMessageId, tx);
 		return s;
 	}
-	async message(a: MailAuthority, id: string, unmatchedMailboxId?: string) {
+	async message(
+		a: MailAuthority,
+		id: string,
+		unmatchedMailboxId?: string,
+		bodyFormat?: 'html'
+	) {
 		requireMailId(id);
 		const imported = await this.prisma.mailMessage.findFirst({
 			where: { workspaceId: a.customer.workspaceId, id }
@@ -1178,17 +1310,20 @@ export class MailService {
 				item: {
 					...(await this.intentSummary(intent)),
 					text: intent.text,
+					...(bodyFormat === 'html' ? { html: intent.html } : {}),
 					bodyStatus: 'COMPLETE',
 					bcc,
 					attachments: attachments.map(attachmentView),
-					links: [
-						{
-							externalEmail: addressList(intent.to)[0]?.email || '',
-							contactId: intent.contactId,
-							state: 'LINKED',
-							version: 1
-						}
-					],
+					links: intent.contactId
+						? [
+								{
+									externalEmail: addressList(intent.to)[0]?.email || '',
+									contactId: intent.contactId,
+									state: 'LINKED',
+									version: 1
+								}
+							]
+						: [],
 					provenance: {
 						folderPath: null,
 						uidValidity: null,
@@ -1254,6 +1389,7 @@ export class MailService {
 			item: {
 				...(await this.messageSummary(m)),
 				text: m.plainText,
+				...(bodyFormat === 'html' ? { html: null } : {}),
 				bodyStatus: m.bodyStatus,
 				bcc,
 				attachments: attachments.map(attachmentView),
@@ -1512,18 +1648,16 @@ export class MailService {
 		await this.mailbox(a, file.mailboxId, 'read', tx);
 		if (file.messageId) await this.readableMessage(a, file.messageId, tx);
 		else {
-			if (!file.contactId) throw new NotFoundException();
-			await this.contact(a, file.contactId, tx);
-			if (
+			if (file.contactId) await this.contact(a, file.contactId, tx);
+			const bound = await tx.mailSendAttachment.findFirst({
+				where: { workspaceId: file.workspaceId, attachmentId: file.id }
+			});
+			if (bound) await this.readableIntent(a, bound.sendId, tx);
+			else if (
 				file.uploadActor !== a.customer.subject ||
 				file.uploadMembershipId !== a.membershipId
-			) {
-				const bound = await tx.mailSendAttachment.findFirst({
-					where: { workspaceId: file.workspaceId, attachmentId: file.id }
-				});
-				if (!bound) throw new NotFoundException();
-				await this.readableIntent(a, bound.sendId, tx);
-			}
+			)
+				throw new NotFoundException();
 		}
 		if (
 			file.uploadActor &&
@@ -1579,13 +1713,15 @@ export class MailService {
 			size: number;
 		}
 	) {
+		const contactId = dto.contactId ?? null;
+		const normalized = { ...dto, contactId };
 		this.enabled();
 		if (!this.config.attachmentsAvailable)
 			throw new ServiceUnavailableException({
 				code: 'crm_mail_objects_not_configured'
 			});
 		await this.mailbox(a, dto.mailboxId, 'send');
-		await this.contact(a, dto.contactId);
+		if (contactId) await this.contact(a, contactId);
 		if (
 			!file ||
 			file.size > MAIL_LIMITS.maxFileBytes ||
@@ -1594,7 +1730,12 @@ export class MailService {
 			throw new BadRequestException({ code: 'crm_mail_file_invalid' });
 		const fileName = safeMailFilename(file.originalname);
 		const sha256 = digest(file.buffer);
-		const hash = this.hash(a, 'UPLOAD', [dto, fileName, file.mimetype, sha256]);
+		const hash = this.hash(a, 'UPLOAD', [
+			normalized,
+			fileName,
+			file.mimetype,
+			sha256
+		]);
 		const old = await this.receipt(a, dto.commandId, hash);
 		if (old) return old;
 		const id = randomUUID();
@@ -1607,16 +1748,16 @@ export class MailService {
 			'MAIL_SEND'
 		);
 		await this.mailbox(fresh, dto.mailboxId, 'send');
-		await this.contact(fresh, dto.contactId);
-		return this.command(fresh, dto, 'UPLOAD', hash, async (tx) => {
+		if (contactId) await this.contact(fresh, contactId);
+		return this.command(fresh, normalized, 'UPLOAD', hash, async (tx) => {
 			const m = await this.lockMailbox(fresh, dto.mailboxId, 'send', tx);
-			await this.contact(fresh, dto.contactId, tx);
+			if (contactId) await this.contact(fresh, contactId, tx);
 			const item = await tx.mailAttachment.create({
 				data: {
 					id,
 					workspaceId: dto.workspaceId,
 					mailboxId: m.id,
-					contactId: dto.contactId,
+					contactId: contactId,
 					uploadActor: a.customer.subject,
 					uploadMembershipId: a.membershipId,
 					safeFileName: fileName,
@@ -1669,6 +1810,94 @@ export class MailService {
 			}
 		);
 	}
+	async replySource(
+		a: MailAuthority,
+		mailboxId: string,
+		contactId: string | null,
+		id: string | null,
+		tx: MailTx = this.prisma
+	) {
+		if (!id) return null;
+		const imported = await tx.mailMessage.findFirst({
+			where: { workspaceId: a.customer.workspaceId, id }
+		});
+		if (imported) {
+			const source = await this.readableMessage(a, id, tx);
+			if (source.mailboxId !== mailboxId) throw new BadRequestException();
+			const linked = await tx.mailContactLink.findMany({
+				where: {
+					workspaceId: source.workspaceId,
+					messageId: source.id,
+					state: 'LINKED'
+				}
+			});
+			if (
+				contactId === null
+					? linked.length > 0
+					: !linked.some((link) => link.contactId === contactId)
+			)
+				throw new BadRequestException({
+					code: 'crm_mail_reply_contact_invalid'
+				});
+			if (contactId) await this.contact(a, contactId, tx);
+			return contactId === null ? source.id : null;
+		} else {
+			const source = await this.readableIntent(a, id, tx);
+			if (source.mailboxId !== mailboxId || source.contactId !== contactId)
+				throw new BadRequestException();
+			if (contactId === null && source.scopeMessageId) {
+				const linked = await tx.mailContactLink.findFirst({
+					where: {
+						workspaceId: source.workspaceId,
+						messageId: source.scopeMessageId,
+						state: 'LINKED'
+					}
+				});
+				if (linked)
+					throw new BadRequestException({
+						code: 'crm_mail_reply_contact_invalid'
+					});
+			}
+			return contactId === null ? source.scopeMessageId : null;
+		}
+	}
+	async sendAttachment(
+		a: MailAuthority,
+		id: string,
+		mailboxId: string,
+		contactId: string | null,
+		tx: MailTx = this.prisma,
+		sendId?: string
+	) {
+		const file = await this.attachment(a, id, tx);
+		if (file.mailboxId !== mailboxId) throw new BadRequestException();
+		if (
+			contactId === null &&
+			(file.messageId ||
+				file.uploadActor !== a.customer.subject ||
+				file.uploadMembershipId !== a.membershipId)
+		)
+			throw new BadRequestException({
+				code: 'crm_mail_attachment_context_invalid'
+			});
+		if (contactId === null) {
+			const bindings = await tx.mailSendAttachment.findMany({
+				where: { workspaceId: file.workspaceId, attachmentId: file.id }
+			});
+			if (bindings.some((binding) => binding.sendId !== sendId))
+				throw new BadRequestException({
+					code: 'crm_mail_attachment_context_invalid'
+				});
+		}
+		if (file.messageId) {
+			await this.replySource(a, mailboxId, contactId, file.messageId, tx);
+		} else if (file.contactId !== contactId)
+			throw new BadRequestException({
+				code: 'crm_mail_attachment_context_invalid'
+			});
+		return file;
+	}
+
 	async send(a: MailAuthority, dto: MailSendDto) {
 		this.enabled();
 		if (!this.config.sendEnabled || !this.config.attachmentsAvailable)
@@ -1676,7 +1905,7 @@ export class MailService {
 				code: 'crm_mail_send_not_configured'
 			});
 		await this.mailbox(a, dto.mailboxId, 'send');
-		await this.contact(a, dto.contactId);
+		if (dto.contactId) await this.contact(a, dto.contactId);
 		const all = [...dto.to, ...dto.cc, ...dto.bcc];
 		if (
 			!dto.to.length ||
@@ -1699,12 +1928,21 @@ export class MailService {
 			this.hash(a, 'SEND', dto),
 			async (tx) => {
 				const m = await this.lockMailbox(a, dto.mailboxId, 'send', tx);
-				await this.contact(a, dto.contactId, tx);
+				if (dto.contactId) await this.contact(a, dto.contactId, tx);
 				if (!m.enabled)
 					throw new ConflictException({ code: 'crm_mail_disconnected' });
+				if (Buffer.byteLength(JSON.stringify(dto), 'utf8') > 32768)
+					throw new BadRequestException({ code: 'crm_mail_compose_invalid' });
+				const body = prepareMailBody(dto);
 				let total = 0;
 				for (const id of dto.attachmentIds) {
-					const file = await this.attachment(a, id, tx);
+					const file = await this.sendAttachment(
+						a,
+						id,
+						m.id,
+						dto.contactId,
+						tx
+					);
 					if (
 						file.mailboxId !== m.id ||
 						file.state !== 'VALIDATED' ||
@@ -1717,44 +1955,19 @@ export class MailService {
 				}
 				if (total > MAIL_LIMITS.maxSendBytes)
 					throw new BadRequestException({ code: 'crm_mail_send_too_large' });
-				if (dto.replyToMessageId) {
-					const imported = await tx.mailMessage.findFirst({
-						where: { workspaceId: dto.workspaceId, id: dto.replyToMessageId }
-					});
-					if (imported) {
-						const source = await this.readableMessage(
-							a,
-							dto.replyToMessageId,
-							tx
-						);
-						if (source.mailboxId !== m.id) throw new BadRequestException();
-						const link = await tx.mailContactLink.findFirst({
-							where: {
-								workspaceId: dto.workspaceId,
-								messageId: source.id,
-								contactId: dto.contactId,
-								state: 'LINKED'
-							}
-						});
-						if (!link)
-							throw new BadRequestException({
-								code: 'crm_mail_reply_contact_invalid'
-							});
-					} else {
-						const source = await this.readableIntent(
-							a,
-							dto.replyToMessageId,
-							tx
-						);
-						if (source.mailboxId !== m.id || source.contactId !== dto.contactId)
-							throw new BadRequestException();
-					}
-				}
+				const scopeMessageId = await this.replySource(
+					a,
+					m.id,
+					dto.contactId,
+					dto.replyToMessageId,
+					tx
+				);
 				const intent = await tx.mailSendIntent.create({
 					data: {
 						workspaceId: dto.workspaceId,
 						mailboxId: m.id,
 						contactId: dto.contactId,
+						scopeMessageId,
 						actorSubject: a.customer.subject,
 						membershipId: a.membershipId,
 						commandId: dto.commandId,
@@ -1764,7 +1977,8 @@ export class MailService {
 						cc: dto.cc as unknown as Prisma.InputJsonValue,
 						bcc: dto.bcc as unknown as Prisma.InputJsonValue,
 						subject: dto.subject,
-						text: dto.text,
+						text: body.text,
+						html: body.html,
 						replyToMessageId: dto.replyToMessageId,
 						attachmentIds: dto.attachmentIds,
 						messageId: `<${randomUUID()}@${m.canonicalAddress.split('@')[1]}>`,
@@ -1808,9 +2022,24 @@ export class MailService {
 		};
 	}
 	async buildMime(a: MailAuthority, s: MailSendIntent, m: MailMailbox) {
+		const scopeMessageId = await this.replySource(
+			a,
+			m.id,
+			s.contactId,
+			s.replyToMessageId
+		);
+		if (scopeMessageId !== s.scopeMessageId)
+			throw new BadRequestException({ code: 'crm_mail_reply_scope_invalid' });
 		const attachments = [];
 		for (const id of s.attachmentIds) {
-			const file = await this.attachment(a, id);
+			const file = await this.sendAttachment(
+				a,
+				id,
+				m.id,
+				s.contactId,
+				this.prisma,
+				s.id
+			);
 			if (file.state !== 'VALIDATED' || !file.privateObjectKey || !file.sha256)
 				throw new Error('MAIL_ATTACHMENT_NOT_VALIDATED');
 			this.objects.assertKey(file.privateObjectKey, m.workspaceId, m.id);
@@ -1848,6 +2077,7 @@ export class MailService {
 			bcc: recipientList(addressList(s.bcc)),
 			subject: s.subject,
 			text: s.text,
+			...(s.html !== null ? { html: s.html } : {}),
 			messageId: s.messageId,
 			inReplyTo,
 			references,

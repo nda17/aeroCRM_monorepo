@@ -11,17 +11,41 @@ export const CrmNavigationLink = ({
 	item,
 	isActive,
 	enabled,
+	disabledReason,
 	onNavigate
 }: {
 	item: CrmNavigationItem
 	isActive: boolean
 	enabled: boolean
+	disabledReason?: string
 	onNavigate?: () => void
 }) => {
-	const { triggerProps, tooltip, close } = useTooltip<HTMLAnchorElement>(
-		item.description,
+	const { triggerProps, tooltip, close } = useTooltip<HTMLElement>(
+		disabledReason ?? item.description,
 		enabled
 	)
+	if (disabledReason)
+		return (
+			<>
+				<button
+					{...triggerProps}
+					type="button"
+					className={clsx(
+						styles.navigationLink,
+						styles.navigationLinkDisabled
+					)}
+					aria-disabled="true"
+					aria-label={`${item.label}. ${disabledReason}`}
+					title={disabledReason}
+				>
+					<span className={styles.navigationIcon}>
+						<AppIcon name={item.icon} size={20} />
+					</span>
+					<span>{item.label}</span>
+				</button>
+				{tooltip}
+			</>
+		)
 	return (
 		<>
 			<Link

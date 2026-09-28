@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button, ScreenState } from '@/shared/ui'
+import { invalidContractError } from '@/shared/api/authenticated-http-client'
 import {
-	getMailMessage,
+	getRichMailMessage,
 	getUnmatchedMailMessage,
 	getMailAttachment,
 	mailCommand,
@@ -21,17 +22,20 @@ import {
 	useMailContext
 } from '../model/use-mail-context'
 import { MailCommandNotice } from './MailCommandNotice'
+import { MailRichText } from './MailRichText'
 import styles from './Mail.module.scss'
 
 export const MailMessageReader = ({
 	id,
 	unmatchedMailboxId,
 	contactId,
+	expectedMailboxId,
 	replyMailboxIds,
 	onReply
 }: {
 	id: string
 	contactId?: string
+	expectedMailboxId?: string
 	replyMailboxIds?: readonly string[]
 	unmatchedMailboxId?: string
 	onReply?: (message: MailMessageDetail) => void
@@ -42,26 +46,35 @@ export const MailMessageReader = ({
 			unmatchedMailboxId ? 'mail-unmatched-message' : 'mail-message',
 			...context.key,
 			id,
-			contactId
+			contactId,
+			expectedMailboxId,
+			unmatchedMailboxId ? 'plain' : 'html'
 		],
 		enabled:
 			!!context.session &&
 			!context.capabilities.isError &&
 			context.capabilities.data?.enabled === true &&
 			context.capabilities.data.mailPermissions.includes('mail:read'),
-		queryFn: () =>
-			unmatchedMailboxId
+		queryFn: async () => {
+			const result = await (unmatchedMailboxId
 				? getUnmatchedMailMessage(
 						context.session!.accessToken,
 						context.workspace.workspaceId,
 						unmatchedMailboxId,
 						id
 					)
-				: getMailMessage(
+				: getRichMailMessage(
 						context.session!.accessToken,
 						context.workspace.workspaceId,
 						id
-					),
+					))
+			if (
+				result.item.id !== id ||
+				(expectedMailboxId && result.item.mailboxId !== expectedMailboxId)
+			)
+				throw invalidContractError()
+			return result
+		},
 		gcTime: 0,
 		staleTime: 0,
 		retry: false,
@@ -136,7 +149,11 @@ export const MailMessageReader = ({
 						: 'Текст письма недоступен.'}
 				</p>
 			) : null}
-			{item.text ? (
+			{'html' in item &&
+			typeof item.html === 'string' &&
+			item.sourceKind === 'CRM_SEND' ? (
+				<MailRichText html={item.html} text={item.text} />
+			) : item.text ? (
 				<div className={styles.text}>{item.text}</div>
 			) : item.bodyStatus === 'COMPLETE' ? (
 				<p className={styles.muted}>В письме нет текста.</p>

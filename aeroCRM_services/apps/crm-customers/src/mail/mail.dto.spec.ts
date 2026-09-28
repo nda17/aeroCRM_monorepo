@@ -3,9 +3,12 @@ import { plainToInstance } from "class-transformer";
 import { validate } from "class-validator";
 import {
   MailConnectDto,
+  MailMessagesQuery,
+  MailMessageQuery,
   MailNotificationReadDto,
   MailNotificationsQuery,
   MailSendDto,
+  MailUploadDto,
 } from "./mail.dto";
 
 const connectInput = () => ({
@@ -37,6 +40,45 @@ const errors = async (type: new () => object, input: object) =>
   });
 
 describe("strict corporate mail request DTOs", () => {
+  it("requires an explicit supported folder and validates standalone pagination", async () => {
+    const base = {
+      workspaceId: "11111111-1111-4111-8111-111111111111",
+      folder: "INBOX",
+    };
+    expect(await errors(MailMessagesQuery, base)).toHaveLength(0);
+    expect(await errors(MailMessagesQuery, {
+      ...base, folder: "SENT", limit: "100",
+      mailboxId: "33333333-3333-4333-8333-333333333333",
+    })).toHaveLength(0);
+    for (const patch of [
+      { folder: undefined }, { folder: null }, { folder: "ALL" },
+      { folder: "inbox" }, { limit: "101" }, { limit: "0" },
+      { mailboxId: "invalid" }, { contactId: "44444444-4444-4444-8444-444444444444" },
+    ]) expect(await errors(MailMessagesQuery, { ...base, ...patch })).not.toHaveLength(0);
+  });
+
+  it("opts into HTML detail without weakening the old query", async () => {
+    const base = { workspaceId: "11111111-1111-4111-8111-111111111111" };
+    expect(await errors(MailMessageQuery, base)).toHaveLength(0);
+    expect(await errors(MailMessageQuery, { ...base, bodyFormat: "html" })).toHaveLength(0);
+    for (const bodyFormat of [null, "text", "HTML", {}])
+      expect(await errors(MailMessageQuery, { ...base, bodyFormat })).not.toHaveLength(0);
+  });
+
+  it("accepts omitted upload contact scope but rejects malformed or explicit null scope", async () => {
+    const base = {
+      schemaVersion: "1",
+      workspaceId: "11111111-1111-4111-8111-111111111111",
+      commandId: "22222222-2222-4222-8222-222222222222",
+      mailboxId: "33333333-3333-4333-8333-333333333333",
+    };
+    expect(await errors(MailUploadDto, base)).toHaveLength(0);
+    expect(await errors(MailUploadDto, {
+      ...base, contactId: "44444444-4444-4444-8444-444444444444",
+    })).toHaveLength(0);
+    for (const contactId of [null, "", "null", "invalid"])
+      expect(await errors(MailUploadDto, { ...base, contactId })).not.toHaveLength(0);
+  });
   it("validates notification pagination defaults and fixed page size", async () => {
     const base = { workspaceId: "11111111-1111-4111-8111-111111111111" };
     const query = plainToInstance(MailNotificationsQuery, base);
@@ -141,6 +183,17 @@ describe("strict corporate mail request DTOs", () => {
       replyToMessageId: null,
     };
     expect(await errors(MailSendDto, valid)).toHaveLength(0);
+    expect(await errors(MailSendDto, { ...valid, html: "<p><strong>Привет</strong></p>" })).toHaveLength(0);
+    for (const html of [null, {}, 42, "я".repeat(12 * 1024)])
+      expect(await errors(MailSendDto, { ...valid, html })).not.toHaveLength(0);
+    expect(await errors(MailSendDto, { ...valid, text: "\\".repeat(18000) })).not.toHaveLength(0);
+
+    expect(await errors(MailSendDto, { ...valid, contactId: null })).toHaveLength(0);
+    for (const contactId of [undefined, "", "null", "invalid"])
+      expect(await errors(MailSendDto, { ...valid, contactId })).not.toHaveLength(0);
+    expect(await errors(MailSendDto, {
+      ...valid, scopeMessageId: "55555555-5555-4555-8555-555555555555",
+    })).not.toHaveLength(0);
     expect(
       await errors(MailSendDto, {
         ...valid,

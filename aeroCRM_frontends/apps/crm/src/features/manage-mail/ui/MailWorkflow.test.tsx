@@ -33,6 +33,7 @@ import { MailComposer } from './MailComposer'
 import { MailMessageReader } from './MailMessageReader'
 import { MailSettings } from './MailSettings'
 import { UnmatchedMail } from './UnmatchedMail'
+import { MailWorkspaceScreen } from './MailWorkspaceScreen'
 
 vi.mock(
 	'@/shared/api/authenticated-http-client',
@@ -318,6 +319,16 @@ const Providers = ({ children }: PropsWithChildren) => {
 }
 
 beforeEach(() => {
+	// JSDOM has no layout implementation for the Range used by ProseMirror.
+	Object.defineProperty(Range.prototype, 'getClientRects', {
+		configurable: true,
+		value: () => []
+	})
+	Object.defineProperty(Range.prototype, 'getBoundingClientRect', {
+		configurable: true,
+		value: () => new DOMRect()
+	})
+
 	vi.clearAllMocks()
 	queryClient = new QueryClient({
 		defaultOptions: {
@@ -335,6 +346,10 @@ beforeEach(() => {
 	request.mockImplementation(async config => {
 		const url = config.url ?? ''
 		if (url.endsWith('/capabilities')) return capabilities as never
+		if (url.endsWith('/mailboxes')) return mailPage([mailbox]) as never
+		if (url.endsWith('/messages')) return mailPage([]) as never
+		if (url.endsWith(`/messages/${messageId}`))
+			return success({ ...detail, html: null }) as never
 		if (
 			url.endsWith(`/mailboxes/${mailboxId}/connection`) &&
 			config.method === 'GET'
@@ -387,6 +402,8 @@ beforeEach(() => {
 
 afterEach(() => {
 	cleanup()
+	queryClient.clear()
+	vi.useRealTimers()
 	useSessionStore.getState().setAnonymous()
 })
 
@@ -797,6 +814,7 @@ describe('mail UI workflows', () => {
 			/>,
 			{ wrapper: Providers }
 		)
+		fireEvent.click(screen.getByRole('button', { name: 'Обычный текст' }))
 		fireEvent.change(screen.getByLabelText('Письмо'), {
 			target: { value: 'Ответ с вложением' }
 		})
@@ -923,6 +941,7 @@ describe('mail UI workflows', () => {
 		fireEvent.change(screen.getByLabelText('Тема'), {
 			target: { value: 'Коммерческое предложение' }
 		})
+		fireEvent.click(screen.getByRole('button', { name: 'Обычный текст' }))
 		fireEvent.change(screen.getByLabelText('Письмо'), {
 			target: { value: 'Текст черновика' }
 		})
@@ -989,6 +1008,7 @@ describe('mail UI workflows', () => {
 		fireEvent.change(screen.getByLabelText('Тема'), {
 			target: { value: 'Вложение к предложению' }
 		})
+		fireEvent.click(screen.getByRole('button', { name: 'Обычный текст' }))
 		fireEvent.change(screen.getByLabelText('Письмо'), {
 			target: { value: 'Текст черновика во время проверки' }
 		})
@@ -1072,6 +1092,7 @@ describe('mail UI workflows', () => {
 			/>,
 			{ wrapper: Providers }
 		)
+		fireEvent.click(screen.getByRole('button', { name: 'Обычный текст' }))
 		fireEvent.change(screen.getByLabelText('Письмо'), {
 			target: { value: 'Черновик сохранён' }
 		})
@@ -1132,6 +1153,7 @@ describe('mail UI workflows', () => {
 			/>,
 			{ wrapper: Providers }
 		)
+		fireEvent.click(screen.getByRole('button', { name: 'Обычный текст' }))
 		fireEvent.change(screen.getByLabelText('Письмо'), {
 			target: { value: 'Черновик остаётся в форме' }
 		})
@@ -1269,7 +1291,7 @@ describe('mail UI workflows', () => {
 	})
 })
 
-	describe('customer mail refresh', () => {
+describe('customer mail refresh', () => {
 	const setup = (state: 'QUEUED' | 'SENDING' | null) => {
 		const row = contactMessage(state)
 		request.mockImplementation(async config => {
@@ -1341,12 +1363,19 @@ describe('mail UI workflows', () => {
 			if (url.endsWith('/mailboxes')) return mailPage([]) as never
 			if (url.endsWith(`/contacts/${contactId}/messages`)) {
 				messageCalls++
-				return mailPage(messageCalls === 1 ? [] : [contactMessage(null)]) as never
+				return mailPage(
+					messageCalls === 1 ? [] : [contactMessage(null)]
+				) as never
 			}
-			throw new Error(`Unexpected mail API request: ${config.method} ${url}`)
+			throw new Error(
+				`Unexpected mail API request: ${config.method} ${url}`
+			)
 		})
 		render(
-			<CustomerMailPanel contactId={contactId} email="customer@example.ru" />,
+			<CustomerMailPanel
+				contactId={contactId}
+				email="customer@example.ru"
+			/>,
 			{ wrapper: Providers }
 		)
 		await act(async () => {
@@ -1366,7 +1395,9 @@ describe('mail UI workflows', () => {
 			await vi.advanceTimersByTimeAsync(1)
 		})
 		expect(screen.getByText('Incoming mail update')).toBeTruthy()
-		expect(request.mock.calls.every(([config]) => config.method === 'GET')).toBe(true)
+		expect(
+			request.mock.calls.every(([config]) => config.method === 'GET')
+		).toBe(true)
 	})
 
 	it.each([
@@ -1440,5 +1471,149 @@ describe('mail UI workflows', () => {
 			await vi.advanceTimersByTimeAsync(20_000)
 		})
 		expect(messageRequests()).toHaveLength(1)
+	})
+})
+
+describe('standalone mail workspace', () => {
+	it.each([false, true])(
+		'loads folders and composes without a contact rich=%s',
+		async rich => {
+			render(<MailWorkspaceScreen />, { wrapper: Providers })
+			await screen.findByRole('button', { name: 'Написать письмо' })
+			await waitFor(() =>
+				expect(request).toHaveBeenCalledWith(
+					expect.objectContaining({
+						url: '/crm/customers/mail/messages',
+						params: expect.objectContaining({
+							folder: 'INBOX',
+							mailboxId,
+							workspaceId
+						})
+					})
+				)
+			)
+			fireEvent.click(screen.getByRole('button', { name: 'Отправленные' }))
+			await waitFor(() =>
+				expect(request).toHaveBeenCalledWith(
+					expect.objectContaining({
+						url: '/crm/customers/mail/messages',
+						params: expect.objectContaining({ folder: 'SENT', mailboxId })
+					})
+				)
+			)
+			fireEvent.click(
+				screen.getByRole('button', { name: 'Написать письмо' })
+			)
+			fireEvent.change(screen.getByLabelText(/^Кому/), {
+				target: { value: 'new@example.org' }
+			})
+			fireEvent.change(screen.getByLabelText('Тема'), {
+				target: { value: 'Свободное письмо' }
+			})
+			fireEvent.click(
+				screen.getByRole('button', { name: 'Обычный текст' })
+			)
+			fireEvent.change(screen.getByLabelText('Письмо'), {
+				target: { value: 'Hello without contact' }
+			})
+			if (rich) {
+				fireEvent.click(
+					screen.getByRole('button', { name: 'Форматировать текст' })
+				)
+				fireEvent.click(
+					screen.getByRole('button', { name: 'Маркированный список' })
+				)
+			}
+			fireEvent.click(screen.getByRole('button', { name: 'Отправить' }))
+			await waitFor(() =>
+				expect(request).toHaveBeenCalledWith(
+					expect.objectContaining({
+						url: '/crm/customers/mail/send',
+						data: expect.objectContaining({
+							contactId: null,
+							replyToMessageId: null,
+							text: expect.stringContaining('Hello without contact'),
+							to: [{ email: 'new@example.org', name: null }]
+						})
+					})
+				)
+			)
+			const sent = request.mock.calls.find(([config]) =>
+				config.url?.endsWith('/send')
+			)![0].data as Record<string, unknown>
+			if (rich)
+				expect(sent.html).toBe(
+					'<ul><li><p>Hello without contact</p></li></ul><p></p>'
+				)
+			else expect(sent).not.toHaveProperty('html')
+		}
+	)
+	it('does not request messages until a mailbox is connected and recovers through refresh', async () => {
+		const original = request.getMockImplementation()!
+		let connected = false
+		request.mockImplementation(config =>
+			config.url?.endsWith('/mailboxes')
+				? Promise.resolve(mailPage(connected ? [mailbox] : []) as never)
+				: original(config)
+		)
+		render(<MailWorkspaceScreen />, { wrapper: Providers })
+		await screen.findByText('Почта недоступна')
+		expect(
+			request.mock.calls.some(([config]) =>
+				config.url?.endsWith('/messages')
+			)
+		).toBe(false)
+		connected = true
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Повторить проверку' })
+		)
+		await screen.findByRole('button', { name: 'Написать письмо' })
+		await waitFor(() =>
+			expect(
+				request.mock.calls.some(([config]) =>
+					config.url?.endsWith('/messages')
+				)
+			).toBe(true)
+		)
+	})
+	it('preserves a draft but blocks send while mailbox availability is unavailable', async () => {
+		const original = request.getMockImplementation()!
+		let failed = false
+		request.mockImplementation(config =>
+			config.url?.endsWith('/mailboxes') && failed
+				? Promise.reject(new Error('temporary failure'))
+				: original(config)
+		)
+		render(<MailWorkspaceScreen />, { wrapper: Providers })
+		fireEvent.click(
+			await screen.findByRole('button', { name: 'Написать письмо' })
+		)
+		fireEvent.click(screen.getByRole('button', { name: 'Обычный текст' }))
+		fireEvent.change(screen.getByLabelText('Письмо'), {
+			target: { value: 'Keep my draft' }
+		})
+		failed = true
+		await act(async () => {
+			await queryClient.invalidateQueries({ queryKey: ['mail-mailboxes'] })
+		})
+		await screen.findByText('Почта недоступна')
+		expect(
+			(screen.getByLabelText('Письмо') as HTMLTextAreaElement).value
+		).toBe('Keep my draft')
+		expect(
+			(
+				screen.getByRole('button', {
+					name: 'Отправить'
+				}) as HTMLButtonElement
+			).disabled
+		).toBe(true)
+		failed = false
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Повторить проверку' })
+		)
+		await screen.findByRole('button', { name: 'Написать письмо' })
+		expect(
+			(screen.getByLabelText('Письмо') as HTMLTextAreaElement).value
+		).toBe('Keep my draft')
 	})
 })

@@ -1,5 +1,7 @@
 import {
 	ForbiddenException,
+	NotFoundException,
+	UnauthorizedException,
 	Injectable,
 	OnModuleDestroy,
 	OnModuleInit
@@ -8,7 +10,8 @@ import {
 	Prisma,
 	MailJob,
 	MailMailbox,
-	MailConnection
+	MailConnection,
+	MailAttachment
 } from '@prisma/crm-customers-client';
 import { randomUUID } from 'node:crypto';
 import {
@@ -371,6 +374,18 @@ export class MailWorker implements OnModuleInit, OnModuleDestroy {
 						? error.message
 						: 'MAIL_PROVIDER_UNAVAILABLE';
 			try {
+				if (safe === 'MAIL_UPLOAD_ACTOR_REVOKED') {
+					await this.mail.prisma.mailAttachment.updateMany({
+						where: {
+							workspaceId: job.workspaceId,
+							id: job.targetId!,
+							state: 'QUARANTINED'
+						},
+						data: { state: 'UNAVAILABLE' }
+					});
+					await this.finish(job, 'CANCELLED', safe);
+					return;
+				}
 				if (safe === 'MAIL_DELEGATION_REVOKED') await this.revoke(job);
 				try {
 					await this.mail.prisma.mailMailbox.update({
@@ -879,6 +894,34 @@ export class MailWorker implements OnModuleInit, OnModuleDestroy {
 			await client.logout().catch(() => client.close());
 		}
 	}
+	private async validationAuthority(
+		job: MailJob,
+		file: MailAttachment,
+		fallback: MailAuthority
+	) {
+		if (!file.uploadActor || !file.uploadMembershipId) {
+			await this.mail.attachment(fallback, file.id);
+			return fallback;
+		}
+		try {
+			const actor = await this.mail.authorization.workflow(
+				job.workspaceId,
+				file.uploadActor,
+				file.uploadMembershipId,
+				'MAIL_SEND'
+			);
+			await this.mail.attachment(actor, file.id);
+			return actor;
+		} catch (error) {
+			if (
+				error instanceof ForbiddenException ||
+				error instanceof NotFoundException ||
+				error instanceof UnauthorizedException
+			)
+				throw new Error('MAIL_UPLOAD_ACTOR_REVOKED');
+			throw error;
+		}
+	}
 	private async validate(job: MailJob) {
 		const { a, m } = await this.fresh(job, 'MAIL_SYNC');
 		if (!job.targetId) throw new Error('MAIL_ATTACHMENT_MISSING');
@@ -896,8 +939,7 @@ export class MailWorker implements OnModuleInit, OnModuleDestroy {
 			file.mailboxId !== m.id
 		)
 			throw new Error('MAIL_ATTACHMENT_MISSING');
-		if (file.messageId) await this.mail.readableMessage(a, file.messageId);
-		else if (file.contactId) await this.mail.contact(a, file.contactId);
+		await this.validationAuthority(job, file, a);
 		this.mail.objects.assertKey(
 			file.privateObjectKey,
 			file.workspaceId,
@@ -917,9 +959,11 @@ export class MailWorker implements OnModuleInit, OnModuleDestroy {
 		} catch {
 			state = 'REJECTED';
 		}
-		const fresh = (await this.fresh(job, 'MAIL_SYNC')).a;
-		if (file.messageId) await this.mail.readableMessage(fresh, file.messageId);
-		else if (file.contactId) await this.mail.contact(fresh, file.contactId);
+		await this.validationAuthority(
+			job,
+			file,
+			(await this.fresh(job, 'MAIL_SYNC')).a
+		);
 		await this.mail.prisma.$transaction(async (tx) => {
 			await this.assertLease(job, tx);
 			await tx.mailAttachment.updateMany({
@@ -946,7 +990,7 @@ export class MailWorker implements OnModuleInit, OnModuleDestroy {
 			'MAIL_SEND'
 		);
 		await this.mail.mailbox(a, m.id, 'send');
-		await this.mail.contact(a, intent.contactId);
+		if (intent.contactId) await this.mail.contact(a, intent.contactId);
 		if (intent.mailboxGeneration !== m.generation)
 			throw new Error('MAIL_GENERATION_CHANGED');
 		let mime: Buffer;
@@ -1016,11 +1060,27 @@ export class MailWorker implements OnModuleInit, OnModuleDestroy {
 			await this.mail.prisma.$transaction(async (tx) => {
 				await this.assertLease(job, tx);
 				const current = await this.mail.lockMailbox(a, m.id, 'send', tx);
-				await this.mail.contact(a, intent.contactId, tx);
+				if (intent.contactId) await this.mail.contact(a, intent.contactId, tx);
+				const scopeMessageId = await this.mail.replySource(
+					a,
+					m.id,
+					intent.contactId,
+					intent.replyToMessageId,
+					tx
+				);
+				if (scopeMessageId !== intent.scopeMessageId)
+					throw new Error('MAIL_REPLY_SCOPE_CHANGED');
 				if (!current.enabled || current.generation !== intent.mailboxGeneration)
 					throw new Error('MAIL_GENERATION_CHANGED');
 				for (const id of intent.attachmentIds) {
-					const attachment = await this.mail.attachment(a, id, tx);
+					const attachment = await this.mail.sendAttachment(
+						a,
+						id,
+						m.id,
+						intent.contactId,
+						tx,
+						intent.id
+					);
 					if (attachment.state !== 'VALIDATED' || attachment.mailboxId !== m.id)
 						throw new Error('MAIL_ATTACHMENT_NOT_VALIDATED');
 				}

@@ -1,4 +1,5 @@
-import { NotFoundException } from "@nestjs/common";
+import { ForbiddenException, NotFoundException } from "@nestjs/common";
+import { createHash } from "node:crypto";
 import type { MailAuthority } from "./mail-authorization.client";
 import { MailWorker } from "./mail.worker";
 
@@ -71,5 +72,36 @@ describe("mail worker authorization at dispatch time", () => {
       mailboxId,
       "read",
     );
+  });
+});
+
+
+describe("upload validation actor revocation", () => {
+  it.each([false, true])("cancels only the upload when its actor is revoked afterRead=%s", async (afterRead) => {
+    const bytes = Buffer.from("hello");
+    const mailbox = { id: "mailbox", workspaceId: "workspace", enabled: true, generation: 1, connectionId: "connection" };
+    const file = { id: "file", mailboxId: mailbox.id, workspaceId: mailbox.workspaceId, state: "QUARANTINED", privateObjectKey: "key", sha256: createHash("sha256").update(bytes).digest("hex"), byteSize: bytes.length, safeFileName: "hello.txt", declaredMime: "text/plain", uploadActor: "uploader", uploadMembershipId: "membership" };
+    const authority = { membershipId: "delegate-member", customer: { subject: "delegate" } };
+    let uploaderChecks = 0;
+    const workflow = jest.fn(async (_workspace, actor) => {
+      if (actor === "uploader" && (++uploaderChecks > (afterRead ? 1 : 0))) throw new ForbiddenException();
+      return authority;
+    });
+    const prisma = {
+      mailMailbox: { findUniqueOrThrow: jest.fn().mockResolvedValue(mailbox), update: jest.fn() },
+      mailConnection: { findUniqueOrThrow: jest.fn().mockResolvedValue({ delegatedSubject: "delegate", delegatedMembershipId: "delegate-member" }), update: jest.fn() },
+      mailAttachment: { findUniqueOrThrow: jest.fn().mockResolvedValue(file), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      mailJob: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      $transaction: jest.fn(),
+    };
+    const mail = { prisma, authorization: { workflow }, mailbox: jest.fn().mockResolvedValue(mailbox), attachment: jest.fn().mockResolvedValue(file), objects: { assertKey: jest.fn(), get: jest.fn().mockResolvedValue(bytes) }, config: { enabled: true, attachmentsAvailable: true } };
+    const worker = new MailWorker(mail as never);
+    await (worker as unknown as { run(job: unknown): Promise<void> }).run({ id: "job", kind: "VALIDATE_ATTACHMENT", targetId: file.id, mailboxId: mailbox.id, workspaceId: mailbox.workspaceId, generation: 1, leaseVersion: 1, attempts: 1 });
+    expect(mail.objects.get).toHaveBeenCalledTimes(afterRead ? 1 : 0);
+    expect(prisma.mailAttachment.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { state: "UNAVAILABLE" } }));
+    expect(prisma.mailJob.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: "CANCELLED", safeErrorCode: "MAIL_UPLOAD_ACTOR_REVOKED" }) }));
+    expect(prisma.mailMailbox.update).not.toHaveBeenCalled();
+    expect(prisma.mailConnection.update).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });

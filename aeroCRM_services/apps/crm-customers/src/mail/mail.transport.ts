@@ -221,6 +221,7 @@ export class MailTransport {
 			bcc: unknown[];
 			subject: string;
 			text: string;
+			html?: string;
 			messageId: string;
 			inReplyTo?: string;
 			references?: string[];
@@ -238,6 +239,7 @@ export class MailTransport {
 			bcc: input.bcc as never,
 			subject: input.subject,
 			text: input.text,
+			...(input.html !== undefined ? { html: input.html } : {}),
 			messageId: input.messageId,
 			inReplyTo: input.inReplyTo,
 			references: input.references,

@@ -7,6 +7,7 @@ export const appIconNames = [
 	'yandex',
 	'vk',
 	'inbox',
+	'mail',
 	'bell',
 	'deals',
 	'tasks',
@@ -43,6 +44,12 @@ export interface AppIconProps extends Omit<
 }
 
 const iconRegistry: Record<AppIconName, ReactNode> = {
+	mail: (
+		<g>
+			<rect x="3" y="5" width="18" height="14" rx="2" />
+			<path d="m3 7 9 6 9-6" />
+		</g>
+	),
 	eye: (
 		<g>
 			<path d="M2.75 12s3.35-6.25 9.25-6.25S21.25 12 21.25 12 17.9 18.25 12 18.25 2.75 12 2.75 12z" />

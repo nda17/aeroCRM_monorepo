@@ -47,10 +47,16 @@ custom-role customer grants вместе с новым mailbox ACL; редакт
 `endsWith(':write')` для новых действий. Worker запрашивает fresh membership,
 role/scope/state по указанному purpose, не делегирует через `INTAKE_ACCEPT`.
 
-Любое письмо/вложение/попытка отправки требуют одновременно актуальные
-customerScope и mailbox ACL. Для непривязанной корреспонденции разрешён только
-специальный экран ручной привязки при mailbox read; он не возвращает сведения
-о недоступных контактах. `PERSONAL` принадлежит одному subject+membershipId;
+Доступ к письму начинается с актуального mailbox ACL. Если импортированное
+письмо имеет хотя бы одну `LINKED` связь, необходима также текущая видимая
+связь с неархивным контактом из customerScope; скрытый связанный контакт не
+превращает письмо в непривязанное. Письма без любой `LINKED` связи доступны
+по mailbox read на отдельной странице «Почта» и в ручной привязке, без выдачи
+чужих контактов. Исходящий intent с contactId требует customerScope; intent
+без контакта наследует текущий доступ к scopeMessageId, если он задан, иначе
+достаточен mailbox ACL. Вложения наследуют доступ к источнику или intent;
+непривязанный локальный upload доступен только своему actor+membership.
+`PERSONAL` принадлежит одному subject+membershipId;
 в v1 не имеет чужих grants и не передаётся автоматически. OWNER/CRM_ADMIN не
 видят даже список чужих личных ящиков. `SHARED` имеет явные subject grants
 `read/send/manage`; send подразумевает read. Управление общим ящиком требует
@@ -61,7 +67,10 @@ OWNER/CRM_ADMIN и manage grant; первоначальный grant получа
 
 ## Данные и ограничения БД
 
-Аддитивная миграция `20260928000000_corporate_mail`, schema `crm_customers`.
+Базовая миграция `20260928000000_corporate_mail`, schema `crm_customers`.
+Дополнение `20260929000000_mail_workspace` — шестая аддитивная миграция:
+nullable contactId, внутренний scopeMessageId и nullable sanitized HTML
+в send intents. Предыдущие SQL и их checksum не изменяются.
 UUIDv4 IDs; workspaceId обязателен во всех таблицах. Ссылки на mailbox,
 connection, message, contact и attachment — составные FK вместе с workspace,
 `ON DELETE RESTRICT`, никаких cross-service FK. `version` — positive int CAS;
@@ -75,8 +84,8 @@ connection, message, contact и attachment — составные FK вмест�
 | `mail_folders` | id, workspaceId, mailboxId, exactPath, kind=`INBOX/SENT`, selected, uidValidity bigint, liveLastUid bigint, backfillLastUid bigint, backfillUpperUid bigint, importStartedAt/cutoff/completedAt, generation; UNIQUE(workspaceId, mailboxId, exactPath) |
 | `mail_messages` | id, workspaceId, mailboxId, folderId, folderGeneration, uidValidity/uid, direction, messageId(nullable), inReplyTo/references, from/to/cc/bcc, subject, sentAt/receivedAt, bounded plainText, bodyStatus, sourceHash, createdAt; UNIQUE(workspaceId, folderId, folderGeneration, uidValidity, uid). Поля источника неизменяемы |
 | `mail_contact_links` | id, workspaceId, mailboxId, messageId, externalEmail, contactId(nullable), state=`UNMATCHED/AMBIGUOUS/LINKED`, method=`EXACT/MANUAL`, actorSubject, version; UNIQUE(workspaceId, messageId, externalEmail). Хранить источник ручного решения |
-| `mail_attachments` | id, workspaceId, mailboxId, messageId(nullable), uploadActor/membershipId(nullable), sourcePart(nullable), safeFileName, declared/detected MIME, byteSize, sha256, privateObjectKey, state=`DEFERRED/UPLOADING/QUARANTINED/VALIDATED/REJECTED/UNAVAILABLE`, validationVersion, expiresAt; неизменяемые bytes/hash после VALIDATED |
-| `mail_send_intents` | id, workspaceId, mailboxId, contactId, actorSubject/membershipId, commandId UNIQUE, requestHash, mailboxGeneration, immutable recipients/subject/body/replySource/attachmentIds, messageId UNIQUE, immutable MIME objectKey/hash, state, dispatchAdmittedAt, accepted/rejected recipients, safeErrorCode, version, createdAt/settledAt |
+| `mail_attachments` | id, workspaceId, mailboxId, messageId/contactId(nullable), uploadActor/membershipId(nullable), sourcePart(nullable), safeFileName, declared/detected MIME, byteSize, sha256, privateObjectKey, state=`DEFERRED/UPLOADING/QUARANTINED/VALIDATED/REJECTED/UNAVAILABLE`, validationVersion, expiresAt; неизменяемые bytes/hash после VALIDATED |
+| `mail_send_intents` | id, workspaceId, mailboxId, contactId(nullable), scopeMessageId(nullable, composite FK к mail_messages), actorSubject/membershipId, commandId UNIQUE, requestHash, mailboxGeneration, immutable recipients/subject/text/html(nullable)/replySource/attachmentIds, messageId UNIQUE, immutable MIME objectKey/hash, state, dispatchAdmittedAt, accepted/rejected recipients, safeErrorCode, version, createdAt/settledAt |
 | `mail_jobs` | id, workspaceId, mailboxId, generation, kind=`LIVE_SYNC/BACKFILL/FETCH_ATTACHMENT/VALIDATE_ATTACHMENT/SEND/RECONCILE`, targetId, unique active work key, state, dueAt, leaseOwner/leaseUntil, leaseVersion, attempts, safeErrorCode. Durable bounded retry, SKIP LOCKED + CAS |
 | `mail_commands` | commandId PK, workspaceId, actorSubject, requestHash, response JSON, createdAt; SELECT/INSERT only; не хранить plaintext credentials в response/hash input snapshot |
 | `mail_audit` | id, workspaceId, mailboxId, actorSubject, action, entityId, commandId, occurredAt, safe metadata; SELECT/INSERT only; без bodies/addresses/secrets в operational logs |
@@ -97,7 +106,10 @@ Prefix `M=/api/v1/crm/customers/mail`. GET query всегда содержит w
 
 Каждая бизнес-команда содержит `C={schemaVersion:1,workspaceId,commandId}`;
 `Idempotency-Key === commandId`. Update добавляет `expectedVersion`.
-Receipt/hash включает actor, workspace, operation и нормализованное тело;
+Receipt/hash включает actor, workspace и operation. SEND хеширует исходный
+DTO до HTML sanitization и получения plain fallback; отсутствие html сохраняет
+прежний digest. UPLOAD нормализует отсутствующий contactId в null, сохраняя
+прежний путь с заданным UUID;
 same key/same input возвращает прежний результат после повторной авторизации,
 same key/different input → 409. Неизвестный HTTP результат повторяется с тем же
 ключом. Credential-команды используют keyed digest, не plaintext receipt.
@@ -114,15 +126,16 @@ same key/different input → 409. Неизвестный HTTP результат
 | PUT `M/mailboxes/:id/grants` | `C+{expectedVersion,grants:[{subject,membershipId,read,send,manage}]}`; только SHARED, полный CAS набор, max 100; → summary без секретов |
 | POST `M/mailboxes/:id/disconnect` | `C+{expectedVersion}`; revoke delegation, generation++, очистка активных secrets, остановка новых jobs; история остаётся под прежним ACL |
 | GET `M/contacts/:contactId/messages` | scope+mailbox ACL в SQL до paging; фильтры mailboxId/cursor; items summary без body/BCC |
-| GET `M/messages/:id` | contact link + current customer scope + mailbox read; plainText, from/to/cc, attachment metadata, provenance. BCC только исходному actor либо явно обладающему send/read в этом mailbox; не из чужой копии |
+| GET `M/messages` | workspaceId, обязательный folder=`INBOX/SENT`, optional mailboxId/cursor/limit; mailbox ACL и текущая область контакта применяются в SQL до paging. INBOX — импортированные INBOUND; SENT — импортированные OUTBOUND и CRM_SEND intents. Ответ прежний MailMessagePage без body/BCC |
+| GET `M/messages/:id` | Общая политика mailbox/link/intent scope; plainText, from/to/cc, attachment metadata, provenance. Только query `bodyFormat=html` добавляет item.html:string\|null; без query ключ html отсутствует. BCC только исходному actor либо явно обладающему send/read в этом mailbox; не из чужой копии |
 | GET `M/mailboxes/:id/unmatched` | Inbox ручной привязки, mailbox read; не выдаёт чужих кандидатов и их число |
-| GET `M/mailboxes/:mailboxId/unmatched/:messageId` | mailbox read, совпадение mailbox; без LINKED связей → message detail для ручной привязки. Если LINKED связи уже есть, обязательна обычная проверка readableMessage и customer scope. Загрузка вложения требует обычной привязки и обеих ACL |
+| GET `M/mailboxes/:mailboxId/unmatched/:messageId` | mailbox read, совпадение mailbox; без LINKED связей → message detail для ручной привязки. Если LINKED связи уже есть, обязательна обычная проверка readableMessage и customer scope. Подготовка и загрузка вложения используют ту же текущую политику источника: без LINKED — mailbox read, со связью — также customerScope |
 | POST `M/messages/:id/link` | `C+{expectedVersion,externalEmail,contactId}`; видимый текущий контакт, mailbox manage или mailbox read+customers:write; фиксирует MANUAL. Если уже есть LINKED связь, требуется текущий доступ к письму; при замене — также к прежнему контакту. → `{schemaVersion:1,workspaceId,item:{externalEmail,contactId,state,version}}`, отдельный strict parser |
-| POST `M/attachments` | multipart: C, mailboxId, contactId, file (1); до чтения/после materialization scope+mailbox send; → metadata, сначала QUARANTINED |
+| POST `M/attachments` | multipart: C, mailboxId, optional contactId, file (1); для свободного письма contactId отсутствует и в body, и в binding header. До чтения/после materialization mailbox send и customerScope только при заданном контакте; → metadata, сначала QUARANTINED |
 | POST `M/attachments/:id/prepare` | `C+{messageId}`; scoped incoming download preparation; → metadata/job; повтор не скачивает заново VALIDATED object |
-| GET `M/attachments/:id` | metadata после обеих ACL; download только `.../:id/content` и только VALIDATED |
-| POST `M/send` | `C+{mailboxId,contactId,to:[Address],cc:[Address],bcc:[Address],subject,text,attachmentIds,replyToMessageId:null|string}` → `{schemaVersion:1,workspaceId,sendId,state:'QUEUED',messageId}` |
-| GET `M/sends/:id` | author/explicit mailbox grant + contact scope; `{schemaVersion:1,workspaceId,item:{id,state,messageId,accepted,rejected,safeErrorCode,createdAt,settledAt}}` |
+| GET `M/attachments/:id` | metadata после текущей политики источника/intent либо проверки владельца unbound upload; download только `.../:id/content` и только VALIDATED |
+| POST `M/send` | `C+{mailboxId,contactId:string\|null,to:[Address],cc:[Address],bcc:[Address],subject,text,html?:string,attachmentIds,replyToMessageId:null\|string}` → `{schemaVersion:1,workspaceId,sendId,state:'QUEUED',messageId}` |
+| GET `M/sends/:id` | текущий mailbox ACL и область intent: contactId, наследуемый scopeMessageId либо свободное письмо без обоих; `{schemaVersion:1,workspaceId,item:{id,state,messageId,accepted,rejected,safeErrorCode,createdAt,settledAt}}` |
 
 Единственный connect DTO; все поля обязательны, включая явный `smtpPassword:null`.
 Default UI: IMAP 993/TLS, SMTP 465/TLS, общие credentials; username SMTP
@@ -245,8 +258,9 @@ PARTIAL_ACCEPTED, без досылки rejected recipients. Потеря отв
 
 **CRM хранит исходящую историю независимо от IMAP Sent.** Immutable
 `mail_send_intents` содержит текст, получателей и attachment references до
-SMTP. Contact history объединяет импортированные сообщения и эти intents
-после обеих ACL; запись источника `CRM_SEND` имеет `sendId/state`, источник
+SMTP. Contact history объединяет импортированные сообщения и связанные intents
+после обеих ACL; standalone SENT также включает свободные intents после
+проверки их текущей области доступа; запись источника `CRM_SEND` имеет `sendId/state`, источник
 `IMAP` — `messageId` записи/provenance. Cursor ordering общий и стабильный.
 FAILED/UNKNOWN не обозначаются доставленными письмами. Деталь CRM_SEND читается
 через `M/messages/:id` с теми же ACL (id=sendId); `M/sends/:id` возвращает
@@ -262,8 +276,11 @@ Workers используют durable leases/CAS; внешние вызовы в�
 Lease recovery синхронизации безопасен благодаря уникальному UID ключу;
 для SEND recovery никогда не выдаёт новый transport permit. Fresh authority
 проверяется до external work и перед commit/dispatch. Offboarding/отзыв роли
-останавливает delegated connection; shared mailbox требует нового явно
-подключённого delegation, личный не становится доступным администратору.
+владельца delegated connection останавливает connection; shared mailbox требует
+нового явно подключённого delegation, личный не становится доступным
+администратору. Отзыв прав отдельного upload actor отменяет только его
+VALIDATE_ATTACHMENT job и делает quarantine файл UNAVAILABLE; он не стирает
+секрет и не отключает общий ящик остальных сотрудников.
 
 ## Защита сетевого подключения
 
@@ -329,11 +346,14 @@ encrypted/неподдерживаемые документы отклонять
 не выдавать поле/надпись scanned/clean. Если включён дополнительный scanner,
 его unavailable/error оставляет QUARANTINED, не делает файл VALIDATED.
 
-Download только через авторизованный endpoint, повторно проверяет обе ACL;
+Download только через авторизованный endpoint, повторно проверяет актуальную
+политику источника, intent или владельца unbound upload;
 `Content-Disposition: attachment`, `application/octet-stream`, `nosniff`,
 `Cache-Control: private,no-store`; filename не путь и очищен от control/bidi.
 Нет публичных/долгоживущих signed URLs, inline preview и remote HTML images.
-UI отображает escaped plainText. Staging bytes ограничены памятью; на VPS
+Входящая почта отображается как escaped plainText. Для исходящего CRM_SEND
+rich body допускается только ограниченное очищенное форматирование, описанное
+ниже; HTML вложения по-прежнему запрещены. Staging bytes ограничены памятью; на VPS
 нет локального почтового архива. Unbound uploads истекают через24h; worker
 удаляет только свои доказанно orphan objects, никогда привязанные к intent.
 
@@ -421,6 +441,66 @@ info@aerocrm.space и S3 с отдельным почтовым ключом. Р
 код можно выпустить
 с недоступной соответствующей capability, но INT-04 нельзя назвать полностью
 включённой и проверенной функцией; границу зафиксировать в backlog/release.
+
+## Отдельная страница «Почта» и форматирование исходящих
+
+Sidebar ведёт на `/mail`; при отсутствии доступного ящика пункт отключён.
+Подключение остаётся в существующих настройках почты. Страница читает INBOX
+и SENT выбранного или всех разрешённых ящиков; не требует искусственной
+привязки свободного письма к контакту. Новых разрешений, env или сервисов нет.
+Курсор списка связан с workspace, actor, membership, folder и mailbox.
+Для SENT обе выборки получают limit+1 после SQL ACL, объединяются по общему
+`createdAt,id` и затем ограничиваются в одной RepeatableRead transaction.
+
+В SEND contactId обязателен как UUID или явный null. Null не является wildcard
+для ответа: связанный источник требует явно выбранного текущего видимого
+контакта; ответ без контакта разрешён только источнику без любой LINKED связи.
+Для IMAP null reply сервер сохраняет scopeMessageId исходного письма, для
+следующего null reply наследует этот же ID без рекурсивной цепочки. Обычная
+свободная отправка имеет null scope. Поздняя привязка исходника к скрытому
+контакту скрывает потомков и их bound files; перед MIME и SMTP источник
+проверяется снова. После появления LINKED связи прежний null reply не получает
+новый dispatch permit. Свободная отправка не создаёт автоматическую связь
+с произвольным совпавшим контактом.
+
+Локальный upload имеет точное nullable contact binding. Для null SEND допустим
+только локальный файл своего actor+membership с null contactId, не импортированное
+вложение. Такой файл используется одним send intent; worker может читать binding только
+текущего intent, привязка к другому запрещена API и SQL под блокировкой строки.
+Это не разрешает повторную SMTP отправку UNKNOWN или повторный transport permit.
+После binding даже uploader обязан пройти текущую проверку readableIntent.
+Это исключает перенос файла из наследуемой области ответа в свободное письмо.
+
+Редактор Tiptap предоставляет абзацы, переносы, жирный/курсивный текст, списки
+и ссылки. Optional html — строка, null запрещён. Сервер очищает её через
+`sanitize-html` 2.17.5: только p, br, strong, em, ul, ol, li, a; единственный
+атрибут a.href с абсолютным http/https/mailto URL, без protocol-relative и
+control characters. CSS, изображения, таблицы, script/style, SVG, textarea/xmp
+и прочие элементы вне allowlist не становятся rich content. Plain fallback
+получается из очищенного HTML через `html-to-text`; клиентский text не задаёт
+plain body rich-письма. Оба значения сохраняются неизменно, MIME содержит
+text/plain и text/html alternative; URL/file access генератора MIME отключён.
+Входящий HTML не отображается. Frontend дополнительно строит ограниченное
+React-дерево из разрешённых элементов, без произвольного HTML rendering.
+
+UTF-8 сумма raw text+html и отдельно derived text+sanitized html не превышает
+24576 байт, serialized полный SEND DTO — 32768 байт. Отсутствующий html сохраняет
+прежний plain path и command digest. Receipt известной команды читается после
+fresh ACL до повторной sanitization и новых semantic checks: изменение sanitizer
+не меняет результат повтора прежнего raw request. Изменённый raw request с тем
+же commandId по-прежнему получает 409. Потеря результата не создаёт новый POST
+или автоматическую SMTP отправку.
+
+Rich detail выбирается только `bodyFormat=html`; старый ответ не получает новых
+ключей. Для IMAP и legacy plain intents html равен null. Почтовые уведомления
+остаются linked-only и ведут в контакт; свободная переписка не расширяет область
+данных колокольчика.
+
+Миграция 6 сохраняет 14 mail-таблиц и 14 write guards, добавляет двадцатый
+составной FK. Предыдущий образ допустим для rollback только при доказанном
+отсутствии null-contact intents, scopeMessageId, HTML intents и локальных
+null-contact uploads после остановки writers. Если новые данные уже существуют,
+нужен совместимый образ или исправление вперёд; DDL назад не откатывается.
 
 ## Уведомления о входящей почте и обновление без перезагрузки
 
@@ -643,3 +723,16 @@ deep-link и скрытие данных при потере доступа. Р�
 владелец, как согласовано. Нативное управление браузером было недоступно;
 живую проверку нового интерфейса и его узкого viewport не подменяем тестами
 компонентов. Дополнительные контрольные письма не отправлялись.
+
+## Подготовка отдельной «Почты» и Tiptap, 29.09.2026
+
+Runtime и аддитивная миграция 6 подготовлены локально. Проверка на PostgreSQL 18
+успешна; checksum migrations, backup inventory и новое тело write guard
+согласованы. Локальные read-only postflight-скрипты ожидают reviewed CI manifest
+и точные SHA будущего выпуска, проверяют 14 таблиц, 20 FK и 14 guards, сохранение
+env/ключа, идентичность образов и готовность backend/frontend.
+
+Это граница подготовки, не production acceptance: новый выпуск ещё не подтверждён
+CI/CD postflight и живой проверкой владельца. Предыдущие production результаты
+выше относятся к своим SHA и сохранены. Новые реальные письма в ходе подготовки
+не отправлялись.
