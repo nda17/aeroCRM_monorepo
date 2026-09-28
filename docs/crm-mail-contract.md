@@ -351,8 +351,13 @@ Server env: `CRM_CUSTOMERS_PROCESS_ROLE=api|mail-sync|mail-send`,
 `CRM_MAIL_ENABLED`, `CRM_MAIL_SYNC_ENABLED`, `CRM_MAIL_SEND_ENABLED`,
 `CRM_MAIL_CREDENTIAL_KEY_ID`,
 `CRM_MAIL_CREDENTIAL_KEY` (base64 32bytes), `CRM_MAIL_S3_ENDPOINT/REGION/BUCKET/`
-`ACCESS_KEY_ID/SECRET_ACCESS_KEY/FORCE_PATH_STYLE`. Раздельные flags дают
-rollback остановки admission. Optional отсутствующая конфигурация выключает
+`ACCESS_KEY_ID/SECRET_ACCESS_KEY/FORCE_PATH_STYLE`. `CRM_MAIL_SEND_ENABLED=false`
+останавливает весь send worker, включая обработку ранее допущенных отправок;
+это не отдельный admission-only режим. При отключении сохраняются совместимый
+образ и прежний encryption key/id; незавершённые допущенные отправки требуют
+проверки и восстановления после повторного включения worker, без автоматической
+повторной SMTP-отправки при неизвестном результате. Optional отсутствующая
+конфигурация выключает
 соответствующую capability с понятным статусом, не ломает customer CRUD.
 Enabled конфигурация с неверными ключами/URL проваливает readiness.
 API получает только необходимые secrets; sync/send роли не публикуются
@@ -385,8 +390,10 @@ backup migration manifest/checksum Operations, infra reviewed closure inventory
 SELECT/INSERT; mutable tables — только необходимые SELECT/INSERT/UPDATE,
 без DELETE/TRUNCATE/DDL. Функции не PUBLIC, schema/principal остаются прежними.
 Исторические миграции не переписывать; applied schema не откатывать DROP.
-Rollback старого app при pending jobs/admitted sends запрещён: сначала
-остановить admission через CI/CD и сохранить совместимый outcome worker.
+Rollback старого app при pending jobs/admitted sends запрещён. Отключение send
+через CI/CD останавливает весь worker; сохраняются совместимый образ и прежний
+encryption key/id. Незавершённые допущенные отправки проверяются и восстанавливаются
+после повторного включения worker, без автоматического SMTP resend при UNKNOWN.
 Все deploy/enable исключительно GitHub CI/CD с точным зелёным SHA.
 
 Required tests: старые permission responses byte-shape неизменны; OWN/TEAM,
