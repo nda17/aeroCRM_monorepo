@@ -98,6 +98,8 @@ export type MailboxSyncStatus =
 	| 'NOT_CONFIGURED'
 	| 'IDLE'
 	| 'SYNCING'
+	| 'BACKFILL'
+	| 'CURRENT'
 	| 'ERROR'
 	| 'DISCONNECTED'
 
@@ -469,6 +471,8 @@ const parseMailbox = (value: unknown): value is MailMailbox =>
 		'NOT_CONFIGURED',
 		'IDLE',
 		'SYNCING',
+		'BACKFILL',
+		'CURRENT',
 		'ERROR',
 		'DISCONNECTED'
 	] as const) &&

@@ -129,7 +129,8 @@ export const MailSettings = () => {
 													? 'Нужно переподключить'
 													: mailbox.syncStatus === 'ERROR'
 														? 'Ошибка синхронизации'
-														: mailbox.syncStatus === 'SYNCING'
+														: mailbox.syncStatus === 'SYNCING' ||
+															  mailbox.syncStatus === 'BACKFILL'
 															? 'Загружается история'
 															: 'Подключён'}
 											{mailbox.lastSyncAt ? (

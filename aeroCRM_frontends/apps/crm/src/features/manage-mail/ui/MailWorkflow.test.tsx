@@ -26,6 +26,7 @@ import { DirtyFormProvider } from '@/shared/lib/dirty-form'
 import { ConnectMailbox } from './ConnectMailbox'
 import { MailComposer } from './MailComposer'
 import { MailMessageReader } from './MailMessageReader'
+import { MailSettings } from './MailSettings'
 import { UnmatchedMail } from './UnmatchedMail'
 
 vi.mock(
@@ -225,6 +226,119 @@ afterEach(() => {
 })
 
 describe('mail UI workflows', () => {
+	it.each([
+		['BACKFILL', 'Загружается история'],
+		['SYNCING', 'Загружается история'],
+		['CURRENT', 'Подключён']
+	])('renders the %s mailbox sync state as %s', async (syncStatus, label) => {
+		request.mockImplementation(async config => {
+			const url = config.url ?? ''
+			if (url.endsWith('/capabilities')) return capabilities as never
+			if (url.endsWith('/mailboxes'))
+				return {
+					schemaVersion: 1,
+					workspaceId,
+					items: [{ ...mailbox, syncStatus }],
+					nextCursor: null
+				} as never
+			throw new Error(`Unexpected mail API request: ${config.method} ${url}`)
+		})
+		render(<MailSettings />, { wrapper: Providers })
+		expect(await screen.findByText(label)).toBeTruthy()
+	})
+
+	it('recovers folder selection from the same command after a BACKFILL receipt', async () => {
+		let attempts = 0
+		request.mockImplementation(async config => {
+			const url = config.url ?? ''
+			if (url.endsWith('/capabilities')) return capabilities as never
+			if (url.endsWith('/mailboxes'))
+				return {
+					schemaVersion: 1,
+					workspaceId,
+					items: [{ ...mailbox, syncStatus: 'CURRENT' }],
+					nextCursor: null
+				} as never
+			if (
+				url.endsWith(`/mailboxes/${mailboxId}/folders`) &&
+				config.method === 'GET'
+			)
+				return {
+					schemaVersion: 1,
+					workspaceId,
+					items: [
+						{
+							path: 'INBOX',
+							name: 'Входящие',
+							kind: 'INBOX',
+							selected: false
+						},
+						{
+							path: 'Sent Items',
+							name: 'Отправленные',
+							kind: 'SENT',
+							selected: false
+						}
+					],
+					nextCursor: null
+				} as never
+			if (
+				url.endsWith(`/mailboxes/${mailboxId}/folders`) &&
+				config.method === 'PUT'
+			) {
+				attempts++
+				if (attempts === 1)
+					throw new AuthenticatedApiError('temporary', 'Сеть недоступна.')
+				return success({
+					...mailbox,
+					version: 8,
+					syncStatus: 'BACKFILL'
+				}) as never
+			}
+			throw new Error(`Unexpected mail API request: ${config.method} ${url}`)
+		})
+		render(<MailSettings />, { wrapper: Providers })
+		fireEvent.click(
+			await screen.findByRole('button', { name: 'Папки и импорт' })
+		)
+		fireEvent.change(await screen.findByLabelText('Входящие'), {
+			target: { value: 'INBOX' }
+		})
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Сохранить и начать импорт' })
+		)
+		await screen.findByRole('button', { name: 'Проверить результат' })
+		const first = request.mock.calls.find(
+			([config]) => config.method === 'PUT' && config.url?.endsWith('/folders')
+		)?.[0]
+		expect(first?.data).toMatchObject({
+			expectedVersion: 7,
+			folders: [{ path: 'INBOX', kind: 'INBOX' }]
+		})
+		expect(first?.headers?.['Idempotency-Key']).toBe(
+			(first?.data as { commandId: string }).commandId
+		)
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Проверить результат' })
+		)
+		await waitFor(() => expect(attempts).toBe(2))
+		const folderCommands = request.mock.calls
+			.filter(
+				([config]) => config.method === 'PUT' && config.url?.endsWith('/folders')
+			)
+			.map(([config]) => config)
+		expect(folderCommands).toHaveLength(2)
+		expect(folderCommands[1]?.data).toEqual(first?.data)
+		expect(folderCommands[1]?.headers?.['Idempotency-Key']).toBe(
+			first?.headers?.['Idempotency-Key']
+		)
+		await waitFor(() =>
+			expect(
+				screen.queryByRole('button', { name: 'Сохранить и начать импорт' })
+			).toBeNull()
+		)
+	})
+
 	it('submits the universal IMAP/SMTP connect contract with shared credentials and no provider selector', async () => {
 		const onConnected = vi.fn()
 		render(
