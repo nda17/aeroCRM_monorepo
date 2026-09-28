@@ -39,7 +39,9 @@ import {
 	MailPrepareAttachmentDto,
 	MailSendDto,
 	MailUploadDto,
-	MailQueryDto
+	MailQueryDto,
+	MailNotificationsQuery,
+	MailNotificationReadDto
 } from './mail.dto';
 export type MailTx = Prisma.TransactionClient;
 export interface MailAddress {
@@ -1274,6 +1276,121 @@ export class MailService {
 			}
 		};
 	}
+	private async notificationScope(a: MailAuthority, tx: MailTx) {
+		this.enabled();
+		const mailboxIds = await this.visibleMailboxIds(a, 'read', tx);
+		return {
+			workspaceId: a.customer.workspaceId,
+			message: {
+				workspaceId: a.customer.workspaceId,
+				mailboxId: { in: mailboxIds },
+				mailContactLink_messageId: {
+					some: { state: 'LINKED', contact: customerScope(a.customer) }
+				}
+			}
+		};
+	}
+	async notifications(a: MailAuthority, query: MailNotificationsQuery) {
+		if (query.workspaceId !== a.customer.workspaceId)
+			throw new ForbiddenException();
+		return this.prisma.$transaction(
+			async (tx) => {
+				const scope = await this.notificationScope(a, tx);
+				const reader = {
+					recipientSubject: a.customer.subject,
+					recipientMembershipId: a.membershipId
+				};
+				const unread = {
+					reads: { none: { ...reader, readAt: { not: null } } }
+				};
+				const where = {
+					...scope,
+					...(query.unreadOnly === 'true' ? unread : {})
+				};
+				const [total, unreadCount, rows] = await Promise.all([
+					tx.mailNotification.count({ where }),
+					tx.mailNotification.count({ where: { ...scope, ...unread } }),
+					tx.mailNotification.findMany({
+						where,
+						orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+						skip: (query.page - 1) * query.pageSize,
+						take: query.pageSize,
+						include: {
+							reads: { where: reader },
+							message: {
+								select: {
+									subject: true,
+									mailContactLink_messageId: {
+										where: {
+											state: 'LINKED',
+											contact: customerScope(a.customer)
+										},
+										orderBy: [{ contactId: 'asc' }, { id: 'asc' }],
+										take: 1,
+										select: { contactId: true }
+									}
+								}
+							}
+						}
+					})
+				]);
+				return {
+					schemaVersion: 1,
+					workspaceId: query.workspaceId,
+					page: query.page,
+					pageSize: query.pageSize,
+					total,
+					unreadCount,
+					items: rows.map((row) => ({
+						id: row.id,
+						messageId: row.messageId,
+						contactId: row.message.mailContactLink_messageId[0].contactId!,
+						title:
+							row.message.subject
+								.replace(/[\x00-\x1f\x7f]/g, ' ')
+								.trim()
+								.slice(0, 200) || 'Без темы',
+						createdAt: row.createdAt.toISOString(),
+						readAt: row.reads[0]?.readAt?.toISOString() ?? null
+					}))
+				};
+			},
+			{ isolationLevel: 'RepeatableRead' }
+		);
+	}
+	async readNotification(
+		a: MailAuthority,
+		id: string,
+		dto: MailNotificationReadDto
+	) {
+		requireMailId(id);
+		if (dto.workspaceId !== a.customer.workspaceId)
+			throw new ForbiddenException();
+		return this.prisma.$transaction(
+			async (tx) => {
+				const scope = await this.notificationScope(a, tx);
+				const notification = await tx.mailNotification.findFirst({
+					where: { id, ...scope }
+				});
+				if (!notification) throw new NotFoundException();
+				const rows = await tx.$queryRaw<{ readAt: Date | null }[]>(Prisma.sql`
+				INSERT INTO crm_customers.mail_notification_reads
+				(workspace_id,notification_id,recipient_subject,recipient_membership_id,read_at)
+				VALUES (${dto.workspaceId}::uuid,${id}::uuid,${a.customer.subject},${a.membershipId}::uuid,${dto.read ? new Date() : null})
+				ON CONFLICT (notification_id,recipient_subject,recipient_membership_id) DO UPDATE
+				SET read_at=CASE WHEN ${dto.read} THEN COALESCE(mail_notification_reads.read_at,EXCLUDED.read_at) ELSE NULL END
+				RETURNING read_at AS "readAt"`);
+				return {
+					schemaVersion: 1,
+					workspaceId: dto.workspaceId,
+					id,
+					readAt: rows[0].readAt?.toISOString() ?? null
+				};
+			},
+			{ isolationLevel: 'RepeatableRead' }
+		);
+	}
+
 	async unmatched(a: MailAuthority, id: string, query: MailQueryDto) {
 		await this.mailbox(a, id);
 		const filter = `unmatched:${id}`;

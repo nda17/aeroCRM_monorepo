@@ -32,9 +32,11 @@ import { useState, type FormEvent } from 'react'
 import styles from './ContactsScreen.module.scss'
 
 const ContactsScreen = ({
-	initialContactId
+	initialContactId,
+	initialMailMessageId
 }: {
 	initialContactId?: string | null
+	initialMailMessageId?: string | null
 }) => {
 	const { workspaceId, canWrite: subscriptionCanWrite } =
 		useCrmWorkspaceAccess()
@@ -431,6 +433,11 @@ const ContactsScreen = ({
 					workspaceId={workspaceId}
 					kind={activeSelection.kind}
 					id={activeSelection.id}
+					initialMailMessageId={
+						link?.scope === linkScope && activeSelection.id === link.id
+							? initialMailMessageId
+							: null
+					}
 					canWrite={canWrite}
 					scopeKey={scopeKey}
 					onClose={closeEditor}

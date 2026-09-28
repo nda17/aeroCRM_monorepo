@@ -24,14 +24,17 @@ vi.mock('@/features/edit-customer', () => ({
 	CustomerEditor: ({
 		id,
 		canWrite,
+		initialMailMessageId,
 		onClose
 	}: {
 		id?: string
 		canWrite: boolean
+		initialMailMessageId?: string | null
 		onClose: () => void
 	}) => (
 		<div role="dialog" aria-label="Карточка контакта">
 			<span>{id}</span>
+			<span>{initialMailMessageId}</span>
 			<span>{canWrite ? 'Редактирование' : 'Только просмотр'}</span>
 			<button onClick={onClose}>Закрыть карточку</button>
 		</div>
@@ -43,6 +46,7 @@ vi.mock('@/features/export-records', () => ({
 
 const workspaceId = '11111111-1111-4111-8111-111111111111'
 const contactId = '22222222-2222-4222-8222-222222222222'
+const messageId = '33333333-3333-4333-8333-333333333333'
 let client: QueryClient
 let permissions: CrmPermissions
 const setPermissions = (confirmed = true) =>
@@ -157,8 +161,31 @@ describe('Contact links', () => {
 	)
 	it('passes a validated identifier from the contacts route', async () => {
 		const page = await ContactsPage({
-			searchParams: Promise.resolve({ contactId })
+			searchParams: Promise.resolve({
+				contactId,
+				mailMessageId: messageId
+			})
 		})
 		expect(page.props.initialContactId).toBe(contactId)
+		expect(page.props.initialMailMessageId).toBe(messageId)
 	})
+	it.each([
+		{ contactId, mailMessageId: 'invalid' },
+		{ contactId: [contactId], mailMessageId: messageId },
+		{ contactId: undefined, mailMessageId: messageId },
+		{ contactId, mailMessageId: [messageId] }
+	])(
+		'drops malformed or ambiguous mail deep-link input %#',
+		async params => {
+			const page = await ContactsPage({
+				searchParams: Promise.resolve(params)
+			})
+			expect(page.props.initialContactId).toBe(
+				Array.isArray(params.contactId) || !params.contactId
+					? null
+					: contactId
+			)
+			expect(page.props.initialMailMessageId).toBeNull()
+		}
+	)
 })

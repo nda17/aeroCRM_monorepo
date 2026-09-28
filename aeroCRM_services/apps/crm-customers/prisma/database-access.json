@@ -96,6 +96,15 @@
     "mail_audit": [
       "SELECT",
       "INSERT"
+    ],
+    "mail_notifications": [
+      "SELECT",
+      "INSERT"
+    ],
+    "mail_notification_reads": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
     ]
   },
   "sequences": {},

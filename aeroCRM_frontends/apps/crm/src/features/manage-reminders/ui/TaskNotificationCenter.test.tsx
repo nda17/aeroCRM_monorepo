@@ -10,7 +10,11 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import toast from 'react-hot-toast'
 import { useSessionStore, resetSessionStore } from '@/entities/session'
-import { listCrmNotifications } from '../api/crm-notifications.api'
+import {
+	listCrmNotifications,
+	readCrmNotification,
+	type NotificationPage
+} from '../api/crm-notifications.api'
 import { inspectNotificationHead } from './CombinedNotificationCenter'
 import {
 	listTaskNotifications,
@@ -20,6 +24,8 @@ import {
 	useReminderSession,
 	type ReminderContext
 } from '../model/use-reminder-session'
+import { useMailContext } from '@/features/manage-mail/model/use-mail-context'
+import { AuthenticatedApiError } from '@/shared/api/authenticated-http-client'
 import {
 	TaskNotificationCenter,
 	TaskNotificationPanel
@@ -32,6 +38,13 @@ vi.mock('@/entities/crm-task-notifications', () => ({
 vi.mock('../model/use-reminder-session', () => ({
 	useReminderSession: vi.fn()
 }))
+vi.mock(
+	'@/features/manage-mail/model/use-mail-context',
+	async importOriginal => ({
+		...(await importOriginal<object>()),
+		useMailContext: vi.fn()
+	})
+)
 vi.mock('../api/crm-notifications.api', () => ({
 	listCrmNotifications: vi.fn().mockResolvedValue({
 		page: 1,
@@ -81,7 +94,7 @@ const data = {
 		}
 	]
 }
-let client: QueryClient, context: ReminderContext
+let client: QueryClient, context: ReminderContext, mailContext: object
 beforeEach(() => {
 	vi.clearAllMocks()
 	resetSessionStore()
@@ -101,8 +114,12 @@ beforeEach(() => {
 		canWrite: false,
 		actorConfirmed: true,
 		actor: { subject: 'owner', membershipId: null },
-		session: { accessToken: 'token' },
-		workspace: { workspaceId },
+		session: { accessToken: 'token', userId: 'owner' },
+		sessionRevision: 1,
+		workspace: {
+			workspaceId,
+			membership: { membershipId: 'membership-1' }
+		},
 		permissions: {
 			isSuccess: true,
 			isFetching: false,
@@ -117,7 +134,32 @@ beforeEach(() => {
 		},
 		current: () => true
 	} as unknown as ReminderContext
+	useSessionStore.setState({
+		session: context.session,
+		sessionRevision: 1
+	})
+	mailContext = {
+		workspace: {
+			workspaceId,
+			membership: { membershipId: 'membership-1' }
+		},
+		session: context.session,
+		sessionRevision: 1,
+		key: [workspaceId, 'owner', 1, 'membership-1'],
+		current: () => true,
+		capabilities: {
+			data: {
+				enabled: true,
+				mailPermissions: ['mail:read']
+			},
+			isError: false,
+			isFetching: false,
+			isSuccess: true,
+			refetch: vi.fn()
+		}
+	}
 	vi.mocked(useReminderSession).mockImplementation(() => context)
+	vi.mocked(useMailContext).mockImplementation(() => mailContext as never)
 	vi.mocked(listTaskNotifications).mockResolvedValue(data)
 	vi.mocked(setTaskNotificationRead).mockResolvedValue({
 		schemaVersion: 1,
@@ -160,8 +202,9 @@ describe('new event notice', () => {
 			session: context.session,
 			sessionRevision: 1
 		})
+		mailContext = { ...mailContext, session: context.session }
 	})
-	it.each(['intake', 'support', 'tasks'] as const)(
+	it.each(['intake', 'support', 'mail', 'tasks'] as const)(
 		'announces a new %s event once for four seconds, without replaying initial history',
 		async source => {
 			render(center())
@@ -179,13 +222,31 @@ describe('new event notice', () => {
 							1,
 							false
 						]
-					: [`crm-${source}-notifications`, context.key, 1, false]
-			const event = {
-				...data.items[0],
-				id: 'new-event',
-				targetId: id,
-				createdAt: '2026-09-08T12:00:00.000Z'
-			}
+					: source === 'mail'
+						? [
+								'crm-mail-notifications',
+								context.key,
+								...(mailContext as { key: string[] }).key,
+								1,
+								false
+							]
+						: [`crm-${source}-notifications`, context.key, 1, false]
+			const event =
+				source === 'mail'
+					? {
+							id: 'new-event',
+							title: 'New incoming email',
+							createdAt: '2026-09-08T12:00:00.000Z',
+							readAt: null,
+							targetId: id,
+							contactId: id
+						}
+					: {
+							...data.items[0],
+							id: 'new-event',
+							targetId: id,
+							createdAt: '2026-09-08T12:00:00.000Z'
+						}
 			const snapshot = { ...data, items: [event], unreadCount: 1 }
 			await act(async () => {
 				client.setQueryData(key, snapshot)
@@ -304,6 +365,299 @@ describe('new event notice', () => {
 	})
 })
 describe('task notification center', () => {
+	it('shows incoming mail separately, links to its contact, and does not auto-mark it read', async () => {
+		const mailItem = {
+			id: '33333333-3333-4333-8333-333333333333',
+			title: 'Вопрос по заказу',
+			createdAt: '2026-09-08T12:00:00.000Z',
+			readAt: null,
+			targetId: '44444444-4444-4444-8444-444444444444',
+			contactId: '55555555-5555-4555-8555-555555555555'
+		}
+		vi.mocked(listCrmNotifications).mockImplementation(async source =>
+			source === 'mail'
+				? {
+						page: 1,
+						pageSize: 10,
+						total: 1,
+						unreadCount: 1,
+						items: [mailItem]
+					}
+				: { page: 1, pageSize: 10, total: 0, unreadCount: 0, items: [] }
+		)
+		render(center())
+		fireEvent.click(
+			await screen.findByRole('button', {
+				name: 'Уведомления, непрочитанных: 2'
+			})
+		)
+		fireEvent.click(screen.getByRole('button', { name: 'Почта' }))
+		const link = await screen.findByRole('link', {
+			name: 'Вопрос по заказу'
+		})
+		expect(link.getAttribute('href')).toBe(
+			`/contacts?workspaceId=${workspaceId}&contactId=${mailItem.contactId}&mailMessageId=${mailItem.targetId}`
+		)
+		expect(readCrmNotification).not.toHaveBeenCalled()
+		expect(listCrmNotifications).toHaveBeenCalledWith(
+			'mail',
+			'token',
+			workspaceId,
+			1,
+			false
+		)
+	})
+
+	it('refreshes mail at 15 seconds while other notification sources retain their 60-second cadence', async () => {
+		context = {
+			...context,
+			authority: {
+				subject: 'owner',
+				workspaceId,
+				permissions: ['intake:read']
+			}
+		} as ReminderContext
+		vi.useFakeTimers()
+		render(center())
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+			await vi.advanceTimersByTimeAsync(1)
+		})
+		expect(
+			screen.getByRole('button', {
+				name: 'Уведомления, непрочитанных: 1'
+			})
+		).toBeTruthy()
+		const countBySource = () => {
+			const calls = vi.mocked(listCrmNotifications).mock.calls
+			return Object.fromEntries(
+				(['intake', 'support', 'mail'] as const).map(source => [
+					source,
+					calls.filter(([calledSource]) => calledSource === source).length
+				])
+			)
+		}
+		const initial = countBySource()
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(15_000)
+		})
+		const afterMailInterval = countBySource()
+		expect(afterMailInterval.mail).toBeGreaterThan(initial.mail)
+		expect(afterMailInterval.intake).toBe(initial.intake)
+		expect(afterMailInterval.support).toBe(initial.support)
+		expect(readCrmNotification).not.toHaveBeenCalled()
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(45_000)
+		})
+		const afterOtherIntervals = countBySource()
+		expect(afterOtherIntervals.intake).toBeGreaterThan(
+			afterMailInterval.intake
+		)
+		expect(afterOtherIntervals.support).toBeGreaterThan(
+			afterMailInterval.support
+		)
+	})
+
+	it('hides a cached mail badge and rows when mail capability lookup fails', async () => {
+		mailContext = {
+			...mailContext,
+			capabilities: {
+				...(mailContext as { capabilities: object }).capabilities,
+				isError: true,
+				isSuccess: false,
+				data: undefined
+			}
+		}
+		const mailItem = {
+			id,
+			title: 'Private message',
+			createdAt: '2026-09-08T12:00:00.000Z',
+			readAt: null,
+			targetId: id,
+			contactId: id
+		}
+		for (const page of [1, 2]) {
+			client.setQueryData(
+				[
+					'crm-mail-notifications',
+					context.key,
+					...(mailContext as { key: string[] }).key,
+					page,
+					false
+				],
+				{ page, pageSize: 10, total: 1, unreadCount: 1, items: [mailItem] }
+			)
+		}
+		render(center())
+		await waitFor(() =>
+			expect(
+				screen.getByRole('button', {
+					name: 'Уведомления, часть счётчиков недоступна'
+				})
+			).toBeTruthy()
+		)
+		fireEvent.click(screen.getByRole('button', { name: /^Уведомления/ }))
+		fireEvent.click(screen.getByRole('button', { name: 'Почта' }))
+		expect(
+			await screen.findByText(
+				'Не удалось загрузить уведомления. Попробуйте обновить список.'
+			)
+		).toBeTruthy()
+		expect(screen.queryByText('Private message')).toBeNull()
+	})
+
+	it('hides page-two mail after a mailbox denial even when the head page was cached', async () => {
+		const mailItem = {
+			id: '33333333-3333-4333-8333-333333333333',
+			title: 'Private page-one mail',
+			createdAt: '2026-09-08T12:00:00.000Z',
+			readAt: null,
+			targetId: '44444444-4444-4444-8444-444444444444',
+			contactId: '55555555-5555-4555-8555-555555555555'
+		}
+		vi.mocked(listCrmNotifications).mockImplementation(
+			async (source, _token, _workspace, page) => {
+				if (source !== 'mail')
+					return {
+						page: 1,
+						pageSize: 10,
+						total: 0,
+						unreadCount: 0,
+						items: []
+					}
+				if (page === 2)
+					throw new AuthenticatedApiError('forbidden', 'denied')
+				return {
+					page: 1,
+					pageSize: 10,
+					total: 11,
+					unreadCount: 1,
+					items: [mailItem]
+				}
+			}
+		)
+		render(center())
+		fireEvent.click(
+			await screen.findByRole('button', {
+				name: 'Уведомления, непрочитанных: 2'
+			})
+		)
+		fireEvent.click(screen.getByRole('button', { name: 'Почта' }))
+		await screen.findByRole('link', { name: 'Private page-one mail' })
+		fireEvent.click(screen.getByRole('button', { name: 'Далее' }))
+		expect(
+			await screen.findByText('Недостаточно прав для просмотра почты.')
+		).toBeTruthy()
+		expect(screen.queryByText('Private page-one mail')).toBeNull()
+		expect(
+			screen.getByRole('button', {
+				name: 'Уведомления, непрочитанных: 1'
+			})
+		).toBeTruthy()
+	})
+
+	it('discards a late list result when workspace membership scope changes', async () => {
+		let resolveList!: (value: NotificationPage) => void
+		const current = vi.fn(() => true)
+		mailContext = { ...mailContext, current }
+		vi.mocked(listCrmNotifications).mockImplementation(source =>
+			source === 'mail'
+				? new Promise(resolve => {
+						resolveList = resolve
+					})
+				: Promise.resolve({
+						page: 1,
+						pageSize: 10,
+						total: 0,
+						unreadCount: 0,
+						items: []
+					})
+		)
+		render(center())
+		fireEvent.click(
+			await screen.findByRole('button', {
+				name: 'Уведомления, часть счётчиков недоступна'
+			})
+		)
+		fireEvent.click(screen.getByRole('button', { name: 'Почта' }))
+		await waitFor(() => expect(resolveList).toBeTypeOf('function'))
+		current.mockReturnValue(false)
+		await act(async () => {
+			resolveList!({
+				page: 1,
+				pageSize: 10,
+				total: 1,
+				unreadCount: 1,
+				items: [
+					{
+						id: '33333333-3333-4333-8333-333333333333',
+						title: 'Late private message',
+						createdAt: '2026-09-08T12:00:00.000Z',
+						readAt: null,
+						targetId: '44444444-4444-4444-8444-444444444444',
+						contactId: '55555555-5555-4555-8555-555555555555'
+					}
+				]
+			})
+		})
+		expect(
+			await screen.findByText(
+				'Не удалось загрузить уведомления. Попробуйте обновить список.'
+			)
+		).toBeTruthy()
+		expect(screen.queryByText('Late private message')).toBeNull()
+		expect(readCrmNotification).not.toHaveBeenCalled()
+	})
+
+	it('clears cached private notifications immediately when the read mutation is denied', async () => {
+		let listCalls = 0
+		vi.mocked(listCrmNotifications).mockImplementation(async source => {
+			if (source !== 'mail')
+				return {
+					page: 1,
+					pageSize: 10,
+					total: 0,
+					unreadCount: 0,
+					items: []
+				}
+			listCalls += 1
+			if (listCalls > 1) return new Promise(() => {})
+			return {
+				page: 1,
+				pageSize: 10,
+				total: 1,
+				unreadCount: 1,
+				items: [
+					{
+						id: '33333333-3333-4333-8333-333333333333',
+						title: 'Sensitive notification',
+						createdAt: '2026-09-08T12:00:00.000Z',
+						readAt: null,
+						targetId: '44444444-4444-4444-8444-444444444444',
+						contactId: '55555555-5555-4555-8555-555555555555'
+					}
+				]
+			}
+		})
+		vi.mocked(readCrmNotification).mockRejectedValue(
+			new AuthenticatedApiError('forbidden', 'revoked')
+		)
+		render(center())
+		fireEvent.click(
+			await screen.findByRole('button', {
+				name: 'Уведомления, непрочитанных: 2'
+			})
+		)
+		fireEvent.click(screen.getByRole('button', { name: 'Почта' }))
+		await screen.findByRole('link', { name: 'Sensitive notification' })
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Отметить прочитанным' })
+		)
+		await waitFor(() => expect(listCalls).toBeGreaterThan(1))
+		expect(screen.queryByText('Sensitive notification')).toBeNull()
+	})
+
 	it('shows server badge, safe task link and explicit read preference in READ_ONLY', async () => {
 		render(view())
 		fireEvent.click(

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { Readable } from "node:stream";
 
 const required = (name) => {
   const value = process.env[name];
@@ -11,9 +12,8 @@ const migrationUrl = required("CRM_CUSTOMERS_TEST_MIGRATION_DATABASE_URL");
 const runtimeRole = required("CRM_CUSTOMERS_TEST_RUNTIME_ROLE");
 assert.equal(process.env.CRM_MAIL_INTEGRATION_ALLOW_MUTATION, "true");
 assert.match(runtimeRole, /^[a-z][a-z0-9_]{0,62}$/);
-// The integration exercises SQL-backed send creation only. Keep a synthetic
-// local key and placeholder object-store settings so CI needs no mail secrets
-// or external storage; this script never dispatches SMTP or calls S3.
+// Keep a synthetic local key and placeholder object-store settings so CI needs
+// no mail secrets or external storage; this script never dispatches SMTP or calls S3.
 process.env.CRM_MAIL_ENABLED = "true";
 process.env.CRM_MAIL_SYNC_ENABLED = "false";
 process.env.CRM_MAIL_SEND_ENABLED = "true";
@@ -36,6 +36,7 @@ assert.equal(local(runtimeUrl), local(migrationUrl));
 const { PrismaClient } = await import("@prisma/crm-customers-client");
 const { MailConfig } = await import("../../dist/src/mail/mail.config.js");
 const { MailService } = await import("../../dist/src/mail/mail.service.js");
+const { MailWorker } = await import("../../dist/src/mail/mail.worker.js");
 const runtime = new PrismaClient({ datasources: { db: { url: runtimeUrl } } });
 const migrator = new PrismaClient({
   datasources: { db: { url: migrationUrl } },
@@ -99,9 +100,11 @@ try {
     "mail_jobs",
     "mail_commands",
     "mail_audit",
+    "mail_notifications",
+    "mail_notification_reads",
   ];
   const guards = await runtime.$queryRawUnsafe(
-    `SELECT c.relname FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='crm_customers' AND t.tgname='mail_write_guard' AND NOT t.tgisinternal ORDER BY c.relname`,
+    `SELECT c.relname FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_proc p ON p.oid=t.tgfoid WHERE n.nspname='crm_customers' AND p.proname='mail_write_guard' AND t.tgenabled='O' AND NOT t.tgisinternal ORDER BY c.relname`,
   );
   assert.deepEqual(
     guards.map((row) => row.relname).sort(),
@@ -287,6 +290,9 @@ try {
     {},
     {},
   );
+  let syncMailForNotifications;
+  let generatedNotificationId;
+  let secondMembershipAuthority;
   const idempotentCommandId = randomUUID();
   const response = { schemaVersion: 1, workspaceId, item: { state: "QUEUED" } };
   const runCommand = () =>
@@ -318,6 +324,412 @@ try {
     where: { id: ids.link },
     data: { state: "LINKED", contactId, version: { increment: 1 } },
   });
+
+  // Run the production worker sync method against a synthetic IMAP transport.
+  // This exercises LIVE_SYNC, duplicate UID, BACKFILL, SENT, and UIDVALIDITY
+  // reset paths without external mail access or send operations.
+  const syncContactId = randomUUID();
+  const syncConnectionId = randomUUID();
+  const syncMailboxId = randomUUID();
+  const syncInboxId = randomUUID();
+  const syncSentId = randomUUID();
+  const syncMembershipId = randomUUID();
+  await runtime.contact.create({
+    data: {
+      id: syncContactId,
+      workspaceId,
+      name: "Mail notification worker contact",
+      email: "worker-contact@example.org",
+      createdBySubject: subject,
+    },
+  });
+  await runtime.mailConnection.create({
+    data: {
+      id: syncConnectionId,
+      workspaceId,
+      delegatedSubject: subject,
+      delegatedMembershipId: membershipId,
+      provider: "IMAP_SMTP",
+      transport: { imap: {}, smtp: {} },
+      authMode: "PASSWORD",
+      credentialPrincipal: "worker@example.org",
+      keyId: "fixture-key",
+      state: "ACTIVE",
+    },
+  });
+  await runtime.mailMailbox.create({
+    data: {
+      id: syncMailboxId,
+      workspaceId,
+      connectionId: syncConnectionId,
+      kind: "SHARED",
+      canonicalAddress: `worker-${workspaceId}@example.org`,
+      displayName: "Worker notification fixture",
+      imapLogin: "worker@example.org",
+      smtpLogin: "worker@example.org",
+      sendMode: "AS",
+      enabled: true,
+    },
+  });
+  await runtime.mailMailboxGrant.create({
+    data: {
+      id: randomUUID(),
+      workspaceId,
+      mailboxId: syncMailboxId,
+      subject,
+      membershipId,
+      canRead: true,
+      canSend: true,
+      canManage: true,
+    },
+  });
+  await runtime.mailFolder.createMany({
+    data: [
+      {
+        id: syncInboxId,
+        workspaceId,
+        mailboxId: syncMailboxId,
+        exactPath: "INBOX",
+        kind: "INBOX",
+        selected: true,
+        uidValidity: 7n,
+        cutoff: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+      },
+      {
+        id: syncSentId,
+        workspaceId,
+        mailboxId: syncMailboxId,
+        exactPath: "Sent",
+        kind: "SENT",
+        selected: true,
+        uidValidity: 7n,
+        cutoff: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+      },
+    ],
+  });
+
+  let openedPath = "INBOX";
+  let imapValidity = 7n;
+  let imapUidNext = 2;
+  let imapUids = [1];
+  const fakeImap = {
+    mailboxOpen: async (path) => {
+      openedPath = path;
+      return { uidNext: imapUidNext, uidValidity: imapValidity };
+    },
+    search: async () => imapUids,
+    fetchOne: async (uid) => ({
+      uid: Number(uid),
+      internalDate: new Date(),
+      size: 5,
+      envelope: {
+        date: new Date(),
+        messageId: `<worker-${openedPath}-${uid}@example.org>`,
+        subject: `Worker ${openedPath} ${uid}`,
+        from: [{ address: "worker-contact@example.org", name: null }],
+        to: [{ address: `worker-${workspaceId}@example.org`, name: null }],
+        cc: [],
+        bcc: [],
+      },
+      bodyStructure: { type: "text/plain", size: 5, part: "1" },
+      headers: Buffer.alloc(0),
+    }),
+    download: async () => ({
+      content: Readable.from([Buffer.from("hello")]),
+      meta: { charset: "utf-8" },
+    }),
+    logout: async () => undefined,
+    close: () => undefined,
+  };
+  syncMailForNotifications = new MailService(
+    runtime,
+    { workflow: async () => commandAuthority },
+    new MailConfig(),
+    {
+      credentials: () => ({ password: "synthetic" }),
+      configuration: () => ({ imap: {} }),
+      imap: async () => fakeImap,
+    },
+    {},
+  );
+  const previousProcessRole = process.env.CRM_CUSTOMERS_PROCESS_ROLE;
+  process.env.CRM_CUSTOMERS_PROCESS_ROLE = "mail-sync";
+  const worker = new MailWorker(syncMailForNotifications);
+  const syncJob = async (kind, folderId, key) =>
+    runtime.mailJob.create({
+      data: {
+        id: randomUUID(),
+        workspaceId,
+        mailboxId: syncMailboxId,
+        generation: 1,
+        kind,
+        targetId: folderId,
+        workKey: `notification-worker:${key}:${randomUUID()}`,
+        state: "QUEUED",
+      },
+    });
+  const processSyncJob = async (kind) => {
+    const job = await worker.claim();
+    assert.equal(job?.kind, kind);
+    await worker.sync(job);
+    await runtime.mailJob.updateMany({
+      where: { id: job.id, state: "QUEUED" },
+      data: { dueAt: new Date(Date.now() + 60 * 60 * 1000) },
+    });
+    return job;
+  };
+  try {
+    await syncJob("LIVE_SYNC", syncInboxId, "live");
+    await processSyncJob("LIVE_SYNC");
+    const liveMessage = await runtime.mailMessage.findFirstOrThrow({
+      where: { workspaceId, mailboxId: syncMailboxId, uid: 1n },
+    });
+    const liveLink = await runtime.mailContactLink.findFirstOrThrow({
+      where: { workspaceId, messageId: liveMessage.id },
+    });
+    assert.equal(liveLink.state, "LINKED");
+    assert.equal(liveLink.contactId, syncContactId);
+    assert.equal(
+      await runtime.mailNotification.count({ where: { workspaceId } }),
+      1,
+      "a new LIVE_SYNC INBOX message creates one notification",
+    );
+
+    await runtime.mailFolder.update({
+      where: { id: syncInboxId },
+      data: { liveLastUid: 0n },
+    });
+    await syncJob("LIVE_SYNC", syncInboxId, "duplicate-uid");
+    await processSyncJob("LIVE_SYNC");
+    assert.equal(
+      await runtime.mailNotification.count({ where: { workspaceId } }),
+      1,
+      "reprocessing the same folder generation and UID does not duplicate the event",
+    );
+
+    imapUidNext = 3;
+    imapUids = [1, 2];
+    await runtime.mailFolder.update({
+      where: { id: syncInboxId },
+      data: { backfillUpperUid: 2n, backfillLastUid: 0n, completedAt: null },
+    });
+    await syncJob("BACKFILL", syncInboxId, "history");
+    await processSyncJob("BACKFILL");
+    assert.equal(
+      await runtime.mailMessage.count({
+        where: { workspaceId, mailboxId: syncMailboxId, folderId: syncInboxId },
+      }),
+      2,
+      "backfill imports historical messages",
+    );
+    assert.equal(await runtime.mailNotification.count({ where: { workspaceId } }), 1);
+
+    imapUidNext = 2;
+    imapUids = [1];
+    await syncJob("LIVE_SYNC", syncSentId, "sent");
+    await processSyncJob("LIVE_SYNC");
+    assert.equal(
+      await runtime.mailMessage.findFirstOrThrow({
+        where: { workspaceId, mailboxId: syncMailboxId, folderId: syncSentId },
+      }).then((message) => message.direction),
+      "OUTBOUND",
+    );
+    assert.equal(
+      await runtime.mailNotification.count({ where: { workspaceId } }),
+      1,
+      "live SENT messages do not create incoming notifications",
+    );
+
+    imapValidity = 8n;
+    imapUidNext = 3;
+    imapUids = [1, 2];
+    await runtime.mailFolder.update({
+      where: { id: syncInboxId },
+      data: {
+        uidValidity: 7n,
+        liveLastUid: 0n,
+        backfillLastUid: 0n,
+        backfillUpperUid: null,
+        completedAt: null,
+      },
+    });
+    await syncJob("LIVE_SYNC", syncInboxId, "uid-reset");
+    await processSyncJob("LIVE_SYNC");
+    assert.equal(await runtime.mailNotification.count({ where: { workspaceId } }), 1);
+    await processSyncJob("BACKFILL");
+    assert.equal(
+      await runtime.mailMessage.count({
+        where: {
+          workspaceId,
+          mailboxId: syncMailboxId,
+          folderId: syncInboxId,
+          folderGeneration: 2,
+        },
+      }),
+      2,
+      "UIDVALIDITY reset reimports history as the new folder generation",
+    );
+    assert.equal(
+      await runtime.mailNotification.count({ where: { workspaceId } }),
+      1,
+      "UIDVALIDITY reset and its generated BACKFILL do not notify historical mail",
+    );
+
+  const notifications = await syncMailForNotifications.notifications(commandAuthority, {
+      workspaceId,
+      page: 1,
+      pageSize: 10,
+      unreadOnly: "false",
+    });
+    assert.equal(notifications.total, 1);
+    assert.equal(notifications.unreadCount, 1);
+  assert.equal(notifications.items[0].messageId, liveMessage.id);
+  assert.equal(notifications.items[0].contactId, syncContactId);
+  generatedNotificationId = notifications.items[0].id;
+    const readInput = { schemaVersion: 1, workspaceId, read: true };
+  const firstRead = await syncMailForNotifications.readNotification(
+      commandAuthority,
+      notifications.items[0].id,
+      readInput,
+    );
+  const repeatedRead = await syncMailForNotifications.readNotification(
+      commandAuthority,
+      notifications.items[0].id,
+      readInput,
+    );
+  assert.equal(repeatedRead.readAt, firstRead.readAt);
+  await assert.rejects(() =>
+    runtime.mailNotification.update({
+      where: { id: notifications.items[0].id },
+      data: { createdAt: new Date() },
+    }),
+  );
+  await assert.rejects(() =>
+    runtime.mailNotification.delete({
+      where: { id: notifications.items[0].id },
+    }),
+  );
+  const readRow = await runtime.mailNotificationRead.findFirstOrThrow({
+    where: {
+      workspaceId,
+      notificationId: notifications.items[0].id,
+      recipientSubject: subject,
+      recipientMembershipId: membershipId,
+    },
+  });
+  await assert.rejects(() =>
+    runtime.mailNotificationRead.update({
+      where: { id: readRow.id },
+      data: { recipientMembershipId: randomUUID() },
+    }),
+  );
+    assert.equal(
+      (await syncMailForNotifications.notifications(commandAuthority, {
+        workspaceId,
+        page: 1,
+        pageSize: 10,
+        unreadOnly: "true",
+      })).total,
+      0,
+    );
+
+    const secondMembership = randomUUID();
+    await runtime.mailMailboxGrant.create({
+      data: {
+        id: randomUUID(),
+        workspaceId,
+        mailboxId: syncMailboxId,
+        subject,
+        membershipId: secondMembership,
+        canRead: true,
+        canSend: false,
+        canManage: false,
+      },
+    });
+  secondMembershipAuthority = {
+      ...commandAuthority,
+      membershipId: secondMembership,
+    };
+    assert.equal(
+      (await syncMailForNotifications.notifications(secondMembershipAuthority, {
+        workspaceId,
+        page: 1,
+        pageSize: 10,
+        unreadOnly: "true",
+      })).unreadCount,
+      1,
+      "a new membership does not inherit another membership's read state",
+    );
+  const unread = await syncMailForNotifications.readNotification(
+      commandAuthority,
+      notifications.items[0].id,
+      { ...readInput, read: false },
+    );
+    assert.equal(unread.readAt, null);
+    assert.equal(
+      (await syncMailForNotifications.notifications(secondMembershipAuthority, {
+        workspaceId,
+        page: 1,
+        pageSize: 10,
+        unreadOnly: "true",
+      })).unreadCount,
+      1,
+    );
+  await runtime.contact.update({
+    where: { id: syncContactId },
+    data: { archivedAt: new Date() },
+  });
+  assert.equal(
+    (await syncMailForNotifications.notifications(secondMembershipAuthority, {
+      workspaceId,
+      page: 1,
+      pageSize: 10,
+      unreadOnly: "false",
+    })).total,
+    0,
+    "archived contacts fall outside current notification scope and counts",
+  );
+  await assert.rejects(() =>
+    syncMailForNotifications.readNotification(
+      secondMembershipAuthority,
+      generatedNotificationId,
+      { schemaVersion: 1, workspaceId, read: true },
+    ),
+  );
+  await runtime.contact.update({
+    where: { id: syncContactId },
+    data: { archivedAt: null },
+  });
+    await runtime.mailMailboxGrant.update({
+      where: {
+        workspaceId_mailboxId_subject_membershipId: {
+          workspaceId,
+          mailboxId: syncMailboxId,
+          subject,
+          membershipId,
+        },
+      },
+      data: { revokedAt: new Date() },
+    });
+    const revokedList = await syncMailForNotifications.notifications(commandAuthority, {
+      workspaceId,
+      page: 1,
+      pageSize: 10,
+      unreadOnly: "false",
+    });
+    assert.equal(revokedList.total, 0);
+    await assert.rejects(() =>
+      syncMailForNotifications.readNotification(commandAuthority, notifications.items[0].id, {
+        ...readInput,
+        read: false,
+      }),
+    );
+  } finally {
+    if (previousProcessRole === undefined)
+      delete process.env.CRM_CUSTOMERS_PROCESS_ROLE;
+    else process.env.CRM_CUSTOMERS_PROCESS_ROLE = previousProcessRole;
+  }
+
   const otherContactId = randomUUID();
   await runtime.contact.create({
     data: {
@@ -801,8 +1213,17 @@ try {
       },
     }),
   );
+  await assert.rejects(
+    () =>
+      syncMailForNotifications.readNotification(
+        secondMembershipAuthority,
+        generatedNotificationId,
+        { schemaVersion: 1, workspaceId, read: true },
+      ),
+    /crm_workspace_closed|CRM_WORKSPACE_CLOSED/,
+  );
   console.log(
-    "Corporate mail PG18: 12 table guards, strict runtime role, service cancellation, idempotency, workspace FK, admission/fence races, post-fence settlement, immutable content, and append-only ledgers passed.",
+    "Corporate mail PG18: 14 table guards, worker notification eligibility and deduplication, notification scope/read idempotence, strict runtime role, service cancellation, idempotency, workspace FK, admission/fence races, post-fence settlement, immutable content, and append-only ledgers passed.",
   );
 } finally {
   await Promise.all([runtime.$disconnect(), migrator.$disconnect()]);

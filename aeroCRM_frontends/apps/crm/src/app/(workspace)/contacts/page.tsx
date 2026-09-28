@@ -11,12 +11,15 @@ const ContactsPage = async ({
 }: {
 	searchParams: Promise<Record<string, string | string[] | undefined>>
 }) => {
-	const { contactId } = await searchParams
+	const { contactId, mailMessageId } = await searchParams
 	const initialContactId = isUuidV4(contactId) ? contactId : null
+	const initialMailMessageId =
+		initialContactId && isUuidV4(mailMessageId) ? mailMessageId : null
 	return (
 		<ContactsScreen
-			key={initialContactId ?? 'contacts'}
+			key={`${initialContactId ?? 'contacts'}:${initialMailMessageId ?? ''}`}
 			initialContactId={initialContactId}
+			initialMailMessageId={initialMailMessageId}
 		/>
 	)
 }

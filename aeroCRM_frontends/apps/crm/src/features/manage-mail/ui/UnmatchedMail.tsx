@@ -26,6 +26,7 @@ import {
 } from '@/entities/mail/model/mail.contract'
 import {
 	newMailCommand,
+	isMailAccessDenied,
 	useMailCommand,
 	useMailContext
 } from '../model/use-mail-context'
@@ -45,9 +46,14 @@ export const UnmatchedMail = ({
 	const linkScopeId = useId()
 	const [cursor, setCursor] = useState<string | undefined>()
 	const [selected, setSelected] = useState<string | null>(null)
+	const readable =
+		context.capabilities.data?.enabled === true &&
+		context.capabilities.data.mailPermissions.includes('mail:read') &&
+		mailbox.permissions.includes('read')
 	const rows = useQuery({
 		queryKey: ['mail-unmatched', ...context.key, mailbox.id, cursor],
-		enabled: !!context.session,
+		enabled:
+			readable && !!context.session && !context.capabilities.isError,
 		queryFn: () =>
 			listUnmatchedMail(
 				context.session!.accessToken,
@@ -57,8 +63,18 @@ export const UnmatchedMail = ({
 			),
 		gcTime: 0,
 		retry: false,
-		staleTime: 0
+		staleTime: 0,
+		refetchInterval: query =>
+			readable && !context.capabilities.isError && !query.state.error
+				? 5000
+				: false
 	})
+	if (
+		!readable ||
+		isMailAccessDenied(context.capabilities.error) ||
+		isMailAccessDenied(rows.error)
+	)
+		return null
 	return (
 		<Drawer
 			isOpen

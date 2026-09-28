@@ -18,15 +18,20 @@ import styles from './Mail.module.scss'
 
 export const CustomerMailPanel = ({
 	contactId,
-	email
+	email,
+	initialMessageId
 }: {
 	contactId: string
 	email: string | null
+	initialMessageId?: string | null
 }) => {
 	const context = useMailContext()
 	const client = useQueryClient()
+	const [headId, setHeadId] = useState<string | null>(null)
 	const [cursor, setCursor] = useState<string | undefined>()
-	const [selected, setSelected] = useState<string | null>(null)
+	const [selected, setSelected] = useState<string | null>(
+		initialMessageId ?? null
+	)
 	const [compose, setCompose] = useState<{
 		reply?: MailMessageDetail
 	} | null>(null)
@@ -42,7 +47,11 @@ export const CustomerMailPanel = ({
 				context.workspace.workspaceId
 			),
 		gcTime: 0,
-		retry: false
+		retry: false,
+		refetchInterval: query =>
+			!query.state.error && !context.capabilities.isError && readable
+				? 15000
+				: false
 	})
 	const messages = useQuery({
 		queryKey: ['mail-contact-messages', ...context.key, contactId, cursor],
@@ -56,27 +65,75 @@ export const CustomerMailPanel = ({
 			),
 		gcTime: 0,
 		retry: false,
-		refetchInterval: query =>
-			!query.state.error &&
-			query.state.data?.items.some(
+		refetchInterval: query => {
+			if (
+				!readable ||
+				context.capabilities.isError ||
+				isMailAccessDenied(mailboxes.error) ||
+				query.state.error
+			)
+				return false
+			return query.state.data?.items.some(
 				item => item.state === 'QUEUED' || item.state === 'SENDING'
 			)
 				? 3000
+				: 5000
+		}
+	})
+	const head = useQuery({
+		queryKey: [
+			'mail-contact-messages',
+			...context.key,
+			contactId,
+			undefined
+		],
+		enabled: readable && !!context.session && !!cursor,
+		queryFn: () =>
+			listContactMail(
+				context.session!.accessToken,
+				context.workspace.workspaceId,
+				contactId
+			),
+		gcTime: 0,
+		retry: false,
+		refetchInterval: query =>
+			!query.state.error && !context.capabilities.isError && readable
+				? 5000
 				: false
 	})
+	const firstId = messages.data?.items[0]?.id ?? null
+	if (!cursor && !messages.isError && messages.data && headId !== firstId)
+		setHeadId(firstId)
+	const newMessages =
+		!!cursor &&
+		!head.isError &&
+		!!head.data?.items[0] &&
+		head.data.items[0].id !== headId
 	const senders =
 		mailboxes.isError ||
+		context.capabilities.isError ||
 		!context.capabilities.data?.mailPermissions.includes('mail:send')
 			? []
 			: (mailboxes.data?.items.filter(
 					item =>
 						item.state === 'ACTIVE' && item.permissions.includes('send')
 				) ?? [])
-	const refresh = () => {
-		void client.invalidateQueries({
-			queryKey: ['mail-contact-messages', context.workspace.workspaceId]
+	const refresh = async () => {
+		const fresh = await context.capabilities.refetch()
+		if (
+			!context.current() ||
+			fresh.isError ||
+			!fresh.data?.enabled ||
+			!fresh.data.mailPermissions.includes('mail:read')
+		)
+			return
+		await mailboxes.refetch()
+		if (!context.current()) return
+		await client.invalidateQueries({
+			queryKey: ['mail-contact-messages', ...context.key, contactId]
 		})
 	}
+
 	if (context.capabilities.isPending)
 		return <p role="status">Проверяем доступ к переписке…</p>
 	if (
@@ -113,26 +170,42 @@ export const CustomerMailPanel = ({
 					<Button
 						variant="secondary"
 						disabled={messages.isFetching}
-						onClick={refresh}
+						onClick={() => void refresh()}
 					>
 						Обновить
 					</Button>
 				</div>
 			</div>
-			{messages.isError || !messages.data ? (
+			{newMessages ? (
+				<Button variant="secondary" onClick={() => setCursor(undefined)}>
+					Есть новые письма · К началу
+				</Button>
+			) : null}
+			{messages.isError ||
+			context.capabilities.isError ||
+			mailboxes.isError ||
+			!messages.data ? (
 				<ScreenState
 					compact
-					variant={messages.isError ? 'error' : 'loading'}
+					variant={
+						messages.isError ||
+						context.capabilities.isError ||
+						mailboxes.isError
+							? 'error'
+							: 'loading'
+					}
 					title={
-						messages.isError
+						messages.isError ||
+						context.capabilities.isError ||
+						mailboxes.isError
 							? 'Переписка недоступна'
 							: 'Загружаем переписку…'
 					}
 					action={
-						messages.isError ? (
-							<Button onClick={() => void messages.refetch()}>
-								Повторить
-							</Button>
+						messages.isError ||
+						context.capabilities.isError ||
+						mailboxes.isError ? (
+							<Button onClick={() => void refresh()}>Повторить</Button>
 						) : undefined
 					}
 				/>
@@ -206,13 +279,10 @@ export const CustomerMailPanel = ({
 				<Drawer isOpen title="Письмо" onClose={() => setSelected(null)}>
 					<MailMessageReader
 						id={selected}
+						contactId={contactId}
+						replyMailboxIds={senders.map(mailbox => mailbox.id)}
 						onReply={
-							senders.some(
-								mailbox =>
-									mailbox.id ===
-									messages.data?.items.find(item => item.id === selected)
-										?.mailboxId
-							)
+							senders.length > 0
 								? message => {
 										if (
 											senders.some(
@@ -237,7 +307,7 @@ export const CustomerMailPanel = ({
 						setCompose(null)
 						refresh()
 					}}
-					onQueued={refresh}
+					onQueued={() => void refresh()}
 				/>
 			) : null}
 		</section>

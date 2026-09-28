@@ -5,6 +5,8 @@ import {
 	Controller,
 	ExecutionContext,
 	Get,
+	Header,
+	ForbiddenException,
 	Headers,
 	HttpCode,
 	Injectable,
@@ -31,7 +33,9 @@ import {
 	MailPrepareAttachmentDto,
 	MailQueryDto,
 	MailSendDto,
-	MailUploadDto
+	MailUploadDto,
+	MailNotificationsQuery,
+	MailNotificationReadDto
 } from './mail.dto';
 import { MAIL_LIMITS } from './mail.config';
 @Injectable()
@@ -75,6 +79,38 @@ export class MailController {
 			await this.mail.authority(token, query.workspaceId)
 		);
 	}
+	@Get('notifications')
+	@Header('Cache-Control', 'no-store')
+	async notifications(
+		@Headers('authorization') token: string | undefined,
+		@Query() query: MailNotificationsQuery
+	) {
+		const a = await this.mail.authority(token, query.workspaceId);
+		const result = await this.mail.notifications(a, query);
+		if (
+			JSON.stringify(await this.mail.authority(token, query.workspaceId)) !==
+			JSON.stringify(a)
+		)
+			throw new ForbiddenException();
+		return result;
+	}
+	@Put('notifications/:id/read')
+	@Header('Cache-Control', 'no-store')
+	async readNotification(
+		@Headers('authorization') token: string | undefined,
+		@Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+		@Body() dto: MailNotificationReadDto
+	) {
+		const a = await this.mail.authority(token, dto.workspaceId);
+		const result = await this.mail.readNotification(a, id, dto);
+		if (
+			JSON.stringify(await this.mail.authority(token, dto.workspaceId)) !==
+			JSON.stringify(a)
+		)
+			throw new ForbiddenException();
+		return result;
+	}
+
 	@Get('mailboxes') async mailboxes(
 		@Headers('authorization') token: string | undefined,
 		@Query() query: MailQueryDto

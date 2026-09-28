@@ -26,9 +26,13 @@ import styles from './Mail.module.scss'
 export const MailMessageReader = ({
 	id,
 	unmatchedMailboxId,
+	contactId,
+	replyMailboxIds,
 	onReply
 }: {
 	id: string
+	contactId?: string
+	replyMailboxIds?: readonly string[]
 	unmatchedMailboxId?: string
 	onReply?: (message: MailMessageDetail) => void
 }) => {
@@ -37,9 +41,14 @@ export const MailMessageReader = ({
 		queryKey: [
 			unmatchedMailboxId ? 'mail-unmatched-message' : 'mail-message',
 			...context.key,
-			id
+			id,
+			contactId
 		],
-		enabled: !!context.session,
+		enabled:
+			!!context.session &&
+			!context.capabilities.isError &&
+			context.capabilities.data?.enabled === true &&
+			context.capabilities.data.mailPermissions.includes('mail:read'),
 		queryFn: () =>
 			unmatchedMailboxId
 				? getUnmatchedMailMessage(
@@ -55,19 +64,45 @@ export const MailMessageReader = ({
 					),
 		gcTime: 0,
 		staleTime: 0,
-		retry: false
+		retry: false,
+		refetchInterval: query =>
+			!query.state.error && !context.capabilities.isError ? 5000 : false
 	})
-	if (message.isError || !message.data)
+	const readable =
+		!context.capabilities.isError &&
+		context.capabilities.data?.enabled === true &&
+		context.capabilities.data.mailPermissions.includes('mail:read')
+	const linked =
+		!contactId ||
+		message.data?.item.links.some(
+			link => link.state === 'LINKED' && link.contactId === contactId
+		)
+	const refresh = async () => {
+		const fresh = await context.capabilities.refetch()
+		if (
+			!context.current() ||
+			fresh.isError ||
+			!fresh.data?.enabled ||
+			!fresh.data.mailPermissions.includes('mail:read')
+		)
+			return
+		await message.refetch()
+	}
+	if (!readable || message.isError || !message.data || !linked)
 		return (
 			<ScreenState
 				compact
-				variant={message.isError ? 'error' : 'loading'}
-				title={message.isError ? 'Письмо недоступно' : 'Загружаем письмо…'}
+				variant={
+					message.isError || !readable || !linked ? 'error' : 'loading'
+				}
+				title={
+					message.isError || !readable || !linked
+						? 'Письмо недоступно'
+						: 'Загружаем письмо…'
+				}
 				action={
-					message.isError ? (
-						<Button onClick={() => void message.refetch()}>
-							Повторить
-						</Button>
+					message.isError || !readable || !linked ? (
+						<Button onClick={() => void refresh()}>Повторить</Button>
 					) : undefined
 				}
 			/>
@@ -128,7 +163,8 @@ export const MailMessageReader = ({
 					))}
 				</ul>
 			) : null}
-			{onReply ? (
+			{onReply &&
+			(!replyMailboxIds || replyMailboxIds.includes(item.mailboxId)) ? (
 				<Button variant="secondary" onClick={() => onReply(item)}>
 					Ответить
 				</Button>

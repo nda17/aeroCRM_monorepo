@@ -273,32 +273,33 @@ model MailFolder {
 }
 
 model MailMessage {
-  mailbox                   MailMailbox       @relation("MailMessage_mailboxId", fields: [workspaceId, mailboxId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
-  folder                    MailFolder        @relation("MailMessage_folderId", fields: [workspaceId, folderId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
-  mailContactLink_messageId MailContactLink[] @relation("MailContactLink_messageId")
-  mailAttachment_messageId  MailAttachment[]  @relation("MailAttachment_messageId")
-  id                        String            @id @default(uuid()) @db.Uuid
-  workspaceId               String            @map("workspace_id") @db.Uuid
-  mailboxId                 String            @map("mailbox_id") @db.Uuid
-  folderId                  String            @map("folder_id") @db.Uuid
-  folderGeneration          Int               @map("folder_generation")
-  uidValidity               BigInt            @map("uid_validity")
+  notifications             MailNotification[]
+  mailbox                   MailMailbox        @relation("MailMessage_mailboxId", fields: [workspaceId, mailboxId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  folder                    MailFolder         @relation("MailMessage_folderId", fields: [workspaceId, folderId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  mailContactLink_messageId MailContactLink[]  @relation("MailContactLink_messageId")
+  mailAttachment_messageId  MailAttachment[]   @relation("MailAttachment_messageId")
+  id                        String             @id @default(uuid()) @db.Uuid
+  workspaceId               String             @map("workspace_id") @db.Uuid
+  mailboxId                 String             @map("mailbox_id") @db.Uuid
+  folderId                  String             @map("folder_id") @db.Uuid
+  folderGeneration          Int                @map("folder_generation")
+  uidValidity               BigInt             @map("uid_validity")
   uid                       BigInt
-  direction                 String            @db.VarChar(16)
-  messageId                 String?           @map("message_id") @db.VarChar(998)
-  inReplyTo                 String?           @map("in_reply_to") @db.VarChar(998)
+  direction                 String             @db.VarChar(16)
+  messageId                 String?            @map("message_id") @db.VarChar(998)
+  inReplyTo                 String?            @map("in_reply_to") @db.VarChar(998)
   references                String[]
   from                      Json
   to                        Json
   cc                        Json
   bcc                       Json
-  subject                   String            @db.VarChar(300)
-  sentAt                    DateTime?         @map("sent_at")
-  receivedAt                DateTime          @map("received_at")
-  plainText                 String?           @map("plain_text")
-  bodyStatus                String            @map("body_status") @db.VarChar(24)
-  sourceHash                String?           @map("source_hash") @db.VarChar(64)
-  createdAt                 DateTime          @default(now()) @map("created_at")
+  subject                   String             @db.VarChar(300)
+  sentAt                    DateTime?          @map("sent_at")
+  receivedAt                DateTime           @map("received_at")
+  plainText                 String?            @map("plain_text")
+  bodyStatus                String             @map("body_status") @db.VarChar(24)
+  sourceHash                String?            @map("source_hash") @db.VarChar(64)
+  createdAt                 DateTime           @default(now()) @map("created_at")
 
   @@unique([workspaceId, id])
   @@unique([workspaceId, folderId, folderGeneration, uidValidity, uid], map: "mail_messages_source_uid_key")
@@ -458,5 +459,34 @@ model MailAudit {
   metadata     Json
 
   @@map("mail_audit")
+  @@schema("crm_customers")
+}
+
+model MailNotification {
+  message     MailMessage            @relation(fields: [workspaceId, messageId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  reads       MailNotificationRead[]
+  id          String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String                 @map("workspace_id") @db.Uuid
+  messageId   String                 @map("message_id") @db.Uuid
+  createdAt   DateTime               @default(now()) @map("created_at")
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, messageId])
+  @@index([workspaceId, createdAt, id])
+  @@map("mail_notifications")
+  @@schema("crm_customers")
+}
+
+model MailNotificationRead {
+  notification          MailNotification @relation(fields: [workspaceId, notificationId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId           String           @map("workspace_id") @db.Uuid
+  notificationId        String           @map("notification_id") @db.Uuid
+  recipientSubject      String           @map("recipient_subject") @db.VarChar(256)
+  recipientMembershipId String           @map("recipient_membership_id") @db.Uuid
+  readAt                DateTime?        @map("read_at")
+
+  @@unique([notificationId, recipientSubject, recipientMembershipId])
+  @@map("mail_notification_reads")
   @@schema("crm_customers")
 }

@@ -10,13 +10,14 @@ import {
 } from '@/shared/lib/contract'
 import { supportApi } from '@/entities/support/api/support.api'
 
-export type NotificationSource = 'intake' | 'support'
+export type NotificationSource = 'intake' | 'support' | 'mail'
 export interface CrmNotification {
 	id: string
 	title: string
 	createdAt: string
 	readAt: string | null
 	targetId: string
+	contactId?: string
 	sequence?: number
 }
 export interface NotificationPage {
@@ -41,11 +42,13 @@ export async function listCrmNotifications(
 		url:
 			source === 'intake'
 				? '/crm/intake/notifications'
-				: '/support/notifications',
+				: source === 'mail'
+					? '/crm/customers/mail/notifications'
+					: '/support/notifications',
 		params: {
 			page: String(page),
 			unreadOnly: String(unreadOnly),
-			...(source === 'intake'
+			...(source !== 'support'
 				? { workspaceId, pageSize: '10' }
 				: { limit: '10' })
 		}
@@ -59,12 +62,12 @@ export async function listCrmNotifications(
 			'total',
 			'unreadCount',
 			'items',
-			...(source === 'intake' ? ['workspaceId'] : [])
+			...(source !== 'support' ? ['workspaceId'] : [])
 		]) ||
 		value.schemaVersion !== 1 ||
 		value.page !== page ||
 		value.pageSize !== 10 ||
-		(source === 'intake' && value.workspaceId !== workspaceId) ||
+		(source !== 'support' && value.workspaceId !== workspaceId) ||
 		!Number.isSafeInteger(value.total) ||
 		Number(value.total) < 0 ||
 		!Number.isSafeInteger(value.unreadCount) ||
@@ -83,13 +86,22 @@ export async function listCrmNotifications(
 				'readAt',
 				...(source === 'intake'
 					? ['entryId']
-					: ['conversationId', 'sequence'])
+					: source === 'mail'
+						? ['messageId', 'contactId']
+						: ['conversationId', 'sequence'])
 			]) ||
 			!isUuidV4(row.id) ||
 			!isNonEmptyString(row.title, 200) ||
 			!date(row.createdAt) ||
 			(row.readAt !== null && !date(row.readAt)) ||
-			!isUuidV4(source === 'intake' ? row.entryId : row.conversationId) ||
+			!isUuidV4(
+				source === 'intake'
+					? row.entryId
+					: source === 'mail'
+						? row.messageId
+						: row.conversationId
+			) ||
+			(source === 'mail' && !isUuidV4(row.contactId)) ||
 			(source === 'support' &&
 				(!Number.isInteger(row.sequence) || Number(row.sequence) < 1))
 		)
@@ -101,7 +113,10 @@ export async function listCrmNotifications(
 			readAt: row.readAt as string | null,
 			targetId: (source === 'intake'
 				? row.entryId
-				: row.conversationId) as string,
+				: source === 'mail'
+					? row.messageId
+					: row.conversationId) as string,
+			...(source === 'mail' ? { contactId: row.contactId as string } : {}),
 			...(source === 'support' ? { sequence: Number(row.sequence) } : {})
 		}
 	})
@@ -123,10 +138,34 @@ export async function readCrmNotification(
 ) {
 	if (source === 'support')
 		return supportApi.read(token, item.targetId, item.sequence!)
-	return authenticatedRequest({
+	const value = await authenticatedRequest({
 		accessToken: token,
 		method: 'PUT',
-		url: '/crm/intake/notifications/' + item.id + '/read',
+		url:
+			(source === 'mail'
+				? '/crm/customers/mail/notifications/'
+				: '/crm/intake/notifications/') +
+			item.id +
+			'/read',
 		data: { schemaVersion: 1, workspaceId, read: item.readAt === null }
 	})
+	if (
+		source === 'mail' &&
+		(!isRecord(value) ||
+			!hasExactKeys(value, [
+				'schemaVersion',
+				'workspaceId',
+				'id',
+				'readAt'
+			]) ||
+			value.schemaVersion !== 1 ||
+			value.workspaceId !== workspaceId ||
+			value.id !== item.id ||
+			(value.readAt !== null && !date(value.readAt)) ||
+			(item.readAt === null
+				? value.readAt === null
+				: value.readAt !== null))
+	)
+		throw invalidContractError()
+	return value
 }

@@ -19,6 +19,10 @@ import {
 	type CrmNotification,
 	type NotificationSource
 } from '../api/crm-notifications.api'
+import {
+	useMailContext,
+	isMailAccessDenied
+} from '@/features/manage-mail/model/use-mail-context'
 import type { ReminderContext } from '../model/use-reminder-session'
 import styles from './TaskNotificationCenter.module.scss'
 
@@ -30,6 +34,7 @@ type HeadMarker = { at: number; ids: Set<string> }
 type HeadObservation = {
 	intake: NotificationHead | null
 	support: NotificationHead | null
+	mail: NotificationHead | null
 	tasks: NotificationHead | null
 	open: boolean
 	markers: Partial<Record<NotificationSource | 'tasks', HeadMarker>>
@@ -92,6 +97,7 @@ export function CombinedNotificationCenter({
 			live.current = false
 		}
 	}, [])
+	const mailContext = useMailContext()
 	const session = context.session
 	const current = () =>
 		live.current &&
@@ -106,12 +112,29 @@ export function CombinedNotificationCenter({
 		context.authority?.subject === session.userId &&
 		context.authority?.permissions.includes('intake:read')
 	const deniedIntake = context.permissions.isSuccess && !canIntake
+	const sameMailContext =
+		context.workspace.workspaceId === mailContext.workspace.workspaceId &&
+		context.workspace.membership.membershipId ===
+			mailContext.workspace.membership.membershipId &&
+		context.sessionRevision === mailContext.sessionRevision &&
+		session?.accessToken === mailContext.session?.accessToken &&
+		session?.userId === mailContext.session?.userId
+	const canMail =
+		!!session &&
+		sameMailContext &&
+		!mailContext.capabilities.isError &&
+		mailContext.capabilities.data?.enabled === true &&
+		mailContext.capabilities.data.mailPermissions.includes('mail:read')
 	const load = async (
 		source: NotificationSource,
 		requestedPage: number,
 		requestedUnread: boolean
 	) => {
-		if (!current()) throw invalidContractError()
+		if (
+			!current() ||
+			(source === 'mail' && (!sameMailContext || !mailContext.current()))
+		)
+			throw invalidContractError()
 		const result = await listCrmNotifications(
 			source,
 			session!.accessToken,
@@ -119,7 +142,11 @@ export function CombinedNotificationCenter({
 			requestedPage,
 			requestedUnread
 		)
-		if (!current()) throw invalidContractError()
+		if (
+			!current() ||
+			(source === 'mail' && (!sameMailContext || !mailContext.current()))
+		)
+			throw invalidContractError()
 		return result
 	}
 	const intake = useQuery({
@@ -176,6 +203,46 @@ export function CombinedNotificationCenter({
 		gcTime: 0,
 		refetchInterval: 60000
 	})
+	const mail = useQuery({
+		queryKey: [
+			'crm-mail-notifications',
+			context.key,
+			...mailContext.key,
+			tab === 'mail' ? page : 1,
+			tab === 'mail' && unread
+		],
+		queryFn: () =>
+			load('mail', tab === 'mail' ? page : 1, tab === 'mail' && unread),
+		enabled: !!canMail,
+		retry: false,
+		gcTime: 0,
+		refetchInterval: query =>
+			!query.state.error && canMail ? 15000 : false
+	})
+	const mailHead = useQuery({
+		queryKey: [
+			'crm-mail-notifications',
+			context.key,
+			...mailContext.key,
+			1,
+			false
+		],
+		queryFn: () => load('mail', 1, false),
+		enabled: !!canMail,
+		retry: false,
+		gcTime: 0,
+		refetchInterval: query =>
+			!query.state.error && canMail ? 15000 : false
+	})
+	const deniedMail =
+		isMailAccessDenied(mailContext.capabilities.error) ||
+		(mailContext.capabilities.isSuccess && !canMail) ||
+		isMailAccessDenied(mail.error) ||
+		isMailAccessDenied(mailHead.error)
+	const latestMail =
+		canMail && !deniedMail && !mail.isError && mailHead.isSuccess
+			? mailHead.data
+			: null
 	const latestIntake =
 		canIntake && intakeHead.isSuccess ? intakeHead.data : null
 	const latestSupport =
@@ -184,6 +251,7 @@ export function CombinedNotificationCenter({
 		!observed ||
 		observed.intake !== latestIntake ||
 		observed.support !== latestSupport ||
+		observed.mail !== latestMail ||
 		observed.tasks !== taskSnapshot ||
 		observed.open !== open
 	) {
@@ -192,6 +260,7 @@ export function CombinedNotificationCenter({
 		for (const [source, head] of [
 			['intake', latestIntake],
 			['support', latestSupport],
+			['mail', latestMail],
 			['tasks', taskSnapshot]
 		] as const) {
 			if (!head) continue
@@ -202,6 +271,7 @@ export function CombinedNotificationCenter({
 		setObserved({
 			intake: latestIntake,
 			support: latestSupport,
+			mail: latestMail,
 			tasks: taskSnapshot,
 			open,
 			markers,
@@ -220,20 +290,41 @@ export function CombinedNotificationCenter({
 	const counts = [
 		taskCount,
 		deniedIntake ? 0 : (latestIntake?.unreadCount ?? null),
-		latestSupport?.unreadCount ?? null
+		latestSupport?.unreadCount ?? null,
+		deniedMail ? 0 : (latestMail?.unreadCount ?? null)
 	]
 	const count = counts.reduce<number>((sum, n) => sum + (n ?? 0), 0)
 	const partial = counts.some(n => n === null)
 	const hint = useTooltip<HTMLButtonElement>(
-		'Новые заявки, ответы поддержки и ваши задачи.',
+		'Новые заявки, почта, ответы поддержки и ваши задачи.',
 		!open
 	)
-	const query = tab === 'intake' ? intake : support
+	const query = tab === 'intake' ? intake : tab === 'mail' ? mail : support
+	const refresh = async () => {
+		if (!current()) return
+		if (tab === 'mail') {
+			const fresh = await mailContext.capabilities.refetch()
+			if (
+				!current() ||
+				!mailContext.current() ||
+				fresh.isError ||
+				!fresh.data?.enabled ||
+				!fresh.data.mailPermissions.includes('mail:read')
+			)
+				return
+			await Promise.all([mail.refetch(), mailHead.refetch()])
+		} else await query.refetch()
+	}
 	const mark = async (
 		source: NotificationSource,
 		item: CrmNotification
 	) => {
-		if (!current() || busy) return
+		if (
+			!current() ||
+			busy ||
+			(source === 'mail' && (!canMail || !mailContext.current()))
+		)
+			return
 		setBusy(true)
 		try {
 			await readCrmNotification(
@@ -242,24 +333,34 @@ export function CombinedNotificationCenter({
 				context.workspace.workspaceId,
 				item
 			)
-			if (current())
+			if (current() && (source !== 'mail' || mailContext.current()))
 				toast.success(
 					item.readAt === null
 						? 'Отмечено прочитанным'
 						: 'Отмечено непрочитанным'
 				)
 		} catch {
-			if (current())
+			if (source === 'mail' && current() && mailContext.current())
+				await client.resetQueries({
+					queryKey: [
+						'crm-mail-notifications',
+						context.key,
+						...mailContext.key
+					]
+				})
+			if (current() && (source !== 'mail' || mailContext.current()))
 				toast.error(
 					'Не удалось подтвердить отметку. Обновляем уведомления.'
 				)
 		} finally {
-			if (current()) {
+			if (current() && (source !== 'mail' || mailContext.current())) {
 				await client.invalidateQueries({
 					queryKey: [
 						source === 'intake'
 							? 'crm-intake-notifications'
-							: 'crm-support-notifications'
+							: source === 'mail'
+								? 'crm-mail-notifications'
+								: 'crm-support-notifications'
 					]
 				})
 				if (source === 'support')
@@ -310,7 +411,7 @@ export function CombinedNotificationCenter({
 				isOpen={open}
 				onClose={() => setOpen(false)}
 				title="Уведомления"
-				description="Заявки, ответы поддержки, назначения и сроки задач."
+				description="Заявки, входящая почта, ответы поддержки, назначения и сроки задач."
 				size="md"
 			>
 				<div className={styles.content}>
@@ -319,25 +420,28 @@ export function CombinedNotificationCenter({
 						role="group"
 						aria-label="Виды уведомлений"
 					>
-						{(['intake', 'support', 'tasks'] as const).map(source => (
-							<Button
-								key={source}
-								variant={tab === source ? 'primary' : 'secondary'}
-								aria-pressed={tab === source}
-								onClick={() => {
-									setTab(source)
-									setPage(1)
-								}}
-							>
-								{
+						{(['intake', 'mail', 'support', 'tasks'] as const).map(
+							source => (
+								<Button
+									key={source}
+									variant={tab === source ? 'primary' : 'secondary'}
+									aria-pressed={tab === source}
+									onClick={() => {
+										setTab(source)
+										setPage(1)
+									}}
+								>
 									{
-										intake: 'Заявки',
-										support: 'Поддержка',
-										tasks: 'Задачи'
-									}[source]
-								}
-							</Button>
-						))}
+										{
+											intake: 'Заявки',
+											mail: 'Почта',
+											support: 'Поддержка',
+											tasks: 'Задачи'
+										}[source]
+									}
+								</Button>
+							)
+						)}
 					</div>
 					{partial ? (
 						<p role="status">Часть счётчиков пока недоступна.</p>
@@ -364,7 +468,7 @@ export function CombinedNotificationCenter({
 									variant="secondary"
 									disabled={busy || query.isFetching}
 									onClick={() => {
-										void query.refetch()
+										void refresh()
 									}}
 								>
 									Обновить
@@ -372,12 +476,17 @@ export function CombinedNotificationCenter({
 							</div>
 							{tab === 'intake' && deniedIntake ? (
 								<p>Недостаточно прав для просмотра заявок.</p>
-							) : query.isError ? (
+							) : tab === 'mail' && deniedMail ? (
+								<p>Недостаточно прав для просмотра почты.</p>
+							) : query.isError ||
+							  (tab === 'mail' &&
+									(mailContext.capabilities.isError ||
+										mailHead.isError)) ? (
 								<p role="alert">
 									Не удалось загрузить уведомления. Попробуйте обновить
 									список.
 								</p>
-							) : !query.data ? (
+							) : !query.data || (tab === 'mail' && !canMail) ? (
 								<p role="status">Загружаем уведомления…</p>
 							) : (
 								<>
@@ -399,7 +508,9 @@ export function CombinedNotificationCenter({
 													<span className={styles.kind}>
 														{tab === 'intake'
 															? 'Новая заявка'
-															: 'Ответ поддержки'}
+															: tab === 'mail'
+																? 'Входящее письмо'
+																: 'Ответ поддержки'}
 													</span>
 													<Link
 														href={
@@ -408,13 +519,25 @@ export function CombinedNotificationCenter({
 																	context.workspace.workspaceId +
 																	'&entry=' +
 																	item.targetId
-																: '/planner?workspaceId=' +
-																	context.workspace.workspaceId +
-																	'&supportConversation=' +
-																	item.targetId
+																: tab === 'mail'
+																	? '/contacts?workspaceId=' +
+																		context.workspace.workspaceId +
+																		'&contactId=' +
+																		item.contactId +
+																		'&mailMessageId=' +
+																		item.targetId
+																	: '/planner?workspaceId=' +
+																		context.workspace.workspaceId +
+																		'&supportConversation=' +
+																		item.targetId
 														}
 														onClick={event => {
-															if (!current() || busy) {
+															if (
+																!current() ||
+																busy ||
+																(tab === 'mail' &&
+																	(!canMail || !mailContext.current()))
+															) {
 																event.preventDefault()
 																return
 															}
@@ -422,7 +545,9 @@ export function CombinedNotificationCenter({
 															toast(
 																tab === 'intake'
 																	? 'Открываем заявку'
-																	: 'Открываем поддержку'
+																	: tab === 'mail'
+																		? 'Открываем письмо'
+																		: 'Открываем поддержку'
 															)
 														}}
 													>

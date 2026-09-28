@@ -21,7 +21,15 @@ import styles from './TaskNotificationCenter.module.scss'
 
 export const TaskNotificationCenter = () => {
 	const context = useReminderSession()
-	return <TaskNotificationSession key={context.key} context={context} />
+	return (
+		<TaskNotificationSession
+			key={JSON.stringify([
+				context.key,
+				context.workspace.membership.membershipId
+			])}
+			context={context}
+		/>
+	)
 }
 const TaskNotificationSession = ({
 	context
@@ -31,7 +39,9 @@ const TaskNotificationSession = ({
 	// Keep only drawer visibility while actor verification recovers. A new
 	// workspace/session/scope resets it; the panel still remounts per actor.
 	const [open, setOpen] = useState(false)
-	const [tab, setTab] = useState<'intake' | 'support' | 'tasks'>('intake')
+	const [tab, setTab] = useState<'intake' | 'support' | 'mail' | 'tasks'>(
+		'intake'
+	)
 	return (
 		<TaskNotificationPanel
 			key={JSON.stringify([context.key, context.actor])}

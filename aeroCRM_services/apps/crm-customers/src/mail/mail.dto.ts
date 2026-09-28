@@ -150,6 +150,19 @@ export class MailQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit?: number;
 }
 
+export class MailNotificationsQuery {
+  @IsUUID("4") workspaceId!: string;
+  @Type(() => Number) @IsInt() @Min(1) @Max(100000) page = 1;
+  @Type(() => Number) @Equals(10) pageSize = 10;
+  @IsIn(["true", "false"]) unreadOnly = "false";
+}
+
+export class MailNotificationReadDto {
+  @Equals(1) schemaVersion!: 1;
+  @IsUUID("4") workspaceId!: string;
+  @IsBoolean() read!: boolean;
+}
+
 export class MailCommandBaseDto {
   @Equals(1) schemaVersion!: 1;
   @IsUUID("4") workspaceId!: string;

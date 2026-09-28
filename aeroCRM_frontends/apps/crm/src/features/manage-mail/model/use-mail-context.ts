@@ -1,5 +1,6 @@
 'use client'
 
+import { useLayoutEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useCrmWorkspaceAccess } from '@/entities/crm-access'
 import { useSessionStore } from '@/entities/session'
@@ -16,8 +17,27 @@ export const useMailContext = () => {
 	const key = [
 		workspace.workspaceId,
 		session?.userId,
-		sessionRevision
+		sessionRevision,
+		workspace.membership.membershipId
 	] as const
+	const binding = JSON.stringify(key)
+	const live = useRef<string | null>(binding)
+	useLayoutEffect(() => {
+		live.current = binding
+		return () => {
+			live.current = null
+		}
+	}, [binding])
+	const current = () => {
+		const store = useSessionStore.getState()
+		return (
+			live.current === binding &&
+			!!session &&
+			store.session?.userId === session.userId &&
+			store.sessionRevision === sessionRevision &&
+			store.session?.accessToken === session.accessToken
+		)
+	}
 	const capabilities = useQuery({
 		queryKey: ['mail-capabilities', ...key],
 		enabled: !!session,
@@ -25,9 +45,17 @@ export const useMailContext = () => {
 			getMailCapabilities(session!.accessToken, workspace.workspaceId),
 		gcTime: 0,
 		staleTime: 15_000,
+		refetchInterval: query => (!query.state.error ? 15_000 : false),
 		retry: false
 	})
-	return { workspace, session, sessionRevision, key, capabilities }
+	return {
+		workspace,
+		session,
+		sessionRevision,
+		key,
+		capabilities,
+		current
+	}
 }
 
 export const useMailCommand = <C extends { commandId: string }, R>(

@@ -23,6 +23,11 @@ import {
 	PendingCommandProvider
 } from '@/shared/lib/pending-command'
 import { DirtyFormProvider } from '@/shared/lib/dirty-form'
+import {
+	listCrmNotifications,
+	readCrmNotification
+} from '@/features/manage-reminders/api/crm-notifications.api'
+import { CustomerMailPanel } from './CustomerMailPanel'
 import { ConnectMailbox } from './ConnectMailbox'
 import { MailComposer } from './MailComposer'
 import { MailMessageReader } from './MailMessageReader'
@@ -112,8 +117,34 @@ const detail = {
 		references: []
 	}
 }
+const contactMessage = (
+	state: 'QUEUED' | 'SENDING' | null,
+	direction: 'INBOUND' | 'OUTBOUND' = state ? 'OUTBOUND' : 'INBOUND'
+) => ({
+	id: messageId,
+	mailboxId,
+	direction,
+	subject: state ? 'Pending outgoing mail' : 'Incoming mail update',
+	from: [{ email: 'customer@example.ru', name: null }],
+	to: [{ email: 'team@corp.ru', name: null }],
+	cc: [],
+	sentAt: null,
+	receivedAt: stamp,
+	attachmentCount: 0,
+	sourceKind: state ? 'CRM_SEND' : 'IMAP',
+	state,
+	createdAt: stamp
+})
+const mailPage = (items: unknown[]) => ({
+	schemaVersion: 1,
+	workspaceId,
+	items,
+	nextCursor: null
+})
 const success = <T,>(item: T) => ({ schemaVersion: 1, workspaceId, item })
-const attachmentReceipt = (state: 'QUARANTINED' | 'VALIDATED' | 'REJECTED') => ({
+const attachmentReceipt = (
+	state: 'QUARANTINED' | 'VALIDATED' | 'REJECTED'
+) => ({
 	id: attachmentId,
 	fileName: 'offer.pdf',
 	declaredMime: 'application/pdf',
@@ -123,6 +154,127 @@ const attachmentReceipt = (state: 'QUARANTINED' | 'VALIDATED' | 'REJECTED') => (
 	sha256: 'a'.repeat(64),
 	validationVersion: 1,
 	expiresAt: null
+})
+
+describe('incoming mail notification contract', () => {
+	const notificationId = 'aa111111-1111-4111-8111-111111111111'
+	const notification = {
+		id: notificationId,
+		messageId,
+		contactId,
+		title: 'Новое письмо от клиента',
+		createdAt: stamp,
+		readAt: null
+	}
+	const response = {
+		schemaVersion: 1,
+		workspaceId,
+		page: 1,
+		pageSize: 10,
+		total: 1,
+		unreadCount: 1,
+		items: [notification]
+	}
+
+	it('parses mail notification list and desired-state read receipt strictly', async () => {
+		request.mockResolvedValueOnce(response)
+		await expect(
+			listCrmNotifications(
+				'mail',
+				session.accessToken,
+				workspaceId,
+				1,
+				false
+			)
+		).resolves.toMatchObject({
+			unreadCount: 1,
+			items: [{ targetId: messageId, contactId, readAt: null }]
+		})
+		expect(request).toHaveBeenCalledWith(
+			expect.objectContaining({
+				method: 'GET',
+				url: '/crm/customers/mail/notifications',
+				params: {
+					page: '1',
+					unreadOnly: 'false',
+					workspaceId,
+					pageSize: '10'
+				}
+			})
+		)
+
+		request.mockResolvedValueOnce({
+			schemaVersion: 1,
+			workspaceId,
+			id: notificationId,
+			readAt: stamp
+		})
+		await expect(
+			readCrmNotification('mail', session.accessToken, workspaceId, {
+				id: notificationId,
+				title: notification.title,
+				createdAt: stamp,
+				readAt: null,
+				targetId: messageId,
+				contactId
+			})
+		).resolves.toMatchObject({ id: notificationId, readAt: stamp })
+		expect(request).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				method: 'PUT',
+				url: `/crm/customers/mail/notifications/${notificationId}/read`,
+				data: { schemaVersion: 1, workspaceId, read: true }
+			})
+		)
+	})
+
+	it.each([
+		{ ...response, pageSize: 20 },
+		{ ...response, workspaceId: contactId },
+		{ ...response, extra: true },
+		{ ...response, items: [{ ...notification, recipient: 'secret' }] },
+		{ ...response, items: [{ ...notification, contactId: 'invalid' }] },
+		{ ...response, items: [{ ...notification, title: '' }] },
+		{ ...response, items: [{ ...notification, readAt: 'yesterday' }] }
+	])(
+		'rejects malformed or overbroad mail notification payload %#',
+		async bad => {
+			request.mockResolvedValueOnce(bad)
+			await expect(
+				listCrmNotifications(
+					'mail',
+					session.accessToken,
+					workspaceId,
+					1,
+					false
+				)
+			).rejects.toThrow()
+		}
+	)
+
+	it('rejects a read receipt for another notification or an invalid read timestamp', async () => {
+		for (const bad of [
+			{ schemaVersion: 1, workspaceId, id: contactId, readAt: stamp },
+			{
+				schemaVersion: 1,
+				workspaceId,
+				id: notificationId,
+				readAt: 'later'
+			}
+		]) {
+			request.mockResolvedValueOnce(bad)
+			await expect(
+				readCrmNotification('mail', session.accessToken, workspaceId, {
+					id: notificationId,
+					title: notification.title,
+					createdAt: stamp,
+					readAt: null,
+					targetId: messageId,
+					contactId
+				})
+			).rejects.toThrow()
+		}
+	})
 })
 
 const access = {
@@ -243,22 +395,27 @@ describe('mail UI workflows', () => {
 		['BACKFILL', 'Загружается история'],
 		['SYNCING', 'Загружается история'],
 		['CURRENT', 'Подключён']
-	])('renders the %s mailbox sync state as %s', async (syncStatus, label) => {
-		request.mockImplementation(async config => {
-			const url = config.url ?? ''
-			if (url.endsWith('/capabilities')) return capabilities as never
-			if (url.endsWith('/mailboxes'))
-				return {
-					schemaVersion: 1,
-					workspaceId,
-					items: [{ ...mailbox, syncStatus }],
-					nextCursor: null
-				} as never
-			throw new Error(`Unexpected mail API request: ${config.method} ${url}`)
-		})
-		render(<MailSettings />, { wrapper: Providers })
-		expect(await screen.findByText(label)).toBeTruthy()
-	})
+	])(
+		'renders the %s mailbox sync state as %s',
+		async (syncStatus, label) => {
+			request.mockImplementation(async config => {
+				const url = config.url ?? ''
+				if (url.endsWith('/capabilities')) return capabilities as never
+				if (url.endsWith('/mailboxes'))
+					return {
+						schemaVersion: 1,
+						workspaceId,
+						items: [{ ...mailbox, syncStatus }],
+						nextCursor: null
+					} as never
+				throw new Error(
+					`Unexpected mail API request: ${config.method} ${url}`
+				)
+			})
+			render(<MailSettings />, { wrapper: Providers })
+			expect(await screen.findByText(label)).toBeTruthy()
+		}
+	)
 
 	it('recovers folder selection from the same command after a BACKFILL receipt', async () => {
 		let attempts = 0
@@ -308,7 +465,9 @@ describe('mail UI workflows', () => {
 					syncStatus: 'BACKFILL'
 				}) as never
 			}
-			throw new Error(`Unexpected mail API request: ${config.method} ${url}`)
+			throw new Error(
+				`Unexpected mail API request: ${config.method} ${url}`
+			)
 		})
 		render(<MailSettings />, { wrapper: Providers })
 		fireEvent.click(
@@ -322,7 +481,8 @@ describe('mail UI workflows', () => {
 		)
 		await screen.findByRole('button', { name: 'Проверить результат' })
 		const first = request.mock.calls.find(
-			([config]) => config.method === 'PUT' && config.url?.endsWith('/folders')
+			([config]) =>
+				config.method === 'PUT' && config.url?.endsWith('/folders')
 		)?.[0]
 		expect(first?.data).toMatchObject({
 			expectedVersion: 7,
@@ -337,7 +497,8 @@ describe('mail UI workflows', () => {
 		await waitFor(() => expect(attempts).toBe(2))
 		const folderCommands = request.mock.calls
 			.filter(
-				([config]) => config.method === 'PUT' && config.url?.endsWith('/folders')
+				([config]) =>
+					config.method === 'PUT' && config.url?.endsWith('/folders')
 			)
 			.map(([config]) => config)
 		expect(folderCommands).toHaveLength(2)
@@ -614,14 +775,14 @@ describe('mail UI workflows', () => {
 					expiresAt: null
 				}) as never
 			}
-		if ((config.url ?? '').endsWith('/send'))
-			return {
-				schemaVersion: 1,
-				workspaceId,
-				sendId,
-				state: 'QUEUED',
-				messageId: '<sent@example.ru>'
-			} as never
+			if ((config.url ?? '').endsWith('/send'))
+				return {
+					schemaVersion: 1,
+					workspaceId,
+					sendId,
+					state: 'QUEUED',
+					messageId: '<sent@example.ru>'
+				} as never
 			throw new Error(`Unexpected request: ${config.method} ${config.url}`)
 		})
 		const reply = { ...detail, subject: 'Исходная тема' }
@@ -632,7 +793,7 @@ describe('mail UI workflows', () => {
 				mailboxes={[mailbox as never]}
 				reply={reply as never}
 				onClose={vi.fn()}
-			onQueued={onQueued}
+				onQueued={onQueued}
 			/>,
 			{ wrapper: Providers }
 		)
@@ -688,13 +849,14 @@ describe('mail UI workflows', () => {
 		expect(
 			request.mock.calls.some(([config]) => config.url?.endsWith('/send'))
 		).toBe(false)
-		await waitFor(() => expect(attachmentReads).toBeGreaterThanOrEqual(2), {
-			timeout: 5000
-		})
-		await screen.findByText(/offer\.pdf ·/)
-		fireEvent.click(
-			screen.getByRole('button', { name: 'Отправить' })
+		await waitFor(
+			() => expect(attachmentReads).toBeGreaterThanOrEqual(2),
+			{
+				timeout: 5000
+			}
 		)
+		await screen.findByText(/offer\.pdf ·/)
+		fireEvent.click(screen.getByRole('button', { name: 'Отправить' }))
 		await waitFor(() =>
 			expect(
 				request.mock.calls.some(([config]) =>
@@ -717,8 +879,8 @@ describe('mail UI workflows', () => {
 		})
 		expect(send?.headers?.['Idempotency-Key']).toBe(sendData.commandId)
 		expect(
-			request.mock.calls.filter(
-				([config]) => config.url?.endsWith('/attachments')
+			request.mock.calls.filter(([config]) =>
+				config.url?.endsWith('/attachments')
 			)
 		).toHaveLength(1)
 		await waitFor(() => expect(onQueued).toHaveBeenCalledOnce())
@@ -804,10 +966,15 @@ describe('mail UI workflows', () => {
 			if (url.endsWith(`/attachments/${attachmentId}`)) {
 				reads++
 				if (reads === 1)
-					throw new AuthenticatedApiError('temporary', 'Проверка недоступна.')
+					throw new AuthenticatedApiError(
+						'temporary',
+						'Проверка недоступна.'
+					)
 				return success(attachmentReceipt('VALIDATED')) as never
 			}
-			throw new Error(`Unexpected mail API request: ${config.method} ${url}`)
+			throw new Error(
+				`Unexpected mail API request: ${config.method} ${url}`
+			)
 		})
 		render(
 			<MailComposer
@@ -827,23 +994,35 @@ describe('mail UI workflows', () => {
 		})
 		fireEvent.change(await screen.findByLabelText('Вложение'), {
 			target: {
-				files: [new File(['document'], 'offer.pdf', { type: 'application/pdf' })]
+				files: [
+					new File(['document'], 'offer.pdf', { type: 'application/pdf' })
+				]
 			}
 		})
-		fireEvent.click(screen.getByRole('button', { name: 'Прикрепить файл' }))
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Прикрепить файл' })
+		)
 		await screen.findByRole('button', { name: 'Проверить результат' })
-		const firstPost = request.mock.calls.find(
-			([config]) => config.url?.endsWith('/attachments')
+		const firstPost = request.mock.calls.find(([config]) =>
+			config.url?.endsWith('/attachments')
 		)?.[0]
-		fireEvent.click(screen.getByRole('button', { name: 'Проверить результат' }))
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Проверить результат' })
+		)
 		await screen.findByRole('button', { name: 'Проверить файл' })
-		expect(screen.getByText('Не удалось проверить файл. Проверьте доступ и повторите проверку.')).toBeTruthy()
+		expect(
+			screen.getByText(
+				'Не удалось проверить файл. Проверьте доступ и повторите проверку.'
+			)
+		).toBeTruthy()
 		expect(
 			(screen.getByLabelText('Письмо') as HTMLTextAreaElement).value
 		).toBe('Текст черновика во время проверки')
-		expect(screen.getByRole('button', { name: 'Отправить' })).toHaveProperty('disabled', true)
-		const postsBeforeFileCheck = request.mock.calls.filter(
-			([config]) => config.url?.endsWith('/attachments')
+		expect(
+			screen.getByRole('button', { name: 'Отправить' })
+		).toHaveProperty('disabled', true)
+		const postsBeforeFileCheck = request.mock.calls.filter(([config]) =>
+			config.url?.endsWith('/attachments')
 		)
 		expect(postsBeforeFileCheck).toHaveLength(2)
 		const uploadData = firstPost?.data as FormData
@@ -854,13 +1033,17 @@ describe('mail UI workflows', () => {
 		expect(replayData.get('mailboxId')).toBe(mailboxId)
 		expect(replayData.get('contactId')).toBe(contactId)
 		expect(firstPost?.headers?.['Idempotency-Key']).toBe(commandId)
-		expect(postsBeforeFileCheck[1]?.[0].headers?.['Idempotency-Key']).toBe(commandId)
+		expect(postsBeforeFileCheck[1]?.[0].headers?.['Idempotency-Key']).toBe(
+			commandId
+		)
 		fireEvent.click(screen.getByRole('button', { name: 'Проверить файл' }))
 		await screen.findByText(/offer\.pdf ·/)
 		expect(uploads).toBe(2)
 		expect(reads).toBe(2)
 		expect(
-			request.mock.calls.filter(([config]) => config.url?.endsWith('/attachments'))
+			request.mock.calls.filter(([config]) =>
+				config.url?.endsWith('/attachments')
+			)
 		).toHaveLength(2)
 	})
 
@@ -875,7 +1058,9 @@ describe('mail UI workflows', () => {
 				reads++
 				return success(attachmentReceipt('REJECTED')) as never
 			}
-			throw new Error(`Unexpected mail API request: ${config.method} ${url}`)
+			throw new Error(
+				`Unexpected mail API request: ${config.method} ${url}`
+			)
 		})
 		render(
 			<MailComposer
@@ -892,19 +1077,31 @@ describe('mail UI workflows', () => {
 		})
 		fireEvent.change(await screen.findByLabelText('Вложение'), {
 			target: {
-				files: [new File(['document'], 'offer.pdf', { type: 'application/pdf' })]
+				files: [
+					new File(['document'], 'offer.pdf', { type: 'application/pdf' })
+				]
 			}
 		})
-		fireEvent.click(screen.getByRole('button', { name: 'Прикрепить файл' }))
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Прикрепить файл' })
+		)
 		expect((await screen.findByRole('alert')).textContent).toContain(
 			'Файл не прошёл проверку или недоступен.'
 		)
-		expect(screen.queryByRole('list', { name: 'Прикреплённые файлы' })).toBeNull()
+		expect(
+			screen.queryByRole('list', { name: 'Прикреплённые файлы' })
+		).toBeNull()
 		expect(reads).toBe(1)
-		expect(screen.getByRole('button', { name: 'Отправить' })).toHaveProperty('disabled', true)
-		fireEvent.click(screen.getByRole('button', { name: 'Убрать выбранный файл' }))
+		expect(
+			screen.getByRole('button', { name: 'Отправить' })
+		).toHaveProperty('disabled', true)
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Убрать выбранный файл' })
+		)
 		expect(screen.queryByRole('alert')).toBeNull()
-		expect(screen.getByRole('button', { name: 'Отправить' })).toHaveProperty('disabled', false)
+		expect(
+			screen.getByRole('button', { name: 'Отправить' })
+		).toHaveProperty('disabled', false)
 		expect(
 			(screen.getByLabelText('Письмо') as HTMLTextAreaElement).value
 		).toBe('Черновик сохранён')
@@ -921,7 +1118,9 @@ describe('mail UI workflows', () => {
 				return (await new Promise<unknown>(resolve => {
 					finishRead = resolve
 				})) as never
-			throw new Error(`Unexpected mail API request: ${config.method} ${url}`)
+			throw new Error(
+				`Unexpected mail API request: ${config.method} ${url}`
+			)
 		})
 		render(
 			<MailComposer
@@ -938,20 +1137,30 @@ describe('mail UI workflows', () => {
 		})
 		fireEvent.change(await screen.findByLabelText('Вложение'), {
 			target: {
-				files: [new File(['document'], 'offer.pdf', { type: 'application/pdf' })]
+				files: [
+					new File(['document'], 'offer.pdf', { type: 'application/pdf' })
+				]
 			}
 		})
-		fireEvent.click(screen.getByRole('button', { name: 'Прикрепить файл' }))
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Прикрепить файл' })
+		)
 		await screen.findByText('Проверяется файл…')
 		await screen.findByRole('button', { name: 'Убрать выбранный файл' })
-		fireEvent.click(screen.getByRole('button', { name: 'Убрать выбранный файл' }))
-		await act(async () => finishRead(success(attachmentReceipt('VALIDATED'))))
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Убрать выбранный файл' })
+		)
+		await act(async () =>
+			finishRead(success(attachmentReceipt('VALIDATED')))
+		)
 		await waitFor(() =>
 			expect(
 				screen.getByRole('button', { name: 'Отправить' })
 			).toHaveProperty('disabled', false)
 		)
-		expect(screen.queryByRole('list', { name: 'Прикреплённые файлы' })).toBeNull()
+		expect(
+			screen.queryByRole('list', { name: 'Прикреплённые файлы' })
+		).toBeNull()
 		expect(
 			(screen.getByLabelText('Письмо') as HTMLTextAreaElement).value
 		).toBe('Черновик остаётся в форме')
@@ -968,7 +1177,9 @@ describe('mail UI workflows', () => {
 			}
 			if (url.endsWith(`/attachments/${attachmentId}`))
 				throw new AuthenticatedApiError('forbidden', 'Forbidden')
-			throw new Error(`Unexpected mail API request: ${config.method} ${url}`)
+			throw new Error(
+				`Unexpected mail API request: ${config.method} ${url}`
+			)
 		})
 		render(
 			<MailComposer
@@ -982,15 +1193,25 @@ describe('mail UI workflows', () => {
 		)
 		fireEvent.change(await screen.findByLabelText('Вложение'), {
 			target: {
-				files: [new File(['document'], 'offer.pdf', { type: 'application/pdf' })]
+				files: [
+					new File(['document'], 'offer.pdf', { type: 'application/pdf' })
+				]
 			}
 		})
-		fireEvent.click(screen.getByRole('button', { name: 'Прикрепить файл' }))
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Прикрепить файл' })
+		)
 		expect(await screen.findByRole('alert')).toBeTruthy()
-		expect(screen.getByRole('button', { name: 'Проверить файл' })).toBeTruthy()
-		expect(screen.queryByRole('list', { name: 'Прикреплённые файлы' })).toBeNull()
+		expect(
+			screen.getByRole('button', { name: 'Проверить файл' })
+		).toBeTruthy()
+		expect(
+			screen.queryByRole('list', { name: 'Прикреплённые файлы' })
+		).toBeNull()
 		expect(uploads).toBe(1)
-		expect(screen.getByRole('button', { name: 'Отправить' })).toHaveProperty('disabled', true)
+		expect(
+			screen.getByRole('button', { name: 'Отправить' })
+		).toHaveProperty('disabled', true)
 	})
 
 	it('hides an unmatched message after a hard access denial', async () => {
@@ -1026,6 +1247,7 @@ describe('mail UI workflows', () => {
 					workspaceId,
 					session.userId,
 					1,
+					access.membership.membershipId,
 					messageId
 				]
 			})
@@ -1044,5 +1266,179 @@ describe('mail UI workflows', () => {
 				screen.queryByText('Содержание доступно только участникам ящика.')
 			).toBeNull()
 		)
+	})
+})
+
+	describe('customer mail refresh', () => {
+	const setup = (state: 'QUEUED' | 'SENDING' | null) => {
+		const row = contactMessage(state)
+		request.mockImplementation(async config => {
+			const url = config.url ?? ''
+			if (url.endsWith('/capabilities'))
+				return {
+					...capabilities,
+					mailPermissions: ['mail:read']
+				} as never
+			if (url.endsWith('/mailboxes')) return mailPage([]) as never
+			if (url.endsWith(`/contacts/${contactId}/messages`))
+				return mailPage([row]) as never
+			throw new Error(
+				`Unexpected mail API request: ${config.method} ${url}`
+			)
+		})
+		render(
+			<CustomerMailPanel
+				contactId={contactId}
+				email="customer@example.ru"
+			/>,
+			{ wrapper: Providers }
+		)
+		return {
+			row,
+			messageRequests: () =>
+				request.mock.calls.filter(([config]) =>
+					config.url?.endsWith(`/contacts/${contactId}/messages`)
+				)
+		}
+	}
+
+	it.each([
+		[null, 5000, 'Incoming mail update'],
+		['QUEUED', 3000, 'Pending outgoing mail'],
+		['SENDING', 3000, 'Pending outgoing mail']
+	] as const)(
+		'refetches visible %s contact mail at %i ms without sending a command',
+		async (state, interval, subject) => {
+			vi.useFakeTimers()
+			const { messageRequests } = setup(state)
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(1)
+			})
+			expect(screen.getByText(subject)).toBeTruthy()
+			expect(messageRequests()).toHaveLength(1)
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(interval - 2)
+			})
+			expect(messageRequests()).toHaveLength(1)
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(1)
+			})
+			expect(messageRequests()).toHaveLength(2)
+			expect(screen.getByText(subject)).toBeTruthy()
+			expect(
+				request.mock.calls.every(([config]) => config.method === 'GET')
+			).toBe(true)
+		}
+	)
+
+	it('shows a newly arrived inbound message after the five-second refresh', async () => {
+		vi.useFakeTimers()
+		let messageCalls = 0
+		request.mockImplementation(async config => {
+			const url = config.url ?? ''
+			if (url.endsWith('/capabilities'))
+				return { ...capabilities, mailPermissions: ['mail:read'] } as never
+			if (url.endsWith('/mailboxes')) return mailPage([]) as never
+			if (url.endsWith(`/contacts/${contactId}/messages`)) {
+				messageCalls++
+				return mailPage(messageCalls === 1 ? [] : [contactMessage(null)]) as never
+			}
+			throw new Error(`Unexpected mail API request: ${config.method} ${url}`)
+		})
+		render(
+			<CustomerMailPanel contactId={contactId} email="customer@example.ru" />,
+			{ wrapper: Providers }
+		)
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(1)
+		})
+		expect(screen.queryByText('Incoming mail update')).toBeNull()
+		expect(messageCalls).toBe(1)
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(4999)
+		})
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+		expect(messageCalls).toBe(2)
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(1)
+		})
+		expect(screen.getByText('Incoming mail update')).toBeTruthy()
+		expect(request.mock.calls.every(([config]) => config.method === 'GET')).toBe(true)
+	})
+
+	it.each([
+		['temporary' as const, 'Переписка недоступна'],
+		['forbidden' as const, null]
+	])(
+		'stops polling and clears prior message content after %s response',
+		async (kind, visibleError) => {
+			vi.useFakeTimers()
+			let messageCalls = 0
+			request.mockImplementation(async config => {
+				const url = config.url ?? ''
+				if (url.endsWith('/capabilities'))
+					return {
+						...capabilities,
+						mailPermissions: ['mail:read']
+					} as never
+				if (url.endsWith('/mailboxes')) return mailPage([]) as never
+				if (url.endsWith(`/contacts/${contactId}/messages`)) {
+					messageCalls++
+					if (messageCalls > 1)
+						throw new AuthenticatedApiError(kind, 'Mail access changed')
+					return mailPage([contactMessage(null)]) as never
+				}
+				throw new Error(
+					`Unexpected mail API request: ${config.method} ${url}`
+				)
+			})
+			render(
+				<CustomerMailPanel
+					contactId={contactId}
+					email="customer@example.ru"
+				/>,
+				{ wrapper: Providers }
+			)
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(1)
+			})
+			expect(screen.getByText('Incoming mail update')).toBeTruthy()
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(5000)
+			})
+			expect(messageCalls).toBe(2)
+			expect(screen.queryByText('Incoming mail update')).toBeNull()
+			if (visibleError) expect(screen.getByText(visibleError)).toBeTruthy()
+			else
+				expect(
+					screen.queryByRole('region', { name: 'Переписка с клиентом' })
+				).toBeNull()
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(15_000)
+			})
+			expect(messageCalls).toBe(2)
+			expect(
+				request.mock.calls.every(([config]) => config.method === 'GET')
+			).toBe(true)
+		}
+	)
+
+	it('clears the previous contact mail and stops polling after session cleanup', async () => {
+		vi.useFakeTimers()
+		const { messageRequests } = setup(null)
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(1)
+		})
+		expect(screen.getByText('Incoming mail update')).toBeTruthy()
+		expect(messageRequests()).toHaveLength(1)
+		act(() => useSessionStore.getState().setAnonymous())
+		expect(screen.queryByText('Incoming mail update')).toBeNull()
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(20_000)
+		})
+		expect(messageRequests()).toHaveLength(1)
 	})
 })

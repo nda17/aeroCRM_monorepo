@@ -669,6 +669,10 @@ export class MailWorker implements OnModuleInit, OnModuleDestroy {
 							}
 						});
 					}
+					if (live && folder!.kind === 'INBOX')
+						await tx.mailNotification.create({
+							data: { workspaceId: job.workspaceId, messageId: message.id }
+						});
 					for (const part of copy.attachments)
 						await tx.mailAttachment.create({
 							data: {

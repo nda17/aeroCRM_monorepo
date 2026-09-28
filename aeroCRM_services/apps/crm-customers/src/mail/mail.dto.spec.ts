@@ -1,7 +1,12 @@
 import "reflect-metadata";
 import { plainToInstance } from "class-transformer";
 import { validate } from "class-validator";
-import { MailConnectDto, MailSendDto } from "./mail.dto";
+import {
+  MailConnectDto,
+  MailNotificationReadDto,
+  MailNotificationsQuery,
+  MailSendDto,
+} from "./mail.dto";
 
 const connectInput = () => ({
   schemaVersion: 1,
@@ -32,6 +37,53 @@ const errors = async (type: new () => object, input: object) =>
   });
 
 describe("strict corporate mail request DTOs", () => {
+  it("validates notification pagination defaults and fixed page size", async () => {
+    const base = { workspaceId: "11111111-1111-4111-8111-111111111111" };
+    const query = plainToInstance(MailNotificationsQuery, base);
+    expect(query).toMatchObject({ page: 1, pageSize: 10, unreadOnly: "false" });
+    expect(await errors(MailNotificationsQuery, base)).toHaveLength(0);
+    expect(
+      await errors(MailNotificationsQuery, {
+        ...base,
+        page: "100000",
+        pageSize: "10",
+        unreadOnly: "true",
+      }),
+    ).toHaveLength(0);
+    for (const patch of [
+      { page: "0" },
+      { page: "100001" },
+      { page: "1.5" },
+      { pageSize: "20" },
+      { unreadOnly: "yes" },
+      { extra: "unexpected" },
+      { workspaceId: "not-a-uuid" },
+    ]) {
+      expect(
+        await errors(MailNotificationsQuery, { ...base, ...patch }),
+      ).not.toHaveLength(0);
+    }
+  });
+
+  it("accepts only the exact desired-state notification read DTO", async () => {
+    const valid = {
+      schemaVersion: 1,
+      workspaceId: "11111111-1111-4111-8111-111111111111",
+      read: true,
+    };
+    expect(await errors(MailNotificationReadDto, valid)).toHaveLength(0);
+    for (const patch of [
+      { schemaVersion: 2 },
+      { workspaceId: "not-a-uuid" },
+      { read: "true" },
+      { readAt: "2026-09-28T10:00:00.000Z" },
+    ]) {
+      expect(
+        await errors(MailNotificationReadDto, { ...valid, ...patch }),
+      ).not.toHaveLength(0);
+    }
+  });
+
   it("accepts the universal IMAP/SMTP contract including separate nullable SMTP password", async () => {
     expect(await errors(MailConnectDto, connectInput())).toHaveLength(0);
     expect(

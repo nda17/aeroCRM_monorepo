@@ -52,6 +52,7 @@ interface EditorProps {
 	workspaceId: string
 	kind: CustomerKind
 	id?: string
+	initialMailMessageId?: string | null
 	initialName?: string
 	canWrite: boolean
 	scopeKey?: string
@@ -179,6 +180,7 @@ const CustomerForm = ({
 	kind,
 	id,
 	initialName,
+	initialMailMessageId,
 	canWrite,
 	scopeKey,
 	onClose,
@@ -969,7 +971,11 @@ const CustomerForm = ({
 				) : null}
 			</form>
 			{record?.kind === 'contacts' ? (
-				<CustomerMailPanel contactId={record.id} email={record.email} />
+				<CustomerMailPanel
+					contactId={record.id}
+					email={record.email}
+					initialMessageId={initialMailMessageId}
+				/>
 			) : null}
 		</Drawer>
 	)
