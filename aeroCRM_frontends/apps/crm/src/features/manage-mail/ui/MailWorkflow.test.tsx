@@ -113,6 +113,17 @@ const detail = {
 	}
 }
 const success = <T,>(item: T) => ({ schemaVersion: 1, workspaceId, item })
+const attachmentReceipt = (state: 'QUARANTINED' | 'VALIDATED' | 'REJECTED') => ({
+	id: attachmentId,
+	fileName: 'offer.pdf',
+	declaredMime: 'application/pdf',
+	detectedMime: 'application/pdf',
+	byteSize: 12,
+	state,
+	sha256: 'a'.repeat(64),
+	validationVersion: 1,
+	expiresAt: null
+})
 
 const access = {
 	schemaVersion: 1 as const,
@@ -211,11 +222,13 @@ beforeEach(() => {
 				expiresAt: null
 			}) as never
 		if (url.endsWith('/send'))
-			return success({
+			return {
+				schemaVersion: 1,
+				workspaceId,
 				sendId,
 				state: 'QUEUED',
 				messageId: '<sent@example.ru>'
-			}) as never
+			} as never
 		throw new Error(`Unexpected mail API request: ${config.method} ${url}`)
 	})
 })
@@ -575,19 +588,40 @@ describe('mail UI workflows', () => {
 
 	it('keeps a reply draft and prevents sending until the selected attachment upload is validated', async () => {
 		let finishUpload!: (value: unknown) => void
+		let attachmentReads = 0
+		const onQueued = vi.fn()
 		request.mockImplementation(async config => {
 			if ((config.url ?? '').endsWith('/capabilities'))
 				return capabilities as never
-			if ((config.url ?? '').endsWith('/attachments'))
+			if (
+				(config.url ?? '').endsWith('/attachments') &&
+				config.method === 'POST'
+			)
 				return (await new Promise<unknown>(resolve => {
 					finishUpload = resolve
 				})) as never
-			if ((config.url ?? '').endsWith('/send'))
+			if ((config.url ?? '').endsWith(`/attachments/${attachmentId}`)) {
+				attachmentReads++
 				return success({
-					sendId,
-					state: 'QUEUED',
-					messageId: '<sent@example.ru>'
+					id: attachmentId,
+					fileName: 'offer.pdf',
+					declaredMime: 'application/pdf',
+					detectedMime: 'application/pdf',
+					byteSize: 12,
+					state: attachmentReads === 1 ? 'QUARANTINED' : 'VALIDATED',
+					sha256: 'a'.repeat(64),
+					validationVersion: 1,
+					expiresAt: null
 				}) as never
+			}
+		if ((config.url ?? '').endsWith('/send'))
+			return {
+				schemaVersion: 1,
+				workspaceId,
+				sendId,
+				state: 'QUEUED',
+				messageId: '<sent@example.ru>'
+			} as never
 			throw new Error(`Unexpected request: ${config.method} ${config.url}`)
 		})
 		const reply = { ...detail, subject: 'Исходная тема' }
@@ -598,7 +632,7 @@ describe('mail UI workflows', () => {
 				mailboxes={[mailbox as never]}
 				reply={reply as never}
 				onClose={vi.fn()}
-				onQueued={vi.fn()}
+			onQueued={onQueued}
 			/>,
 			{ wrapper: Providers }
 		)
@@ -634,15 +668,32 @@ describe('mail UI workflows', () => {
 					declaredMime: 'application/pdf',
 					detectedMime: 'application/pdf',
 					byteSize: 12,
-					state: 'VALIDATED',
+					state: 'QUARANTINED',
 					sha256: 'a'.repeat(64),
 					validationVersion: 1,
 					expiresAt: null
 				})
 			)
 		)
+		await screen.findByText('Проверяется файл…')
+		expect(
+			(screen.getByLabelText('Письмо') as HTMLTextAreaElement).value
+		).toBe('Ответ с вложением')
+		expect(
+			screen.getByRole('button', { name: 'Отправить' })
+		).toHaveProperty('disabled', true)
+		fireEvent.submit(
+			screen.getByRole('button', { name: 'Отправить' }).closest('form')!
+		)
+		expect(
+			request.mock.calls.some(([config]) => config.url?.endsWith('/send'))
+		).toBe(false)
+		await waitFor(() => expect(attachmentReads).toBeGreaterThanOrEqual(2), {
+			timeout: 5000
+		})
+		await screen.findByText(/offer\.pdf ·/)
 		fireEvent.click(
-			await screen.findByRole('button', { name: 'Отправить' })
+			screen.getByRole('button', { name: 'Отправить' })
 		)
 		await waitFor(() =>
 			expect(
@@ -665,6 +716,12 @@ describe('mail UI workflows', () => {
 			replyToMessageId: messageId
 		})
 		expect(send?.headers?.['Idempotency-Key']).toBe(sendData.commandId)
+		expect(
+			request.mock.calls.filter(
+				([config]) => config.url?.endsWith('/attachments')
+			)
+		).toHaveLength(1)
+		await waitFor(() => expect(onQueued).toHaveBeenCalledOnce())
 	})
 
 	it('replays an unknown send with the same idempotency key and immutable request', async () => {
@@ -676,11 +733,13 @@ describe('mail UI workflows', () => {
 				attempt++
 				if (attempt === 1)
 					throw new AuthenticatedApiError('temporary', 'Сеть недоступна.')
-				return success({
+				return {
+					schemaVersion: 1,
+					workspaceId,
 					sendId,
 					state: 'QUEUED',
 					messageId: '<sent@example.ru>'
-				}) as never
+				} as never
 			}
 			throw new Error(`Unexpected request: ${config.method} ${config.url}`)
 		})
@@ -728,6 +787,210 @@ describe('mail UI workflows', () => {
 			sends[0]?.headers?.['Idempotency-Key']
 		)
 		expect(sends[1]?.data).toEqual(sends[0]?.data)
+	})
+
+	it('recovers a lost attachment POST, then checks the quarantined ID with GET only', async () => {
+		let uploads = 0
+		let reads = 0
+		request.mockImplementation(async config => {
+			const url = config.url ?? ''
+			if (url.endsWith('/capabilities')) return capabilities as never
+			if (url.endsWith('/attachments') && config.method === 'POST') {
+				uploads++
+				if (uploads === 1)
+					throw new AuthenticatedApiError('temporary', 'Сеть недоступна.')
+				return success(attachmentReceipt('QUARANTINED')) as never
+			}
+			if (url.endsWith(`/attachments/${attachmentId}`)) {
+				reads++
+				if (reads === 1)
+					throw new AuthenticatedApiError('temporary', 'Проверка недоступна.')
+				return success(attachmentReceipt('VALIDATED')) as never
+			}
+			throw new Error(`Unexpected mail API request: ${config.method} ${url}`)
+		})
+		render(
+			<MailComposer
+				contactId={contactId}
+				email="customer@example.ru"
+				mailboxes={[mailbox as never]}
+				onClose={vi.fn()}
+				onQueued={vi.fn()}
+			/>,
+			{ wrapper: Providers }
+		)
+		fireEvent.change(screen.getByLabelText('Тема'), {
+			target: { value: 'Вложение к предложению' }
+		})
+		fireEvent.change(screen.getByLabelText('Письмо'), {
+			target: { value: 'Текст черновика во время проверки' }
+		})
+		fireEvent.change(await screen.findByLabelText('Вложение'), {
+			target: {
+				files: [new File(['document'], 'offer.pdf', { type: 'application/pdf' })]
+			}
+		})
+		fireEvent.click(screen.getByRole('button', { name: 'Прикрепить файл' }))
+		await screen.findByRole('button', { name: 'Проверить результат' })
+		const firstPost = request.mock.calls.find(
+			([config]) => config.url?.endsWith('/attachments')
+		)?.[0]
+		fireEvent.click(screen.getByRole('button', { name: 'Проверить результат' }))
+		await screen.findByRole('button', { name: 'Проверить файл' })
+		expect(screen.getByText('Не удалось проверить файл. Проверьте доступ и повторите проверку.')).toBeTruthy()
+		expect(
+			(screen.getByLabelText('Письмо') as HTMLTextAreaElement).value
+		).toBe('Текст черновика во время проверки')
+		expect(screen.getByRole('button', { name: 'Отправить' })).toHaveProperty('disabled', true)
+		const postsBeforeFileCheck = request.mock.calls.filter(
+			([config]) => config.url?.endsWith('/attachments')
+		)
+		expect(postsBeforeFileCheck).toHaveLength(2)
+		const uploadData = firstPost?.data as FormData
+		const replayData = postsBeforeFileCheck[1]?.[0].data as FormData
+		const commandId = uploadData.get('commandId')
+		expect(typeof commandId).toBe('string')
+		expect(replayData.get('commandId')).toBe(commandId)
+		expect(replayData.get('mailboxId')).toBe(mailboxId)
+		expect(replayData.get('contactId')).toBe(contactId)
+		expect(firstPost?.headers?.['Idempotency-Key']).toBe(commandId)
+		expect(postsBeforeFileCheck[1]?.[0].headers?.['Idempotency-Key']).toBe(commandId)
+		fireEvent.click(screen.getByRole('button', { name: 'Проверить файл' }))
+		await screen.findByText(/offer\.pdf ·/)
+		expect(uploads).toBe(2)
+		expect(reads).toBe(2)
+		expect(
+			request.mock.calls.filter(([config]) => config.url?.endsWith('/attachments'))
+		).toHaveLength(2)
+	})
+
+	it('does not attach a terminal REJECTED receipt and lets the user remove it', async () => {
+		let reads = 0
+		request.mockImplementation(async config => {
+			const url = config.url ?? ''
+			if (url.endsWith('/capabilities')) return capabilities as never
+			if (url.endsWith('/attachments') && config.method === 'POST')
+				return success(attachmentReceipt('QUARANTINED')) as never
+			if (url.endsWith(`/attachments/${attachmentId}`)) {
+				reads++
+				return success(attachmentReceipt('REJECTED')) as never
+			}
+			throw new Error(`Unexpected mail API request: ${config.method} ${url}`)
+		})
+		render(
+			<MailComposer
+				contactId={contactId}
+				email="customer@example.ru"
+				mailboxes={[mailbox as never]}
+				onClose={vi.fn()}
+				onQueued={vi.fn()}
+			/>,
+			{ wrapper: Providers }
+		)
+		fireEvent.change(screen.getByLabelText('Письмо'), {
+			target: { value: 'Черновик сохранён' }
+		})
+		fireEvent.change(await screen.findByLabelText('Вложение'), {
+			target: {
+				files: [new File(['document'], 'offer.pdf', { type: 'application/pdf' })]
+			}
+		})
+		fireEvent.click(screen.getByRole('button', { name: 'Прикрепить файл' }))
+		expect((await screen.findByRole('alert')).textContent).toContain(
+			'Файл не прошёл проверку или недоступен.'
+		)
+		expect(screen.queryByRole('list', { name: 'Прикреплённые файлы' })).toBeNull()
+		expect(reads).toBe(1)
+		expect(screen.getByRole('button', { name: 'Отправить' })).toHaveProperty('disabled', true)
+		fireEvent.click(screen.getByRole('button', { name: 'Убрать выбранный файл' }))
+		expect(screen.queryByRole('alert')).toBeNull()
+		expect(screen.getByRole('button', { name: 'Отправить' })).toHaveProperty('disabled', false)
+		expect(
+			(screen.getByLabelText('Письмо') as HTMLTextAreaElement).value
+		).toBe('Черновик сохранён')
+	})
+
+	it('does not attach a late VALIDATED result after the pending file was removed', async () => {
+		let finishRead!: (value: unknown) => void
+		request.mockImplementation(async config => {
+			const url = config.url ?? ''
+			if (url.endsWith('/capabilities')) return capabilities as never
+			if (url.endsWith('/attachments') && config.method === 'POST')
+				return success(attachmentReceipt('QUARANTINED')) as never
+			if (url.endsWith(`/attachments/${attachmentId}`))
+				return (await new Promise<unknown>(resolve => {
+					finishRead = resolve
+				})) as never
+			throw new Error(`Unexpected mail API request: ${config.method} ${url}`)
+		})
+		render(
+			<MailComposer
+				contactId={contactId}
+				email="customer@example.ru"
+				mailboxes={[mailbox as never]}
+				onClose={vi.fn()}
+				onQueued={vi.fn()}
+			/>,
+			{ wrapper: Providers }
+		)
+		fireEvent.change(screen.getByLabelText('Письмо'), {
+			target: { value: 'Черновик остаётся в форме' }
+		})
+		fireEvent.change(await screen.findByLabelText('Вложение'), {
+			target: {
+				files: [new File(['document'], 'offer.pdf', { type: 'application/pdf' })]
+			}
+		})
+		fireEvent.click(screen.getByRole('button', { name: 'Прикрепить файл' }))
+		await screen.findByText('Проверяется файл…')
+		await screen.findByRole('button', { name: 'Убрать выбранный файл' })
+		fireEvent.click(screen.getByRole('button', { name: 'Убрать выбранный файл' }))
+		await act(async () => finishRead(success(attachmentReceipt('VALIDATED'))))
+		await waitFor(() =>
+			expect(
+				screen.getByRole('button', { name: 'Отправить' })
+			).toHaveProperty('disabled', false)
+		)
+		expect(screen.queryByRole('list', { name: 'Прикреплённые файлы' })).toBeNull()
+		expect(
+			(screen.getByLabelText('Письмо') as HTMLTextAreaElement).value
+		).toBe('Черновик остаётся в форме')
+	})
+
+	it('keeps a forbidden attachment status out of the composer without another upload', async () => {
+		let uploads = 0
+		request.mockImplementation(async config => {
+			const url = config.url ?? ''
+			if (url.endsWith('/capabilities')) return capabilities as never
+			if (url.endsWith('/attachments') && config.method === 'POST') {
+				uploads++
+				return success(attachmentReceipt('QUARANTINED')) as never
+			}
+			if (url.endsWith(`/attachments/${attachmentId}`))
+				throw new AuthenticatedApiError('forbidden', 'Forbidden')
+			throw new Error(`Unexpected mail API request: ${config.method} ${url}`)
+		})
+		render(
+			<MailComposer
+				contactId={contactId}
+				email="customer@example.ru"
+				mailboxes={[mailbox as never]}
+				onClose={vi.fn()}
+				onQueued={vi.fn()}
+			/>,
+			{ wrapper: Providers }
+		)
+		fireEvent.change(await screen.findByLabelText('Вложение'), {
+			target: {
+				files: [new File(['document'], 'offer.pdf', { type: 'application/pdf' })]
+			}
+		})
+		fireEvent.click(screen.getByRole('button', { name: 'Прикрепить файл' }))
+		expect(await screen.findByRole('alert')).toBeTruthy()
+		expect(screen.getByRole('button', { name: 'Проверить файл' })).toBeTruthy()
+		expect(screen.queryByRole('list', { name: 'Прикреплённые файлы' })).toBeNull()
+		expect(uploads).toBe(1)
+		expect(screen.getByRole('button', { name: 'Отправить' })).toHaveProperty('disabled', true)
 	})
 
 	it('hides an unmatched message after a hard access denial', async () => {

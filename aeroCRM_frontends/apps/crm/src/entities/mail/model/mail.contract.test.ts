@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
 	parseMailLinkResult,
 	parseMailMailboxPage,
-	parseMailMailboxResult
+	parseMailMailboxResult,
+	parseMailMessageResult
 } from './mail.contract'
 
 const workspaceId = '11111111-1111-4111-8111-111111111111'
@@ -18,6 +19,34 @@ const mailbox = {
 	syncStatus: 'IDLE',
 	lastSyncAt: null,
 	safeErrorCode: null
+}
+const message = {
+	id: '33333333-3333-4333-8333-333333333333',
+	mailboxId,
+	direction: 'INBOUND',
+	subject: 'Вопрос по предложению',
+	from: [{ email: 'customer@example.org', name: null }],
+	to: [{ email: 'mailbox@example.org', name: null }],
+	cc: [],
+	sentAt: null,
+	receivedAt: '2026-09-28T10:00:00.000Z',
+	attachmentCount: 0,
+	sourceKind: 'IMAP',
+	state: null,
+	createdAt: '2026-09-28T10:00:00.000Z',
+	text: '',
+	bodyStatus: 'COMPLETE',
+	bcc: [],
+	attachments: [],
+	links: [],
+	provenance: {
+		folderPath: 'INBOX',
+		uidValidity: '1',
+		uid: '1',
+		messageId: '<mail@example.org>',
+		inReplyTo: null,
+		references: []
+	}
 }
 const link = {
 	schemaVersion: 1,
@@ -90,4 +119,25 @@ describe('mailbox sync status contract', () => {
 			parseMailMailboxResult({ schemaVersion: 1, workspaceId, item }, workspaceId)
 		).toBeNull()
 	})
+})
+
+describe('mail message body contract', () => {
+	it.each(['', '  \n\t'])('accepts an empty or whitespace-only body %j', text => {
+		const item = { ...message, text }
+		expect(
+			parseMailMessageResult({ schemaVersion: 1, workspaceId, item }, workspaceId)
+			?.item.text
+		).toBe(text)
+	})
+
+	it.each(['x'.repeat(262_145), 42, { text: 'invalid' }])(
+		'rejects an oversized or non-string body %#', text => {
+			expect(
+				parseMailMessageResult(
+					{ schemaVersion: 1, workspaceId, item: { ...message, text } },
+					workspaceId
+				)
+			).toBeNull()
+		}
+	)
 })

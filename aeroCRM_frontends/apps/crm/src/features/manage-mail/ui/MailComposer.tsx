@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
+	getMailAttachment,
 	getMailSend,
 	mailCommand,
 	uploadMailAttachment
@@ -287,7 +288,7 @@ export const MailComposer = ({
 					</fieldset>
 					{context.capabilities.data?.attachmentsAvailable ? (
 						<AttachmentUpload
-							key={mailboxId}
+							key={`${context.key.join(':')}:${mailboxId}:${contactId}`}
 							mailboxId={mailboxId}
 							contactId={contactId}
 							current={attachments}
@@ -340,9 +341,24 @@ const AttachmentUpload = ({
 	const context = useMailContext()
 	const [file, setFile] = useState<File | null>(null)
 	const [error, setError] = useState<string | null>(null)
+	const [tracked, setTracked] = useState<{
+		item: MailAttachment
+		deadline: number
+	} | null>(null)
+	const [expired, setExpired] = useState(false)
+	const attached = useRef<string | null>(null)
 	const input = useRef<HTMLInputElement>(null)
 	const form = useDirtyForm({ dirty: !!file, label: 'Вложение письма' })
 	const limits = context.capabilities.data?.attachmentLimits
+	const finish = (item: MailAttachment) => {
+		if (attached.current === item.id) return
+		attached.current = item.id
+		onAttached(item)
+		setTracked(null)
+		setFile(null)
+		if (input.current) input.current.value = ''
+		form.markClean()
+	}
 	const build = () => ({
 		...newMailCommand(context.workspace.workspaceId),
 		mailboxId,
@@ -355,22 +371,81 @@ const AttachmentUpload = ({
 		'mail:send',
 		uploadMailAttachment,
 		result => {
-			if (result.item.state !== 'VALIDATED') {
-				setError('Файл не прошёл проверку. Выберите другой файл.')
-				return
+			if (result.item.state === 'VALIDATED') finish(result.item)
+			else {
+				setExpired(false)
+				setTracked({ item: result.item, deadline: Date.now() + 60_000 })
 			}
-			onAttached(result.item)
-			setFile(null)
-			if (input.current) input.current.value = ''
-			form.markClean()
 		}
 	)
+	const intermediate = (state: MailAttachment['state']) =>
+		['DEFERRED', 'UPLOADING', 'QUARANTINED'].includes(state)
+	const record = useQuery({
+		queryKey: [
+			'mail-upload-attachment',
+			...context.key,
+			mailboxId,
+			contactId,
+			tracked?.item.id
+		],
+		enabled:
+			!!tracked &&
+			intermediate(tracked.item.state) &&
+			!expired &&
+			!disabled &&
+			command.enabled,
+		queryFn: async () => {
+			const result = await getMailAttachment(
+				context.session!.accessToken,
+				context.workspace.workspaceId,
+				tracked!.item.id
+			)
+			if (result.item.id !== tracked!.item.id)
+				throw new Error('Unexpected attachment identifier')
+			return result
+		},
+		refetchInterval: query =>
+			tracked &&
+			Date.now() < tracked.deadline &&
+			!query.state.error &&
+			intermediate(query.state.data?.item.state ?? tracked.item.state)
+				? 2000
+				: false,
+		refetchOnWindowFocus: false,
+		refetchOnReconnect: false,
+		gcTime: 0,
+		staleTime: 0,
+		retry: false
+	})
+	const checked = record.isError
+		? null
+		: (record.data?.item ?? tracked?.item)
 	useEffect(() => {
-		onPendingChange(!!file || command.locked)
+		if (!tracked || !checked || !intermediate(checked.state)) return
+		const timer = setTimeout(
+			() => setExpired(true),
+			Math.max(0, tracked.deadline - Date.now())
+		)
+		return () => clearTimeout(timer)
+	}, [tracked, checked])
+	useEffect(() => {
+		if (
+			tracked &&
+			command.enabled &&
+			!disabled &&
+			!record.isError &&
+			!record.isFetching &&
+			checked?.id === tracked.item.id &&
+			checked.state === 'VALIDATED'
+		)
+			finish(checked)
+	})
+	useEffect(() => {
+		onPendingChange(!!file || !!tracked || command.locked)
 		return () => onPendingChange(false)
-	}, [file, command.locked, onPendingChange])
+	}, [file, tracked, command.locked, onPendingChange])
 	const upload = () => {
-		if (!file || !limits) return
+		if (!file || !limits || tracked) return
 		setError(null)
 		if (
 			file.size > limits.maxFileBytes ||
@@ -391,7 +466,7 @@ const AttachmentUpload = ({
 					ref={input}
 					type="file"
 					accept={limits?.supportedMediaTypes.join(',')}
-					disabled={disabled || command.locked}
+					disabled={disabled || command.locked || !!tracked}
 					onChange={event => {
 						setFile(event.target.files?.[0] ?? null)
 						setError(null)
@@ -404,24 +479,64 @@ const AttachmentUpload = ({
 			</p>
 			{file ? (
 				<div className={styles.actions}>
-					<Button
-						variant="secondary"
-						disabled={disabled || command.locked}
-						onClick={upload}
-					>
-						Прикрепить файл
-					</Button>
+					{!tracked ? (
+						<Button
+							variant="secondary"
+							disabled={disabled || command.locked}
+							onClick={upload}
+						>
+							Прикрепить файл
+						</Button>
+					) : null}
 					<Button
 						variant="ghost"
 						disabled={disabled || command.locked}
 						onClick={() => {
+							setTracked(null)
+							setExpired(false)
 							setFile(null)
+							setError(null)
 							if (input.current) input.current.value = ''
 						}}
 					>
 						Убрать выбранный файл
 					</Button>
 				</div>
+			) : null}
+			{tracked ? (
+				<>
+					{record.isError ? (
+						<p role="alert">
+							Не удалось проверить файл. Проверьте доступ и повторите
+							проверку.
+						</p>
+					) : checked &&
+					  ['REJECTED', 'UNAVAILABLE'].includes(checked.state) ? (
+						<p role="alert">
+							Файл не прошёл проверку или недоступен. Уберите его и
+							выберите другой файл.
+						</p>
+					) : expired ? (
+						<p role="status">
+							Проверка файла ещё не завершена. Проверьте его позже.
+						</p>
+					) : (
+						<p role="status">Проверяется файл…</p>
+					)}
+					{record.isError || expired ? (
+						<Button
+							variant="secondary"
+							disabled={disabled || !command.enabled || record.isFetching}
+							onClick={() => {
+								setExpired(false)
+								setTracked({ ...tracked, deadline: Date.now() + 60_000 })
+								void record.refetch()
+							}}
+						>
+							Проверить файл
+						</Button>
+					) : null}
+				</>
 			) : null}
 			<MailCommandNotice command={command} />
 			{error ? <p role="alert">{error}</p> : null}

@@ -575,7 +575,8 @@ const parseMessageDetail = (
 			state: value.state,
 			createdAt: value.createdAt
 		}) ||
-		!nullableString(value.text, 262_144) ||
+		(value.text !== null &&
+			(typeof value.text !== 'string' || value.text.length > 262_144)) ||
 		!enumValue(value.bodyStatus, [
 			'COMPLETE',
 			'TOO_LARGE',
