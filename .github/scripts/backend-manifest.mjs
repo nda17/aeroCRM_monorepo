@@ -22,6 +22,20 @@ export function validateManifest(manifest, expected = {}) {
   }
   return manifest;
 }
+export function validateDockerStore(info) {
+  if (info.ServerVersion !== '29.8.1' || info.Driver !== 'overlayfs' || !Array.isArray(info.DriverStatus) || !info.DriverStatus.some(pair => Array.isArray(pair) && pair[0] === 'driver-type' && pair[1] === 'io.containerd.snapshotter.v1')) throw new Error('Backend images require Docker 29.8.1 with the production containerd image store');
+  return info;
+}
+export function validateBuiltImage(image, sourceSha) {
+  const singleManifest = ['application/vnd.oci.image.manifest.v1+json', 'application/vnd.docker.distribution.manifest.v2+json'];
+  if (!matches(SHA, sourceSha) || !matches(/^sha256:[a-f0-9]{64}$/, image.Id) || image.Config?.Labels?.['org.opencontainers.image.revision'] !== sourceSha || image.Os !== 'linux' || image.Architecture !== 'amd64' || image.Descriptor?.digest !== image.Id || !singleManifest.includes(image.Descriptor?.mediaType)) throw new Error('Built backend image must be a reviewed single-platform manifest with its exact revision');
+  return image;
+}
+export function validateImageRoundTrip(entry, image) {
+  validateBuiltImage(image, entry.sourceSha);
+  if (image.Id !== entry.imageId) throw new Error('Backend archive save/load changed the immutable image ID');
+  return image;
+}
 export function validateFrontendState(state, releaseSha) {
   if (!keysEqual(state, ['schemaVersion', 'manifest', 'infraSha', 'envHash', 'composeHash', 'closure']) || state.schemaVersion !== 1 || !matches(SHA, state.infraSha) || !matches(HASH, state.envHash) || !matches(HASH, state.composeHash)) throw new Error('Invalid canonical backend state');
   validateManifest(state.manifest, { releaseSha });
@@ -133,9 +147,18 @@ async function main() {
     const selected = plan.include.find(item => item.app === app);
     if (!selected) throw new Error('Image was not selected for build');
     const inspect = JSON.parse(execFileSync('docker', ['image', 'inspect', `aerocrm/${app}:${plan.releaseSha}`], { encoding: 'utf8' }))[0];
-    if (inspect.Config?.Labels?.['org.opencontainers.image.revision'] !== plan.releaseSha) throw new Error('Built image revision differs');
+    validateBuiltImage(inspect, plan.releaseSha);
     const entry = { sourceSha: plan.releaseSha, contextHash: selected.contextHash, imageId: inspect.Id, artifactSha256: createHash('sha256').update(readFileSync(`${app}.tar.gz`)).digest('hex'), ciRunId: plan.ciRunId, artifactName: `image-${app}` };
     writeFileSync(`${app}.metadata.json`, `${JSON.stringify(entry)}\n`);
+  } else if (command === 'docker-store') {
+    validateDockerStore(JSON.parse(execFileSync('docker', ['info', '--format', '{{json .}}'], { encoding: 'utf8' })));
+  } else if (command === 'roundtrip') {
+    if (!BACKEND_APPS.includes(app)) throw new Error('Unknown backend app');
+    const entry = JSON.parse(readFileSync(`${app}.metadata.json`, 'utf8'));
+    const plan = JSON.parse(readFileSync(path, 'utf8'));
+    if (entry.sourceSha !== plan.releaseSha || entry.ciRunId !== plan.ciRunId) throw new Error('Roundtrip metadata differs from current plan');
+    const image = JSON.parse(execFileSync('docker', ['image', 'inspect', `aerocrm/${app}:${entry.sourceSha}`], { encoding: 'utf8' }))[0];
+    validateImageRoundTrip(entry, image);
   } else if (command === 'assemble') {
     const plan = JSON.parse(readFileSync(path, 'utf8'));
     for (const selected of plan.include) {

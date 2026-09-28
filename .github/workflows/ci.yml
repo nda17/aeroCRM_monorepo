@@ -958,6 +958,14 @@ jobs:
       matrix: ${{ fromJSON(needs.backend-plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
+      - name: Match the production Docker Engine and image store
+        uses: docker/setup-docker-action@v5
+        with:
+          version: v29.8.1
+          daemon-config: |
+            {"features":{"containerd-snapshotter":true}}
+      - name: Require the reviewed production image store
+        run: node .github/scripts/backend-manifest.mjs docker-store
       - uses: actions/download-artifact@v4
         with:
           name: backend-plan
@@ -967,9 +975,16 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          docker build --file "aeroCRM_services/apps/$APP/Dockerfile" --build-arg APP_REVISION="$SHA" --tag "aerocrm/$APP:$SHA" "aeroCRM_services/apps/$APP"
+          docker build --platform linux/amd64 --provenance=false --sbom=false --file "aeroCRM_services/apps/$APP/Dockerfile" --build-arg APP_REVISION="$SHA" --tag "aerocrm/$APP:$SHA" "aeroCRM_services/apps/$APP"
           docker save "aerocrm/$APP:$SHA" | gzip -1 > "$APP.tar.gz"
           node .github/scripts/backend-manifest.mjs record backend-plan.json "$APP"
+          docker image rm "aerocrm/$APP:$SHA"
+          if docker image inspect "aerocrm/$APP:$SHA" >/dev/null 2>&1; then
+            echo 'Image tag survived removal; archive identity roundtrip cannot be verified' >&2
+            exit 1
+          fi
+          docker image load --input "$APP.tar.gz"
+          node .github/scripts/backend-manifest.mjs roundtrip backend-plan.json "$APP"
       - uses: actions/upload-artifact@v4
         with:
           name: image-${{ matrix.app }}

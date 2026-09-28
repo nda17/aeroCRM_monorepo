@@ -1,10 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { BACKEND_APPS, validateManifest, isGlobalBuildInput, computeContextHashes,
-  validateFrontendState, planBackend, validateOriginRun, artifactAvailable } from './backend-manifest.mjs';
+  validateFrontendState, planBackend, validateOriginRun, artifactAvailable, validateDockerStore,
+  validateBuiltImage, validateImageRoundTrip } from './backend-manifest.mjs';
 import { validateInstalledImage, requiredFreeBytes, inspectArchive } from './backend-images.mjs';
 
 const sha = char => char.repeat(40);
@@ -18,6 +21,45 @@ function manifest(release = sha('a'), ciRunId = '101') {
 }
 const trackedFile = (path, blob = sha('e'), mode = '100644') => ({ path, blob, mode });
 const equalHashes = hash => Object.fromEntries(BACKEND_APPS.map(app => [app, hash]));
+
+function tar(entries) {
+  const blocks = [];
+  for (const entry of entries) {
+    const data = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data ?? '');
+    const header = Buffer.alloc(512);
+    header.write(entry.name, 0, Math.min(Buffer.byteLength(entry.name), 100), 'utf8');
+    const octal = (offset, length, value) => header.write(value.toString(8).padStart(length - 1, '0') + '\0', offset, length, 'ascii');
+    octal(100, 8, entry.mode ?? (entry.type === '5' ? 0o755 : 0o644));
+    octal(108, 8, 0); octal(116, 8, 0); octal(124, 12, data.length); octal(136, 12, 0);
+    header.fill(0x20, 148, 156); header[156] = (entry.type ?? '0').charCodeAt(0);
+    header.write('ustar\0', 257, 6, 'ascii'); header.write('00', 263, 2, 'ascii');
+    const checksum = header.reduce((sum, byte) => sum + byte, 0);
+    header.write(checksum.toString(8).padStart(6, '0') + '\0 ', 148, 8, 'ascii');
+    blocks.push(header);
+    if (data.length) {
+      blocks.push(data);
+      const remainder = data.length % 512;
+      if (remainder) blocks.push(Buffer.alloc(512 - remainder));
+    }
+  }
+  blocks.push(Buffer.alloc(1024));
+  return Buffer.concat(blocks);
+}
+function dockerArchive(layerPath, layerBytes, { duplicateLayer = false, nonRegular = false } = {}) {
+  const layers = [layerPath, ...(duplicateLayer ? [layerPath] : [])];
+  const entries = [{ name: 'manifest.json', data: JSON.stringify([{ Config: 'config.json',
+    RepoTags: ['aerocrm/synthetic:fixture'], Layers: layers }]) },
+  { name: 'config.json', data: '{}' }];
+  if (nonRegular) entries.push({ name: layerPath, type: '5' });
+  else if (layerBytes !== null) entries.push({ name: layerPath, data: layerBytes });
+  return tar(entries);
+}
+function writeCompressedArchive(directory, name, contents) {
+  const compressed = gzipSync(contents);
+  const file = join(directory, name);
+  writeFileSync(file, compressed);
+  return { file, compressed };
+}
 
 test('manifest accepts all 13 services and binds current-run images to the reviewed SHA', () => {
   assert.equal(validateManifest(manifest(), { releaseSha: sha('a'), ciRunId: '101' }).services.billing.sourceSha, sha('a'));
@@ -46,6 +88,47 @@ test('manifest rejects absent and unexpected keys, invalid digests, and wrong im
     const value = manifest();
     mutate(value);
     assert.throws(() => validateManifest(value));
+  }
+});
+
+test('image builder accepts only the reviewed containerd overlayfs Docker store contract', () => {
+  const store = { ServerVersion: '29.8.1', Driver: 'overlayfs',
+    DriverStatus: [['driver-type', 'io.containerd.snapshotter.v1']] };
+  assert.equal(validateDockerStore(store), store);
+  for (const mutate of [
+    value => { value.ServerVersion = '29.8.0'; },
+    value => { value.Driver = 'aufs'; },
+    value => { value.DriverStatus = []; },
+    value => { value.DriverStatus = [['driver-type', 'overlayfs']]; }
+  ]) {
+    const invalid = structuredClone(store); mutate(invalid);
+    assert.throws(() => validateDockerStore(invalid));
+  }
+});
+
+test('built image identity binds exact revision, linux amd64 platform, and one supported manifest descriptor', () => {
+  const sourceSha = sha('a');
+  const imageId = `sha256:${hash('b')}`;
+  const image = { Id: imageId, Os: 'linux', Architecture: 'amd64',
+    Config: { Labels: { 'org.opencontainers.image.revision': sourceSha } },
+    Descriptor: { digest: imageId, mediaType: 'application/vnd.oci.image.manifest.v1+json' } };
+  assert.equal(validateBuiltImage(image, sourceSha), image);
+  const dockerImage = structuredClone(image);
+  dockerImage.Descriptor.mediaType = 'application/vnd.docker.distribution.manifest.v2+json';
+  assert.equal(validateBuiltImage(dockerImage, sourceSha), dockerImage);
+  assert.equal(validateImageRoundTrip({ imageId, sourceSha }, image), image);
+  assert.throws(() => validateImageRoundTrip({ imageId: `sha256:${hash('c')}`, sourceSha }, image));
+  for (const mutate of [
+    value => { value.Id = 'invalid'; },
+    value => { value.Config.Labels['org.opencontainers.image.revision'] = sha('f'); },
+    value => { value.Os = 'darwin'; },
+    value => { value.Architecture = 'arm64'; },
+    value => { value.Descriptor.digest = `sha256:${hash('c')}`; },
+    value => { value.Descriptor.mediaType = 'application/vnd.oci.image.index.v1+json'; },
+    value => { value.Descriptor.mediaType = ['application/vnd.oci.image.manifest.v1+json']; }
+  ]) {
+    const invalid = structuredClone(image); mutate(invalid);
+    assert.throws(() => validateBuiltImage(invalid, sourceSha));
   }
 });
 
@@ -166,24 +249,62 @@ test('image installation must match the manifest digest and immutable source rev
     Config: { Labels: { 'org.opencontainers.image.revision': sha('f') } } }, entry, 'billing'), /Immutable image tag/);
 });
 
-test('capacity preflight reserves one GiB after accounting for every expanded archive', () => {
-  assert.equal(requiredFreeBytes(2 * 1024 ** 3), 3 * 1024 ** 3);
+test('capacity preflight reserves one GiB after accounting for outer archives and unpacked image layers', () => {
+  const storageBytes = 2 * 1024 ** 3 + 37;
+  assert.equal(requiredFreeBytes(storageBytes), storageBytes + 1024 ** 3);
   assert.equal(requiredFreeBytes(0), 1024 ** 3);
 });
 
-test('archive inspection hashes the compressed bytes and counts the decompressed Docker stream', async () => {
+test('archive inspector measures Docker tar and unique plain layer storage exactly', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'aerocrm-image-archive-test-'));
-  const archive = join(directory, 'image.tar.gz');
   try {
-    const { gzipSync } = await import('node:zlib');
-    const { createHash } = await import('node:crypto');
-    const payload = Buffer.from('synthetic docker save payload\n');
-    const compressed = gzipSync(payload);
-    writeFileSync(archive, compressed);
-    assert.deepEqual(await inspectArchive(archive), {
-      artifactSha256: createHash('sha256').update(compressed).digest('hex'), expandedBytes: payload.length
+    const layer = tar([{ name: 'rootfs/etc/fixture', data: 'synthetic layer payload\n' }]);
+    const outer = dockerArchive('layers/base/layer.tar', layer, { duplicateLayer: true });
+    const { file, compressed } = writeCompressedArchive(directory, 'docker-image.tar.gz', outer);
+    assert.deepEqual(await inspectArchive(file), {
+      artifactSha256: createHash('sha256').update(compressed).digest('hex'),
+      expandedBytes: outer.length, unpackedLayerBytes: layer.length,
+      storageBytes: outer.length + layer.length
     });
-    writeFileSync(archive, 'not a gzip stream');
-    await assert.rejects(inspectArchive(archive));
+    assert.equal(requiredFreeBytes((await inspectArchive(file)).storageBytes),
+      outer.length + layer.length + 1024 ** 3);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('archive inspector expands gzip-compressed OCI blob layers and deduplicates their references', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'aerocrm-oci-image-archive-test-'));
+  try {
+    const layer = tar([{ name: 'rootfs/usr/share/fixture', data: 'compressed synthetic layer\n' }]);
+    const compressedLayer = gzipSync(layer);
+    const layerPath = `blobs/sha256/${createHash('sha256').update(compressedLayer).digest('hex')}`;
+    const outer = dockerArchive(layerPath, compressedLayer, { duplicateLayer: true });
+    const { file, compressed } = writeCompressedArchive(directory, 'oci-image.tar.gz', outer);
+    assert.deepEqual(await inspectArchive(file), {
+      artifactSha256: createHash('sha256').update(compressed).digest('hex'),
+      expandedBytes: outer.length, unpackedLayerBytes: layer.length,
+      storageBytes: outer.length + layer.length
+    });
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('archive inspector rejects missing, non-regular, malformed layers and a damaged outer gzip checksum', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'aerocrm-invalid-image-archive-test-'));
+  try {
+    const missing = dockerArchive('missing/layer.tar', null);
+    const missingFile = writeCompressedArchive(directory, 'missing.tar.gz', missing).file;
+    await assert.rejects(inspectArchive(missingFile));
+
+    const nonRegular = dockerArchive('layers/base/layer.tar', null, { nonRegular: true });
+    const nonRegularFile = writeCompressedArchive(directory, 'non-regular.tar.gz', nonRegular).file;
+    await assert.rejects(inspectArchive(nonRegularFile));
+
+    const unsupported = dockerArchive('layers/base/layer.tar', Buffer.from('BZh9 unsupported compressed layer'));
+    const unsupportedFile = writeCompressedArchive(directory, 'unsupported-layer.tar.gz', unsupported).file;
+    await assert.rejects(inspectArchive(unsupportedFile));
+
+    const valid = gzipSync(tar([{ name: 'manifest.json', data: '[]' }]));
+    const damaged = Buffer.from(valid); damaged[damaged.length - 1] ^= 0xff;
+    const damagedPath = join(directory, 'damaged-checksum.tar.gz'); writeFileSync(damagedPath, damaged);
+    await assert.rejects(inspectArchive(damagedPath));
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });

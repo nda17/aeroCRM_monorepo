@@ -239,6 +239,21 @@ jobs:
           ssh-key: ${{ secrets.INFRA_DEPLOY_KEY }}
           path: infra
           persist-credentials: false
+      - name: Match the production Docker Engine for release regression tests
+        uses: docker/setup-docker-action@v5
+        with:
+          version: v29.8.1
+          daemon-config: |
+            {"features":{"containerd-snapshotter":true}}
+      - name: Match the production Docker Compose for release regression tests
+        uses: docker/setup-compose-action@v2
+        with:
+          version: v5.5.1
+      - name: Require the reviewed production image store
+        run: |
+          node source/.github/scripts/backend-manifest.mjs docker-store
+          compose_version=$(docker compose version --short)
+          test "${compose_version#v}" = '5.5.1'
       - name: Validate reviewed release scripts
         run: |
           test "$(git -C infra rev-parse HEAD)" = "${{ inputs.infra_sha }}"
