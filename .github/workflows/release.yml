@@ -145,6 +145,8 @@ jobs:
           [[ "$SHA" =~ ^[a-f0-9]{40}$ ]]
           [[ "$INFRA_SHA" =~ ^[a-f0-9]{40}$ ]]
           [[ "$RUN_ID" =~ ^[0-9]+$ ]]
+          # The trusted production wrapper may resume an older exact pending target after the branch moves.
+          [[ "$GITHUB_REF" == refs/heads/prod_0.1.0 ]]
           read -r conclusion head_sha branch workflow_path <<< "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '[.conclusion,.head_sha,.head_branch,.path] | join(" ")')"
           [[ "$conclusion" == success && "$head_sha" == "$SHA" && "$branch" == prod_0.1.0 && "$workflow_path" == .github/workflows/ci.yml ]]
           if [[ "$CUTOVER" == true ]]; then
@@ -227,6 +229,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.verify.outputs.sha }}
+          path: source
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
           repository: nda17/aeroCRM_infra
           ref: ${{ inputs.infra_sha }}
           ssh-key: ${{ secrets.INFRA_DEPLOY_KEY }}
@@ -234,6 +241,13 @@ jobs:
           persist-credentials: false
       - name: Validate reviewed release scripts
         run: |
+          test "$(git -C infra rev-parse HEAD)" = "${{ inputs.infra_sha }}"
+          test "$(git -C source rev-parse HEAD)" = "${{ needs.verify.outputs.sha }}"
+          node --check source/.github/scripts/backend-manifest.mjs
+          node --check source/.github/scripts/backend-images.mjs
+          node --check infra/scripts/backend-release.mjs
+          node --check infra/scripts/backend-release-state.mjs
+          node --check infra/scripts/backend-release-transaction.mjs
           bash -n infra/scripts/release.sh
           bash infra/scripts/release.sh --policy-self-test
           bash -n infra/scripts/aerocrm-nginx-release.sh
@@ -250,7 +264,9 @@ jobs:
           node infra/scripts/workspace-closure-migration.mjs --policy-self-test
           node infra/scripts/workspace-closure-enable.mjs --policy-self-test
           node infra/scripts/backend-rollback-compatibility-guard.mjs --policy-self-test
-      - name: Download exact CI artifacts
+          REQUIRE_DOCKER_COMPOSE_TEST=true node --test infra/scripts/*.test.mjs
+      - name: Download exact CI frontend artifacts
+        if: matrix.role == 'frontend'
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ inputs.ci_run_id }}
@@ -262,8 +278,22 @@ jobs:
             gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "image-$app" --dir "images/$app"
             test -s "images/$app/$app.tar.gz"
           done
+      - name: Download and verify complete backend manifest and inherited CI origins
+        if: matrix.role == 'backend'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.ci_run_id }}
+          SHA: ${{ needs.verify.outputs.sha }}
+          REQUIRE_UNIFORM: ${{ (inputs.billing_capacity_migration || inputs.crm_custom_roles_migration || inputs.crm_sales_commerce_migration || inputs.crm_intake_notifications_migration || inputs.workspace_closure_migration || inputs.workspace_closure_identity_acl_repair || inputs.workspace_closure_enable || inputs.crm_contracts_cutover) && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name backend-manifest --dir manifest
+          node source/.github/scripts/backend-manifest.mjs verify manifest/backend-manifest.json
       - name: Load images and release
         env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.ci_run_id }}
+          INFRA_SHA: ${{ inputs.infra_sha }}
           ROLE: ${{ matrix.role }}
           APPS: ${{ matrix.apps }}
           SHA: ${{ needs.verify.outputs.sha }}
@@ -310,73 +340,79 @@ jobs:
             printf '%s\n' "$BACK_KEY" > ~/.ssh/release_key
           fi
           [[ "$hash" =~ ^[a-f0-9]{64}$ && "$port" =~ ^[0-9]{1,5}$ ]]
+          chmod 600 ~/.ssh/release_key
           dest="$user@$host"
+          stage="/opt/aerocrm/releases/staging/$SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          if [ "$ROLE" = backend ] && { [ "$CUTOVER" = true ] || [ "$CLOSURE_ENABLE" = true ]; }; then
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" \
+              "bash -c 'set -euo pipefail; if test -e /opt/aerocrm/releases/backend-state.json; then echo Historical cutover/enable is forbidden after canonical backend state adoption >&2; exit 1; fi'"
+          fi
           if [ "$ROLE" = frontend ]; then
             backend_key="$RUNNER_TEMP/aerocrm_backend_check_key"
             printf '%s\n' "$BACK_KEY" > "$backend_key"
             chmod 600 "$backend_key"
             ssh -i "$backend_key" -p "$BACK_PORT" -o StrictHostKeyChecking=yes "$BACK_USER@$BACK_HOST" \
-              "bash -c 'set -euo pipefail; cd /opt/aerocrm; test \"\$(cat releases/backend.sha)\" = \"$SHA\"; test \"\$(cat releases/workspace-closure-enabled.sha)\" = \"$SHA\"'"
+              "bash -c 'set -euo pipefail; cd /opt/aerocrm; for pending in backend-release.pending.json crm-contract-cutover.pending backend-rollback-blocked.pending; do test ! -e releases/\$pending; done; if test -e releases/backend-state.json; then cat releases/backend-state.json; else test \"\$(cat releases/backend.sha)\" = \"$SHA\"; test \"\$(cat releases/workspace-closure-enabled.sha)\" = \"$SHA\"; printf legacy; fi'" > "$RUNNER_TEMP/backend-frontend-gate.json"
+            node source/.github/scripts/backend-manifest.mjs frontend-gate "$RUNNER_TEMP/backend-frontend-gate.json" "$SHA"
             rm -f "$backend_key"
           fi
-          ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'mkdir -p /opt/aerocrm/compose /opt/aerocrm/scripts'
-          scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes "infra/compose/$ROLE.yml" "$dest:/opt/aerocrm/compose/"
-          if [ "$ROLE" = frontend ]; then
-            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'mkdir -p /opt/aerocrm/nginx'
-            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/nginx/frontends.conf "$dest:/opt/aerocrm/nginx/"
-          fi
           if [ "$ROLE" = backend ]; then
-            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/compose/rabbitmq.conf "$dest:/opt/aerocrm/compose/"
-            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/backend-rollback-compatibility-guard.mjs infra/scripts/workspace-closure-reviewed-inventory.json infra/scripts/ensure-cutover-node.sh "$dest:/opt/aerocrm/scripts/"
-            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'bash /opt/aerocrm/scripts/ensure-cutover-node.sh --rollback-guard')
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "mkdir -p /opt/aerocrm/releases/staging && mkdir '$stage'"
+            scp -r -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/compose infra/scripts "$dest:$stage/"
+            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes manifest/backend-manifest.json "$dest:$stage/"
+            if [ "$CUTOVER" = true ] || [ "$CLOSURE_ENABLE" = true ]; then
+              ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" \
+                "flock -n /opt/aerocrm/release.lock bash -c 'set -euo pipefail; test ! -e /opt/aerocrm/releases/backend-state.json; mkdir -p /opt/aerocrm/compose /opt/aerocrm/scripts; cp \"$stage/compose/backend.yml\" /opt/aerocrm/compose/backend.yml; cp \"$stage/compose/rabbitmq.conf\" /opt/aerocrm/compose/rabbitmq.conf; cp \"$stage/scripts/\"* /opt/aerocrm/scripts/'"
+            fi
+            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --rollback-guard")
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
+          else
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'mkdir -p /opt/aerocrm/compose /opt/aerocrm/scripts /opt/aerocrm/nginx'
+            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/compose/frontend.yml "$dest:/opt/aerocrm/compose/"
+            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/nginx/frontends.conf "$dest:/opt/aerocrm/nginx/"
+            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/release.sh "$dest:/opt/aerocrm/scripts/"
           fi
-          scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/release.sh "$dest:/opt/aerocrm/scripts/"
           if [ "$ROLE" = backend ] && [ "$CUTOVER" = true ]; then
-            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/crm-contract-cutover.mjs infra/scripts/crm-contract-cutover-preflight.mjs infra/scripts/ensure-cutover-node.sh "$dest:/opt/aerocrm/scripts/"
-            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'bash /opt/aerocrm/scripts/ensure-cutover-node.sh')
+            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh'")
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "bash -c 'set -euo pipefail; cd /opt/aerocrm; actual=\$(cd env/backend && find . -maxdepth 1 -type f -name \"*.env\" -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d\" \" -f1); staged=\$(cd \"$STAGED_DIR/backend\" && find . -maxdepth 1 -type f -name \"*.env\" -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d\" \" -f1); test \"\$actual\" = \"$BACK_HASH\"; test \"\$staged\" = \"$STAGED_HASH\"; test -f \"$STAGED_DIR/migrations/identity.env\"; test -f \"$STAGED_DIR/migrations/notification-delivery.env\"; test -f \"$DEFINITIONS_FILE\"'"
           fi
           if [ "$ROLE" = backend ] && [ "$BILLING_MIGRATION" = true ]; then
-            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/billing-capacity-migration.mjs infra/scripts/ensure-cutover-node.sh "$dest:/opt/aerocrm/scripts/"
-            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'bash /opt/aerocrm/scripts/ensure-cutover-node.sh --billing')
+            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --billing")
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
           fi
           if [ "$ROLE" = backend ] && [ "$CUSTOM_ROLES_MIGRATION" = true ]; then
-            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/crm-custom-roles-migration.mjs infra/scripts/ensure-cutover-node.sh "$dest:/opt/aerocrm/scripts/"
-            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'bash /opt/aerocrm/scripts/ensure-cutover-node.sh --crm-custom-roles')
+            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --crm-custom-roles")
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
           fi
           if [ "$ROLE" = backend ] && [ "$SALES_COMMERCE_MIGRATION" = true ]; then
-            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/crm-sales-commerce-migration.mjs infra/scripts/ensure-cutover-node.sh "$dest:/opt/aerocrm/scripts/"
-            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'bash /opt/aerocrm/scripts/ensure-cutover-node.sh --crm-sales-commerce')
+            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --crm-sales-commerce")
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
           fi
           if [ "$ROLE" = backend ] && [ "$INTAKE_NOTIFICATIONS_MIGRATION" = true ]; then
-            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/crm-intake-notifications-migration.mjs infra/scripts/ensure-cutover-node.sh "$dest:/opt/aerocrm/scripts/"
-            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'bash /opt/aerocrm/scripts/ensure-cutover-node.sh --crm-intake-notifications')
+            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --crm-intake-notifications")
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
           fi
-          if [ "$ROLE" = backend ] && { [ "$CLOSURE_MIGRATION" = true ] || [ "$IDENTITY_ACL_REPAIR" = true ]; }; then
-            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/workspace-closure-migration.mjs "$dest:/opt/aerocrm/scripts/"
+          if [ "$ROLE" = backend ]; then
+            IMAGE_SSH_DEST="$dest" IMAGE_SSH_PORT="$port" IMAGE_SSH_KEY="$HOME/.ssh/release_key" \
+              node source/.github/scripts/backend-images.mjs manifest/backend-manifest.json
+          else
+            for app in $APPS; do
+              cat "images/$app/$app.tar.gz" | ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'set -o pipefail; gzip -dc | docker load >/dev/null'
+            done
           fi
-          if [ "$ROLE" = backend ] && [ "$CLOSURE_ENABLE" = true ]; then
-            scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/scripts/workspace-closure-enable.mjs "$dest:/opt/aerocrm/scripts/"
-          fi
-          for app in $APPS; do
-            gzip -dc "images/$app/$app.tar.gz" | ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'docker load >/dev/null'
-          done
           if [ "$ROLE" = backend ] && [ "$CLOSURE_ENABLE" = true ]; then
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" \
-              "cd /opt/aerocrm && flock -n release.lock '$node_bin' scripts/workspace-closure-enable.mjs '$SHA' '$BACK_BEFORE_HASH' '$BACK_HASH'"
+              "cd /opt/aerocrm && flock -n release.lock '$node_bin' '$stage/scripts/workspace-closure-enable.mjs' '$SHA' '$BACK_BEFORE_HASH' '$BACK_HASH'"
           fi
           if [ "$ROLE" = backend ] && [ "$CUTOVER" = true ]; then
             resume_arg=
             if [ "$RESUME" = true ]; then resume_arg=' --resume'; fi
-            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && '$node_bin' scripts/crm-contract-cutover.mjs '$SHA' '$STAGED_DIR' '$DEFINITIONS_FILE'$resume_arg"
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && REVIEWED_INFRA_DIR='$stage' '$node_bin' '$stage/scripts/crm-contract-cutover.mjs' '$SHA' '$STAGED_DIR' '$DEFINITIONS_FILE'$resume_arg"
           elif [ "$ROLE" = backend ]; then
-            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH' '$INTAKE_NOTIFICATIONS_MIGRATION' '$INTAKE_NOTIFICATIONS_MIGRATION_HASH' '$CLOSURE_MIGRATION' '$CLOSURE_MIGRATION_HASH' '$IDENTITY_ACL_REPAIR' '$IDENTITY_ENV_HASH'"
+            manifest_env="BACKEND_MANIFEST_PATH='$stage/backend-manifest.json' INFRA_SHA='$INFRA_SHA' CI_RUN_ID='$RUN_ID'"
+            if [ "$CLOSURE_ENABLE" = true ]; then manifest_env=; fi
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && $manifest_env REVIEWED_INFRA_DIR='$stage' '$stage/scripts/release.sh' '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH' '$INTAKE_NOTIFICATIONS_MIGRATION' '$INTAKE_NOTIFICATIONS_MIGRATION_HASH' '$CLOSURE_MIGRATION' '$CLOSURE_MIGRATION_HASH' '$IDENTITY_ACL_REPAIR' '$IDENTITY_ENV_HASH'"
           else
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash'"
           fi

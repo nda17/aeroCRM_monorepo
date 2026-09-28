@@ -29,10 +29,23 @@ pnpm build:frontends
 
 Каждый backend app устанавливает зависимости и собирается отдельно по своему `package.json` и Dockerfile. Инфраструктура и выпуск размещены в соседнем `aeroCRM_infra`; подготовка host, env и миграций выполняется его скриптами по утверждённым приватным inputs.
 
-CI проверяет три frontend на dev/PR; immutable образы по SHA собираются только для `prod_0.1.0`. Release требует успешный CI именно этого SHA и сверяет lock/env hashes перед загрузкой образов.
+CI проверяет три frontend на dev/PR; immutable образы по SHA собираются только для `prod_0.1.0`. Release требует успешный CI именно этого SHA и сверяет lock/env hashes перед переключением сервисов.
 
 Первый запуск использует чистые базы: trial 10 дней, базовый тариф включает владельца и двух сотрудников; годовая оплата со скидкой 10%. На production ЮKassa переключена на боевой магазин: `CRM_PAYMENT_LAUNCH_MODE=production`, `BILLING_CRM_PAYMENTS_ENABLED=true`. Реквизиты хранятся только в приватных env.
 
 URL HTTP-уведомлений ЮKassa: `https://api.aerocrm.space/api/v1/payments/webhook`. Обрабатываются `payment.succeeded`, `payment.waiting_for_capture`, `payment.canceled`; обработка `refund.succeeded` пока не реализована.
 
 До запуска publishers применяются service-owned миграции и ACL, затем `bootstrap:admin` в Identity, `bootstrap:crm-policy` в Billing и `scripts/bootstrap-db-settings.mjs` для настроек сервисов. Приватные bootstrap env передаются только соответствующим one-shot процессам. Администраторы сервиса не получают рабочее пространство или trial автоматически.
+
+Backend CI публикует полный `backend-manifest.json` для 13 приложений. В нём `releaseSha` обозначает проверенный релиз, а `services.<app>.sourceSha` — неизменяемый SHA конкретного образа. Сборка сравнивает полный Git-контекст приложения и общие ограничения с последним зелёным production CI; при отсутствии проверенного артефакта сервис собирается заново. Изменения Prisma, ACL, REST-контрактов, DTO, парсеров и messaging консервативно пересобирают весь backend. Документация за пределами Docker-контекстов не вызывает пересборку; файл внутри контекста влияет на своё приложение.
+
+Артефакты образов и manifest хранятся 90 дней. Release запускается с production-ветки и проверяет точный SHA зелёного CI, reviewed infra и происхождение каждого унаследованного образа. На VPS образ используется повторно только при совпадении Docker image ID и revision; занятый SHA-тег с другим ID останавливает релиз. Скачиваются только отсутствующие образы; SHA-256 проверяется по сжатым байтам, gzip передаётся по SSH и распаковывается на VPS. Перед загрузкой проверяется свободное место Docker с консервативной оценкой по распакованным архивам и запасом 1 GiB; workflow не очищает образы автоматически.
+
+Для миграций и исторического cutover/включения функций требуется CI `workflow_dispatch` с `force_full_backend=true`, чтобы все `sourceSha` совпадали с целевым SHA. Уже выпущенный проверенный образ с этим SHA и тем же контекстом используется повторно; остальные приложения доводятся до целевого SHA. Если его артефакт истёк и пересборка дала другой Docker ID, занятый неизменяемый тег не перезаписывается: нужен новый commit SHA. Повтор pending-релиза разрешён для его исходного SHA/CI/infra даже после движения production-ветки; точные inputs и проверка зелёного CI сохраняются. После принятия canonical `releases/backend-state.json` исторические cutover и enable остаются закрыты; обычный релиз использует этот файл, атомарное состояние и снимок reviewed infra. Frontend сверяет canonical `manifest.releaseSha`, включённое закрытие workspace и отсутствие pending-маркеров; для старого deployment без canonical состояния поддерживается проверка прежних SHA-маркеров.
+
+Локальные проверки алгоритма выпуска:
+
+```sh
+node --test .github/scripts/*.test.mjs
+node aeroCRM_services/apps/operations/scripts/database-backup-migration-manifests.mjs --check
+```

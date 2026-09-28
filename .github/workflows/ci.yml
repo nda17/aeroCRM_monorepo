@@ -1,11 +1,17 @@
 name: aeroCRM CI
 on:
   push:
-    branches: [dev_0.1.0/feature/standalone-crm, prod_0.1.0]
+    branches: [dev_0.1.0/feature/standalone-crm, dev_0.2.0/feature/selective-backend-release, prod_0.1.0]
   pull_request:
   workflow_dispatch:
+    inputs:
+      force_full_backend:
+        description: Build all backend images at this SHA for migrations or a fresh baseline
+        type: boolean
+        default: false
 permissions:
   contents: read
+  actions: read
 jobs:
   frontends:
     runs-on: ubuntu-latest
@@ -906,49 +912,121 @@ jobs:
       - name: Run workspace closure specs
         working-directory: aeroCRM_services/apps/${{ matrix.service }}
         run: pnpm exec jest --runInBand --testPathPattern=workspace-closure
-  image:
-    needs: [frontends, contract-migrations, billing-capacity-postgres18, crm-custom-roles-postgres18, crm-sales-commerce-postgres18, crm-intake-notifications-postgres18, workspace-closure-postgres18, workspace-closure-unit]
+  backend-release-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify release planner and embedded backup migration inventory
+        run: |
+          node --check .github/scripts/backend-manifest.mjs
+          node --check .github/scripts/backend-images.mjs
+          node --test .github/scripts/*.test.mjs
+          node aeroCRM_services/apps/operations/scripts/database-backup-migration-manifests.mjs --check
+  backend-plan:
+    needs: [frontends, contract-migrations, billing-capacity-postgres18, crm-custom-roles-postgres18, crm-sales-commerce-postgres18, crm-intake-notifications-postgres18, workspace-closure-postgres18, workspace-closure-unit, backend-release-contracts]
+    if: github.ref == 'refs/heads/prod_0.1.0' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has_builds: ${{ steps.plan.outputs.has_builds }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Plan complete backend manifest from latest green production CI
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE_FULL_BACKEND: ${{ inputs.force_full_backend && 'true' || 'false' }}
+        run: node .github/scripts/backend-manifest.mjs plan backend-plan.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-plan
+          path: backend-plan.json
+          retention-days: 90
+          if-no-files-found: error
+  backend-images:
+    needs: backend-plan
+    if: needs.backend-plan.outputs.has_builds == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.backend-plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend-plan
+      - name: Build selected exact-SHA backend image and record compressed archive identity
+        env:
+          APP: ${{ matrix.app }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker build --file "aeroCRM_services/apps/$APP/Dockerfile" --build-arg APP_REVISION="$SHA" --tag "aerocrm/$APP:$SHA" "aeroCRM_services/apps/$APP"
+          docker save "aerocrm/$APP:$SHA" | gzip -1 > "$APP.tar.gz"
+          node .github/scripts/backend-manifest.mjs record backend-plan.json "$APP"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.app }}
+          path: ${{ matrix.app }}.tar.gz
+          retention-days: 90
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-metadata-${{ matrix.app }}
+          path: ${{ matrix.app }}.metadata.json
+          retention-days: 90
+          if-no-files-found: error
+  backend-manifest:
+    needs: [backend-plan, backend-images]
+    if: always() && needs.backend-plan.result == 'success' && (needs.backend-images.result == 'success' || needs.backend-images.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend-plan
+      - uses: actions/download-artifact@v4
+        if: needs.backend-images.result == 'success'
+        with:
+          pattern: backend-metadata-*
+          path: metadata
+          merge-multiple: true
+      - name: Assemble complete reviewed service image map
+        run: node .github/scripts/backend-manifest.mjs assemble backend-plan.json metadata
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-manifest
+          path: backend-manifest.json
+          retention-days: 90
+          if-no-files-found: error
+  frontend-images:
+    needs: [frontends, contract-migrations, billing-capacity-postgres18, crm-custom-roles-postgres18, crm-sales-commerce-postgres18, crm-intake-notifications-postgres18, workspace-closure-postgres18, workspace-closure-unit, backend-release-contracts]
     if: github.ref == 'refs/heads/prod_0.1.0' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { app: landing, family: frontend }
-          - { app: crm, family: frontend }
-          - { app: admin-panel, family: frontend }
-          - { app: api-gateway, family: backend }
-          - { app: notification-delivery, family: backend }
-          - { app: campaigns, family: backend }
-          - { app: reporting, family: backend }
-          - { app: billing, family: backend }
-          - { app: identity, family: backend }
-          - { app: platform, family: backend }
-          - { app: support, family: backend }
-          - { app: operations, family: backend }
-          - { app: crm-access, family: backend }
-          - { app: crm-intake, family: backend }
-          - { app: crm-customers, family: backend }
-          - { app: crm-sales, family: backend }
+        app: [landing, crm, admin-panel]
     steps:
       - uses: actions/checkout@v4
-      - name: Build exact-SHA image
+      - name: Build exact-SHA frontend image
         env:
           APP: ${{ matrix.app }}
-          FAMILY: ${{ matrix.family }}
           SHA: ${{ github.sha }}
           TURNSTILE_SITE_KEY: ${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
         run: |
           set -euo pipefail
-          if [ "$FAMILY" = frontend ]; then
-            docker build --file aeroCRM_frontends/Dockerfile --build-arg FRONTEND_APP="$APP" --build-arg APP_REVISION="$SHA" --build-arg NEXT_PUBLIC_TURNSTILE_SITE_KEY="$TURNSTILE_SITE_KEY" --tag "aerocrm/$APP:$SHA" aeroCRM_frontends
-          else
-            docker build --file "aeroCRM_services/apps/$APP/Dockerfile" --build-arg APP_REVISION="$SHA" --tag "aerocrm/$APP:$SHA" "aeroCRM_services/apps/$APP"
-          fi
+          docker build --file aeroCRM_frontends/Dockerfile --build-arg FRONTEND_APP="$APP" --build-arg APP_REVISION="$SHA" --build-arg NEXT_PUBLIC_TURNSTILE_SITE_KEY="$TURNSTILE_SITE_KEY" --tag "aerocrm/$APP:$SHA" aeroCRM_frontends
           docker save "aerocrm/$APP:$SHA" | gzip -1 > "$APP.tar.gz"
       - uses: actions/upload-artifact@v4
         with:
           name: image-${{ matrix.app }}
           path: ${{ matrix.app }}.tar.gz
-          retention-days: 7
+          retention-days: 90
           if-no-files-found: error
