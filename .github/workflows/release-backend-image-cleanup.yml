@@ -1,0 +1,100 @@
+name: aeroCRM reviewed backend image cleanup
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Green monorepo CI run for this exact production workflow commit
+        required: true
+      sha:
+        description: Full production monorepo SHA containing this reviewed workflow
+        required: true
+      infra_sha:
+        description: Exact reviewed infrastructure commit; verify green Infrastructure CI separately
+        required: true
+      approved_inventory_hash:
+        description: Approved SHA-256 of the frozen reviewed cleanup artifact
+        required: true
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: aerocrm-production-release
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Require green exact-SHA production CI and reviewed identities
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ inputs.sha }}
+          INFRA_SHA: ${{ inputs.infra_sha }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+          INVENTORY_HASH: ${{ inputs.approved_inventory_hash }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/prod_0.1.0 && "$SHA" == "$GITHUB_SHA" ]]
+          [[ "$SHA" =~ ^[a-f0-9]{40}$ && "$INFRA_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$CI_RUN_ID" =~ ^[0-9]+$ && "$INVENTORY_HASH" =~ ^[a-f0-9]{64}$ ]]
+          read -r conclusion head_sha branch workflow_path status <<< "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID" --jq '[.conclusion,.head_sha,.head_branch,.path,.status] | join(" ")')"
+          [[ "$conclusion" == success && "$status" == completed && "$head_sha" == "$SHA" && "$branch" == prod_0.1.0 && "$workflow_path" == .github/workflows/ci.yml ]]
+      - uses: actions/checkout@v4
+        with:
+          repository: nda17/aeroCRM_infra
+          ref: ${{ inputs.infra_sha }}
+          ssh-key: ${{ secrets.INFRA_DEPLOY_KEY }}
+          path: infra
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - name: Validate pinned cleanup implementation and approved artifact
+        env:
+          INFRA_SHA: ${{ inputs.infra_sha }}
+          INVENTORY_HASH: ${{ inputs.approved_inventory_hash }}
+        run: |
+          set -euo pipefail
+          test "$(git -C infra rev-parse HEAD)" = "$INFRA_SHA"
+          test "$(sha256sum infra/scripts/backend-image-cleanup-reviewed.json | cut -d' ' -f1)" = "$INVENTORY_HASH"
+          node --check infra/scripts/backend-image-inventory.mjs
+          node --check infra/scripts/backend-image-cleanup.mjs
+          node --test infra/scripts/backend-image-cleanup.test.mjs infra/scripts/backend-release-state.test.mjs
+      - name: Run only the reviewed image deletions under the shared release lock
+        env:
+          INFRA_SHA: ${{ inputs.infra_sha }}
+          INVENTORY_HASH: ${{ inputs.approved_inventory_hash }}
+          BACK_HOST: ${{ secrets.BACKEND_SSH_HOST }}
+          BACK_USER: ${{ secrets.BACKEND_SSH_USER }}
+          BACK_PORT: ${{ secrets.BACKEND_SSH_PORT }}
+          BACK_KEY: ${{ secrets.BACKEND_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$BACK_HOST" =~ ^[a-zA-Z0-9.-]+$ && "$BACK_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          [[ "${BACK_PORT:-22}" =~ ^[0-9]{1,5}$ ]]
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$BACK_KEY" > ~/.ssh/cleanup_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/cleanup_key ~/.ssh/known_hosts
+          dest="$BACK_USER@$BACK_HOST"
+          stage="/opt/aerocrm/releases/staging/cleanup-$INFRA_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh -i ~/.ssh/cleanup_key -p "${BACK_PORT:-22}" -o StrictHostKeyChecking=yes -o BatchMode=yes "$dest" \
+            "umask 077; mkdir -p /opt/aerocrm/releases/staging && mkdir '$stage' && mkdir '$stage/scripts'"
+          scp -i ~/.ssh/cleanup_key -P "${BACK_PORT:-22}" -o StrictHostKeyChecking=yes -o BatchMode=yes \
+            infra/scripts/backend-image-cleanup.mjs infra/scripts/backend-image-inventory.mjs \
+            infra/scripts/backend-release-state.mjs infra/scripts/backend-image-cleanup-reviewed.json "$dest:$stage/scripts/"
+          ssh -i ~/.ssh/cleanup_key -p "${BACK_PORT:-22}" -o StrictHostKeyChecking=yes -o BatchMode=yes "$dest" \
+            "chmod 600 '$stage/scripts/'* && cd /opt/aerocrm && INFRA_SHA='$INFRA_SHA' /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node '$stage/scripts/backend-image-cleanup.mjs' '$INFRA_SHA' '$INVENTORY_HASH'" > backend-image-cleanup-report.json
+          node -e "const r=require('./backend-image-cleanup-report.json'); if(r.mode!=='REVIEWED_CLEANUP'||r.inventoryHash!==process.env.INVENTORY_HASH||r.infraSha!==process.env.INFRA_SHA||r.removedImageIds.length!==105||r.inventory.candidates.length!==0)process.exit(1);console.log('Reviewed images removed:',r.removedImageIds.length);console.log('Available filesystem bytes:',JSON.stringify(r.diskUsage))"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-image-cleanup-report
+          path: backend-image-cleanup-report.json
+          retention-days: 30
+          if-no-files-found: error
+      - name: Remove runner SSH key
+        if: always()
+        run: rm -f ~/.ssh/cleanup_key
