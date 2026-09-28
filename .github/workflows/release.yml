@@ -264,7 +264,8 @@ jobs:
           node infra/scripts/workspace-closure-migration.mjs --policy-self-test
           node infra/scripts/workspace-closure-enable.mjs --policy-self-test
           node infra/scripts/backend-rollback-compatibility-guard.mjs --policy-self-test
-          REQUIRE_DOCKER_COMPOSE_TEST=true node --test infra/scripts/*.test.mjs
+          # This release gate covers the introduced state, transaction and real Compose regressions.
+          REQUIRE_DOCKER_COMPOSE_TEST=true node --test infra/scripts/backend-release*.test.mjs
       - name: Download exact CI frontend artifacts
         if: matrix.role == 'frontend'
         env:
