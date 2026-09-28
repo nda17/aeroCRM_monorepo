@@ -11,6 +11,19 @@ const migrationUrl = required("CRM_CUSTOMERS_TEST_MIGRATION_DATABASE_URL");
 const runtimeRole = required("CRM_CUSTOMERS_TEST_RUNTIME_ROLE");
 assert.equal(process.env.CRM_MAIL_INTEGRATION_ALLOW_MUTATION, "true");
 assert.match(runtimeRole, /^[a-z][a-z0-9_]{0,62}$/);
+// The integration exercises SQL-backed send creation only. Keep a synthetic
+// local key and placeholder object-store settings so CI needs no mail secrets
+// or external storage; this script never dispatches SMTP or calls S3.
+process.env.CRM_MAIL_ENABLED = "true";
+process.env.CRM_MAIL_SYNC_ENABLED = "false";
+process.env.CRM_MAIL_SEND_ENABLED = "true";
+process.env.CRM_MAIL_CREDENTIAL_KEY = Buffer.alloc(32, 0x42).toString("base64");
+process.env.CRM_MAIL_CREDENTIAL_KEY_ID = "pg18-fixture-key";
+process.env.CRM_MAIL_S3_ENDPOINT = "https://objects.example.invalid";
+process.env.CRM_MAIL_S3_REGION = "test-only";
+process.env.CRM_MAIL_S3_BUCKET = "test-only";
+process.env.CRM_MAIL_S3_ACCESS_KEY_ID = "test-only";
+process.env.CRM_MAIL_S3_SECRET_ACCESS_KEY = "test-only";
 const local = (value) => {
   const parsed = new URL(value);
   return ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname)
@@ -61,6 +74,7 @@ const commandAuthority = {
   membershipId,
   mailPermissions: ["mail:read", "mail:send", "mail:manage"],
 };
+const authorities = new Map([[workspaceId, commandAuthority]]);
 try {
   const [server] = await runtime.$queryRawUnsafe(
     "SELECT current_setting('server_version_num')::int AS version",
@@ -268,7 +282,7 @@ try {
 
   const mail = new MailService(
     runtime,
-    { workflow: async () => commandAuthority },
+    { workflow: async (id) => authorities.get(id) ?? commandAuthority },
     new MailConfig(),
     {},
     {},
@@ -297,6 +311,210 @@ try {
     }),
     1,
   );
+
+  // Exercise actual SEND writes against both supported reply source types.
+  // The imported message must already be linked to this contact.
+  await runtime.mailContactLink.update({
+    where: { id: ids.link },
+    data: { state: "LINKED", contactId, version: { increment: 1 } },
+  });
+  const otherContactId = randomUUID();
+  await runtime.contact.create({
+    data: {
+      id: otherContactId,
+      workspaceId,
+      name: "Other mail contact",
+      createdBySubject: subject,
+    },
+  });
+  const otherMailboxId = randomUUID();
+  await runtime.mailMailbox.create({
+    data: {
+      id: otherMailboxId,
+      workspaceId,
+      connectionId: ids.connection,
+      kind: "SHARED",
+      canonicalAddress: `other-${workspaceId}@example.org`,
+      displayName: "Other integration mailbox",
+      imapLogin: "mail@example.org",
+      smtpLogin: "mail@example.org",
+      sendMode: "AS",
+      enabled: true,
+    },
+  });
+  await runtime.mailMailboxGrant.create({
+    data: {
+      id: randomUUID(),
+      workspaceId,
+      mailboxId: otherMailboxId,
+      subject,
+      membershipId,
+      canRead: true,
+      canSend: true,
+      canManage: true,
+    },
+  });
+
+  const replyDto = (replyToMessageId, overrides = {}) => ({
+    schemaVersion: 1,
+    workspaceId,
+    commandId: randomUUID(),
+    mailboxId: ids.mailbox,
+    contactId,
+    to: [{ email: "sender@example.org", name: null }],
+    cc: [],
+    bcc: [],
+    subject: "Reply regression",
+    text: "Synthetic reply body",
+    attachmentIds: [],
+    replyToMessageId,
+    ...overrides,
+  });
+  const importedReply = replyDto(ids.message);
+  const importedReceipt = await mail.send(commandAuthority, importedReply);
+  assert.equal(importedReceipt.state, "QUEUED");
+  assert.equal(
+    (
+      await runtime.mailSendIntent.findUniqueOrThrow({
+        where: { id: importedReceipt.sendId },
+      })
+    ).replyToMessageId,
+    ids.message,
+  );
+  assert.deepEqual(
+    await mail.send(commandAuthority, importedReply),
+    importedReceipt,
+  );
+  assert.equal(
+    await runtime.mailSendIntent.count({
+      where: { commandId: importedReply.commandId },
+    }),
+    1,
+    "replaying an imported-message reply reuses its idempotent receipt",
+  );
+
+  const priorIntentReply = replyDto(ids.intent);
+  const priorIntentReceipt = await mail.send(
+    commandAuthority,
+    priorIntentReply,
+  );
+  assert.equal(priorIntentReceipt.state, "QUEUED");
+  assert.equal(
+    (
+      await runtime.mailSendIntent.findUniqueOrThrow({
+        where: { id: priorIntentReceipt.sendId },
+      })
+    ).replyToMessageId,
+    ids.intent,
+  );
+
+  for (const [label, dto] of [
+    [
+      "imported message linked to another contact",
+      replyDto(ids.message, { contactId: otherContactId }),
+    ],
+    [
+      "prior CRM intent owned by another contact",
+      replyDto(ids.intent, { contactId: otherContactId }),
+    ],
+    [
+      "imported message in another mailbox",
+      replyDto(ids.message, { mailboxId: otherMailboxId }),
+    ],
+    [
+      "prior CRM intent in another mailbox",
+      replyDto(ids.intent, { mailboxId: otherMailboxId }),
+    ],
+  ]) {
+    const before = await runtime.mailSendIntent.count({
+      where: { commandId: dto.commandId },
+    });
+    await assert.rejects(() => mail.send(commandAuthority, dto), label);
+    assert.equal(
+      await runtime.mailSendIntent.count({
+        where: { commandId: dto.commandId },
+      }),
+      before,
+      `${label} must not create an intent`,
+    );
+  }
+
+  const foreignWorkspaceContactId = randomUUID();
+  const foreignWorkspaceConnectionId = randomUUID();
+  const foreignWorkspaceMailboxId = randomUUID();
+  await migrator.workspaceClosureFence.upsert({
+    where: { workspaceId: otherWorkspaceId },
+    create: { workspaceId: otherWorkspaceId },
+    update: { fencedAt: null },
+  });
+  await runtime.contact.create({
+    data: {
+      id: foreignWorkspaceContactId,
+      workspaceId: otherWorkspaceId,
+      name: "Foreign workspace mail contact",
+      createdBySubject: subject,
+    },
+  });
+  await runtime.mailConnection.create({
+    data: {
+      id: foreignWorkspaceConnectionId,
+      workspaceId: otherWorkspaceId,
+      delegatedSubject: subject,
+      delegatedMembershipId: membershipId,
+      provider: "IMAP_SMTP",
+      transport: { imap: {}, smtp: {} },
+      authMode: "PASSWORD",
+      credentialPrincipal: "foreign@example.org",
+      keyId: "fixture-key",
+      state: "ACTIVE",
+    },
+  });
+  await runtime.mailMailbox.create({
+    data: {
+      id: foreignWorkspaceMailboxId,
+      workspaceId: otherWorkspaceId,
+      connectionId: foreignWorkspaceConnectionId,
+      kind: "SHARED",
+      canonicalAddress: `reply-foreign-${otherWorkspaceId}@example.org`,
+      displayName: "Foreign workspace mailbox",
+      imapLogin: "foreign@example.org",
+      smtpLogin: "foreign@example.org",
+      sendMode: "AS",
+      enabled: true,
+    },
+  });
+  await runtime.mailMailboxGrant.create({
+    data: {
+      id: randomUUID(),
+      workspaceId: otherWorkspaceId,
+      mailboxId: foreignWorkspaceMailboxId,
+      subject,
+      membershipId,
+      canRead: true,
+      canSend: true,
+      canManage: true,
+    },
+  });
+  const foreignAuthority = {
+    ...commandAuthority,
+    customer: { ...commandAuthority.customer, workspaceId: otherWorkspaceId },
+  };
+  authorities.set(otherWorkspaceId, foreignAuthority);
+  for (const sourceId of [ids.message, ids.intent]) {
+    const dto = replyDto(sourceId, {
+      workspaceId: otherWorkspaceId,
+      mailboxId: foreignWorkspaceMailboxId,
+      contactId: foreignWorkspaceContactId,
+    });
+    await assert.rejects(() => mail.send(foreignAuthority, dto));
+    assert.equal(
+      await runtime.mailSendIntent.count({
+        where: { commandId: dto.commandId },
+      }),
+      0,
+      "a reply source from another workspace must not create an intent",
+    );
+  }
 
   const auditRow = await runtime.mailAudit.findFirstOrThrow({
     where: { commandId: ids.command },
