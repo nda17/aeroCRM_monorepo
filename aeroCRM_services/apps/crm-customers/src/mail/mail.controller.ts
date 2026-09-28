@@ -217,7 +217,8 @@ export class MailController {
 				files: 1,
 				fields: 5,
 				fieldSize: 1024,
-				parts: 6
+				// Busboy emits partsLimit at the closing boundary of the last allowed part.
+				parts: 7
 			}
 		})
 	)
