@@ -483,6 +483,16 @@ text/plain и text/html alternative; URL/file access генератора MIME �
 Входящий HTML не отображается. Frontend дополнительно строит ограниченное
 React-дерево из разрешённых элементов, без произвольного HTML rendering.
 
+Tiptap закреплён на MIT-версии 3.22.3 с существующим общим графом ProseMirror.
+`sanitize-html` 2.17.5 выбран для текущего Node 20; новые исправления требуют
+Node >=22.12. Условия [raw-text advisory](https://github.com/advisories/GHSA-jxwj-j7wr-gfrw)
+и [SVG advisory](https://github.com/advisories/GHSA-g8qq-57p8-ggw5) исключены
+закрытым allowlist; соответствующие примеры проверены локально. Расширять список
+элементов до обновления runtime/санитайзера нельзя. Обновление отложено отдельной
+записью P2 в корневом backlog. Полный `pnpm audit` не выполнен: автоматическая
+проверка разрешений отклонила экспорт графа зависимостей; публичные advisory
+и локальные защитные проверки не подменяют полный аудит.
+
 UTF-8 сумма raw text+html и отдельно derived text+sanitized html не превышает
 24576 байт, serialized полный SEND DTO — 32768 байт. Отсутствующий html сохраняет
 прежний plain path и command digest. Receipt известной команды читается после
@@ -724,15 +734,53 @@ deep-link и скрытие данных при потере доступа. Р�
 живую проверку нового интерфейса и его узкого viewport не подменяем тестами
 компонентов. Дополнительные контрольные письма не отправлялись.
 
-## Подготовка отдельной «Почты» и Tiptap, 29.09.2026
+## Выпуск отдельной «Почты» и Tiptap, 29.09.2026
 
-Runtime и аддитивная миграция 6 подготовлены локально. Проверка на PostgreSQL 18
-успешна; checksum migrations, backup inventory и новое тело write guard
-согласованы. Локальные read-only postflight-скрипты ожидают reviewed CI manifest
-и точные SHA будущего выпуска, проверяют 14 таблиц, 20 FK и 14 guards, сохранение
-env/ключа, идентичность образов и готовность backend/frontend.
+Runtime SHA `d01df4ffd169a5c203b067986585d8ce454b6272`, infrastructure SHA
+`54653b20548a6db5344566ace3395cbdb5760aa3` опубликованы в согласованные dev/prod
+ветки. [Production CI 36491221953](https://github.com/nda17/aeroCRM_monorepo/actions/runs/36491221953)
+успешно завершил все 32 jobs и сформировал единый manifest 13 backend-образов
+этого SHA. [Backend release 36491948004](https://github.com/nda17/aeroCRM_monorepo/actions/runs/36491948004)
+и [frontend release 36492912068](https://github.com/nda17/aeroCRM_monorepo/actions/runs/36492912068)
+успешны. Миграция включена, установка env выключена; существующие ключи и
+конфигурация не менялись. Release выполнен только GitHub CI/CD.
 
-Это граница подготовки, не production acceptance: новый выпуск ещё не подтверждён
-CI/CD postflight и живой проверкой владельца. Предыдущие production результаты
-выше относятся к своим SHA и сохранены. Новые реальные письма в ходе подготовки
-не отправлялись.
+Локально прошли 512 тестов Customers, PostgreSQL 18 интеграция и 2331 тест
+фронтенда (2315 CRM + 16 Turnstile; один прежний skip). Проверены nullable
+compose/upload, ACL до пагинации, наследование scope и отзыв доступа к потомкам,
+одноразовая привязка null-upload, отмена upload actor без отключения общего
+ящика, sanitization, HTML/plain MIME, неизменность raw command и старого detail,
+disabled navigation, Tiptap и сохранение черновика при потере доступности.
+Lint/typecheck/build всех фронтендов, Customers и rollback policy self-test
+успешны. При локальной сборке landing использовал предусмотренный fallback
+для недоступного в sandbox контента; production CI сборка успешна.
+
+[Dev CI 36491222098](https://github.com/nda17/aeroCRM_monorepo/actions/runs/36491222098)
+в первом запуске получил native Segmentation fault в неизменённом CRM Intake
+integration. Единственный повтор упавшего job на том же SHA успешен. Первичный
+сбой сохранён, причина остаётся отдельным ограничением CI в корневом backlog;
+production CI был полностью зелёным с первого запуска.
+
+Независимый read-only postflight подтвердил точный manifest и image IDs всех
+13 backend-образов/32 ролей, readiness 32/32, отсутствие рестартов/OOM, прежние
+env/ключ и отсутствие pending release. В БД ровно 6 завершённых миграций,
+14 mail-таблиц, 20 composite FK, 14 активных guards; проверены все 196 сочетаний
+runtime/backup table privileges и отсутствие PUBLIC grants. Nullable contact/scope/html,
+лимит суммарного тела и RESTRICT FK соответствуют миграции. Function OID 28374,
+owner/ACL и тело guard сохранены согласно reviewed inventory.
+
+- migration SQL SHA-256: `464b7b587b3cbb14fa44f6d6f46539941fd1a48723e902b177ffc7647b6a013c`;
+- function body SHA-256: `aa3b023d32a0f8c32ea95e381287821417e2bf523e317dc40331554694641579`;
+- schema inventory SHA-256: `406243eaccd407a2ce31dbd278a7241385fe9d5a7be39605f77fc1e23016637c`.
+
+Frontend postflight подтвердил все 3 image IDs/labels/health/marker на runtime
+SHA, неизменный env и отсутствие рестартов/OOM. Маршрут `/mail` отвечает HTTP 200.
+Локальные доказательства: `.deploy/mail-workspace-{runtime,db,frontend}-postflight.json`.
+Диагностический DB-скрипт был исправлен для декодирования `name[]` как `text[]`;
+проверки имён FK сохранены, production-схема ради диагностики не менялась.
+
+Живую приёмку нового интерфейса выполняет владелец, как согласовано. Управление
+браузером в этой сессии недоступно, поэтому HTTP 200 и postflight не обозначены
+как визуальная или SMTP end-to-end приёмка. Новые реальные письма при этом
+выпуске не отправлялись. Прежняя приёмка общего ящика и отдельное ограничение
+живой PERSONAL-приёмки остаются в силе.
