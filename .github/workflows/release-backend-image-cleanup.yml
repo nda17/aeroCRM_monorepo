@@ -76,6 +76,8 @@ jobs:
           [[ "${BACK_PORT:-22}" =~ ^[0-9]{1,5}$ ]]
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
+          printf 'Host *\n  ServerAliveInterval 30\n  ServerAliveCountMax 6\n' > ~/.ssh/config
+          chmod 600 ~/.ssh/config
           printf '%s\n' "$BACK_KEY" > ~/.ssh/cleanup_key
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/cleanup_key ~/.ssh/known_hosts

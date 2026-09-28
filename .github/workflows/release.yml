@@ -518,6 +518,8 @@ jobs:
           set -euo pipefail
           umask 077
           mkdir -p ~/.ssh
+          printf 'Host *\n  ServerAliveInterval 30\n  ServerAliveCountMax 6\n' > ~/.ssh/config
+          chmod 600 ~/.ssh/config
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           if [ "$ROLE" = frontend ]; then
             host="$FRONT_HOST"; user="$FRONT_USER"; hash="$FRONT_HASH"; port="$FRONT_PORT"
