@@ -220,6 +220,8 @@ source token не заменяет пользовательскую автори
 | ----- | --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | GET   | `/inbox`                    | `workspaceId`, `page` (1), `pageSize` (25, максимум 100), `search` (до 200), `status` (`NEW`, `ACCEPTED`, `REJECTED`) |
 | GET   | `/inbox/:id`                | Карточка по `workspaceId`                                                                                             |
+| GET   | `/inbox/:id/source`         | Имя источника доступной карточки по `workspaceId`; без credentials и списка чужих источников |
+| PUT   | `/notifications/entries/:entryId/read` | Персональная отметка уведомления после успешного открытия карточки |
 | POST  | `/inbox`                    | Создать ручное обращение                                                                                              |
 | POST  | `/inbox/:id/reject`         | Отклонить новое обращение                                                                                             |
 | GET   | `/inbox/:id/activities`     | История: `workspaceId`, `page`, `pageSize`                                                                            |
@@ -227,6 +229,24 @@ source token не заменяет пользовательскую автори
 | POST  | `/sources`                  | Создать именованный API-источник                                                                                      |
 | POST  | `/sources/:id/rotate-token` | Сменить секрет активного источника                                                                                    |
 | POST  | `/sources/:id/revoke`       | Отозвать источник                                                                                                     |
+
+`GET /inbox/:id/source` проверяет `intake:read`, workspace и текущий OWN/TEAM/ALL
+scope обращения, затем повторно проверяет авторизацию перед ответом. Ответ:
+`{schemaVersion:1,workspaceId,entryId,source:null|{id,name,kind:"API"}}`.
+Обычному читателю не требуются права управления источниками; секреты,
+tokenVersion и метаданные других источников не возвращаются. Для ручного
+обращения и CSV `source=null`. Существующий контракт карточки не меняется.
+
+`PUT /notifications/entries/:entryId/read` принимает строго
+`{schemaVersion:1,workspaceId}` и проверяет тот же scope и `intake:read`, включая
+режим READ_ONLY. Ответ:
+`{schemaVersion:1,workspaceId,entryId,notificationId,readAt}`. Если доступное
+обращение не имеет уведомления, два последних поля равны `null`; отсутствующее
+или недоступное обращение возвращает 404. Транзакция отмечает только текущего
+получателя; чтение коллеги не меняется. Это повторяемая персональная отметка,
+а не бизнес-команда: `commandId` и `Idempotency-Key` не нужны. GET остаются
+без мутаций. Клиент отправляет PUT только после успешного чтения карточки;
+при неудаче показывает отдельный ручной повтор и сохраняет доступ к форме.
 
 Команды содержат `schemaVersion:1`, `workspaceId`, UUIDv4 `commandId` и
 совпадающий `Idempotency-Key`. Повтор неизвестного результата использует

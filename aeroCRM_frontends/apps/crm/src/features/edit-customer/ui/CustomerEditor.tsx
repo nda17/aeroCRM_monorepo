@@ -200,12 +200,18 @@ const CustomerForm = ({
 	const [archiveConfirm, setArchiveConfirm] = useState(false)
 	const [companySearch, setCompanySearch] = useState('')
 	const [companyTerm, setCompanyTerm] = useState('')
+	const [companySearchSubmitted, setCompanySearchSubmitted] =
+		useState(false)
 	const [companyPage, setCompanyPage] = useState(1)
 	const [creatingCompany, setCreatingCompany] = useState(false)
 	const [createdCompany, setCreatedCompany] = useState<Extract<
 		Customer,
 		{ kind: 'companies' }
 	> | null>(null)
+	const [selectedCompany, setSelectedCompany] = useState<{
+		id: string
+		name: string
+	} | null>(null)
 	const form = useForm<Draft>({
 		defaultValues: {
 			name: record?.name ?? initialName ?? '',
@@ -441,6 +447,22 @@ const CustomerForm = ({
 		control: form.control,
 		name: 'companyId'
 	})
+	const companyField = form.register('companyId')
+	const selectedCompanyName = selectedCompanyId
+		? createdCompany?.id === selectedCompanyId
+			? createdCompany.name
+			: selectedCompany?.id === selectedCompanyId
+				? selectedCompany.name
+				: linkedCompany.data?.id === selectedCompanyId
+					? linkedCompany.data.name
+					: (companies.data?.items.find(
+							item => item.id === selectedCompanyId
+						)?.name ?? 'Выбранная компания')
+		: null
+	const selectCompany = (company: { id: string; name: string }) => {
+		form.setValue('companyId', company.id, { shouldDirty: true })
+		setSelectedCompany(company)
+	}
 	const conflict =
 		serverChanged ||
 		(!memory.uncertain &&
@@ -662,6 +684,7 @@ const CustomerForm = ({
 									disabled={!editable}
 									onClick={() => {
 										setCompanyTerm(companySearch.trim())
+										setCompanySearchSubmitted(true)
 										setCompanyPage(1)
 									}}
 								>
@@ -669,11 +692,65 @@ const CustomerForm = ({
 								</Button>
 							</div>
 						) : null}
+						{companySearchSubmitted ? (
+							<p className={styles.hint}>
+								Выберите компанию из результатов ниже. Привязка изменится
+								после сохранения контакта.
+							</p>
+						) : null}
+						{companySearchSubmitted && !companies.isError ? (
+							companies.isFetching ? (
+								<p className={styles.hint} role="status">
+									Загрузка компаний…
+								</p>
+							) : companies.data?.items.length ? (
+								<ul
+									className={styles.companyResults}
+									aria-label="Результаты поиска компаний"
+								>
+									{companies.data.items.map(item => (
+										<li key={item.id}>
+											<button
+												type="button"
+												className={styles.companyResult}
+												aria-pressed={selectedCompanyId === item.id}
+												disabled={!editable}
+												onClick={() => selectCompany(item)}
+											>
+												<span>{item.name}</span>
+												{item.kind === 'companies' && item.inn ? (
+													<span>ИНН {item.inn}</span>
+												) : null}
+												{selectedCompanyId === item.id ? (
+													<span>Выбрана</span>
+												) : null}
+											</button>
+										</li>
+									))}
+								</ul>
+							) : (
+								<p className={styles.hint}>Компании не найдены.</p>
+							)
+						) : null}
+						{selectedCompanyName ? (
+							<p className={styles.hint}>
+								Сейчас выбрана: {selectedCompanyName}
+							</p>
+						) : null}
 						<SelectField
 							label="Компания"
 							disabled={!editable}
 							value={selectedCompanyId}
-							{...form.register('companyId')}
+							{...companyField}
+							onChange={event => {
+								void companyField.onChange(event)
+								const item = companies.data?.items.find(
+									company => company.id === event.currentTarget.value
+								)
+								setSelectedCompany(
+									item ? { id: item.id, name: item.name } : null
+								)
+							}}
 						>
 							<option value="">Без компании</option>
 							{selectedCompanyId &&
@@ -681,11 +758,7 @@ const CustomerForm = ({
 								item => item.id === selectedCompanyId
 							) ? (
 								<option value={selectedCompanyId}>
-									{createdCompany?.id === selectedCompanyId
-										? createdCompany.name
-										: linkedCompany.data?.id === selectedCompanyId
-											? linkedCompany.data.name
-											: 'Выбранная компания'}
+									{selectedCompanyName}
 								</option>
 							) : null}
 							{!companies.isError
@@ -993,6 +1066,7 @@ const CustomerForm = ({
 					onSaved={company => {
 						if (company.kind !== 'companies') return
 						setCreatedCompany(company)
+						setSelectedCompany({ id: company.id, name: company.name })
 						form.setValue('companyId', company.id, { shouldDirty: true })
 						void queryClient.invalidateQueries({
 							queryKey: ['crm-company-picker', workspaceId]

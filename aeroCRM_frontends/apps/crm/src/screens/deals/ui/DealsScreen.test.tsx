@@ -312,9 +312,7 @@ describe('deal list without-next-action filter', () => {
 				true,
 				{}
 			)
-			expect(toast).toHaveBeenLastCalledWith(
-				'Переход на первую страницу сделок'
-			)
+			expect(toast).not.toHaveBeenCalled()
 			expect(checkbox().checked).toBe(true)
 		}
 	)
@@ -361,9 +359,7 @@ describe('deal list without-next-action filter', () => {
 			{}
 		)
 		expect(checkbox().checked).toBe(true)
-		expect(toast).toHaveBeenLastCalledWith(
-			'Фильтр «Без следующего действия» включён'
-		)
+		expect(toast).not.toHaveBeenCalled()
 		fireEvent.click(checkbox())
 		await screen.findByText('Всего 21 · страница 1')
 		expect(listSalesDeals).toHaveBeenLastCalledWith(
@@ -377,9 +373,7 @@ describe('deal list without-next-action filter', () => {
 			false,
 			{}
 		)
-		expect(toast).toHaveBeenLastCalledWith(
-			'Фильтр «Без следующего действия» выключен'
-		)
+		expect(toast).not.toHaveBeenCalled()
 	})
 	it('keeps pipeline, search and WON status when enabling the filter and shows an honest empty result', async () => {
 		render(view())
@@ -461,6 +455,48 @@ describe('deal list without-next-action filter', () => {
 				}) as HTMLButtonElement
 			).disabled
 		).toBe(true)
+	})
+	it('shows pipeline management only with the explicit permission and write access', async () => {
+		const basePermissions = context.permissions.data
+		const mounted = render(view())
+		await ready()
+		expect(
+			screen.queryByRole('button', { name: 'Управление воронками' })
+		).toBeNull()
+		const authorized = {
+			...context,
+			permissions: {
+				...context.permissions,
+				data: {
+					...basePermissions,
+					permissions: [
+						...basePermissions.permissions,
+						'sales:manage-pipelines'
+					]
+				}
+			}
+		}
+		vi.mocked(useSalesSession).mockReturnValue(authorized as never)
+		vi.mocked(useCommerceSalesSession).mockReturnValue(authorized as never)
+		mounted.rerender(view())
+		expect(
+			screen.getByRole('button', { name: 'Управление воронками' })
+		).toBeTruthy()
+		const readOnly = {
+			...authorized,
+			canWrite: false,
+			workspace: { ...authorized.workspace, canWrite: false },
+			permissions: {
+				...authorized.permissions,
+				data: { ...authorized.permissions.data, state: 'READ_ONLY' }
+			}
+		}
+		vi.mocked(useSalesSession).mockReturnValue(readOnly as never)
+		vi.mocked(useCommerceSalesSession).mockReturnValue(readOnly as never)
+		mounted.rerender(view())
+		expect(
+			screen.queryByRole('button', { name: 'Управление воронками' })
+		).toBeNull()
 	})
 	it('does not load or expose filter controls without confirmed read access', () => {
 		vi.mocked(useSalesSession).mockReturnValue({

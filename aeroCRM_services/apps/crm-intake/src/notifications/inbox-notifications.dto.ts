@@ -14,3 +14,7 @@ export class InboxNotificationReadDto {
 	@IsUUID('4') workspaceId!: string;
 	@IsBoolean() read!: boolean;
 }
+export class InboxNotificationEntryReadDto {
+	@Equals(1) schemaVersion!: 1;
+	@IsUUID('4') workspaceId!: string;
+}

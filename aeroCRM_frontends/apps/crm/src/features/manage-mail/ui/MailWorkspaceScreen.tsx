@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { listMailboxMessages } from '@/entities/mail/api/mail.api'
 import type {
@@ -222,8 +223,18 @@ const MailWorkspace = ({
 						</p>
 					) : mailbox?.syncStatus === 'NOT_CONFIGURED' ? (
 						<p role="status">
-							Для получения новых писем выберите папки в «Настройки →
-							Почта».
+							Ящик подключён. Импорт писем ещё не начался: выберите папки в
+							«Настройки → Почта → Папки и импорт».{' '}
+							<Link href="/settings#mail">Открыть настройки почты</Link>
+						</p>
+					) : null}
+					{mailbox?.state === 'ACTIVE' &&
+					['IDLE', 'SYNCING', 'BACKFILL', 'CURRENT'].includes(
+						mailbox.syncStatus
+					) ? (
+						<p className={styles.muted}>
+							Почта проверяется сервером примерно каждые 30 секунд; список
+							писем обновляется автоматически.
 						</p>
 					) : null}
 					<div className={styles.actions} aria-label="Папки почты">

@@ -313,7 +313,9 @@ export function CombinedNotificationCenter({
 			)
 				return
 			await Promise.all([mail.refetch(), mailHead.refetch()])
-		} else await query.refetch()
+		} else if (tab === 'intake')
+			await Promise.all([intake.refetch(), intakeHead.refetch()])
+		else await Promise.all([support.refetch(), supportHead.refetch()])
 	}
 	const mark = async (
 		source: NotificationSource,
@@ -439,13 +441,26 @@ export function CombinedNotificationCenter({
 											tasks: 'Задачи'
 										}[source]
 									}
+									<span aria-hidden="true">
+										{' '}
+										·{' '}
+										{source === 'intake'
+											? (counts[1] ?? '…')
+											: source === 'mail'
+												? (counts[3] ?? '…')
+												: source === 'support'
+													? (counts[2] ?? '…')
+													: (counts[0] ?? '…')}
+									</span>
 								</Button>
 							)
 						)}
 					</div>
-					{partial ? (
-						<p role="status">Часть счётчиков пока недоступна.</p>
-					) : null}
+					<p role={partial ? 'status' : undefined}>
+						{partial
+							? `Известно непрочитанных: ${count}. Часть счётчиков пока недоступна.`
+							: `Всего непрочитанных во всех разделах: ${count}`}
+					</p>
 					{tab === 'tasks' ? (
 						taskContent
 					) : (
@@ -459,7 +474,6 @@ export function CombinedNotificationCenter({
 										onChange={event => {
 											setUnread(event.target.checked)
 											setPage(1)
-											toast('Фильтр уведомлений изменён')
 										}}
 									/>
 									Только непрочитанные
@@ -542,13 +556,6 @@ export function CombinedNotificationCenter({
 																return
 															}
 															setOpen(false)
-															toast(
-																tab === 'intake'
-																	? 'Открываем заявку'
-																	: tab === 'mail'
-																		? 'Открываем письмо'
-																		: 'Открываем поддержку'
-															)
 														}}
 													>
 														{item.title}
@@ -584,7 +591,6 @@ export function CombinedNotificationCenter({
 											disabled={busy || page <= 1}
 											onClick={() => {
 												setPage(n => n - 1)
-												toast('Предыдущая страница')
 											}}
 										>
 											Назад
@@ -598,7 +604,6 @@ export function CombinedNotificationCenter({
 											disabled={busy || page * 10 >= query.data.total}
 											onClick={() => {
 												setPage(n => n + 1)
-												toast('Следующая страница')
 											}}
 										>
 											Далее

@@ -124,11 +124,10 @@ const DealsWorkspaceScreen = ({
 		}
 	}, [filters, savedViews, storageKey])
 
-	const applyView = (next: DealView, name: string) => {
+	const applyView = (next: DealView) => {
 		setFilters(next)
 		setSearchInput(next.search)
 		setPage(1)
-		toast(`Представление «${name}» открыто`)
 	}
 	const pipelines = useQuery({
 		queryKey: ['sales', 'pipelines', ...context.key],
@@ -199,7 +198,6 @@ const DealsWorkspaceScreen = ({
 	const submitSearch = (event: FormEvent) => {
 		event.preventDefault()
 		updateFilters({ search: searchInput.trim() })
-		toast('Поиск применён')
 	}
 	const columns: DataTableColumn<SalesDeal>[] = [
 		{
@@ -285,20 +283,20 @@ const DealsWorkspaceScreen = ({
 				}
 				actions={
 					<>
+						{context.canWrite &&
+							context.permissions.data?.permissions.includes(
+								'sales:manage-pipelines'
+							) && (
+								<Button
+									variant="secondary"
+									onClick={() => setPipelinesOpen(true)}
+								>
+									Управление воронками
+								</Button>
+							)}
 						<ActionMenu>
 							<ExportRecordsControl entity="deals" />
 							<CommerceExportControl />
-							{context.canWrite &&
-								context.permissions.data?.permissions.includes(
-									'sales:manage-pipelines'
-								) && (
-									<Button
-										variant="secondary"
-										onClick={() => setPipelinesOpen(true)}
-									>
-										Управление воронками
-									</Button>
-								)}
 							<Button
 								variant="secondary"
 								tooltip="Загрузить актуальные сделки, этапы воронок и права доступа"
@@ -359,7 +357,7 @@ const DealsWorkspaceScreen = ({
 							<Button
 								size="sm"
 								variant="secondary"
-								onClick={() => applyView(defaultDealView, 'Все сделки')}
+								onClick={() => applyView(defaultDealView)}
 							>
 								Все сделки
 							</Button>
@@ -370,16 +368,13 @@ const DealsWorkspaceScreen = ({
 									filters.assignedToSubject === context.session?.userId
 								}
 								onClick={() =>
-									applyView(
-										{
-											...defaultDealView,
-											layout,
-											pipelineId: layout === 'board' ? pipelineId : '',
-											assignedToSubject: context.session?.userId,
-											status: 'OPEN'
-										},
-										'Мои сделки'
-									)
+									applyView({
+										...defaultDealView,
+										layout,
+										pipelineId: layout === 'board' ? pipelineId : '',
+										assignedToSubject: context.session?.userId,
+										status: 'OPEN'
+									})
 								}
 							>
 								Мои сделки
@@ -389,17 +384,14 @@ const DealsWorkspaceScreen = ({
 								variant="secondary"
 								aria-pressed={!!filters.overdue}
 								onClick={() =>
-									applyView(
-										{
-											...defaultDealView,
-											layout,
-											pipelineId: layout === 'board' ? pipelineId : '',
-											overdue: true,
-											status: 'OPEN',
-											sort: 'next_action_asc'
-										},
-										'Просроченные'
-									)
+									applyView({
+										...defaultDealView,
+										layout,
+										pipelineId: layout === 'board' ? pipelineId : '',
+										overdue: true,
+										status: 'OPEN',
+										sort: 'next_action_asc'
+									})
 								}
 							>
 								Просроченные
@@ -409,16 +401,13 @@ const DealsWorkspaceScreen = ({
 								variant="secondary"
 								aria-pressed={withoutNextAction}
 								onClick={() =>
-									applyView(
-										{
-											...defaultDealView,
-											layout,
-											pipelineId: layout === 'board' ? pipelineId : '',
-											withoutNextAction: true,
-											status: 'OPEN'
-										},
-										'Без следующего действия'
-									)
+									applyView({
+										...defaultDealView,
+										layout,
+										pipelineId: layout === 'board' ? pipelineId : '',
+										withoutNextAction: true,
+										status: 'OPEN'
+									})
 								}
 							>
 								Без следующего действия
@@ -431,7 +420,6 @@ const DealsWorkspaceScreen = ({
 								aria-pressed={layout === 'list'}
 								onClick={() => {
 									updateFilters({ layout: 'list' })
-									toast('Сделки: список')
 								}}
 							>
 								Список
@@ -446,7 +434,6 @@ const DealsWorkspaceScreen = ({
 										layout: 'board',
 										pipelineId: pipelineId || pipelines.data?.[0]?.id || ''
 									})
-									toast('Сделки: воронка')
 								}}
 							>
 								Воронка
@@ -539,8 +526,7 @@ const DealsWorkspaceScreen = ({
 											const savedView = savedViews.find(
 												view => view.id === event.target.value
 											)
-											if (savedView)
-												applyView(savedView.filters, savedView.name)
+											if (savedView) applyView(savedView.filters)
 										}}
 									>
 										<option value="">Выберите представление</option>
@@ -567,11 +553,6 @@ const DealsWorkspaceScreen = ({
 											if (!context.canRead) return
 											const enabled = event.target.checked
 											updateFilters({ withoutNextAction: enabled })
-											toast(
-												enabled
-													? 'Фильтр «Без следующего действия» включён'
-													: 'Фильтр «Без следующего действия» выключен'
-											)
 										}}
 									/>
 									<span>Без следующего действия</span>
@@ -675,14 +656,11 @@ const DealsWorkspaceScreen = ({
 								size="sm"
 								variant="ghost"
 								onClick={() =>
-									applyView(
-										{
-											...defaultDealView,
-											layout,
-											pipelineId: layout === 'board' ? pipelineId : ''
-										},
-										'Все сделки'
-									)
+									applyView({
+										...defaultDealView,
+										layout,
+										pipelineId: layout === 'board' ? pipelineId : ''
+									})
 								}
 							>
 								Сбросить фильтры
@@ -729,7 +707,6 @@ const DealsWorkspaceScreen = ({
 										if (!context.canRead || deals.isFetching) return
 										if (page === 1) void deals.refetch()
 										else setPage(1)
-										toast('Переход на первую страницу сделок')
 									}}
 								>
 									На первую страницу

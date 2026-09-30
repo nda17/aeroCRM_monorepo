@@ -2,7 +2,9 @@ import {
 	BadRequestException,
 	Body,
 	Controller,
+	ForbiddenException,
 	Get,
+	Header,
 	Headers,
 	HttpCode,
 	Param,
@@ -51,6 +53,26 @@ export class IntakeController {
 			query.workspaceId,
 			id
 		);
+	}
+	@Get('inbox/:id/source')
+	@Header('Cache-Control', 'no-store')
+	async entrySource(
+		@Headers('authorization') bearer: string | undefined,
+		@Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+		@Query() query: IntakeWorkspaceQuery
+	) {
+		const access = await this.authorization.authorize(
+			bearer,
+			query.workspaceId
+		);
+		const result = await this.intake.entrySource(access, query.workspaceId, id);
+		if (
+			JSON.stringify(
+				await this.authorization.authorize(bearer, query.workspaceId)
+			) !== JSON.stringify(access)
+		)
+			throw new ForbiddenException();
+		return result;
 	}
 	@Get('inbox/:id/activities')
 	async activities(

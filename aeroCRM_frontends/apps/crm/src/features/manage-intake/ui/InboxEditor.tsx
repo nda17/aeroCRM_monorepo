@@ -13,10 +13,14 @@ import {
 } from '@/shared/lib/phone'
 import {
 	getInboxEntry,
+	getInboxEntrySource,
 	listIntakeActivities,
 	mutateInbox,
+	readInboxNotificationForEntry,
 	type IntakeActivity
 } from '@/entities/intake'
+import { useSessionStore } from '@/entities/session'
+import { invalidContractError } from '@/shared/api/authenticated-http-client'
 import {
 	Button,
 	Drawer,
@@ -24,8 +28,8 @@ import {
 	TextField,
 	TextareaField
 } from '@/shared/ui'
-import { useQuery } from '@tanstack/react-query'
-import { useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import type { IntakeAccess } from '../model/use-intake-access'
@@ -67,6 +71,11 @@ const activityName: Record<IntakeActivity['action'], string> = {
 export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 	const [historyPage, setHistoryPage] = useState(1)
 	const [rejecting, setRejecting] = useState(false)
+	const [failedNotificationKey, setFailedNotificationKey] = useState<
+		string | null
+	>(null)
+	const [notificationReadAttempt, setNotificationReadAttempt] = useState(0)
+	const client = useQueryClient()
 	const form = useForm<Draft>({
 		defaultValues: {
 			title: '',
@@ -111,6 +120,103 @@ export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 		gcTime: 0,
 		refetchOnWindowFocus: false
 	})
+	const source = useQuery({
+		queryKey: [
+			'crm-intake-entry-source',
+			access.workspaceId,
+			access.session?.userId,
+			access.revision,
+			access.scopeKey,
+			id
+		],
+		enabled:
+			!!id &&
+			access.canRead &&
+			record.isSuccess &&
+			record.data?.id === id &&
+			record.data.origin === 'API',
+		queryFn: async () => {
+			const session = access.session
+			const current = () => {
+				const state = useSessionStore.getState()
+				return (
+					!!session &&
+					state.sessionRevision === access.revision &&
+					state.session?.userId === session.userId &&
+					state.session?.accessToken === session.accessToken
+				)
+			}
+			if (!current() || !id) throw invalidContractError()
+			const result = await getInboxEntrySource(
+				session!.accessToken,
+				access.workspaceId,
+				id
+			)
+			if (!current()) throw invalidContractError()
+			return result
+		},
+		retry: false,
+		gcTime: 0,
+		refetchOnWindowFocus: false
+	})
+	const sessionToken = access.session?.accessToken
+	const sessionUserId = access.session?.userId
+	const loadedEntryId = record.data?.id
+	const loadedWorkspaceId = record.data?.workspaceId
+	const notificationKey = `${access.workspaceId}:${sessionUserId}:${access.revision}:${access.scopeKey}:${id}:${notificationReadAttempt}`
+	useEffect(() => {
+		if (
+			!id ||
+			!access.canRead ||
+			!record.isSuccess ||
+			loadedEntryId !== id ||
+			loadedWorkspaceId !== access.workspaceId ||
+			!sessionToken ||
+			!sessionUserId
+		)
+			return
+		let active = true
+		const current = () => {
+			const state = useSessionStore.getState()
+			return (
+				active &&
+				state.sessionRevision === access.revision &&
+				state.session?.userId === sessionUserId &&
+				state.session?.accessToken === sessionToken
+			)
+		}
+		if (!current()) return
+		void readInboxNotificationForEntry(
+			sessionToken,
+			access.workspaceId,
+			id
+		)
+			.then(() => {
+				if (current())
+					void client.invalidateQueries({
+						queryKey: ['crm-intake-notifications']
+					})
+			})
+			.catch(() => {
+				if (current()) setFailedNotificationKey(notificationKey)
+			})
+		return () => {
+			active = false
+		}
+	}, [
+		access.canRead,
+		access.revision,
+		access.scopeKey,
+		access.workspaceId,
+		client,
+		id,
+		loadedEntryId,
+		loadedWorkspaceId,
+		notificationKey,
+		record.isSuccess,
+		sessionToken,
+		sessionUserId
+	])
 	const history = useQuery({
 		queryKey: [
 			'crm-intake-history',
@@ -280,7 +386,12 @@ export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 												? 'Добавлено вручную'
 												: entry.origin === 'CSV'
 													? 'Импорт CSV'
-													: `API · ${entry.sourceId}`
+													: source.isSuccess && source.data
+														? `API · ${source.data.name}`
+														: source.isError ||
+															  (source.isSuccess && !source.data)
+															? 'API · имя источника недоступно'
+															: 'API · загружаем источник…'
 										],
 										[
 											'Получено',
@@ -297,6 +408,19 @@ export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 										</div>
 									))}
 								</dl>
+								{failedNotificationKey === notificationKey ? (
+									<div role="alert">
+										Не удалось отметить уведомление прочитанным.{' '}
+										<Button
+											variant="secondary"
+											onClick={() =>
+												setNotificationReadAttempt(n => n + 1)
+											}
+										>
+											Повторить отметку
+										</Button>
+									</div>
+								) : null}
 
 								<InboxAcceptancePanel
 									key={access.scopeKey}

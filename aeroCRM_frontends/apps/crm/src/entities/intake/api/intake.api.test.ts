@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { authenticatedRequest } from '@/shared/api/authenticated-http-client'
-import { listInbox, mutateInbox, mutateIntakeSource } from './intake.api'
+import {
+	listInbox,
+	getInboxEntrySource,
+	mutateInbox,
+	mutateIntakeSource,
+	readInboxNotificationForEntry
+} from './intake.api'
 
 vi.mock('@/shared/api/authenticated-http-client', () => ({
 	authenticatedRequest: vi.fn(),
@@ -47,6 +53,115 @@ const source = {
 }
 beforeEach(() => vi.clearAllMocks())
 describe('Intake API requests', () => {
+	it('reads only the exact source metadata contract for an inbox entry', async () => {
+		const sourceId = '44444444-4444-4444-8444-444444444444'
+		vi.mocked(authenticatedRequest).mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId,
+			entryId: id,
+			source: { id: sourceId, name: 'Форма сайта', kind: 'API' }
+		})
+		await expect(
+			getInboxEntrySource('session', workspaceId, id)
+		).resolves.toEqual({ id: sourceId, name: 'Форма сайта', kind: 'API' })
+		expect(authenticatedRequest).toHaveBeenCalledWith({
+			accessToken: 'session',
+			method: 'GET',
+			url: `/crm/intake/inbox/${id}/source`,
+			params: { workspaceId }
+		})
+	})
+	it.each([
+		{ extra: true },
+		{ workspaceId: '22222222-2222-4222-8222-222222222222' },
+		{ entryId: '33333333-3333-4333-8333-333333333333' },
+		{
+			source: {
+				id: '44444444-4444-4444-8444-444444444444',
+				name: 'Форма',
+				kind: 'API',
+				token: 'secret'
+			}
+		},
+		{
+			source: {
+				id: '44444444-4444-4444-8444-444444444444',
+				name: ' ',
+				kind: 'API'
+			}
+		},
+		{
+			source: {
+				id: '44444444-4444-4444-8444-444444444444',
+				name: 'Форма',
+				kind: 'CSV'
+			}
+		}
+	])('rejects malformed source response fields %j', async override => {
+		vi.mocked(authenticatedRequest).mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId,
+			entryId: id,
+			source: {
+				id: '44444444-4444-4444-8444-444444444444',
+				name: 'Форма',
+				kind: 'API'
+			},
+			...override
+		})
+		await expect(
+			getInboxEntrySource('session', workspaceId, id)
+		).rejects.toThrow('invalid contract')
+	})
+	it('sends entry-read command and accepts only the exact versioned response', async () => {
+		const notificationId = '44444444-4444-4444-8444-444444444444'
+		vi.mocked(authenticatedRequest).mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId,
+			entryId: id,
+			notificationId,
+			readAt: date
+		})
+		await readInboxNotificationForEntry('session', workspaceId, id)
+		expect(authenticatedRequest).toHaveBeenCalledWith({
+			accessToken: 'session',
+			method: 'PUT',
+			url: `/crm/intake/notifications/entries/${id}/read`,
+			data: { schemaVersion: 1, workspaceId }
+		})
+		vi.mocked(authenticatedRequest).mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId,
+			entryId: id,
+			notificationId: null,
+			readAt: null
+		})
+		await expect(
+			readInboxNotificationForEntry('session', workspaceId, id)
+		).resolves.toMatchObject({ notificationId: null, readAt: null })
+	})
+	it.each([
+		{ extra: true },
+		{ schemaVersion: 2 },
+		{ workspaceId: '22222222-2222-4222-8222-222222222222' },
+		{ entryId: '33333333-3333-4333-8333-333333333333' },
+		{ notificationId: null, readAt: date },
+		{ notificationId: 'bad-id' },
+		{ readAt: 'bad-date' },
+		{ readAt: '2026-09-05T00:00:00Z' }
+	])('rejects invalid entry-read response fields %j', async override => {
+		vi.mocked(authenticatedRequest).mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId,
+			entryId: id,
+			notificationId: '44444444-4444-4444-8444-444444444444',
+			readAt: date,
+			...override
+		})
+		await expect(
+			readInboxNotificationForEntry('session', workspaceId, id)
+		).rejects.toThrow('invalid contract')
+	})
 	it('uses server-side search, status and page scoped to the workspace', async () => {
 		vi.mocked(authenticatedRequest).mockResolvedValue({
 			schemaVersion: 1,

@@ -3,6 +3,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
+	crmPermissionScope,
+	useCrmPermissions
+} from '@/entities/crm-access'
+import { listCustomers, type Customer } from '@/entities/customer'
+import {
 	getMailAttachment,
 	getMailSend,
 	mailCommand,
@@ -73,6 +78,7 @@ export const MailComposer = ({
 }) => {
 	const context = useMailContext()
 	const [chosenContactId, setChosenContactId] = useState(contactId)
+	const [chooseContact, setChooseContact] = useState(false)
 	const [mailboxId, setMailboxId] = useState(
 		reply?.mailboxId ?? mailboxes[0]?.id ?? ''
 	)
@@ -108,6 +114,7 @@ export const MailComposer = ({
 				!!bcc ||
 				!!attachments.length ||
 				to !== initial.to ||
+				chosenContactId !== contactId ||
 				subject !== initial.subject ||
 				mailboxId !== initial.mailboxId),
 		label: contactId ? 'Письмо клиенту' : 'Письмо'
@@ -271,6 +278,34 @@ export const MailComposer = ({
 									))}
 								</SelectField>
 							) : null}
+							{!reply && !contactId ? (
+								<>
+									<Button
+										type="button"
+										variant="secondary"
+										disabled={attachmentPending}
+										onClick={() => setChooseContact(value => !value)}
+									>
+										Выбрать получателя из контактов
+									</Button>
+									{chooseContact ? (
+										<ContactRecipientPicker
+											disabled={command.locked || attachmentPending}
+											onSelect={(id, address) => {
+												const change = () => {
+													setChosenContactId(id)
+													setTo(address)
+													setAttachments([])
+													setValidation(null)
+													setChooseContact(false)
+												}
+												if (attachments.length) form.confirmDiscard(change)
+												else change()
+											}}
+										/>
+									) : null}
+								</>
+							) : null}
 							<SelectField
 								label="Отправитель"
 								value={mailboxId}
@@ -296,9 +331,28 @@ export const MailComposer = ({
 								required
 								maxLength={4000}
 								value={to}
-								onChange={event => setTo(event.target.value)}
+								onChange={event => {
+									const next = event.target.value
+									if (!chosenContactId || contactId || reply) {
+										setTo(next)
+										return
+									}
+									const change = () => {
+										setTo(next)
+										setChosenContactId(null)
+										setAttachments([])
+									}
+									if (attachments.length) form.confirmDiscard(change)
+									else change()
+								}}
 								hint="Несколько адресов можно разделить запятой."
 							/>
+							{!reply && !contactId && chosenContactId ? (
+								<p className={styles.muted}>
+									Получатель выбран из контактов. Если изменить адрес
+									вручную, привязка к контакту будет снята.
+								</p>
+							) : null}
 							<div className={styles.grid}>
 								<TextField
 									label="Копия"
@@ -399,6 +453,143 @@ export const MailComposer = ({
 				</form>
 			)}
 		</Drawer>
+	)
+}
+
+const ContactRecipientPicker = ({
+	disabled,
+	onSelect
+}: {
+	disabled: boolean
+	onSelect: (id: string, email: string) => void
+}) => {
+	const context = useMailContext()
+	const permissions = useCrmPermissions(
+		context.workspace.workspaceId,
+		context.session,
+		context.sessionRevision
+	)
+	const [searchDraft, setSearchDraft] = useState('')
+	const [search, setSearch] = useState('')
+	const [page, setPage] = useState(1)
+	const canRead =
+		permissions.isSuccess &&
+		!permissions.isFetching &&
+		permissions.data.workspaceId === context.workspace.workspaceId &&
+		permissions.data.subject === context.session?.userId &&
+		permissions.data.permissions.includes('customers:read')
+	const contacts = useQuery({
+		queryKey: [
+			'mail-recipient-contacts',
+			...context.key,
+			crmPermissionScope(permissions.data),
+			search,
+			page
+		],
+		enabled: canRead && search.length >= 2,
+		queryFn: () =>
+			listCustomers(
+				context.session!.accessToken,
+				'contacts',
+				context.workspace.workspaceId,
+				page,
+				25,
+				search
+			),
+		retry: false,
+		gcTime: 0
+	})
+	return (
+		<div className={styles.panel}>
+			{permissions.isPending || permissions.isFetching ? (
+				<p role="status">Проверяем доступ к контактам…</p>
+			) : !canRead ? (
+				<p role="status">
+					Список контактов недоступен. Адрес можно ввести вручную.
+				</p>
+			) : (
+				<>
+					<div className={styles.actions}>
+						<TextField
+							label="Найти контакт по имени или email"
+							value={searchDraft}
+							maxLength={200}
+							disabled={disabled}
+							onChange={event => setSearchDraft(event.target.value)}
+						/>
+						<Button
+							type="button"
+							variant="secondary"
+							disabled={disabled || searchDraft.trim().length < 2}
+							onClick={() => {
+								setSearch(searchDraft.trim())
+								setPage(1)
+							}}
+						>
+							Найти
+						</Button>
+					</div>
+					{searchDraft.trim() !== search ? null : contacts.isFetching ? (
+						<p role="status">Ищем контакты…</p>
+					) : contacts.isError ? (
+						<p role="alert">Не удалось загрузить контакты.</p>
+					) : contacts.data ? (
+						<>
+							{!contacts.data.items.some(
+								item => item.kind === 'contacts' && item.email
+							) ? (
+								<p role="status">
+									На этой странице нет контактов с email. Уточните поиск
+									или перейдите на следующую страницу.
+								</p>
+							) : null}
+							<ul className={styles.list}>
+								{contacts.data.items
+									.filter(
+										(
+											item
+										): item is Extract<Customer, { kind: 'contacts' }> =>
+											item.kind === 'contacts' && !!item.email
+									)
+									.map(item => (
+										<li key={item.id}>
+											<Button
+												type="button"
+												variant="ghost"
+												disabled={disabled}
+												onClick={() => onSelect(item.id, item.email!)}
+											>
+												{item.name} — {item.email}
+											</Button>
+										</li>
+									))}
+							</ul>
+							{contacts.data.total > 25 ? (
+								<div className={styles.actions}>
+									<Button
+										variant="secondary"
+										disabled={disabled || page === 1}
+										onClick={() => setPage(value => value - 1)}
+									>
+										Назад
+									</Button>
+									<span>
+										Страница {page} · найдено {contacts.data.total}
+									</span>
+									<Button
+										variant="secondary"
+										disabled={disabled || page * 25 >= contacts.data.total}
+										onClick={() => setPage(value => value + 1)}
+									>
+										Далее
+									</Button>
+								</div>
+							) : null}
+						</>
+					) : null}
+				</>
+			)}
+		</div>
 	)
 }
 

@@ -56,7 +56,7 @@ export const MailSettings = () => {
 		isMailAccessDenied(context.capabilities.error) ||
 		isMailAccessDenied(mailboxes.error)
 	return (
-		<section className={styles.panel} aria-label="Почта">
+		<section id="mail" className={styles.panel} aria-label="Почта">
 			<h2 className={styles.title}>Почта</h2>
 			<p className={styles.muted}>
 				Подключите рабочий ящик по IMAP/SMTP, чтобы видеть переписку в
@@ -132,7 +132,9 @@ export const MailSettings = () => {
 														: mailbox.syncStatus === 'SYNCING' ||
 															  mailbox.syncStatus === 'BACKFILL'
 															? 'Загружается история'
-															: 'Подключён'}
+															: mailbox.syncStatus === 'NOT_CONFIGURED'
+																? 'Выберите папки для импорта'
+																: 'Подключён'}
 											{mailbox.lastSyncAt ? (
 												<div className={styles.muted}>
 													Обновлён:{' '}
@@ -198,8 +200,9 @@ export const MailSettings = () => {
 				<ConnectMailbox
 					key={context.key.join(':')}
 					onClose={() => setConnecting(false)}
-					onConnected={() => {
+					onConnected={mailbox => {
 						setConnecting(false)
+						choose(mailbox, 'folders')
 						refresh()
 					}}
 				/>
@@ -209,8 +212,8 @@ export const MailSettings = () => {
 					key={`${context.key.join(':')}:${selected.mailbox.id}`}
 					mailbox={selected.mailbox}
 					onClose={() => setSelected(null)}
-					onConnected={() => {
-						setSelected(null)
+					onConnected={mailbox => {
+						setSelected({ mailbox, tab: 'folders' })
 						refresh()
 					}}
 				/>

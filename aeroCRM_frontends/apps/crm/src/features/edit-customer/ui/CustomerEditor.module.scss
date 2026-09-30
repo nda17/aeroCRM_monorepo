@@ -22,6 +22,18 @@
 .companySearch {
 	@apply grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto];
 }
+.companyResults {
+	@apply flex max-h-64 flex-col gap-1 overflow-y-auto rounded-xl border border-crm-border p-2;
+}
+.companyResult {
+	@apply flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-3 py-2 text-left text-sm text-crm-text hover:bg-crm-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-crm-action disabled:cursor-not-allowed disabled:opacity-50;
+	&[aria-pressed='true'] {
+		@apply bg-crm-surface-muted font-semibold;
+	}
+	span:not(:first-child) {
+		@apply text-xs text-crm-muted;
+	}
+}
 .pickerNavigation {
 	@apply flex flex-wrap items-center gap-2;
 }

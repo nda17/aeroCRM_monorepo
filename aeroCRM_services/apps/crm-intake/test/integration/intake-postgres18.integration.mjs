@@ -31,7 +31,7 @@ const service = new IntakeService(runtime);
 const { InboxNotificationsService } =
 	await import('../../dist/src/notifications/inbox-notifications.service.js');
 const notifications = new InboxNotificationsService(runtime);
-const workspaceIds = [randomUUID(), randomUUID(), randomUUID()];
+const workspaceIds = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
 const context = access(workspaceIds[0]);
 const token = randomBytes(32).toString('base64url');
 const peerIp = `fd00:${randomBytes(2).toString('hex')}:${randomBytes(2).toString('hex')}::1`;
@@ -190,6 +190,96 @@ try {
 			})
 		).total,
 		1
+	);
+	const ownRead = await notifications.setEntryRead(
+		{ ...context, dataScope: 'OWN', state: 'READ_ONLY' },
+		first.entry.id,
+		{ schemaVersion: 1, workspaceId: context.workspaceId }
+	);
+	assert.equal(ownRead.entryId, first.entry.id);
+	assert.equal(ownRead.notificationId, notificationId);
+	assert.match(ownRead.readAt, /^\d{4}-\d\d-\d\dT/);
+	assert.equal(
+		(
+			await notifications.list(
+				{ ...context, subject: 'colleague' },
+				notificationQuery
+			)
+		).unreadCount,
+		1,
+		'read receipt is isolated to the authenticated subject'
+	);
+	await notifications.setEntryRead(
+		{ ...context, subject: 'colleague', dataScope: 'ALL' },
+		first.entry.id,
+		{ schemaVersion: 1, workspaceId: context.workspaceId }
+	);
+	assert.equal(
+		(await notifications.list(context, notificationQuery)).unreadCount,
+		0,
+		"a colleague's receipt does not change the owner's unread count"
+	);
+	assert.equal(
+		(
+			await notifications.list(
+				{ ...context, subject: 'colleague' },
+				notificationQuery
+			)
+		).unreadCount,
+		0
+	);
+	const teamRead = await notifications.setEntryRead(
+		{ ...context, dataScope: 'TEAM', teamIds: [] },
+		first.entry.id,
+		{ schemaVersion: 1, workspaceId: context.workspaceId }
+	);
+	assert.equal(teamRead.notificationId, notificationId);
+	await assert.rejects(
+		notifications.setEntryRead(
+			{ ...context, subject: 'colleague', dataScope: 'OWN' },
+			first.entry.id,
+			{ schemaVersion: 1, workspaceId: context.workspaceId }
+		),
+		http(404)
+	);
+	await assert.rejects(
+		notifications.setEntryRead(
+			access(workspaceIds[1]),
+			first.entry.id,
+			{ schemaVersion: 1, workspaceId: workspaceIds[1] }
+		),
+		http(404)
+	);
+	const noNotificationWorkspaceId = workspaceIds[3];
+	const noNotificationContext = access(noNotificationWorkspaceId);
+	const entryWithoutNotification = await service.createManual(
+		noNotificationContext,
+		command(noNotificationWorkspaceId, {
+			title: 'Без уведомления',
+			name: 'Тест'
+		})
+	);
+	await migrator.inboxNotification.deleteMany({
+		where: { entryId: entryWithoutNotification.entry.id }
+	});
+	const missingNotificationRead = await notifications.setEntryRead(
+		noNotificationContext,
+		entryWithoutNotification.entry.id,
+		{ schemaVersion: 1, workspaceId: noNotificationWorkspaceId }
+	);
+	assert.deepEqual(missingNotificationRead, {
+		schemaVersion: 1,
+		workspaceId: noNotificationWorkspaceId,
+		entryId: entryWithoutNotification.entry.id,
+		notificationId: null,
+		readAt: null
+	});
+	assert.equal(
+		await runtime.inboxNotificationRead.count({
+			where: { workspaceId: noNotificationWorkspaceId }
+		}),
+		0,
+		'missing notification does not create a read receipt'
 	);
 	assert.equal(first.entry.status, 'NEW');
 	assert.equal(first.entry.origin, 'MANUAL');
@@ -520,6 +610,36 @@ try {
 	assert.equal(apiEntry.workspaceId, context.workspaceId);
 	assert.equal(apiEntry.sourceId, source.source.id);
 	assert.equal(apiEntry.email, 'api@example.test');
+	const readerWithoutSourceManagement = {
+		...context,
+		role: 'AGENT',
+		permissions: ['intake:read']
+	};
+	assert.deepEqual(
+		await service.entrySource(
+			readerWithoutSourceManagement,
+			context.workspaceId,
+			apiEntry.id
+		),
+		{
+			schemaVersion: 1,
+			workspaceId: context.workspaceId,
+			entryId: apiEntry.id,
+			source: {
+				id: source.source.id,
+				name: source.source.name,
+				kind: 'API'
+			}
+		}
+	);
+	await assert.rejects(
+		service.entrySource(
+			access(workspaceIds[1]),
+			workspaceIds[1],
+			apiEntry.id
+		),
+		http(404)
+	);
 	const tildaBody = {
 		tranid: `pg18-${randomUUID()}`,
 		formid: 'form-intake-pg18',

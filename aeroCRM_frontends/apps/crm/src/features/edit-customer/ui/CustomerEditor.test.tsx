@@ -376,6 +376,32 @@ describe('CompanyEditor explicit requisites workflow', () => {
 			expectedVersion: 3
 		})
 	})
+	it('keeps an archive domain error editable without reloading the company', async () => {
+		mountCompany(true, company.id)
+		vi.mocked(mutateCustomer).mockRejectedValue(
+			new AuthenticatedApiError(
+				'validation',
+				'У компании есть активные контакты. Сначала отвяжите их от компании или архивируйте, затем повторите архивирование.'
+			)
+		)
+		await screen.findByRole('textbox', { name: 'Название компании' })
+		const detailReads = vi.mocked(getCustomer).mock.calls.length
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Архивировать запись' })
+		)
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Подтвердить архивирование' })
+		)
+		const alert = await screen.findByRole('alert')
+		expect(alert.textContent).toContain('есть активные контакты')
+		expect(getCustomer).toHaveBeenCalledTimes(detailReads)
+		expect(
+			screen.getByRole('textbox', { name: 'Название компании' })
+		).toHaveProperty('readOnly', false)
+		expect(
+			screen.getByRole('button', { name: 'Подтвердить архивирование' })
+		).toHaveProperty('disabled', false)
+	})
 })
 afterEach(() => {
 	cleanup()
@@ -536,6 +562,51 @@ describe('CustomerEditor', () => {
 			workspaceId,
 			2
 		])
+	})
+	it('shows company search results and retains a selection when results change', async () => {
+		vi.mocked(listCustomers).mockImplementation(
+			async (_token, _kind, _workspace, _page, _size, search) => ({
+				schemaVersion: 1,
+				items: search === 'первый' ? [company] : search ? [] : [],
+				page: 1,
+				pageSize: 25,
+				total: search === 'первый' ? 1 : 0
+			})
+		)
+		mount(true, undefined, 'Новый контакт')
+		fireEvent.change(
+			screen.getByRole('textbox', { name: 'Найти компанию' }),
+			{
+				target: { value: 'первый' }
+			}
+		)
+		fireEvent.click(screen.getByRole('button', { name: 'Найти' }))
+		const result = await screen.findByRole('button', {
+			name: /ООО Ромашка/
+		})
+		expect(result.closest('ul')?.getAttribute('aria-label')).toBe(
+			'Результаты поиска компаний'
+		)
+		fireEvent.click(result)
+		fireEvent.change(
+			screen.getByRole('textbox', { name: 'Найти компанию' }),
+			{
+				target: { value: 'второй' }
+			}
+		)
+		fireEvent.click(screen.getByRole('button', { name: 'Найти' }))
+		await screen.findByText('Компании не найдены.')
+		expect(screen.getByText(/Сейчас выбрана: ООО Ромашка/)).toBeTruthy()
+		expect(
+			screen.getByRole('combobox', { name: 'Компания' })
+		).toHaveProperty('value', company.id)
+		submitEditor()
+		await waitFor(() => expect(mutateCustomer).toHaveBeenCalledOnce())
+		expect(
+			vi.mocked(mutateCustomer).mock.calls[0][1].fields
+		).toMatchObject({
+			companyId: company.id
+		})
 	})
 	it('saves an inline company without submitting the contact and keeps the contact draft selected', async () => {
 		const callbacks = mount(true, undefined, 'Новый контакт')

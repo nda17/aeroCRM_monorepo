@@ -16,11 +16,12 @@ describe('MyDay presentation semantics', () => {
 			pageSize: 20
 		})
 	})
-	it('does not turn cancelled tasks into completed board cards', () => {
+	it('shows cancelled tasks in their own board status', () => {
 		expect(WORKDAY_BOARD_STATUSES).toEqual([
 			'OPEN',
 			'IN_PROGRESS',
-			'COMPLETED'
+			'COMPLETED',
+			'CANCELLED'
 		])
 	})
 	it.each(['OPEN', 'IN_PROGRESS'] as const)(

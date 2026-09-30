@@ -2,7 +2,13 @@ import {
 	authenticatedRequest,
 	invalidContractError
 } from '@/shared/api/authenticated-http-client'
-import { isUuidV4 } from '@/shared/lib/contract'
+import {
+	hasExactKeys,
+	isIsoDate,
+	isNonEmptyString,
+	isRecord,
+	isUuidV4
+} from '@/shared/lib/contract'
 import {
 	parseInboxEntry,
 	parseIntakeActivity,
@@ -66,6 +72,69 @@ export const getInboxEntry = async (
 			id
 		)
 	)
+export const getInboxEntrySource = async (
+	accessToken: string,
+	workspaceId: string,
+	entryId: string
+) => {
+	const value = await authenticatedRequest({
+		accessToken,
+		method: 'GET',
+		url: `${root}/inbox/${safeId(entryId)}/source`,
+		params: { workspaceId: safeId(workspaceId) }
+	})
+	if (
+		!isRecord(value) ||
+		!hasExactKeys(value, [
+			'schemaVersion',
+			'workspaceId',
+			'entryId',
+			'source'
+		]) ||
+		value.schemaVersion !== 1 ||
+		value.workspaceId !== workspaceId ||
+		value.entryId !== entryId ||
+		(value.source !== null &&
+			(!isRecord(value.source) ||
+				!hasExactKeys(value.source, ['id', 'name', 'kind']) ||
+				!isUuidV4(value.source.id) ||
+				!isNonEmptyString(value.source.name, 200) ||
+				value.source.kind !== 'API'))
+	)
+		throw invalidContractError()
+	return value.source as { id: string; name: string; kind: 'API' } | null
+}
+export const readInboxNotificationForEntry = async (
+	accessToken: string,
+	workspaceId: string,
+	entryId: string
+) => {
+	const value = await authenticatedRequest({
+		accessToken,
+		method: 'PUT',
+		url: `${root}/notifications/entries/${safeId(entryId)}/read`,
+		data: { schemaVersion: 1, workspaceId: safeId(workspaceId) }
+	})
+	if (
+		!isRecord(value) ||
+		!hasExactKeys(value, [
+			'schemaVersion',
+			'workspaceId',
+			'entryId',
+			'notificationId',
+			'readAt'
+		]) ||
+		value.schemaVersion !== 1 ||
+		value.workspaceId !== workspaceId ||
+		value.entryId !== entryId ||
+		(value.notificationId !== null && !isUuidV4(value.notificationId)) ||
+		(value.notificationId === null
+			? value.readAt !== null
+			: !isIsoDate(value.readAt))
+	)
+		throw invalidContractError()
+	return value
+}
 export const listIntakeActivities = async (
 	accessToken: string,
 	workspaceId: string,

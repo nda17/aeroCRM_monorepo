@@ -1,7 +1,9 @@
 import {
 	authenticatedRequest,
+	AuthenticatedApiError,
 	invalidContractError
 } from '@/shared/api/authenticated-http-client'
+import axios from 'axios'
 import {
 	parseCustomerPage,
 	parseCustomerResult,
@@ -73,6 +75,27 @@ export interface CustomerMutation {
 	archive?: boolean
 }
 
+const mapCustomerMutationError = (error: unknown) => {
+	if (!axios.isAxiosError(error) || error.response?.status !== 409) return
+	// Only known server codes determine the message; never display response text.
+	const code: unknown = error.response.data?.code
+	if (code === 'crm_company_has_contacts')
+		return new AuthenticatedApiError(
+			'validation',
+			'У компании есть активные контакты. Сначала отвяжите их от компании или архивируйте, затем повторите архивирование.'
+		)
+	if (code === 'crm_customer_version_conflict')
+		return new AuthenticatedApiError(
+			'conflict',
+			'Карточка уже изменилась. Загрузите актуальную версию перед повторной попыткой.'
+		)
+	if (code === 'crm_customer_command_conflict')
+		return new AuthenticatedApiError(
+			'conflict',
+			'Этот запрос уже обработан с другими данными. Загрузите актуальную версию карточки.'
+		)
+}
+
 export const findCustomerDuplicates = async (
 	accessToken: string,
 	workspaceId: string,
@@ -122,6 +145,7 @@ export const mutateCustomer = async (
 			method: id && !archive ? 'PUT' : 'POST',
 			url: `/crm/customers/${schemaVersion === 2 ? 'v2/' : ''}${kind}${id ? `/${id}` : ''}${archive ? '/archive' : ''}`,
 			headers: { 'Idempotency-Key': commandId },
+			mapError: mapCustomerMutationError,
 			data: {
 				schemaVersion,
 				workspaceId,

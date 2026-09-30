@@ -46,7 +46,7 @@ const initial = {
 type ConnectMailboxProps = {
 	mailbox?: MailMailbox
 	onClose: () => void
-	onConnected: () => void
+	onConnected: (mailbox: MailMailbox) => void
 }
 export const ConnectMailbox = (props: ConnectMailboxProps) => {
 	const context = useMailContext()
@@ -172,11 +172,11 @@ const ConnectionForm = ({
 				parseMailMailboxResult,
 				mailbox ? 'PUT' : 'POST'
 			),
-		() => {
+		result => {
 			setSaved(true)
 			setValues(initial)
 			form.markClean()
-			onConnected()
+			onConnected(result.item)
 		}
 	)
 	return (

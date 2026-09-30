@@ -156,6 +156,40 @@ const attachmentReceipt = (
 	validationVersion: 1,
 	expiresAt: null
 })
+const pickerContact = {
+	id: contactId,
+	workspaceId,
+	name: 'Анна Клиентова',
+	notes: null,
+	createdBySubject: 'mail-user',
+	teamId: null,
+	version: 1,
+	archivedAt: null,
+	createdAt: stamp,
+	updatedAt: stamp,
+	phone: null,
+	email: 'anna@example.ru',
+	companyId: null,
+	timeZone: null,
+	preferredCallStart: null,
+	preferredCallEnd: null
+}
+const pickerContactWithoutEmail = {
+	...pickerContact,
+	id: 'c2c1d3d9-dc5a-4a50-98ba-c79b3895db62',
+	name: 'Контакт без адреса',
+	email: null
+}
+const contactReadPermissions = {
+	schemaVersion: 1,
+	workspaceId,
+	subject: session.userId,
+	role: 'OWNER',
+	state: 'ACTIVE',
+	dataScope: 'ALL',
+	teamIds: [],
+	permissions: ['customers:read']
+}
 
 describe('incoming mail notification contract', () => {
 	const notificationId = 'aa111111-1111-4111-8111-111111111111'
@@ -411,7 +445,8 @@ describe('mail UI workflows', () => {
 	it.each([
 		['BACKFILL', 'Загружается история'],
 		['SYNCING', 'Загружается история'],
-		['CURRENT', 'Подключён']
+		['CURRENT', 'Подключён'],
+		['NOT_CONFIGURED', 'Выберите папки для импорта']
 	])(
 		'renders the %s mailbox sync state as %s',
 		async (syncStatus, label) => {
@@ -596,6 +631,87 @@ describe('mail UI workflows', () => {
 		})
 		expect(JSON.stringify(sentData)).not.toMatch(/oauth|provider|timeweb/i)
 		await waitFor(() => expect(onConnected).toHaveBeenCalledOnce())
+	})
+
+	it('opens folder setup with the mailbox version returned by connection', async () => {
+		const connectedMailbox = {
+			...mailbox,
+			version: 12,
+			syncStatus: 'NOT_CONFIGURED'
+		}
+		request.mockImplementation(async config => {
+			const url = config.url ?? ''
+			if (url.endsWith('/capabilities')) return capabilities as never
+			if (url.endsWith('/mailboxes')) return mailPage([]) as never
+			if (url.endsWith('/connections'))
+				return success(connectedMailbox) as never
+			if (
+				url.endsWith(`/mailboxes/${mailboxId}/folders`) &&
+				config.method === 'GET'
+			)
+				return {
+					schemaVersion: 1,
+					workspaceId,
+					items: [
+						{
+							path: 'INBOX',
+							name: 'Входящие',
+							kind: 'INBOX',
+							selected: false
+						}
+					],
+					nextCursor: null
+				} as never
+			if (
+				url.endsWith(`/mailboxes/${mailboxId}/folders`) &&
+				config.method === 'PUT'
+			)
+				return success({ ...connectedMailbox, version: 13 }) as never
+			throw new Error(
+				`Unexpected mail API request: ${config.method} ${url}`
+			)
+		})
+		render(<MailSettings />, { wrapper: Providers })
+		fireEvent.click(
+			await screen.findByRole('button', { name: 'Подключить ящик' })
+		)
+		fireEvent.change(screen.getByLabelText(/^Адрес почты/), {
+			target: { value: 'team@corp.ru' }
+		})
+		fireEvent.change(screen.getByLabelText(/^Сервер IMAP/), {
+			target: { value: 'imap.corp.ru' }
+		})
+		fireEvent.change(screen.getByLabelText('Логин IMAP'), {
+			target: { value: 'mail-login' }
+		})
+		fireEvent.change(screen.getByLabelText(/^Сервер SMTP/), {
+			target: { value: 'smtp.corp.ru' }
+		})
+		fireEvent.change(
+			screen.getByLabelText(/^Пароль приложения или почтового ящика/),
+			{ target: { value: 'mail-secret' } }
+		)
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Проверить и подключить' })
+		)
+		await screen.findByRole('button', {
+			name: 'Сохранить и начать импорт'
+		})
+		fireEvent.change(await screen.findByLabelText('Входящие'), {
+			target: { value: 'INBOX' }
+		})
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Сохранить и начать импорт' })
+		)
+		await waitFor(() =>
+			expect(request).toHaveBeenCalledWith(
+				expect.objectContaining({
+					method: 'PUT',
+					url: `/crm/customers/mail/mailboxes/${mailboxId}/folders`,
+					data: expect.objectContaining({ expectedVersion: 12 })
+				})
+			)
+		)
 	})
 
 	it('prefills reconnection transports and keeps mailbox identity and version in the update request', async () => {
@@ -955,6 +1071,12 @@ describe('mail UI workflows', () => {
 		)
 		await screen.findByRole('button', { name: 'Проверить результат' })
 		expect(
+			screen.getByLabelText(/^Кому/).closest('fieldset')
+		).toHaveProperty('disabled', true)
+		expect(
+			screen.getByRole('button', { name: 'Отправить' })
+		).toHaveProperty('disabled', true)
+		expect(
 			(screen.getByLabelText('Письмо') as HTMLTextAreaElement).value
 		).toBe('Текст черновика')
 		fireEvent.click(
@@ -968,6 +1090,171 @@ describe('mail UI workflows', () => {
 			sends[0]?.headers?.['Idempotency-Key']
 		)
 		expect(sends[1]?.data).toEqual(sends[0]?.data)
+	})
+
+	it('paginates scoped recipient search, omits contacts without email, and links the send', async () => {
+		request.mockImplementation(async config => {
+			const url = config.url ?? ''
+			if (url.endsWith('/capabilities')) return capabilities as never
+			if (url.includes('/access/permissions'))
+				return contactReadPermissions
+			if (url.endsWith('/crm/customers/v2/contacts')) {
+				const page = Number(config.params?.page)
+				return {
+					schemaVersion: 2,
+					items: [page === 1 ? pickerContactWithoutEmail : pickerContact],
+					page,
+					pageSize: 25,
+					total: 26
+				} as never
+			}
+			if (url.endsWith('/send'))
+				return {
+					schemaVersion: 1,
+					workspaceId,
+					sendId,
+					state: 'QUEUED',
+					messageId: '<sent@example.ru>'
+				} as never
+			throw new Error(`Unexpected request: ${config.method} ${url}`)
+		})
+		render(
+			<MailComposer
+				contactId={null}
+				email={null}
+				mailboxes={[mailbox as never]}
+				onClose={vi.fn()}
+				onQueued={vi.fn()}
+			/>,
+			{ wrapper: Providers }
+		)
+		fireEvent.click(
+			await screen.findByRole('button', {
+				name: 'Выбрать получателя из контактов'
+			})
+		)
+		fireEvent.change(
+			await screen.findByLabelText('Найти контакт по имени или email'),
+			{ target: { value: 'Анна' } }
+		)
+		fireEvent.click(screen.getByRole('button', { name: 'Найти' }))
+		await screen.findByText(/На этой странице нет контактов с email/)
+		expect(screen.queryByText(/Контакт без адреса/)).toBeNull()
+		fireEvent.click(screen.getByRole('button', { name: 'Далее' }))
+		const recipient = await screen.findByRole('button', {
+			name: /Анна Клиентова — anna@example\.ru/
+		})
+		expect(request).toHaveBeenCalledWith(
+			expect.objectContaining({
+				method: 'GET',
+				url: '/crm/customers/v2/contacts',
+				params: {
+					workspaceId,
+					page: '2',
+					pageSize: '25',
+					search: 'Анна'
+				}
+			})
+		)
+		fireEvent.click(recipient)
+		expect(screen.getByLabelText(/^Кому/)).toHaveProperty(
+			'value',
+			'anna@example.ru'
+		)
+		expect(screen.getByText(/Получатель выбран из контактов/)).toBeTruthy()
+		fireEvent.change(screen.getByLabelText('Тема'), {
+			target: { value: 'Письмо контакту' }
+		})
+		fireEvent.click(screen.getByRole('button', { name: 'Обычный текст' }))
+		fireEvent.change(screen.getByLabelText('Письмо'), {
+			target: { value: 'Здравствуйте' }
+		})
+		fireEvent.click(screen.getByRole('button', { name: 'Отправить' }))
+		await waitFor(() =>
+			expect(request).toHaveBeenCalledWith(
+				expect.objectContaining({
+					url: '/crm/customers/mail/send',
+					data: expect.objectContaining({
+						contactId,
+						to: [{ email: 'anna@example.ru', name: null }]
+					})
+				})
+			)
+		)
+	})
+
+	it('clears a selected contact link after the recipient address is edited manually', async () => {
+		request.mockImplementation(async config => {
+			const url = config.url ?? ''
+			if (url.endsWith('/capabilities')) return capabilities as never
+			if (url.includes('/access/permissions'))
+				return contactReadPermissions
+			if (url.endsWith('/crm/customers/v2/contacts'))
+				return {
+					schemaVersion: 2,
+					items: [pickerContact],
+					page: 1,
+					pageSize: 25,
+					total: 1
+				} as never
+			if (url.endsWith('/send'))
+				return {
+					schemaVersion: 1,
+					workspaceId,
+					sendId,
+					state: 'QUEUED',
+					messageId: '<sent@example.ru>'
+				} as never
+			throw new Error(`Unexpected request: ${config.method} ${url}`)
+		})
+		render(
+			<MailComposer
+				contactId={null}
+				email={null}
+				mailboxes={[mailbox as never]}
+				onClose={vi.fn()}
+				onQueued={vi.fn()}
+			/>,
+			{ wrapper: Providers }
+		)
+		fireEvent.click(
+			await screen.findByRole('button', {
+				name: 'Выбрать получателя из контактов'
+			})
+		)
+		fireEvent.change(
+			await screen.findByLabelText('Найти контакт по имени или email'),
+			{ target: { value: 'Анна' } }
+		)
+		fireEvent.click(screen.getByRole('button', { name: 'Найти' }))
+		fireEvent.click(
+			await screen.findByRole('button', {
+				name: /Анна Клиентова — anna@example\.ru/
+			})
+		)
+		fireEvent.change(screen.getByLabelText(/^Кому/), {
+			target: { value: 'new@example.org' }
+		})
+		expect(screen.queryByText(/Получатель выбран из контактов/)).toBeNull()
+		fireEvent.change(screen.getByLabelText('Тема'), {
+			target: { value: 'Новое письмо' }
+		})
+		fireEvent.click(screen.getByRole('button', { name: 'Обычный текст' }))
+		fireEvent.change(screen.getByLabelText('Письмо'), {
+			target: { value: 'Текст письма' }
+		})
+		fireEvent.click(screen.getByRole('button', { name: 'Отправить' }))
+		await waitFor(() =>
+			expect(request).toHaveBeenCalledWith(
+				expect.objectContaining({
+					url: '/crm/customers/mail/send',
+					data: expect.objectContaining({
+						contactId: null,
+						to: [{ email: 'new@example.org', name: null }]
+					})
+				})
+			)
+		)
 	})
 
 	it('recovers a lost attachment POST, then checks the quarantined ID with GET only', async () => {

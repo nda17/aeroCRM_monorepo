@@ -2,7 +2,7 @@
 
 import clsx from 'clsx'
 import { useDirtyFormGuard, DirtyFormScope } from '@/shared/lib/dirty-form'
-import { useEffect, useId, useRef } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { MouseEvent, ReactNode, RefObject } from 'react'
 
 import { AppIcon } from '../app-icon'
@@ -61,6 +61,7 @@ export const Drawer = ({
 	className
 }: DrawerProps) => {
 	const guard = useDirtyFormGuard()
+	const [fullscreen, setFullscreen] = useState(false)
 	const scopeId = useId()
 	const close = () =>
 		guard.confirmDiscard(onClose, [scopeId, ...(dirtyFormIds ?? [])])
@@ -118,6 +119,7 @@ export const Drawer = ({
 				styles.dialog,
 				styles[side],
 				styles[size],
+				fullscreen && styles.fullscreen,
 				className
 			)}
 			aria-labelledby={titleId}
@@ -141,15 +143,25 @@ export const Drawer = ({
 							</div>
 						) : null}
 					</div>
-					<button
-						ref={closeButtonRef}
-						type="button"
-						className={styles.closeButton}
-						onClick={close}
-						aria-label={closeLabel}
-					>
-						<AppIcon name="close" size={20} />
-					</button>
+					<div className={styles.headerActions}>
+						<button
+							type="button"
+							className={styles.sizeButton}
+							aria-pressed={fullscreen}
+							onClick={() => setFullscreen(value => !value)}
+						>
+							{fullscreen ? 'Обычный размер' : 'На весь экран'}
+						</button>
+						<button
+							ref={closeButtonRef}
+							type="button"
+							className={styles.closeButton}
+							onClick={close}
+							aria-label={closeLabel}
+						>
+							<AppIcon name="close" size={20} />
+						</button>
+					</div>
 				</header>
 				<DirtyFormScope id={scopeId}>
 					<div className={styles.content}>{children}</div>

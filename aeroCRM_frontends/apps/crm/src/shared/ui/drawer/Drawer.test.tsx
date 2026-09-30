@@ -8,7 +8,9 @@ import {
 import { StrictMode } from 'react'
 import { renderToString } from 'react-dom/server'
 import toast from 'react-hot-toast'
+import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { DirtyFormProvider, useDirtyForm } from '@/shared/lib/dirty-form'
 import { ToastProvider } from '../toast-provider'
 import { Drawer } from './Drawer'
 import styles from './Drawer.module.scss'
@@ -216,5 +218,59 @@ describe('Drawer cancel events', () => {
 
 		expect(event.defaultPrevented).toBe(true)
 		expect(close).toHaveBeenCalledOnce()
+	})
+})
+
+describe('Drawer fullscreen draft preservation', () => {
+	it('resizes the same draft DOM and still guards a close with dirty-form confirmation', () => {
+		const close = vi.fn()
+		const DraftContent = () => {
+			const [draft, setDraft] = useState('Черновик')
+			useDirtyForm({ dirty: !!draft, label: 'Карточка сделки' })
+			return (
+				<label>
+					Черновик
+					<input
+						value={draft}
+						onChange={event => setDraft(event.target.value)}
+					/>
+				</label>
+			)
+		}
+		render(
+			<DirtyFormProvider owner="owner">
+				<ToastProvider>
+					<Drawer isOpen onClose={close} title="Карточка сделки">
+						<DraftContent />
+					</Drawer>
+				</ToastProvider>
+			</DirtyFormProvider>
+		)
+		const draft = screen.getByRole('textbox', { name: 'Черновик' })
+		const drawer = screen.getByRole('dialog', { name: 'Карточка сделки' })
+		fireEvent.click(screen.getByRole('button', { name: 'На весь экран' }))
+		expect(screen.getByRole('dialog', { name: 'Карточка сделки' })).toBe(
+			drawer
+		)
+		expect(screen.getByRole('textbox', { name: 'Черновик' })).toBe(draft)
+		expect(draft).toHaveProperty('value', 'Черновик')
+		expect(drawer.classList.contains(styles.fullscreen)).toBe(true)
+		fireEvent.click(screen.getByRole('button', { name: 'Закрыть панель' }))
+		const confirmDialog = Array.from(
+			document.querySelectorAll('dialog')
+		).find(dialog =>
+			dialog.textContent?.includes('Несохранённые изменения')
+		)
+		const continueButton = Array.from(
+			confirmDialog?.querySelectorAll('button') ?? []
+		).find(button =>
+			button.textContent?.includes('Продолжить редактирование')
+		)
+		expect(continueButton).toBeTruthy()
+		fireEvent.click(continueButton!)
+		expect(close).not.toHaveBeenCalled()
+		expect(
+			screen.getByRole('textbox', { name: 'Черновик' })
+		).toHaveProperty('value', 'Черновик')
 	})
 })

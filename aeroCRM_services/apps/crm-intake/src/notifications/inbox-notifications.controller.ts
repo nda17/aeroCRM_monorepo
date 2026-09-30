@@ -14,7 +14,8 @@ import { IntakeAuthorizationClient } from '../access/intake-authorization.client
 import { InboxNotificationsService } from './inbox-notifications.service';
 import {
 	InboxNotificationsQuery,
-	InboxNotificationReadDto
+	InboxNotificationReadDto,
+	InboxNotificationEntryReadDto
 } from './inbox-notifications.dto';
 
 @Controller('crm/intake/notifications')
@@ -54,5 +55,15 @@ export class InboxNotificationsController {
 			dto.workspaceId
 		);
 		return this.notifications.setRead(access, id, dto);
+	}
+	@Put('entries/:entryId/read')
+	@Header('Cache-Control', 'no-store')
+	async readEntry(
+		@Headers('authorization') bearer: string | undefined,
+		@Param('entryId', new ParseUUIDPipe({ version: '4' })) entryId: string,
+		@Body() dto: InboxNotificationEntryReadDto
+	) {
+		const access = await this.authorization.authorize(bearer, dto.workspaceId);
+		return this.notifications.setEntryRead(access, entryId, dto);
 	}
 }

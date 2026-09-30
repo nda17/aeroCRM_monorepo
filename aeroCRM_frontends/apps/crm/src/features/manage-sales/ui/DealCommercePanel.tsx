@@ -96,11 +96,13 @@ const historyDetails = (value: unknown): string | null => {
 export const DealCommercePanel = ({
 	context,
 	dealId,
+	customerDetailsSuggestion,
 	onSaved,
 	onBusyChange
 }: {
 	context: CommerceContext
 	dealId: string
+	customerDetailsSuggestion?: string
 	onSaved: () => void
 	onBusyChange: (busy: boolean) => void
 }) => {
@@ -378,6 +380,7 @@ export const DealCommercePanel = ({
 						>
 							<TextField
 								label="Продавец / исполнитель"
+								hint="Ваша компания или ИП, от имени которых вы отправляете предложение."
 								value={sellerName}
 								required
 								maxLength={200}
@@ -397,9 +400,28 @@ export const DealCommercePanel = ({
 								value={customerDetails}
 								maxLength={1000}
 								rows={3}
-								hint="Имя клиента будет взято из сделки."
+								hint="Покупатель: контакт сделки и его компания. Имя клиента будет взято из сделки. Проверьте реквизиты перед формированием КП."
 								onChange={event => setCustomerDetails(event.target.value)}
 							/>
+							{customerDetailsSuggestion ? (
+								<Button
+									variant="secondary"
+									disabled={
+										!!customerDetails ||
+										customerDetailsSuggestion.length > 1000
+									}
+									disabledTooltip={
+										customerDetailsSuggestion.length > 1000
+											? 'Данные превышают лимит 1000 символов. Введите нужные реквизиты вручную.'
+											: 'Поле уже заполнено. Очистите его, чтобы подставить данные карточки.'
+									}
+									onClick={() =>
+										setCustomerDetails(customerDetailsSuggestion)
+									}
+								>
+									Заполнить из карточки клиента
+								</Button>
+							) : null}
 							<Button
 								type="submit"
 								isLoading={command.running}

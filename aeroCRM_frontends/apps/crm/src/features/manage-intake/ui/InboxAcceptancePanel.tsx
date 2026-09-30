@@ -344,7 +344,7 @@ const AcceptanceForm = ({
 	const [search, setSearch] = useState(entry.name ?? '')
 	const [page, setPage] = useState(1)
 	const [title, setTitle] = useState(entry.title)
-	const [amount, setAmount] = useState('0')
+	const [amount, setAmount] = useState('')
 	const [pipelineId, setPipelineId] = useState('')
 	const [stageId, setStageId] = useState('')
 	const [taskTitle, setTaskTitle] = useState('Связаться с клиентом')
@@ -634,6 +634,7 @@ const AcceptanceForm = ({
 					label="Сумма сделки, ₽"
 					inputMode="decimal"
 					required
+					placeholder="0"
 					value={amount}
 					onChange={event => setAmount(event.target.value)}
 				/>

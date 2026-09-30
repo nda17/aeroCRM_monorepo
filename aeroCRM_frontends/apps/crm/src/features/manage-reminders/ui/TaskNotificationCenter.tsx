@@ -209,7 +209,6 @@ export const TaskNotificationPanel = ({
 						onChange={event => {
 							setUnreadOnly(event.target.checked)
 							setPage(1)
-							toast('Фильтр уведомлений изменён')
 						}}
 					/>
 					Только непрочитанные
@@ -218,7 +217,7 @@ export const TaskNotificationPanel = ({
 					variant="secondary"
 					disabled={busy || !ready || query.isFetching}
 					onClick={() => {
-						void query.refetch()
+						void Promise.all([query.refetch(), head.refetch()])
 					}}
 				>
 					Обновить
@@ -327,7 +326,6 @@ export const TaskNotificationPanel = ({
 							disabled={busy || page <= 1}
 							onClick={() => {
 								setPage(value => value - 1)
-								toast('Предыдущая страница')
 							}}
 						>
 							Назад
@@ -340,7 +338,6 @@ export const TaskNotificationPanel = ({
 							disabled={busy || page * 10 >= query.data.total}
 							onClick={() => {
 								setPage(value => value + 1)
-								toast('Следующая страница')
 							}}
 						>
 							Далее

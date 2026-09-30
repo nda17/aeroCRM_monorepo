@@ -169,6 +169,31 @@ export class IntakeService {
 		const entry = await this.entry(this.prisma, context, id);
 		return { schemaVersion: 1, entry: inboxEntryView(entry) };
 	}
+	async entrySource(
+		context: IntakeAuthorization,
+		workspaceId: string,
+		id: string
+	) {
+		this.assertContext(context, workspaceId, 'intake:read');
+		const entry = await this.prisma.inboxEntry.findFirst({
+			where: { AND: [intakeEntryScope(context), { id }] },
+			select: {
+				id: true,
+				source: { select: { id: true, name: true, kind: true } }
+			}
+		});
+		if (!entry)
+			throw new NotFoundException({
+				code: 'crm_intake_entry_not_found',
+				message: 'Inbox entry was not found'
+			});
+		return {
+			schemaVersion: 1,
+			workspaceId,
+			entryId: id,
+			source: entry.source
+		};
+	}
 
 	async activities(
 		context: IntakeAuthorization,

@@ -417,7 +417,7 @@ const acceptance = (
 	updatedAt: entry.receivedAt,
 	...patch
 })
-const fillAcceptance = async () => {
+const fillAcceptance = async (amount = '123,45') => {
 	fireEvent.click(
 		await screen.findByRole('button', { name: 'Принять в работу' })
 	)
@@ -437,7 +437,7 @@ const fillAcceptance = async () => {
 	})
 	fireEvent.change(
 		screen.getByRole('textbox', { name: 'Сумма сделки, ₽' }),
-		{ target: { value: '123,45' } }
+		{ target: { value: amount } }
 	)
 }
 describe('Inbox acceptance workflow UI', () => {
@@ -486,6 +486,71 @@ describe('Inbox acceptance workflow UI', () => {
 		expect(screen.queryByText('Принято в работу')).toBeNull()
 		fireEvent.click(screen.getByRole('button', { name: 'Закрыть' }))
 		expect(close).toHaveBeenCalled()
+	})
+	it('starts the amount field empty with a zero placeholder and accepts 5000 without a leading zero', async () => {
+		vi.mocked(mutateInboxAcceptance).mockResolvedValue({
+			schemaVersion: 1,
+			acceptance: acceptance()
+		})
+		mount(entry.id)
+		fireEvent.click(
+			await screen.findByRole('button', { name: 'Принять в работу' })
+		)
+		const amount = await screen.findByRole('textbox', {
+			name: 'Сумма сделки, ₽'
+		})
+		expect(amount).toHaveProperty('value', '')
+		expect(amount).toHaveProperty('placeholder', '0')
+		fireEvent.change(screen.getByRole('combobox', { name: 'Контакт' }), {
+			target: { value: 'CREATE_FROM_ENTRY' }
+		})
+		await screen.findByRole('option', { name: 'Продажи' })
+		fireEvent.change(screen.getByRole('combobox', { name: 'Воронка' }), {
+			target: { value: workspaceId }
+		})
+		fireEvent.change(
+			screen.getByRole('combobox', { name: 'Начальный этап' }),
+			{ target: { value: entry.id } }
+		)
+		fireEvent.change(screen.getByLabelText(/Срок первого действия/), {
+			target: { value: '2026-09-06T14:30' }
+		})
+		fireEvent.change(amount, { target: { value: '5000' } })
+		expect(amount).toHaveProperty('value', '5000')
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Начать обработку' })
+		)
+		await waitFor(() =>
+			expect(mutateInboxAcceptance).toHaveBeenCalledOnce()
+		)
+		const submitted = vi.mocked(mutateInboxAcceptance).mock.calls[0][1]
+		expect(submitted.operation).toBe('accept')
+		if (submitted.operation !== 'accept')
+			throw new Error('Expected acceptance')
+		expect(submitted.deal).toMatchObject({
+			amountMinor: 500000
+		})
+	})
+	it('keeps a manually entered zero and parses it as zero minor units', async () => {
+		vi.mocked(mutateInboxAcceptance).mockResolvedValue({
+			schemaVersion: 1,
+			acceptance: acceptance()
+		})
+		mount(entry.id)
+		await fillAcceptance('0')
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Начать обработку' })
+		)
+		await waitFor(() =>
+			expect(mutateInboxAcceptance).toHaveBeenCalledOnce()
+		)
+		const submitted = vi.mocked(mutateInboxAcceptance).mock.calls[0][1]
+		expect(submitted.operation).toBe('accept')
+		if (submitted.operation !== 'accept')
+			throw new Error('Expected acceptance')
+		expect(submitted.deal).toMatchObject({
+			amountMinor: 0
+		})
 	})
 	it('keeps an unknown acceptance command frozen through a later forbidden reply', async () => {
 		vi.mocked(mutateInboxAcceptance)

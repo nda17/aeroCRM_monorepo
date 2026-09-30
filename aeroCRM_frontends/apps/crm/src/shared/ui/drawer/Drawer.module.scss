@@ -26,6 +26,10 @@
 	@apply max-w-none sm:max-w-2xl;
 }
 
+.fullscreen {
+	@apply inset-x-0 max-w-none border-x-0 sm:max-w-none;
+}
+
 .panel {
 	@apply flex h-full min-h-0 flex-col bg-crm-surface shadow-2xl;
 }
@@ -44,6 +48,14 @@
 
 .description {
 	@apply mt-1 break-words text-sm leading-5 text-crm-muted;
+}
+
+.headerActions {
+	@apply flex shrink-0 items-center gap-1;
+}
+
+.sizeButton {
+	@apply hidden min-h-10 rounded-xl px-3 text-sm text-crm-muted transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 sm:inline-flex sm:items-center;
 }
 
 .closeButton {

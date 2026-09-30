@@ -9,7 +9,8 @@ export const WORKDAY_STATUS_LABELS: Record<WorkdayStatus, string> = {
 export const WORKDAY_BOARD_STATUSES = [
 	'OPEN',
 	'IN_PROGRESS',
-	'COMPLETED'
+	'COMPLETED',
+	'CANCELLED'
 ] as const
 export type WorkdayView = 'list' | 'board'
 export const initialWorkdayFilters = (): WorkdayFilters => ({

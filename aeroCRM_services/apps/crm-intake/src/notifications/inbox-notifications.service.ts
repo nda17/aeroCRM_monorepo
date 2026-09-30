@@ -11,7 +11,8 @@ import { CrmIntakePrismaService } from '../prisma/crm-intake-prisma.service';
 import { intakeEntryScope } from '../intake/intake.service';
 import type {
 	InboxNotificationsQuery,
-	InboxNotificationReadDto
+	InboxNotificationReadDto,
+	InboxNotificationEntryReadDto
 } from './inbox-notifications.dto';
 
 @Injectable()
@@ -101,5 +102,56 @@ export class InboxNotificationsService {
 				readAt: row.readAt?.toISOString() ?? null
 			};
 		});
+	}
+	async setEntryRead(
+		access: IntakeAuthorization,
+		entryId: string,
+		dto: InboxNotificationEntryReadDto
+	) {
+		const scope = this.scope(access, dto.workspaceId);
+		return this.prisma.$transaction(
+			async tx => {
+				const entry = await tx.inboxEntry.findFirst({
+					where: { id: entryId, ...scope.entry },
+					select: { id: true }
+				});
+				if (!entry) throw new NotFoundException();
+				const notification = await tx.inboxNotification.findFirst({
+					where: { workspaceId: dto.workspaceId, entryId },
+					select: { id: true }
+				});
+				if (!notification)
+					return {
+						schemaVersion: 1,
+						workspaceId: dto.workspaceId,
+						entryId,
+						notificationId: null,
+						readAt: null
+					};
+				const row = await tx.inboxNotificationRead.upsert({
+					where: {
+						notificationId_recipientSubject: {
+							notificationId: notification.id,
+							recipientSubject: access.subject
+						}
+					},
+					create: {
+						notificationId: notification.id,
+						workspaceId: dto.workspaceId,
+						recipientSubject: access.subject,
+						readAt: new Date()
+					},
+					update: { readAt: new Date() }
+				});
+				return {
+					schemaVersion: 1,
+					workspaceId: dto.workspaceId,
+					entryId,
+					notificationId: notification.id,
+					readAt: row.readAt!.toISOString()
+				};
+			},
+			{ isolationLevel: 'RepeatableRead' }
+		);
 	}
 }

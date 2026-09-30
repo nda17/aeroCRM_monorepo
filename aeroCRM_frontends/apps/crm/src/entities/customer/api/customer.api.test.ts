@@ -164,6 +164,7 @@ describe('versioned company API', () => {
 			method: 'POST',
 			url: '/crm/customers/companies',
 			headers: { 'Idempotency-Key': commandId },
+			mapError: expect.any(Function),
 			data: {
 				schemaVersion: 1,
 				workspaceId,
@@ -175,6 +176,66 @@ describe('versioned company API', () => {
 				website: null
 			}
 		})
+	})
+	it.each([
+		['crm_company_has_contacts', 'validation', 'активные контакты'],
+		['crm_customer_version_conflict', 'conflict', 'уже изменилась'],
+		['crm_customer_command_conflict', 'conflict', 'другими данными']
+	] as const)(
+		'maps the known customer mutation conflict %s without exposing server text',
+		async (code, kind, expectedMessage) => {
+			vi.mocked(authenticatedRequest).mockResolvedValue({
+				schemaVersion: 2,
+				company: { ...company, archivedAt: base.updatedAt }
+			})
+			await mutateCustomer('token', {
+				schemaVersion: 2,
+				kind: 'companies',
+				workspaceId,
+				commandId,
+				id,
+				expectedVersion: 1,
+				archive: true
+			})
+			const mapError = vi.mocked(authenticatedRequest).mock.calls[0][0]
+				.mapError!
+			const mapped = mapError({
+				isAxiosError: true,
+				response: {
+					status: 409,
+					data: { code, message: 'private server diagnostic' }
+				}
+			})
+			expect(mapped).toMatchObject({ kind })
+			expect(mapped?.message).toContain(expectedMessage)
+			expect(mapped?.message).not.toContain('private server diagnostic')
+		}
+	)
+	it('leaves unknown customer mutation errors to the shared fallback', async () => {
+		vi.mocked(authenticatedRequest).mockResolvedValue({
+			schemaVersion: 2,
+			company: { ...company, archivedAt: base.updatedAt }
+		})
+		await mutateCustomer('token', {
+			schemaVersion: 2,
+			kind: 'companies',
+			workspaceId,
+			commandId,
+			id,
+			expectedVersion: 1,
+			archive: true
+		})
+		const mapError = vi.mocked(authenticatedRequest).mock.calls[0][0]
+			.mapError!
+		expect(
+			mapError({
+				isAxiosError: true,
+				response: {
+					status: 409,
+					data: { code: 'unknown_conflict', message: 'private diagnostic' }
+				}
+			})
+		).toBeUndefined()
 	})
 	it('reads contact v2 while replaying existing commands at v1 without new fields', async () => {
 		const v2 = {

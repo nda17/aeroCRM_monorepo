@@ -144,12 +144,22 @@ const DealEditor = ({
 						rows={3}
 					/>
 					{target?.state === 'OPEN' ? (
-						<NextActionFields
-							title={taskTitle}
-							onTitleChange={setTaskTitle}
-							due={due}
-							onDueChange={setDue}
-						/>
+						<>
+							{deal.nextTask ? (
+								<p className={styles.muted}>
+									При сохранении результата текущее следующее действие «
+									{deal.nextTask.title}» завершится. Вместо него будет
+									создано действие, указанное ниже; остальные задачи
+									останутся без изменений.
+								</p>
+							) : null}
+							<NextActionFields
+								title={taskTitle}
+								onTitleChange={setTaskTitle}
+								due={due}
+								onDueChange={setDue}
+							/>
+						</>
 					) : (
 						<p className={styles.muted}>
 							Все открытые задачи по сделке завершатся при закрытии.
@@ -280,6 +290,54 @@ export const DealDetailsDrawer = ({
 		retry: false,
 		gcTime: 0
 	})
+	const readableContact =
+		canReadContact &&
+		!contact.isError &&
+		!contact.isFetching &&
+		contact.data?.kind === 'contacts'
+			? contact.data
+			: undefined
+	const companyId = readableContact?.companyId
+	const company = useQuery({
+		queryKey: [
+			'crm-customer-detail',
+			...context.key,
+			'deal-company',
+			companyId
+		],
+		enabled: canReadContact && !!companyId && !detail.isError,
+		queryFn: () =>
+			getCustomer(
+				context.session!.accessToken,
+				'companies',
+				context.workspace.workspaceId,
+				companyId!
+			),
+		retry: false,
+		gcTime: 0
+	})
+	const readableCompany =
+		canReadContact &&
+		!company.isError &&
+		!company.isFetching &&
+		company.data?.kind === 'companies' &&
+		company.data.id === companyId
+			? company.data
+			: undefined
+	const quoteCustomerDetails = readableContact
+		? [
+				readableCompany?.legalName || readableCompany?.name,
+				readableCompany?.inn ? `ИНН: ${readableCompany.inn}` : null,
+				readableCompany?.kpp ? `КПП: ${readableCompany.kpp}` : null,
+				readableCompany?.ogrn ? `ОГРН: ${readableCompany.ogrn}` : null,
+				readableCompany?.legalAddress,
+				readableContact.name,
+				readableContact.phone,
+				readableContact.email
+			]
+				.filter(Boolean)
+				.join('\n')
+		: undefined
 	const reload = async () => {
 		const [auth, record] = await Promise.all([
 			context.permissions.refetch(),
@@ -490,6 +548,7 @@ export const DealDetailsDrawer = ({
 					<DealCommercePanel
 						context={context}
 						dealId={deal.id}
+						customerDetailsSuggestion={quoteCustomerDetails}
 						onBusyChange={setCommerceBusy}
 						onSaved={() => {
 							onSaved()

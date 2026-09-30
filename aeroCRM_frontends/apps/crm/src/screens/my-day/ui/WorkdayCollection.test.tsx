@@ -28,7 +28,10 @@ import {
 	type WorkdayFilters,
 	type WorkdayTask
 } from '@/entities/crm-workday'
-import { initialWorkdayFilters } from '../model/workday-view'
+import {
+	initialWorkdayFilters,
+	WORKDAY_BOARD_STATUSES
+} from '../model/workday-view'
 import { WorkdayCollection } from './WorkdayCollection'
 
 vi.mock('@/entities/crm-workday', () => ({ useWorkdayTasks: vi.fn() }))
@@ -235,6 +238,7 @@ beforeEach(() => {
 		if (label === 'К выполнению') return rect(0, 0, 300, 500)
 		if (label === 'В работе') return rect(340, 0, 300, 500)
 		if (label === 'Готово') return rect(680, 0, 300, 500)
+		if (label === 'Отменено') return rect(1020, 0, 300, 500)
 		return rect()
 	})
 	vi.mocked(useWorkdayTasks).mockImplementation(
@@ -255,13 +259,17 @@ beforeEach(() => {
 										? pageTasks
 										: [],
 								total:
-									!filters.status || filters.status === 'OPEN' ? 21 : 0,
+									!filters.status ||
+									filters.status === 'OPEN' ||
+									filters.status === 'CANCELLED'
+										? 21
+										: 0,
 								asOf: '2026-09-07T10:00:00Z',
 								counts: {
 									OPEN: 21,
 									IN_PROGRESS: 0,
 									COMPLETED: 0,
-									CANCELLED: 3
+									CANCELLED: 21
 								}
 							}
 			}) as never
@@ -305,7 +313,7 @@ describe('MyDay server-paged list and board', () => {
 				[binding]
 			)
 			expect(useAssigneeLabels).toHaveBeenCalledTimes(
-				view === 'list' ? 1 : 3
+				view === 'list' ? 1 : 4
 			)
 			expect(screen.queryByText('employee')).toBeNull()
 			expect(screen.queryByText('Имя загружается…')).toBeNull()
@@ -383,20 +391,26 @@ describe('MyDay server-paged list and board', () => {
 			vi
 				.mocked(useWorkdayTasks)
 				.mock.calls.map(([filter]) => filter.status)
-		).toEqual(['OPEN', 'IN_PROGRESS', 'COMPLETED'])
+		).toEqual(['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'])
 		vi.mocked(useWorkdayTasks).mockClear()
 		fireEvent.click(
 			within(
 				screen.getByRole('navigation', {
-					name: 'Страницы колонки «К выполнению»'
+					name: 'Страницы колонки «Отменено»'
 				})
 			).getByRole('button', { name: 'Далее' })
 		)
 		expect(useWorkdayTasks).toHaveBeenCalledExactlyOnceWith(
-			expect.objectContaining({ status: 'OPEN', page: 2, pageSize: 20 })
+			expect.objectContaining({
+				status: 'CANCELLED',
+				page: 2,
+				pageSize: 20
+			})
 		)
 		expect(onPage).not.toHaveBeenCalled()
-		expect(screen.queryByRole('region', { name: 'Отменено' })).toBeNull()
+		expect(
+			screen.getByRole('region', { name: 'Отменено' }).textContent
+		).toContain('Отменено 21')
 	})
 	it('preserves list server pagination and the no-drag status fallback snapshot', () => {
 		setup('list')
@@ -569,6 +583,18 @@ describe('real dnd-kit PointerSensor with synthetic DOM pointer events', () => {
 })
 
 describe('DndContext application callback contract (not browser pointer simulation)', () => {
+	it('accepts the cancelled status from the board enum as a drop target', () => {
+		setup('board')
+		const cancelledStatus = WORKDAY_BOARD_STATUSES.find(
+			status => status === 'CANCELLED'
+		)
+		expect(cancelledStatus).toBe('CANCELLED')
+		const active = startAdapter()
+		act(() => {
+			adapter.props!.onDragEnd!(dropEvent(active, cancelledStatus!))
+		})
+		expect(onStatus).toHaveBeenCalledExactlyOnceWith(task, 'CANCELLED')
+	})
 	it('does not accept a foreign drop without a local drag start', () => {
 		setup('board')
 		act(() => {
@@ -576,7 +602,7 @@ describe('DndContext application callback contract (not browser pointer simulati
 		})
 		expect(onStatus).not.toHaveBeenCalled()
 	})
-	it.each([null, 'OPEN', 'CANCELLED', 'unknown'])(
+	it.each([null, 'OPEN', 'INVALID', 'unknown'])(
 		'does not save outside/unchanged/unsupported target %s',
 		target => {
 			setup('board')

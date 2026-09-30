@@ -115,12 +115,13 @@ const context = {
 let client: QueryClient
 let currentLines: ReturnType<typeof lineData>
 
-const mountPanel = () =>
+const mountPanel = (customerDetailsSuggestion?: string) =>
 	render(
 		<QueryClientProvider client={client}>
 			<DealCommercePanel
 				context={context}
 				dealId={dealId}
+				customerDetailsSuggestion={customerDetailsSuggestion}
 				onSaved={vi.fn()}
 				onBusyChange={vi.fn()}
 			/>
@@ -209,6 +210,55 @@ describe('DealCommercePanel version refreshes', () => {
 			screen.getByText('Сохранённая сумма сделки').parentElement
 				?.textContent
 		).toContain('2,00')
+	})
+
+	it('uses client-card details only after an explicit choice and adds them to the quote command', async () => {
+		const suggestion =
+			'ООО Ромашка\nИНН: 7707083893\nАнна Клиентова\nanna@example.ru'
+		mountPanel(suggestion)
+		const customerDetails = await screen.findByRole('textbox', {
+			name: 'Реквизиты и контакты клиента'
+		})
+		expect(customerDetails).toHaveProperty('value', '')
+		const fill = screen.getByRole('button', {
+			name: 'Заполнить из карточки клиента'
+		})
+		expect(fill).toHaveProperty('disabled', false)
+		fireEvent.click(fill)
+		expect(customerDetails).toHaveProperty('value', suggestion)
+		expect(panelMocks.execute).not.toHaveBeenCalled()
+		fireEvent.change(
+			screen.getByRole('textbox', { name: 'Продавец / исполнитель' }),
+			{ target: { value: 'ООО Исполнитель' } }
+		)
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Сформировать КП' })
+		)
+		await waitFor(() => expect(panelMocks.execute).toHaveBeenCalledOnce())
+		expect(panelMocks.submitted[0]).toMatchObject({
+			action: 'quote',
+			customerDetails: suggestion
+		})
+	})
+
+	it('leaves a manual customer entry alone and disables oversized card suggestions', async () => {
+		mountPanel('Д'.repeat(1001))
+		const customerDetails = await screen.findByRole('textbox', {
+			name: 'Реквизиты и контакты клиента'
+		})
+		const fill = screen.getByRole('button', {
+			name: 'Заполнить из карточки клиента'
+		})
+		expect(fill).toHaveProperty('disabled', true)
+		fireEvent.change(customerDetails, {
+			target: { value: 'Реквизиты, введённые вручную' }
+		})
+		fireEvent.click(fill)
+		expect(customerDetails).toHaveProperty(
+			'value',
+			'Реквизиты, введённые вручную'
+		)
+		expect(panelMocks.execute).not.toHaveBeenCalled()
 	})
 
 	it('preserves a dirty draft against an external version refresh and saves its original base version', async () => {
