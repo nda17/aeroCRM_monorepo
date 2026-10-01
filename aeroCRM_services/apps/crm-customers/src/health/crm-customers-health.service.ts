@@ -48,6 +48,20 @@ export class CrmCustomersHealthService {
 			await this.prisma
 				.$queryRaw`SELECT id, workspace_id, actor_subject, entity, format, row_count, byte_count, snapshot_at, prepared_at FROM crm_customers.export_audit LIMIT 0`;
 			await this.prisma
+				.$queryRaw`SELECT id, workspace_id, actor_subject, entity, source_key, file_digest, rows, expires_at, commit_command_id, request_hash, result, created_at FROM crm_customers.import_previews LIMIT 0`;
+			await this.prisma
+				.$queryRaw`SELECT id, workspace_id, source_key, entity, external_id, payload_hash, company_id, contact_id, created_at FROM crm_customers.import_bindings LIMIT 0`;
+			const importTriggers = await this.prisma.$queryRaw<Array<{ table_name: string; trigger_name: string }>>`
+				SELECT c.relname AS table_name, t.tgname AS trigger_name
+				FROM pg_catalog.pg_trigger t
+				JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
+				JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+				WHERE n.nspname = 'crm_customers'
+				  AND c.relname IN ('import_previews', 'import_bindings')
+				  AND t.tgname IN ('guard_workspace_closure', 'import_preview_immutable', 'import_binding_immutable')
+				  AND t.tgenabled = 'O'`;
+			if (importTriggers.length !== 4) throw new Error('Import guards are unavailable');
+			await this.prisma
 				.$queryRaw`SELECT operation_id, workspace_id, workflow_id, actor_subject, payload_hash, state, contact_id, result, committed_at FROM crm_customers.intake_operation_slots LIMIT 0`;
 			await this.prisma
 				.$queryRaw`SELECT command_id, workspace_id, actor_subject, request_hash, result FROM crm_customers.intake_operation_commands LIMIT 0`;

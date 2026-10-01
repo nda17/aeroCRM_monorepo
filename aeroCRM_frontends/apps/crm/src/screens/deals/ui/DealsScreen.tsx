@@ -40,6 +40,7 @@ import toast from 'react-hot-toast'
 import { useSearchParams } from 'next/navigation'
 import styles from './DealsScreen.module.scss'
 import { ExportRecordsControl } from '@/features/export-records'
+import { ImportRecordsControl } from '@/features/import-records/ui/ImportRecordsControl'
 import { useSalesAssignees } from '@/features/manage-sales/model/use-sales-assignees'
 import { isUuidV4 } from '@/shared/lib/contract'
 import { DealPipelineBoard } from './DealPipelineBoard'
@@ -283,6 +284,7 @@ const DealsWorkspaceScreen = ({
 				}
 				actions={
 					<>
+						<ImportRecordsControl entity="deals" />
 						{context.canWrite &&
 							context.permissions.data?.permissions.includes(
 								'sales:manage-pipelines'

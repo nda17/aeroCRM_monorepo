@@ -55,6 +55,15 @@
       "INSERT",
       "UPDATE"
     ],
+    "import_previews": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "import_bindings": [
+      "SELECT",
+      "INSERT"
+    ],
     "commerce_commands": [
       "SELECT",
       "INSERT"
@@ -167,7 +176,9 @@
     "enforce_service_identity_integrity",
     "workspace_closure_fence_immutable",
     "assert_workspace_open",
-    "guard_workspace_business_write"
+    "guard_workspace_business_write",
+    "import_preview_immutable",
+    "import_binding_immutable"
   ],
   "routineExecute": ["assert_workspace_open(uuid)"]
 }

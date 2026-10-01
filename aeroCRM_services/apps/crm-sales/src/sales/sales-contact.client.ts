@@ -9,6 +9,78 @@ import { serviceOrigin } from './sales-access';
 
 @Injectable()
 export class SalesContactClient {
+	async resolveImportContacts(
+		authorization: string,
+		workspaceId: string,
+		sourceKey: string,
+		references: Array<{ kind: 'contact'; externalId?: string; id?: string }>
+	): Promise<Array<{ id: string; name: string; version: number } | null>> {
+		if (!references.length) return [];
+		const origin = serviceOrigin(process.env.CRM_CUSTOMERS_INTERNAL_BASE_URL);
+		let response: Response;
+		try {
+			response = await fetch(`${origin}/api/v1/crm/customers/imports/resolve`, {
+				method: 'POST',
+				headers: {
+					Authorization: authorization,
+					'content-type': 'application/json'
+				},
+				body: JSON.stringify({ schemaVersion: 1, workspaceId, sourceKey, references }),
+				cache: 'no-store',
+				redirect: 'error',
+				signal: AbortSignal.timeout(10000)
+			});
+		} catch {
+			throw new ServiceUnavailableException('CRM contacts are temporarily unavailable');
+		}
+		if (response.status === 401) throw new UnauthorizedException();
+		if (response.status === 403) throw new ForbiddenException();
+		try {
+			if (!response.ok) throw new Error();
+			const value: unknown = await response.json();
+			if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();
+			const root = value as Record<string, unknown>;
+			if (
+				Object.keys(root).sort().join(',') !== 'items,schemaVersion' ||
+				root.schemaVersion !== 1 ||
+				!Array.isArray(root.items) ||
+				root.items.length !== references.length
+			)
+				throw new Error();
+			return root.items.map((value, index) => {
+				if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();
+				const item = value as Record<string, unknown>;
+				if (
+					Object.keys(item).sort().join(',') !== 'contact,error,index' ||
+					item.index !== index ||
+					(item.error !== null &&
+						(typeof item.error !== 'string' || item.error.length > 200))
+				)
+					throw new Error();
+				if (item.contact === null) {
+					if (typeof item.error !== 'string' || !item.error) throw new Error();
+					return null;
+				}
+				if (item.error !== null || !item.contact || typeof item.contact !== 'object' || Array.isArray(item.contact))
+					throw new Error();
+				const contact = item.contact as Record<string, unknown>;
+				if (
+					Object.keys(contact).sort().join(',') !== 'id,name,version' ||
+					typeof contact.id !== 'string' ||
+					!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(contact.id) ||
+					typeof contact.name !== 'string' ||
+					!contact.name.trim() ||
+					contact.name.length > 200 ||
+					!Number.isSafeInteger(contact.version) ||
+					Number(contact.version) < 1
+				)
+					throw new Error();
+				return { id: contact.id, name: contact.name, version: Number(contact.version) };
+			});
+		} catch {
+			throw new ServiceUnavailableException('CRM contact response is unavailable');
+		}
+	}
 	async requireContact(
 		authorization: string,
 		workspaceId: string,

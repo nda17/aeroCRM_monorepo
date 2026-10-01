@@ -111,6 +111,12 @@ export class CrmSalesHealthService {
 				this.prisma.salesCommandReceipt.findFirst({
 					select: { commandId: true }
 				}),
+				this.prisma.importPreview.findFirst({
+					select: { id: true, commitCommandId: true, result: true }
+				}),
+				this.prisma.importBinding.findFirst({
+					select: { id: true, dealId: true }
+				}),
 				this.prisma.intakeOperationSlot.findFirst({
 					select: { operationId: true, state: true }
 				}),

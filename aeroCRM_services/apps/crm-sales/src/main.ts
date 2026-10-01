@@ -1,5 +1,6 @@
 import { Logger, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { json } from 'express';
 import { EXPORT_EXPOSE_HEADERS } from './exports/export-format';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { parseCrmSalesCorsAllowedOrigins } from './config/crm-sales-cors.config';
@@ -26,6 +27,7 @@ async function bootstrap(): Promise<void> {
 		{ forceCloseConnections: true }
 	);
 	application = app;
+	app.use('/api/v1/crm/sales/imports', json({ limit: '2mb', strict: true }));
 	// A bounded 1 MiB catalog upload is base64 encoded in a JSON request.
 	app.useBodyParser('json', { limit: '2mb' });
 

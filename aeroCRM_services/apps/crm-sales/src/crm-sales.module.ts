@@ -48,6 +48,8 @@ import { CommerceController } from './commerce/commerce.controller';
 import { CommerceService } from './commerce/commerce.service';
 import { CommerceFinanceService } from './commerce/commerce-finance.service';
 import { CommerceImportService } from './commerce/commerce-import.service';
+import { SalesImportController } from './imports/import.controller';
+import { SalesImportService } from './imports/import.service';
 
 @Module({
 	imports: [ConfigModule.forRoot({ isGlobal: true }), CrmSalesPrismaModule],
@@ -65,6 +67,7 @@ import { CommerceImportService } from './commerce/commerce-import.service';
 		SalesExportController,
 		IntakeOperationController,
 		CommerceController,
+		SalesImportController,
 		WorkspaceClosureController
 	],
 	providers: [
@@ -95,6 +98,7 @@ import { CommerceImportService } from './commerce/commerce-import.service';
 		CommerceService,
 		CommerceFinanceService,
 		CommerceImportService,
+		SalesImportService,
 		WorkspaceClosureService,
 		{ provide: APP_FILTER, useClass: WorkspaceClosureErrorFilter }
 	]

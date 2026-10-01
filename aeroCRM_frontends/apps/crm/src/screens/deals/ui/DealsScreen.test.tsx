@@ -63,6 +63,9 @@ vi.mock('@/features/manage-sales/model/use-sales-session', () => ({
 vi.mock('@/features/export-records', () => ({
 	ExportRecordsControl: () => null
 }))
+vi.mock('@/features/import-records/ui/ImportRecordsControl', () => ({
+	ImportRecordsControl: () => null
+}))
 vi.mock('react-hot-toast', () => ({
 	default: Object.assign(vi.fn(), {
 		success: vi.fn(),

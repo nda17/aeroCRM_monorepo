@@ -17,6 +17,8 @@ import { LiveChangesController } from "./live/live-changes.controller";
 import { Module } from "@nestjs/common";
 import { CustomersExportController } from "./exports/export.controller";
 import { CustomersExportService } from "./exports/export.service";
+import { CustomerImportController } from "./imports/import.controller";
+import { CustomerImportService } from "./imports/import.service";
 import { ConfigModule } from "@nestjs/config";
 import { CrmCustomersHealthController } from "./health/crm-customers-health.controller";
 import { CrmCustomersHealthService } from "./health/crm-customers-health.service";
@@ -49,6 +51,7 @@ import {
           ContactsV2Controller,
           CompanyLookupController,
           CustomersExportController,
+          CustomerImportController,
           ContactIntakeOperationController,
           WorkspaceClosureController,
         ]
@@ -73,6 +76,7 @@ import {
             useClass: DadataCompanyLookupAdapter,
           },
           CustomersExportService,
+          CustomerImportService,
           ContactIntakeOperationService,
           ContactIntakeOperationGuard,
           WorkspaceClosureService,

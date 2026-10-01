@@ -49,6 +49,8 @@ describe('CrmSalesHealthService', () => {
 			salesCommandReceipt: {
 				findFirst: jest.fn().mockResolvedValue(null)
 			},
+			importPreview: { findFirst: jest.fn().mockResolvedValue(null) },
+			importBinding: { findFirst: jest.fn().mockResolvedValue(null) },
 			intakeOperationSlot: {
 				findFirst: jest.fn().mockResolvedValue(null)
 			},
@@ -120,7 +122,9 @@ describe('CrmSalesHealthService', () => {
 		'taskCommandReceipt',
 		'taskTimeline',
 		'reminderRule',
-		'reminderRuleCommand'
+		'reminderRuleCommand',
+		'importPreview',
+		'importBinding'
 	] as const)(
 		'refuses readiness without %s permissions/schema',
 		async table => {

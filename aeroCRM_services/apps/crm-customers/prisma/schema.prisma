@@ -51,6 +51,7 @@ model ServiceIdentity {
 }
 
 model Company {
+  importBindings   ImportBinding[] @relation("ImportBinding_companyId")
   id               String    @id @default(uuid()) @db.Uuid
   workspaceId      String    @map("workspace_id") @db.Uuid
   name             String    @db.VarChar(200)
@@ -80,6 +81,7 @@ model Company {
 }
 
 model Contact {
+  importBindings            ImportBinding[]   @relation("ImportBinding_contactId")
   mailContactLink_contactId MailContactLink[] @relation("MailContactLink_contactId")
   mailAttachment_contactId  MailAttachment[]  @relation("MailAttachment_contactId")
   mailSendIntent_contactId  MailSendIntent[]  @relation("MailSendIntent_contactId")
@@ -109,6 +111,46 @@ model Contact {
   @@index([workspaceId, email])
   @@index([workspaceId, companyId])
   @@map("contacts")
+  @@schema("crm_customers")
+}
+
+model ImportPreview {
+  id              String    @id @default(uuid()) @db.Uuid
+  workspaceId     String    @map("workspace_id") @db.Uuid
+  actorSubject    String    @map("actor_subject") @db.VarChar(256)
+  entity          String    @db.VarChar(16)
+  sourceKey       String    @map("source_key") @db.VarChar(100)
+  fileDigest      String    @map("file_digest") @db.Char(64)
+  rows            Json
+  expiresAt       DateTime  @map("expires_at")
+  commitCommandId String?   @unique @map("commit_command_id") @db.Uuid
+  requestHash     String?   @map("request_hash") @db.Char(64)
+  result          Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, actorSubject, expiresAt])
+  @@map("import_previews")
+  @@schema("crm_customers")
+}
+
+model ImportBinding {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  sourceKey   String    @map("source_key") @db.VarChar(100)
+  entity      String    @db.VarChar(16)
+  externalId  String    @map("external_id") @db.VarChar(256)
+  payloadHash String    @map("payload_hash") @db.Char(64)
+  companyId   String?   @map("company_id") @db.Uuid
+  contactId   String?   @map("contact_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  company     Company?  @relation("ImportBinding_companyId", fields: [workspaceId, companyId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+  contact     Contact?  @relation("ImportBinding_contactId", fields: [workspaceId, contactId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([workspaceId, sourceKey, entity, externalId])
+  @@index([workspaceId, companyId])
+  @@index([workspaceId, contactId])
+  @@map("import_bindings")
   @@schema("crm_customers")
 }
 

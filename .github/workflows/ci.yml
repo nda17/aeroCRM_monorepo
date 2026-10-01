@@ -1,7 +1,7 @@
 name: aeroCRM CI
 on:
   push:
-    branches: [dev_0.1.0/feature/standalone-crm, dev_0.2.0/feature/selective-backend-release, dev_0.3.0/feature/draft-protection-and-corporate-mail, prod_0.1.0]
+    branches: [dev_0.1.0/feature/standalone-crm, dev_0.2.0/feature/selective-backend-release, dev_0.3.0/feature/draft-protection-and-corporate-mail, dev_0.4.0/feature/crm-file-imports, prod_0.1.0]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -892,6 +892,12 @@ jobs:
         env:
           CRM_MAIL_INTEGRATION_ALLOW_MUTATION: 'true'
         run: node test/integration/corporate-mail-postgres18.integration.mjs
+      - name: Verify Customers file import atomicity, replay and ACL in PostgreSQL 18
+        working-directory: aeroCRM_services/apps/crm-customers
+        env:
+          CRM_CUSTOMERS_INTEGRATION_ALLOW_MUTATION: 'true'
+          CRM_CUSTOMERS_TEST_SKIP_MIGRATIONS: 'true'
+        run: node test/integration/customers-postgres18.integration.mjs
   workspace-closure-unit:
     runs-on: ubuntu-latest
     strategy:
@@ -935,6 +941,9 @@ jobs:
       - name: Verify mail transport, admission and authorization contracts
         working-directory: aeroCRM_services/apps/crm-customers
         run: pnpm exec jest --runInBand --testPathPattern=mail
+      - name: Verify Customers import and readiness contracts
+        working-directory: aeroCRM_services/apps/crm-customers
+        run: pnpm exec jest --runInBand --testPathPattern='imports|health'
   backend-release-contracts:
     runs-on: ubuntu-latest
     steps:

@@ -3,6 +3,7 @@ import { Logger, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { EXPORT_EXPOSE_HEADERS } from './exports/export-format';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { json } from 'express';
 import { parseCrmCustomersCorsAllowedOrigins } from './config/crm-customers-cors.config';
 import { CrmCustomersModule } from './crm-customers.module';
 import { terminateFailedBootstrap } from './runtime/bootstrap-failure';
@@ -28,6 +29,16 @@ async function bootstrap(): Promise<void> {
 		{ forceCloseConnections: true }
 	);
 	application = app;
+	app.use('/api/v1/crm/customers/imports/inspect', json({ limit: '2mb' }));
+	app.use('/api/v1/crm/customers/imports/preview', json({ limit: '2mb' }));
+	app.use('/api/v1/crm/customers/imports/resolve', json({ limit: '768kb' }));
+	app.use(
+		'/api/v1/crm/customers/imports',
+		(_request: unknown, response: import('express').Response, next: () => void) => {
+			response.setHeader('Cache-Control', 'private,no-store');
+			next();
+		}
+	);
 	app.useBodyParser('json', { limit: '32kb' });
 	app.use(
 		'/api/v1/crm/customers/mail',

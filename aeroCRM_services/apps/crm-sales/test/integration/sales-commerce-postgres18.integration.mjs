@@ -20,6 +20,9 @@ const {
 const {
   CommerceImportService,
 } = require("../../dist/src/commerce/commerce-import.service.js");
+const {
+  SalesImportService,
+} = require("../../dist/src/imports/import.service.js");
 
 assert.equal(process.env.CRM_SALES_INTEGRATION_ALLOW_MUTATION, "true");
 const runtimeUrl = requiredEnv("CRM_SALES_TEST_DATABASE_URL");
@@ -27,7 +30,7 @@ const migrationUrl = requiredEnv("CRM_SALES_TEST_MIGRATION_URL");
 const runtimeRole = requiredEnv("CRM_SALES_TEST_RUNTIME_ROLE");
 const runtime = validateDatabase(runtimeUrl, runtimeRole);
 const migration = validateDatabase(migrationUrl);
-assert.equal(runtime.database, "aerocrm_crm_sales_test");
+assert.match(runtime.database, /^aerocrm_crm_sales_test(?:_import)?$/);
 assert.equal(runtime.database, migration.database);
 assert.equal(
   process.env.CRM_SALES_DATABASE_URL,
@@ -63,6 +66,33 @@ const installer = new PipelineTemplateInstallationService(prisma, catalog);
 const commerce = new CommerceService(prisma, catalog);
 const finance = new CommerceFinanceService(prisma);
 const imports = new CommerceImportService(prisma);
+const importContactVersions = new Map();
+const importContacts = {
+  resolveImportContacts: async (
+    _authorization,
+    requestedWorkspace,
+    _sourceKey,
+    references,
+  ) => {
+    assert.equal(requestedWorkspace, workspaceId);
+    return references.map((reference) => ({
+      id: reference.id,
+      name: "Imported integration contact",
+      version: importContactVersions.get(reference.id) ?? 1,
+    }));
+  },
+};
+const importAccess = {
+  authorize: async (_authorization, requestedWorkspace) => ({
+    ...access,
+    workspaceId: requestedWorkspace,
+  }),
+};
+const fileImports = new SalesImportService(
+  prisma,
+  importAccess,
+  importContacts,
+);
 const sales = new SalesService(prisma, {
   requireContact: async (_authorization, requestedWorkspace, id) => {
     assert.equal(requestedWorkspace, workspaceId);
@@ -258,7 +288,11 @@ try {
     manualAmountMinor: 1234,
   });
   assert.deepEqual(
-    { mode: positiveManual.mode, amountMinor: positiveManual.amountMinor, items: positiveManual.items },
+    {
+      mode: positiveManual.mode,
+      amountMinor: positiveManual.amountMinor,
+      items: positiveManual.items,
+    },
     { mode: "MANUAL", amountMinor: 1234, items: [] },
   );
   const serviceOnly = await commerce.replaceLines(access, dealId, {
@@ -575,10 +609,7 @@ try {
     { created: priceApply.created, updated: priceApply.updated },
     { created: 0, updated: 1 },
   );
-  assert.deepEqual(
-    await imports.apply(access, priceApplyCommand),
-    priceApply,
-  );
+  assert.deepEqual(await imports.apply(access, priceApplyCommand), priceApply);
   const identicalPricePreview = await imports.preview(access, {
     workspaceId,
     ...repeatPriceFile,
@@ -592,7 +623,13 @@ try {
       commandId: randomUUID(),
       previewId: identicalPricePreview.previewId,
     }),
-    { schemaVersion: 1, previewId: identicalPricePreview.previewId, created: 0, updated: 0, unchanged: 1 },
+    {
+      schemaVersion: 1,
+      previewId: identicalPricePreview.previewId,
+      created: 0,
+      updated: 0,
+      unchanged: 1,
+    },
   );
   assert.equal(
     await prisma.commerceCatalogItem.count({ where: { workspaceId } }),
@@ -772,10 +809,317 @@ try {
     isPermissionDenied,
   );
 
-  console.log("CRM Sales PostgreSQL 18 commerce service integration passed");
+  await salesFileImportScenarios({
+    prisma,
+    migrationPrisma,
+    imports: fileImports,
+    importContactVersions,
+    access,
+    pipelineId: installed.installation.pipelineId,
+    openStage,
+    existingDealId: dealId,
+  });
+
+  console.log(
+    "CRM Sales PostgreSQL 18 commerce and file import atomicity/replay/binding integration passed",
+  );
 } finally {
   // This database is an isolated disposable CI fixture. Append-only records are intentionally retained.
   await prisma.$disconnect();
+}
+
+async function salesFileImportScenarios({
+  prisma,
+  migrationPrisma,
+  imports,
+  importContactVersions,
+  access,
+  pipelineId,
+  openStage,
+  existingDealId,
+}) {
+  const authorization = "Bearer integration";
+  const secondStage = await prisma.pipelineStage.create({
+    data: {
+      pipelineId,
+      workspaceId: access.workspaceId,
+      key: `import-rollback-${randomUUID()}`.slice(0, 64),
+      name: "Этап для rollback импорта",
+      position: 50,
+      state: "OPEN",
+    },
+  });
+  const file = (rows) => Buffer.from(rows, "utf8").toString("base64");
+  const request = (sourceKey, rows, decisions = []) => ({
+    schemaVersion: 1,
+    workspaceId: access.workspaceId,
+    entity: "deals",
+    filename: "deals.csv",
+    contentBase64: file(rows),
+    sourceKey,
+    sheet: "CSV",
+    mapping: {
+      externalId: "externalId",
+      title: "title",
+      contactId: "contactId",
+      stageId: "stageId",
+      amount: "amount",
+    },
+    options: { pipelineId },
+    decisions,
+  });
+  const apply = (previewId, commandId) =>
+    imports.apply(
+      access,
+      {
+        schemaVersion: 1,
+        workspaceId: access.workspaceId,
+        previewId,
+        commandId,
+      },
+      authorization,
+    );
+  const contactId = randomUUID();
+  const batch = request(
+    "sales-import-atomic",
+    `externalId,title,contactId,stageId,amount\natomic-first,Atomic first,${contactId},${openStage.id},100\natomic-second,Atomic second,${randomUUID()},${secondStage.id},200\n`,
+  );
+  const preview = await imports.preview(access, batch, authorization);
+  assert.equal(preview.summary.create, 2);
+  assert.equal(preview.rows[0].action, "CREATE");
+  assert.equal(preview.rows[1].action, "CREATE");
+  const beforeDeals = await prisma.deal.count({
+    where: { workspaceId: access.workspaceId },
+  });
+  const beforeTimelines = await prisma.dealTimeline.count({
+    where: { workspaceId: access.workspaceId },
+  });
+  const beforeBindings = await prisma.importBinding.count({
+    where: {
+      workspaceId: access.workspaceId,
+      sourceKey: "sales-import-atomic",
+    },
+  });
+  await prisma.pipelineStage.update({
+    where: { id: secondStage.id },
+    data: { state: "WON" },
+  });
+  await assert.rejects(apply(preview.previewId, randomUUID()), isConflict);
+  assert.equal(
+    await prisma.deal.count({ where: { workspaceId: access.workspaceId } }),
+    beforeDeals,
+    "a later stage conflict must roll back an earlier deal CREATE",
+  );
+  assert.equal(
+    await prisma.dealTimeline.count({
+      where: { workspaceId: access.workspaceId },
+    }),
+    beforeTimelines,
+    "a rolled back batch must leave no timeline entries",
+  );
+  assert.equal(
+    await prisma.importBinding.count({
+      where: {
+        workspaceId: access.workspaceId,
+        sourceKey: "sales-import-atomic",
+      },
+    }),
+    beforeBindings,
+    "a rolled back batch must leave no import bindings",
+  );
+
+  const replaySource = "sales-import-replay";
+  const replayContactId = randomUUID();
+  const replayPreview = await imports.preview(
+    access,
+    request(
+      replaySource,
+      `externalId,title,contactId,stageId,amount\nreplay-1,Replay deal,${replayContactId},${openStage.id},0\n`,
+    ),
+    authorization,
+  );
+  const commandId = randomUUID();
+  const result = await apply(replayPreview.previewId, commandId);
+  assert.equal(result.created, 1);
+  const realNow = Date.now;
+  Date.now = () => realNow() + 2 * 24 * 60 * 60_000;
+  try {
+    assert.deepEqual(
+      (await imports.get(access, replayPreview.previewId, authorization))
+        .result,
+      result,
+      "GET must retain an applied receipt after preview expiry",
+    );
+    assert.deepEqual(await apply(replayPreview.previewId, commandId), result);
+  } finally {
+    Date.now = realNow;
+  }
+  assert.equal(
+    await prisma.deal.count({
+      where: { workspaceId: access.workspaceId, title: "Replay deal" },
+    }),
+    1,
+    "replaying the same command after an unknown response must not create another deal",
+  );
+  const unchangedPreview = await imports.preview(
+    access,
+    request(
+      replaySource,
+      `externalId,title,contactId,stageId,amount\nreplay-1,Replay deal,${replayContactId},${openStage.id},0\n`,
+    ),
+    authorization,
+  );
+  assert.equal(unchangedPreview.rows[0].action, "SKIP");
+  assert.equal(
+    (await apply(unchangedPreview.previewId, randomUUID())).skipped,
+    1,
+  );
+  assert.equal(
+    await prisma.deal.count({
+      where: { workspaceId: access.workspaceId, title: "Replay deal" },
+    }),
+    1,
+    "re-importing an unchanged binding must skip it without creating another deal",
+  );
+
+  const existingDeal = await prisma.deal.findFirstOrThrow({
+    where: { id: existingDealId, workspaceId: access.workspaceId },
+  });
+  const linkPreview = await imports.preview(
+    access,
+    request(
+      "sales-import-explicit-link",
+      `externalId,title,contactId,stageId,amount\nlink-deal,Existing deal,${randomUUID()},${openStage.id},0\n`,
+      [
+        {
+          row: 2,
+          action: "LINK",
+          existingId: existingDealId,
+          expectedVersion: existingDeal.version,
+        },
+      ],
+    ),
+    authorization,
+  );
+  assert.equal(linkPreview.rows[0].action, "LINK");
+  const linked = await apply(linkPreview.previewId, randomUUID());
+  assert.equal(linked.linked, 1);
+  assert.equal(linked.items[0].entityId, existingDealId);
+
+  const concurrentContactId = randomUUID();
+  importContactVersions.set(concurrentContactId, 1);
+  const concurrentSource = "sales-import-command-barrier";
+  const concurrentPreview = await imports.preview(
+    access,
+    request(
+      concurrentSource,
+      `externalId,title,contactId,stageId,amount\nbarrier-1,Command barrier deal,${concurrentContactId},${openStage.id},0\n`,
+    ),
+    authorization,
+  );
+  const concurrentCommandId = randomUUID();
+  const originalTransaction = prisma.$transaction.bind(prisma);
+  let transactionNumber = 0;
+  let releaseFirstTransaction;
+  let signalFirstPrepared;
+  let signalSecondStarted;
+  const firstGate = new Promise((resolve) => {
+    releaseFirstTransaction = resolve;
+  });
+  const firstPrepared = new Promise((resolve) => {
+    signalFirstPrepared = resolve;
+  });
+  const secondStarted = new Promise((resolve) => {
+    signalSecondStarted = resolve;
+  });
+  prisma.$transaction = (callback, options) => {
+    const number = ++transactionNumber;
+    if (number === 2) signalSecondStarted();
+    return originalTransaction(async (tx) => {
+      const value = await callback(tx);
+      if (number === 1) {
+        signalFirstPrepared();
+        await firstGate;
+      }
+      return value;
+    }, options);
+  };
+  try {
+    const firstApply = apply(concurrentPreview.previewId, concurrentCommandId);
+    await firstPrepared;
+    const sameCommandRetry = apply(
+      concurrentPreview.previewId,
+      concurrentCommandId,
+    );
+    await secondStarted;
+    const retryState = await Promise.race([
+      sameCommandRetry.then(
+        () => "settled",
+        () => "settled",
+      ),
+      new Promise((resolve) => setTimeout(() => resolve("waiting"), 100)),
+    ]);
+    assert.equal(
+      retryState,
+      "waiting",
+      "same-command retry must wait for the first transaction's receipt",
+    );
+    importContactVersions.set(concurrentContactId, 2);
+    releaseFirstTransaction();
+    const firstResult = await firstApply;
+    const retryResult = await sameCommandRetry;
+    assert.deepEqual(retryResult, firstResult);
+    assert.equal(firstResult.created, 1);
+    assert.equal(
+      await prisma.deal.count({
+        where: {
+          workspaceId: access.workspaceId,
+          title: "Command barrier deal",
+        },
+      }),
+      1,
+      "same-command retry must leave one deal after the contact advances to v2",
+    );
+    assert.equal(
+      await prisma.importBinding.count({
+        where: {
+          workspaceId: access.workspaceId,
+          sourceKey: concurrentSource,
+          externalId: "barrier-1",
+        },
+      }),
+      1,
+      "same-command retry must leave one source binding",
+    );
+  } finally {
+    releaseFirstTransaction();
+    prisma.$transaction = originalTransaction;
+  }
+
+  const expiredPreview = await imports.preview(
+    access,
+    request(
+      "sales-import-expired",
+      `externalId,title,contactId,stageId,amount\nexpired-1,Expired deal,${randomUUID()},${openStage.id},0\n`,
+    ),
+    authorization,
+  );
+  const currentNow = Date.now;
+  Date.now = () => currentNow() + 2 * 24 * 60 * 60_000;
+  try {
+    assert.equal(
+      (await imports.get(access, expiredPreview.previewId, authorization))
+        .result,
+      null,
+      "GET must keep an expired immutable preview available for recovery",
+    );
+    await assert.rejects(
+      apply(expiredPreview.previewId, randomUUID()),
+      isConflict,
+    );
+  } finally {
+    Date.now = currentNow;
+  }
 }
 
 function requiredEnv(name) {
@@ -788,7 +1132,7 @@ function validateDatabase(value, expectedRole) {
   const url = new URL(value);
   assert.ok(["postgres:", "postgresql:"].includes(url.protocol));
   assert.ok(["localhost", "127.0.0.1", "[::1]"].includes(url.hostname));
-  assert.equal(url.pathname, "/aerocrm_crm_sales_test");
+  assert.match(url.pathname, /^\/aerocrm_crm_sales_test(?:_import)?$/);
   assert.equal(url.searchParams.get("schema"), "crm_sales");
   if (expectedRole)
     assert.equal(decodeURIComponent(url.username), expectedRole);

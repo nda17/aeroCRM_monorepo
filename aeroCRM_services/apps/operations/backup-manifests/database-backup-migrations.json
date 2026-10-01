@@ -148,7 +148,7 @@
 			]
 		},
 		"crm-customers": {
-			"manifestSha256": "8473e653763e743ce28ec1e68368391b2eae0539aa150cb65f219b88a72c6b96",
+			"manifestSha256": "e88591f01ea4c49b8c560ec6ee1f890b7504f224f3ec13d53459648c2d71cdd0",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -173,11 +173,15 @@
 				{
 					"name": "20260929000000_mail_workspace",
 					"checksum": "464b7b587b3cbb14fa44f6d6f46539941fd1a48723e902b177ffc7647b6a013c"
+				},
+				{
+					"name": "20261001000000_crm_file_imports",
+					"checksum": "f576f71658ed8355711810df235a0d267eb575fe86cd6c4009db8cd7a574c44f"
 				}
 			]
 		},
 		"crm-sales": {
-			"manifestSha256": "e05ce841906b02ab8632c1c7c0b24a00c3cbda04d0ed9d6c2c9d5b88a6e840f6",
+			"manifestSha256": "720bda0cacde03310d9452410ad95391cd0f5e5d0e1b370677cdc61538fff743",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -190,6 +194,10 @@
 				{
 					"name": "20260923030000_workspace_closure",
 					"checksum": "bb118b4953dbb143cd79e8c6b1c453958c88a38ac709bc57e1c33235c29e7d4a"
+				},
+				{
+					"name": "20261001000000_crm_file_imports",
+					"checksum": "d2c22df0df205a6b877db8cbc63cd79ad282597503f2cef7ae296a1bc668cd3a"
 				}
 			]
 		}

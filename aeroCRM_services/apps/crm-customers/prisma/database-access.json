@@ -105,6 +105,15 @@
       "SELECT",
       "INSERT",
       "UPDATE"
+    ],
+    "import_previews": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "import_bindings": [
+      "SELECT",
+      "INSERT"
     ]
   },
   "sequences": {},
@@ -115,7 +124,9 @@
     "workspace_closure_fence_immutable",
     "assert_workspace_open",
     "guard_workspace_business_write",
-    "mail_write_guard"
+    "mail_write_guard",
+    "import_preview_immutable",
+    "import_binding_immutable"
   ],
   "routineExecute": [
     "assert_workspace_open(uuid)"

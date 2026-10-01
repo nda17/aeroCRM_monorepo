@@ -3,9 +3,21 @@ import { CrmCustomersPrismaService } from '../prisma/crm-customers-prisma.servic
 import { CrmCustomersHealthService } from './crm-customers-health.service';
 
 describe('CrmCustomersHealthService', () => {
+	const importTriggers = [
+		{ table_name: 'import_previews', trigger_name: 'guard_workspace_closure' },
+		{ table_name: 'import_bindings', trigger_name: 'guard_workspace_closure' },
+		{ table_name: 'import_previews', trigger_name: 'import_preview_immutable' },
+		{ table_name: 'import_bindings', trigger_name: 'import_binding_immutable' }
+	];
 	const createPrisma = (serviceName = 'crm-customers-service') =>
 		({
-			$queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }]),
+			$queryRaw: jest.fn().mockImplementation((parts: TemplateStringsArray) =>
+				Promise.resolve(
+					parts.join('').includes('pg_catalog.pg_trigger')
+						? importTriggers
+						: [{ '?column?': 1 }]
+				)
+			),
 			serviceIdentity: {
 				findUnique: jest.fn().mockResolvedValue({
 					serviceName,
@@ -61,6 +73,31 @@ describe('CrmCustomersHealthService', () => {
 		]) {
 			expect(company).toContain(`c.${column}`);
 		}
+	});
+
+	it('checks all active import guard triggers before readiness', async () => {
+		const prisma = createPrisma();
+		await new CrmCustomersHealthService(prisma).readiness();
+		const triggerQuery = (prisma.$queryRaw as jest.Mock).mock.calls
+			.map(([parts]) => parts.join('') as string)
+			.find(sql => sql.includes('pg_catalog.pg_trigger'));
+		expect(triggerQuery).toContain("n.nspname = 'crm_customers'");
+		expect(triggerQuery).toContain("t.tgenabled = 'O'");
+	});
+
+	it('refuses readiness when an import guard trigger is missing', async () => {
+		const prisma = createPrisma();
+		(prisma.$queryRaw as jest.Mock).mockImplementation(
+			(parts: TemplateStringsArray) =>
+				Promise.resolve(
+					parts.join('').includes('pg_catalog.pg_trigger')
+						? importTriggers.slice(0, 3)
+						: [{ '?column?': 1 }]
+			)
+		);
+		await expect(
+			new CrmCustomersHealthService(prisma).readiness()
+		).rejects.toBeInstanceOf(ServiceUnavailableException);
 	});
 
 	it('fails readiness when the owned customer migration is missing', async () => {

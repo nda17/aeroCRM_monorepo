@@ -160,6 +160,7 @@ model Deal {
   commerceLines     CommerceDealLine[]
   commerceQuotes    CommerceQuote[]
   commercePayments  CommercePayment[]
+  importBindings    ImportBinding[]
 
   @@unique([id, workspaceId])
   @@unique([id, workspaceId, contactId])
@@ -167,6 +168,44 @@ model Deal {
   @@index([workspaceId, assignedToSubject, createdAt])
   @@index([workspaceId, teamId, createdAt])
   @@map("deals")
+  @@schema("crm_sales")
+}
+
+model ImportPreview {
+  id              String   @id @default(uuid()) @db.Uuid
+  workspaceId     String   @map("workspace_id") @db.Uuid
+  actorSubject    String   @map("actor_subject") @db.VarChar(256)
+  entity          String   @db.VarChar(16)
+  sourceKey       String   @map("source_key") @db.VarChar(100)
+  fileDigest      String   @map("file_digest") @db.Char(64)
+  rows            Json
+  refs            Json
+  expiresAt       DateTime @map("expires_at")
+  commitCommandId String?  @unique @map("commit_command_id") @db.Uuid
+  requestHash     String?  @map("request_hash") @db.Char(64)
+  result          Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([workspaceId, actorSubject, createdAt])
+  @@index([workspaceId, expiresAt])
+  @@map("import_previews")
+  @@schema("crm_sales")
+}
+
+model ImportBinding {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  sourceKey   String   @map("source_key") @db.VarChar(100)
+  entity      String   @db.VarChar(16)
+  externalId  String   @map("external_id") @db.VarChar(200)
+  dealId      String   @map("deal_id") @db.Uuid
+  payloadHash String   @map("payload_hash") @db.Char(64)
+  createdAt   DateTime @default(now()) @map("created_at")
+  deal        Deal     @relation(fields: [dealId, workspaceId], references: [id, workspaceId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([workspaceId, sourceKey, entity, externalId])
+  @@index([workspaceId, dealId])
+  @@map("import_bindings")
   @@schema("crm_sales")
 }
 

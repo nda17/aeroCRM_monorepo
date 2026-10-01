@@ -15,6 +15,7 @@ import {
 import { useSessionStore } from '@/entities/session'
 import { CustomerEditor } from '@/features/edit-customer'
 import { ExportRecordsControl } from '@/features/export-records'
+import { ImportRecordsControl } from '@/features/import-records/ui/ImportRecordsControl'
 import { AuthenticatedApiError } from '@/shared/api/authenticated-http-client'
 import { isUuidV4 } from '@/shared/lib/contract'
 import {
@@ -223,6 +224,10 @@ const ContactsScreen = ({
 				}
 				actions={
 					<>
+						<ImportRecordsControl
+							entity={kind}
+							disabled={permissionError}
+						/>
 						<ExportRecordsControl
 							entity={kind}
 							disabled={permissionError}
