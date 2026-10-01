@@ -1,21 +1,27 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { parseImportFile } from './import-parser';
 import { encodedFile, tamperCentralChecksum, xlsxFixture } from './import-parser.fixtures';
-import { parseImportFile as parseCustomersImportFile } from '../../../crm-customers/src/imports/import-parser';
 
-const parsers = [parseImportFile, parseCustomersImportFile];
 const csv = (text: string) => encodedFile('google-contacts.csv', Buffer.from(text, 'utf8'));
 const xlsx = (bytes = xlsxFixture()) => encodedFile('google-contacts.xlsx', bytes);
 
 function expectBothReject(input: Record<string, unknown>, strict = true) {
-	for (const parse of parsers) expect(() => parse(input, strict)).toThrow();
+	expect(() => parseImportFile(input, strict)).toThrow();
 }
 
 describe('Sales import file parser', () => {
-	it('strictly parses Google CSV and keeps the Sales parser in parity', () => {
+	it('keeps the Customers and Sales parser sources byte-identical', () => {
+		const customersSource = readFileSync(join(__dirname, 'import-parser.ts'));
+		const salesSource = readFileSync(
+			join(__dirname, '../../../crm-customers/src/imports/import-parser.ts')
+		);
+		expect(customersSource.equals(salesSource)).toBe(true);
+	});
+
+	it('strictly parses Google CSV', () => {
 		const input = csv('\uFEFFName;Email\r\n"Alice Smith";alice@example.com\r\n');
 		const customers = parseImportFile(input, true);
-		const sales = parseCustomersImportFile(input, true);
-		expect(customers).toEqual(sales);
 		expect(customers.sheets[0]).toMatchObject({
 			headers: ['Name', 'Email'],
 			rows: [{ Name: 'Alice Smith', Email: 'alice@example.com' }],
@@ -24,11 +30,9 @@ describe('Sales import file parser', () => {
 		});
 	});
 
-	it('strictly parses Google XLSX shared strings and keeps the Sales parser in parity', () => {
+	it('strictly parses Google XLSX shared strings', () => {
 		const input = xlsx();
 		const customers = parseImportFile(input, true);
-		const sales = parseCustomersImportFile(input, true);
-		expect(customers).toEqual(sales);
 		expect(customers.sheets[0]).toMatchObject({
 			name: 'Contacts',
 			headers: ['Name', 'Email'],
@@ -48,10 +52,8 @@ describe('Sales import file parser', () => {
 				]
 			})
 		);
-		for (const parse of parsers) {
-			expect(parse(input, false).sheets[0].formulaRows).toEqual([2]);
-			expect(() => parse(input, true)).toThrow();
-		}
+		expect(parseImportFile(input, false).sheets[0].formulaRows).toEqual([2]);
+		expect(() => parseImportFile(input, true)).toThrow();
 	});
 
 	it('rejects ragged, invalid UTF-8, over-limit, and oversized-header CSVs in strict mode', () => {
