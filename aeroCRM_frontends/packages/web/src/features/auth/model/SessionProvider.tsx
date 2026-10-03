@@ -12,6 +12,17 @@ import { useQueryClient } from '@tanstack/react-query'
 import { usePathname } from 'next/navigation'
 import { useCallback, useEffect, useRef } from 'react'
 
+import {
+	getTokenBinding,
+	getCurrentSessionBinding,
+	getSessionRevision,
+	SESSION_UPDATED_EVENT
+} from '@/shared/api/token-storage'
+import { startSessionEvents } from '@/shared/api/session-events'
+import { API_URL } from '@/shared/config/api.config'
+import toast from 'react-hot-toast'
+import axios from 'axios'
+
 const ACCESS_TOKEN_REFRESH_THRESHOLD_MS = 60 * 1000
 
 interface SessionProviderProps {
@@ -36,7 +47,14 @@ const SessionProvider = ({
 	const isProtectedPath = isSessionProtectedPath(pathname)
 
 	const syncSession = useCallback(async () => {
-		if (isLogoutPath) {
+		if (isLogoutPath) return
+		if (
+			window.location.pathname === '/login' &&
+			new URLSearchParams(window.location.search).get('session') ===
+				'revoked'
+		) {
+			setAuth(false)
+			setAuthResolved(true)
 			return
 		}
 
@@ -72,8 +90,10 @@ const SessionProvider = ({
 			setAuthResolved(false)
 		}
 
+		const revision = getSessionRevision()
 		try {
 			await authService.getNewTokens()
+			if (getSessionRevision() !== revision && accessToken) return
 
 			if (pathnameRef.current === '/logout') {
 				clearBrowserSession({ redirectToLogin: false })
@@ -88,8 +108,18 @@ const SessionProvider = ({
 				setAuthResolved(true)
 				queryClient.invalidateQueries({ queryKey: ['get-profile'] })
 			}
-		} catch {
+		} catch (error) {
+			if (getSessionRevision() !== revision) return
+			if (!axios.isAxiosError(error) || error.response?.status !== 401) {
+				if (isMountedRef.current) setAuthResolved(true)
+				return
+			}
 			clearBrowserSession({
+				reason:
+					axios.isAxiosError(error) &&
+					error.response?.data?.code === 'session_revoked'
+						? 'revoked'
+						: undefined,
 				redirectToLogin: isSessionProtectedPath(pathnameRef.current)
 			})
 		}
@@ -100,6 +130,105 @@ const SessionProvider = ({
 		setAuth,
 		setAuthResolved
 	])
+
+	useEffect(() => {
+		if (isLogoutPath) return
+		let alive = true
+		let stop: (() => void) | undefined
+		let captured: ReturnType<typeof getTokenBinding> = null
+		let revision = -1
+		const current = () => {
+			const active = getCurrentSessionBinding()
+			return (
+				alive &&
+				getSessionRevision() === revision &&
+				!!captured &&
+				!!active &&
+				captured.subject === active.subject &&
+				captured.sessionId === active.sessionId
+			)
+		}
+		const bind = () => {
+			if (current()) return
+			stop?.()
+			stop = undefined
+			captured = getCurrentSessionBinding()
+			revision = getSessionRevision()
+			if (!captured) return
+			// Capture this binding in its own closure so a late old signal cannot clear a new login.
+			const expected = captured
+			const expectedRevision = revision
+			const same = () =>
+				current() && captured === expected && revision === expectedRevision
+			stop = startSessionEvents({
+				url: API_URL + '/auth/session/events',
+				isCurrent: same,
+				token: async () => {
+					if (!same()) throw new Error('Session changed')
+					if (
+						!isAccessTokenValid(
+							getAccessToken(),
+							ACCESS_TOKEN_REFRESH_THRESHOLD_MS
+						)
+					)
+						try {
+							await authService.getNewTokens()
+						} catch (error) {
+							if (
+								same() &&
+								axios.isAxiosError(error) &&
+								error.response?.status === 401
+							)
+								clearBrowserSession({
+									reason:
+										error.response.data?.code === 'session_revoked'
+											? 'revoked'
+											: undefined
+								})
+							throw error
+						}
+					if (!same()) throw new Error('Session changed')
+					return getAccessToken()!
+				},
+				onRevoked: () => {
+					if (!same()) return
+					toast.error('Выполнен вход на другом устройстве')
+					void queryClient.cancelQueries()
+					queryClient.clear()
+					clearBrowserSession({ reason: 'revoked' })
+				},
+				onUnauthorized: async () => {
+					if (!same()) return
+					try {
+						await authService.getNewTokens()
+					} catch (error) {
+						if (
+							same() &&
+							axios.isAxiosError(error) &&
+							error.response?.status === 401
+						)
+							clearBrowserSession({
+								reason:
+									error.response?.data?.code === 'session_revoked'
+										? 'revoked'
+										: undefined
+							})
+					}
+				}
+			})
+		}
+		window.addEventListener('focus', bind)
+		window.addEventListener(SESSION_UPDATED_EVENT, bind)
+		window.addEventListener(SESSION_CLEARED_EVENT, bind)
+		bind()
+		return () => {
+			alive = false
+			stop?.()
+			window.removeEventListener('focus', bind)
+			window.removeEventListener(SESSION_UPDATED_EVENT, bind)
+			window.removeEventListener(SESSION_CLEARED_EVENT, bind)
+		}
+	}, [isLogoutPath, queryClient])
 
 	useEffect(() => {
 		hasSessionHintRef.current = hasSessionHint

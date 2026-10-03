@@ -23,9 +23,18 @@ describe('Identity current runtime readiness', () => {
 		};
 		const worker = { isReady: jest.fn().mockReturnValue(false) };
 		const housekeeping = { isReady: jest.fn().mockReturnValue(false) };
+		let sessionInvariantReady = true;
+		let databaseQueryCount = 0;
 		const health = new IdentityHealthService(
 			{
-				$queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }]),
+				$queryRaw: jest.fn().mockImplementation(() => {
+					databaseQueryCount += 1;
+					return Promise.resolve(
+						databaseQueryCount % 4 === 0
+							? [{ ready: sessionInvariantReady }]
+							: [{ '?column?': 1 }]
+					);
+				}),
 				serviceIdentity: {
 					findUnique: jest.fn().mockImplementation(() => identity)
 				}
@@ -59,6 +68,11 @@ describe('Identity current runtime readiness', () => {
 			service: 'identity',
 			role: 'worker'
 		});
+		sessionInvariantReady = false;
+		await expect(health.readiness()).rejects.toThrow(
+			'Identity database is not ready'
+		);
+		sessionInvariantReady = true;
 
 		identity.serviceName = 'another-service';
 		await expect(health.readiness()).rejects.toThrow(

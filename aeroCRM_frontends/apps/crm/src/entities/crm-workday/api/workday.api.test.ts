@@ -208,6 +208,44 @@ describe('Workday API exact requests and immutable effects', () => {
 		})
 		expect(request.mock.calls[0][0].data).not.toHaveProperty('teamId')
 	})
+	it('moves a task with settings CAS and verifies only the returned legacy task contract', async () => {
+		const mutation: WorkdayMutation = {
+			kind: 'column',
+			id: taskId,
+			expectedVersion: 1,
+			columnId: otherId,
+			settingsVersion: 3,
+			sourceStatus: 'OPEN',
+			targetStatus: 'IN_PROGRESS'
+		}
+		const moved = { ...task, version: 2, status: 'IN_PROGRESS' as const }
+		request.mockResolvedValue({ schemaVersion: 1, task: moved })
+		await expect(
+			mutateWorkdayTask('captured', { ...command, mutation })
+		).resolves.toEqual(moved)
+		expect(request).toHaveBeenCalledExactlyOnceWith({
+			accessToken: 'captured',
+			method: 'POST',
+			url: `/crm/sales/workday/tasks/${taskId}/column`,
+			headers: { 'Idempotency-Key': commandId },
+			mapError: expect.any(Function),
+			data: {
+				schemaVersion: 1,
+				workspaceId,
+				commandId,
+				expectedVersion: 1,
+				columnId: otherId,
+				settingsVersion: 3
+			}
+		})
+		request.mockResolvedValue({
+			schemaVersion: 1,
+			task: { ...moved, status: 'COMPLETED' }
+		})
+		await expect(
+			mutateWorkdayTask('captured', { ...command, mutation })
+		).rejects.toBeInstanceOf(AuthenticatedApiError)
+	})
 	it.each([
 		{
 			kind: 'edit',

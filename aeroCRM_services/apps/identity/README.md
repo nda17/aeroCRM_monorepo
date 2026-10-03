@@ -119,7 +119,8 @@ TLS; SMS — только HTTPS POST JSON с кодом/номером в body, 
 `IDENTITY_TEST_DATABASE_URL` и `IDENTITY_TEST_MIGRATION_DATABASE_URL`. Fixture
 использует только synthetic delivery; runtime имеет USAGE identity, SELECT
 users/auth_identities/telegram_notification_channels, UPDATE(id) users и auth_identities для
-row lock, SELECT/INSERT user_sessions и CRUD двух OTP-таблиц. Driver проверяет
+row lock, SELECT/INSERT user_sessions, UPDATE(revoked_at) user_sessions
+для атомарной замены предыдущей сессии и CRUD двух OTP-таблиц. Driver проверяет
 конкурирующий consume, лимит попыток, rollback, изменение контакта, durable
 квоты и SQL constraints; создание/удаление самой test DB остаётся у runner.
 
@@ -224,3 +225,43 @@ Runtime дополнительно нужен `SELECT,INSERT,UPDATE` на
 `internal_command_receipts`, `outbox_events` остаются service-owned. Readiness
 проверяет migration columns. Для rollout применить migration до новой API;
 существующие memberships сохраняются, CRM-права выдаёт отдельный сервис Access.
+
+## Одна активная сессия аккаунта
+
+Успешный вход по паролю, OTP или Google/Yandex/VK заменяет предыдущую сессию
+аккаунта. Подпись JWT и замена сессии выполняются в одной транзакции; ошибка
+проверки данных или подписи сохраняет текущий вход. Конкурентные входы
+сериализуются по строке пользователя: последняя успешная транзакция оставляет
+ровно одну активную сессию. История отозванных сессий сохраняется.
+Аддитивная миграция `20261004000000_single_active_session` отзывает просроченные
+и старые параллельные сессии, оставляя последнюю по `created_at DESC, id DESC`.
+Частичный уникальный индекс и триггер сохраняют правило даже для старого runtime;
+готовность нового runtime требует действующего индекса и обоих триггеров.
+Откат runtime не требует и не допускает удаления этой миграции.
+
+JWT содержит существующий `sid`: каждый Identity Guard и внутренний auth-context
+проверяет живую запись сессии. Старый access JWT сразу отклоняется, refresh
+отозванной сессии возвращает HTTP 401 с `code=session_revoked`.
+Открытие другой вкладки или обновление страницы использует тот же refresh cookie
+и `sid`, поэтому не создаёт новый вход. Новый явный login создаёт новый `sid`.
+
+`GET /api/v1/auth/session/events` принимает только Bearer через заголовок.
+SSE события `ready`, `heartbeat`, `revoked` содержат только `data: {}`.
+Каждый API-процесс слушает PostgreSQL `identity_session_revoked_v1`; уведомления
+после commit закрывают старую сессию, а чтение после подписки и heartbeat каждые
+5 секунд восстанавливают пропущенные сигналы. Истечение access JWT, потеря LISTEN,
+ошибка БД или backpressure закрывают поток; frontend повторяет подключение
+с ограниченной задержкой. Offline UI узнаёт об отзыве при восстановлении связи.
+Уже авторизованная до отзыва команда может завершиться.
+
+Frontend сверяет subject, sid и ревизию перед очисткой, отменяет чтения, очищает
+кэш и убирает доменные потоки. Уведомление не вызывает POST logout: общий cookie
+может принадлежать новому входу. Страница входа показывает фиксированное сообщение
+«Выполнен вход на другом устройстве» по `session=revoked`, без токенов в URL.
+
+Приёмка: `pnpm run test:integration:single-session` на локальной PostgreSQL 18
+с разными runtime/migration ролями и `IDENTITY_INTEGRATION_ALLOW_MUTATION=true`.
+Сценарии покрывают password/OTP/общий OAuth creator, конкурентные входы,
+гонку login/refresh, rollback подписи, отклонение старых JWT/refresh, HTTP SSE,
+истечение access, потерю LISTEN и повторную авторизацию после восстановления.
+OAuth provider HTTP-запросы не выполняются в этом изолированном тесте.

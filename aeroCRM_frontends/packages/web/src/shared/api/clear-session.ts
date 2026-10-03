@@ -1,19 +1,21 @@
 import {
 	isSessionProtectedPath,
 	PUBLIC_PAGES
-} from '@/shared/config/pages/public.config'
+} from '../config/pages/public.config'
 import { removeFromStorage } from './token-storage'
-import { resolveFrontendHref } from '@/shared/lib/navigation/frontend-zones'
-import { withAuthReturnUrl } from '@/shared/lib/auth-return-url'
+import { resolveFrontendHref } from '../lib/navigation/frontend-zones'
+import { withAuthReturnUrl } from '../lib/auth-return-url'
 
 export const SESSION_CLEARED_EVENT = 'aerocrm:session-cleared'
 
 interface ClearBrowserSessionOptions {
 	redirectToLogin?: boolean
+	reason?: 'revoked'
 }
 
 export const clearBrowserSession = ({
-	redirectToLogin
+	redirectToLogin,
+	reason
 }: ClearBrowserSessionOptions = {}) => {
 	removeFromStorage()
 
@@ -26,11 +28,15 @@ export const clearBrowserSession = ({
 	const shouldRedirect =
 		redirectToLogin ?? isSessionProtectedPath(window.location.pathname)
 	if (shouldRedirect && window.location.pathname !== PUBLIC_PAGES.LOGIN) {
-		window.location.replace(
+		const loginUrl = new URL(
 			withAuthReturnUrl(
 				resolveFrontendHref(PUBLIC_PAGES.LOGIN),
 				window.location.href
-			)
+			),
+			window.location.origin
 		)
+		if (reason === 'revoked')
+			loginUrl.searchParams.set('session', 'revoked')
+		window.location.replace(loginUrl.toString())
 	}
 }

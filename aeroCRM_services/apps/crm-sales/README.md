@@ -673,3 +673,51 @@ local-stack/rollout gate.
 ## Workspace closure (WS-01)
 
 The loopback-only `POST /internal/v1/workspace-closures/fence` endpoint accepts only the `crm-access` caller authenticated with `CRM_SALES_CRM_ACCESS_TOKEN`. It commits an immutable local fence binding before returning its ACK. Business admission and transport permits write the same workspace fence row, so a stale transaction cannot commit new work after the ACK. The token is a target-specific secret and must not be reused from the reverse service call.
+
+## Настройки планировщика
+
+`GET /crm/sales/planner/settings?workspaceId=...` возвращает общий каталог
+пространства: `schemaVersion`, `workspaceId`, `version`, упорядоченные массивы
+`templates[{id,title,archived}]` и
+`columns[{id,name,status,isDefault,archived}]`. Первое чтение возвращает
+`version=0`, три исходных шаблона и четыре колонки статусов без записи в БД.
+
+`POST /crm/sales/planner/settings` принимает `schemaVersion=1`, `workspaceId`,
+`commandId`, `expectedVersion` и оба полных массива. Заголовок
+`Idempotency-Key` совпадает с `commandId`. Изменять каталог могут OWNER и
+CRM_ADMIN с `sales:write` в ACTIVE/GRACE. Все существующие ID сохраняются;
+удаление заменяется `archived=true`. Четыре стандартные колонки имеют ID
+`OPEN`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`: допускают переименование и
+перестановку, но сохраняют статус и остаются активными. Пользовательские ID
+— UUIDv4; их статус неизменяем. Лимиты включают архив: 100 шаблонов (название
+до 200 символов) и 50 колонок (включая четыре стандартные, название до 100).
+Устаревшая версия даёт `409 crm_planner_settings_conflict`.
+
+`GET /crm/sales/workday/tasks` дополнительно принимает пару
+`columnId`/`settingsVersion`. Колонка и версия проверяются в том же
+REPEATABLE READ snapshot, что количество и страница задач. `status`, если
+указан, должен совпадать со статусом колонки. `items`/`total` учитывают
+колонку; `counts` и `overdueCount` сохраняют прежний охват по периоду и
+правам. Контракт v1 задачи не расширяется. Права OWN/TEAM/ALL сохраняются.
+
+`POST /crm/sales/workday/tasks/:id/column` принимает `schemaVersion=1`,
+`workspaceId`, `commandId`, `expectedVersion`, `columnId`, `settingsVersion`
+и тот же `Idempotency-Key`. Перемещение увеличивает версию задачи и
+применяет существующие правила статуса/`completedAt`/следующего действия.
+Квитанция имеет тип `MOVED`; история v1 использует `EDITED` или
+`STATUS_CHANGED`. Повтор с тем же payload возвращает сохранённый результат,
+включая повтор после изменения каталога. Архивная или недоступная колонка
+даёт `409 crm_planner_column_unavailable`.
+
+Архивация пользовательской колонки сохраняет размещение и версии задач;
+карточки отображаются в стандартной колонке своего статуса. Восстановление
+колонки возвращает такие карточки в неё. Изменение статуса через прежние
+Sales/Intake/recurring пути сбрасывает пользовательское размещение.
+Составной FK и SQL-триггер запрещают размещение в колонке чужого пространства
+или другого статуса. Каталог и перемещения участвуют в workspace closure
+fence; обновления каталога инвалидируют общий live snapshot пространства.
+
+Проверка на изолированной PostgreSQL 18:
+`pnpm test:planner` после миграций и применения `prisma/database-access.json`.
+Runner требует локальные test database URL и
+`CRM_SALES_INTEGRATION_ALLOW_MUTATION=true`.

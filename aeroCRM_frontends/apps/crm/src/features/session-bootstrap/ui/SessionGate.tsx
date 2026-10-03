@@ -32,13 +32,18 @@ const SessionGate = ({
 		}
 
 		try {
-			const loginUrl = buildLoginUrl(window.location.href)
+			let loginUrl = buildLoginUrl(window.location.href)
+			if (errorMessage === 'Выполнен вход на другом устройстве') {
+				const noticeUrl = new URL(loginUrl, window.location.origin)
+				noticeUrl.searchParams.set('session', 'revoked')
+				loginUrl = noticeUrl.toString()
+			}
 			hasStartedRedirect.current = true
 			redirectToLogin(loginUrl + invitationEmailFragment(returnPath))
 		} catch {
 			fail('Не удалось подготовить безопасный переход на страницу входа.')
 		}
-	}, [fail, redirectToLogin, status])
+	}, [errorMessage, fail, redirectToLogin, status])
 
 	const handleRetry = useCallback(() => {
 		hasStartedRedirect.current = false
@@ -75,7 +80,10 @@ const SessionGate = ({
 						? 'Переходим к авторизации'
 						: 'Проверяем сессию'
 				}
-				description="Рабочее пространство откроется после безопасной проверки входа."
+				description={
+					errorMessage ||
+					'Рабочее пространство откроется после безопасной проверки входа.'
+				}
 			/>
 		</div>
 	)

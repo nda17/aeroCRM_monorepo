@@ -56,8 +56,30 @@ export class CrmSalesHealthService {
 						id: true,
 						version: true,
 						assignedToMembershipId: true,
-						teamId: true
+						teamId: true,
+						boardColumnId: true
 					}
+				}),
+				this.prisma.plannerSettings.findFirst({
+					select: {
+						workspaceId: true,
+						version: true,
+						templates: true,
+						defaultColumns: true
+					}
+				}),
+				this.prisma.plannerBoardColumn.findFirst({
+					select: {
+						id: true,
+						workspaceId: true,
+						status: true,
+						name: true,
+						position: true,
+						archived: true
+					}
+				}),
+				this.prisma.plannerCommandReceipt.findFirst({
+					select: { commandId: true, requestHash: true, result: true }
 				}),
 				this.prisma.taskCommandReceipt.findFirst({
 					select: { commandId: true }

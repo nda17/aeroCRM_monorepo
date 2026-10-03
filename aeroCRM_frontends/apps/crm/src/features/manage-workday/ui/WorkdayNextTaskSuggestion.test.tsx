@@ -28,6 +28,9 @@ vi.mock('@/entities/sales', async () => ({
 	)),
 	getSalesDeal: vi.fn()
 }))
+vi.mock('@/entities/crm-planner/model/use-planner-settings', () => ({
+	usePlannerSettings: () => ({ context: { canRead: false } })
+}))
 vi.mock('react-hot-toast', () => ({
 	default: Object.assign(vi.fn(), { error: vi.fn() })
 }))

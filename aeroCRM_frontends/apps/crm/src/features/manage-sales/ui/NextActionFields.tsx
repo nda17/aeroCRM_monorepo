@@ -1,7 +1,7 @@
 'use client'
 
 import { Button, TextField } from '@/shared/ui'
-import toast from 'react-hot-toast'
+import { ActionTemplatePicker } from '@/features/manage-planner/ui/ActionTemplatePicker'
 import styles from './SalesWorkflow.module.scss'
 
 export const nextActionDue = (days: number, now = new Date()) => {
@@ -45,29 +45,7 @@ export const NextActionFields = ({
 			maxLength={200}
 			disabled={disabled}
 		/>
-		<div
-			className={styles.presets}
-			aria-label="Шаблоны следующего действия"
-		>
-			{[
-				'Позвонить клиенту',
-				'Назначить встречу',
-				'Отправить предложение'
-			].map(value => (
-				<Button
-					key={value}
-					size="sm"
-					variant="secondary"
-					disabled={disabled}
-					onClick={() => {
-						onTitleChange(value)
-						toast('Шаблон действия выбран')
-					}}
-				>
-					{value}
-				</Button>
-			))}
-		</div>
+		<ActionTemplatePicker onSelect={onTitleChange} disabled={disabled} />
 		<TextField
 			label={dueLabel}
 			type="datetime-local"
@@ -89,7 +67,6 @@ export const NextActionFields = ({
 					disabled={disabled}
 					onClick={() => {
 						onDueChange(nextActionDue(days))
-						toast(`Срок: ${label.toLowerCase()}`)
 					}}
 				>
 					{label}

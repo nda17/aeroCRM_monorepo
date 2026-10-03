@@ -2,13 +2,19 @@ import { Type } from 'class-transformer';
 import {
 	IsDefined,
 	IsIn,
+	IsInt,
 	IsString,
 	IsUUID,
 	Matches,
 	MaxLength,
+	Min,
 	MinLength,
 	ValidateIf,
-	ValidateNested
+	ValidateNested,
+	Validate,
+	ValidatorConstraint,
+	type ValidationArguments,
+	type ValidatorConstraintInterface
 } from 'class-validator';
 import {
 	SalesCommandDto,
@@ -17,6 +23,19 @@ import {
 } from '../sales/sales.dto';
 
 const optional = (_object: unknown, value: unknown) => value !== undefined;
+const columnIdPattern =
+	/^(OPEN|IN_PROGRESS|COMPLETED|CANCELLED|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
+
+@ValidatorConstraint({ name: 'plannerColumnFilterPair', async: false })
+class PlannerColumnFilterPairConstraint implements ValidatorConstraintInterface {
+	validate(_value: unknown, args: ValidationArguments) {
+		const query = args.object as WorkdayQuery;
+		return (
+			(query.columnId === undefined) ===
+			(query.settingsVersion === undefined)
+		);
+	}
+}
 
 export class TaskAssigneeDto {
 	@IsString() @Matches(/^[^\s\x00-\x1f\x7f]{1,256}$/) subject!: string;
@@ -48,6 +67,10 @@ export class SetTaskStatusDto extends VersionedSalesCommand {
 		| 'COMPLETED'
 		| 'CANCELLED';
 }
+export class MoveWorkdayTaskDto extends VersionedSalesCommand {
+	@IsString() @Matches(columnIdPattern) columnId!: string;
+	@IsInt() @Min(0) settingsVersion!: number;
+}
 export class AssignWorkdayTaskDto extends VersionedSalesCommand {
 	@IsDefined()
 	@ValidateNested()
@@ -55,7 +78,9 @@ export class AssignWorkdayTaskDto extends VersionedSalesCommand {
 	assignee!: TaskAssigneeDto;
 }
 export class WorkdayQuery extends SalesListQuery {
-	@IsIn(['MINE', 'TEAM', 'ALL']) scope: 'MINE' | 'TEAM' | 'ALL' = 'MINE';
+	@IsIn(['MINE', 'TEAM', 'ALL'])
+	@Validate(PlannerColumnFilterPairConstraint)
+	scope: 'MINE' | 'TEAM' | 'ALL' = 'MINE';
 	@ValidateIf(optional) @IsUUID('4') teamId?: string;
 	@ValidateIf(optional)
 	@IsString()
@@ -82,4 +107,13 @@ export class WorkdayQuery extends SalesListQuery {
 	@ValidateIf(optional)
 	@IsIn(['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'])
 	status?: SetTaskStatusDto['status'];
+	@ValidateIf(optional)
+	@IsString()
+	@Matches(columnIdPattern)
+	columnId?: string;
+	@ValidateIf(optional)
+	@Type(() => Number)
+	@IsInt()
+	@Min(0)
+	settingsVersion?: number;
 }

@@ -1,6 +1,9 @@
 'use client'
 
 import { useDirtyFormGuard } from '@/shared/lib/dirty-form'
+import { usePlannerSettings } from '@/entities/crm-planner/model/use-planner-settings'
+import type { PlannerColumn } from '@/entities/crm-planner/model/planner.types'
+import { PlannerSettingsDrawer } from '@/features/manage-planner/ui/PlannerSettingsDrawer'
 
 import { useState } from 'react'
 import Link from 'next/link'
@@ -47,6 +50,8 @@ const MyDayContent = ({
 	initialTaskId: string | null
 }) => {
 	const context = useWorkdaySession()
+	const planner = usePlannerSettings()
+	const [settingsOpen, setSettingsOpen] = useState(false)
 	const draftGuard = useDirtyFormGuard()
 	const client = useQueryClient()
 	const [filters, setFilters] = useState<Filters>(initialWorkdayFilters)
@@ -108,6 +113,23 @@ const MyDayContent = ({
 			status
 		})
 	}
+	const moveToColumn = (task: WorkdayTask, column: PlannerColumn) => {
+		if (command.locked || !planner.data || planner.query.isFetching) return
+		if (command.hasPendingTask(task.id)) {
+			setSelected(task.id)
+			return
+		}
+		void command.execute({
+			kind: 'column',
+			id: task.id,
+			expectedVersion: task.version,
+			columnId: column.id,
+			settingsVersion: planner.data.version,
+			targetStatus: column.status,
+			sourceStatus: task.status
+		})
+	}
+
 	const reload = async () => {
 		const auth = await context.permissions.refetch()
 		if (auth.isError) {
@@ -119,6 +141,10 @@ const MyDayContent = ({
 			auth.data?.workspaceId !== context.workspace.workspaceId
 		)
 			return
+		await client.invalidateQueries(
+			{ queryKey: ['crm-planner'], refetchType: 'active' },
+			{ throwOnError: true }
+		)
 		await client.invalidateQueries(
 			{ queryKey: ['crm-workday'], refetchType: 'active' },
 			{ throwOnError: true }
@@ -189,6 +215,15 @@ const MyDayContent = ({
 										Обзор команды
 									</Link>
 								) : null}
+								{planner.canManage ? (
+									<Button
+										variant="secondary"
+										disabled={command.locked}
+										onClick={() => setSettingsOpen(true)}
+									>
+										Настройки планировщика
+									</Button>
+								) : null}
 								<ActionMenu
 									disabled={command.pending || command.ambiguous}
 								>
@@ -234,6 +269,11 @@ const MyDayContent = ({
 					/>
 					{!context.canWrite ? (
 						<ReadOnlyBanner description="Задачи доступны для просмотра. Изменения требуют соответствующих прав и действующего доступа." />
+					) : null}
+					{settingsOpen ? (
+						<PlannerSettingsDrawer
+							onClose={() => setSettingsOpen(false)}
+						/>
 					) : null}
 					{seriesOpen ? (
 						<TaskSeriesPanel onClose={() => setSeriesOpen(false)} />
@@ -398,8 +438,14 @@ const MyDayContent = ({
 						key={JSON.stringify([
 							context.key,
 							{ ...filters, page: undefined },
-							view
+							view,
+							planner.data?.version
 						])}
+						planner={planner.data}
+						settingsPending={planner.query.isFetching}
+						settingsError={planner.query.isError}
+						onReloadSettings={() => void planner.query.refetch()}
+						onColumn={moveToColumn}
 						filters={filters}
 						view={view}
 						canWrite={context.canWrite && !command.locked}

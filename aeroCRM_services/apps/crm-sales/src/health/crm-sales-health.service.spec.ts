@@ -35,7 +35,9 @@ describe('CrmSalesHealthService', () => {
 			pipelineStage: { findFirst: jest.fn().mockResolvedValue(null) },
 			deal: { findFirst: jest.fn().mockResolvedValue(null) },
 			salesTask: { findFirst: jest.fn().mockResolvedValue(null) },
-			taskCommandReceipt: { findFirst: jest.fn().mockResolvedValue(null) },
+			taskCommandReceipt: {
+				findFirst: jest.fn().mockResolvedValue(null)
+			},
 			taskTimeline: { findFirst: jest.fn().mockResolvedValue(null) },
 			reminderRule: { findFirst: jest.fn().mockResolvedValue(null) },
 			reminderRuleCommand: {
@@ -61,6 +63,13 @@ describe('CrmSalesHealthService', () => {
 				findFirst: jest.fn().mockResolvedValue(null)
 			},
 			pipelineTemplateInstallationCommand: {
+				findFirst: jest.fn().mockResolvedValue(null)
+			},
+			plannerSettings: { findFirst: jest.fn().mockResolvedValue(null) },
+			plannerBoardColumn: {
+				findFirst: jest.fn().mockResolvedValue(null)
+			},
+			plannerCommandReceipt: {
 				findFirst: jest.fn().mockResolvedValue(null)
 			},
 			serviceIdentity: {
@@ -95,7 +104,8 @@ describe('CrmSalesHealthService', () => {
 				id: true,
 				version: true,
 				assignedToMembershipId: true,
-				teamId: true
+				teamId: true,
+				boardColumnId: true
 			}
 		});
 		expect(prisma.taskCommandReceipt.findFirst).toHaveBeenCalledWith({
@@ -112,14 +122,40 @@ describe('CrmSalesHealthService', () => {
 		});
 		expect(
 			prisma.pipelineTemplateInstallation.findFirst
-		).toHaveBeenCalledWith({ select: { id: true } });
+		).toHaveBeenCalledWith({
+			select: { id: true }
+		});
 		expect(
 			prisma.pipelineTemplateInstallationCommand.findFirst
 		).toHaveBeenCalledWith({ select: { commandId: true } });
+		expect(prisma.plannerSettings.findFirst).toHaveBeenCalledWith({
+			select: {
+				workspaceId: true,
+				version: true,
+				templates: true,
+				defaultColumns: true
+			}
+		});
+		expect(prisma.plannerBoardColumn.findFirst).toHaveBeenCalledWith({
+			select: {
+				id: true,
+				workspaceId: true,
+				status: true,
+				name: true,
+				position: true,
+				archived: true
+			}
+		});
+		expect(prisma.plannerCommandReceipt.findFirst).toHaveBeenCalledWith({
+			select: { commandId: true, requestHash: true, result: true }
+		});
 	});
 
 	it.each([
 		'taskCommandReceipt',
+		'plannerSettings',
+		'plannerBoardColumn',
+		'plannerCommandReceipt',
 		'taskTimeline',
 		'reminderRule',
 		'reminderRuleCommand',

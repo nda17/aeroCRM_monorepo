@@ -1,6 +1,7 @@
 'use client'
 
 import { useDirtyValue } from '@/shared/lib/dirty-form'
+import { ActionTemplatePicker } from '@/features/manage-planner/ui/ActionTemplatePicker'
 
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -208,6 +209,7 @@ const CreateForm = ({
 							disabled={locked}
 							onChange={event => setTitle(event.target.value)}
 						/>
+						<ActionTemplatePicker onSelect={setTitle} disabled={locked} />
 						<TextField
 							label="Срок выполнения"
 							type="datetime-local"

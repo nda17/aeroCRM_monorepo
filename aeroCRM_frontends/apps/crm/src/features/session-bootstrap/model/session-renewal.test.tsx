@@ -18,6 +18,10 @@ import {
 } from '../api/refresh-session'
 import { installSessionRenewal } from './session-renewal'
 
+const sessionEventsMock = vi.hoisted(() => ({ start: vi.fn() }))
+vi.mock('@/shared/api/session-events', () => ({
+	startSessionEvents: sessionEventsMock.start
+}))
 vi.mock('../api/refresh-session', async original => ({
 	...(await original<object>()),
 	refreshSession: vi.fn()
@@ -56,6 +60,7 @@ beforeEach(() => {
 	vi.useFakeTimers()
 	vi.setSystemTime(now)
 	vi.mocked(refreshSession).mockReset()
+	sessionEventsMock.start.mockReset().mockImplementation(() => vi.fn())
 	resetSessionStore()
 })
 afterEach(() => {
@@ -151,6 +156,43 @@ describe('mounted session renewal lease', () => {
 			kind: 'unauthorized'
 		})
 		expect(refreshSession).not.toHaveBeenCalled()
+	})
+	it('ignores revocation from an old SSE binding after a new login and revokes only the current session', () => {
+		const fetchSpy = vi.spyOn(globalThis, 'fetch')
+		const onRevoked = vi.fn()
+		stop = installSessionRenewal(undefined, onRevoked)
+		const previous = jwt(now + 600_000, 'owner', 'session-1')
+		useSessionStore.getState().setAuthenticated({
+			accessToken: previous,
+			userId: 'owner'
+		})
+		const oldBinding = sessionEventsMock.start.mock.calls[0][0]
+
+		const current = jwt(now + 600_000, 'owner', 'session-2')
+		useSessionStore.getState().setAuthenticated({
+			accessToken: current,
+			userId: 'owner'
+		})
+		const currentBinding = sessionEventsMock.start.mock.calls[1][0]
+
+		act(() => oldBinding.onRevoked())
+		expect(useSessionStore.getState()).toMatchObject({
+			status: 'authenticated',
+			session: { accessToken: current, userId: 'owner' },
+			errorMessage: null
+		})
+		expect(onRevoked).not.toHaveBeenCalled()
+
+		act(() => currentBinding.onRevoked())
+		expect(useSessionStore.getState()).toMatchObject({
+			status: 'anonymous',
+			session: null,
+			errorMessage: 'Выполнен вход на другом устройстве'
+		})
+		expect(onRevoked).toHaveBeenCalledOnce()
+		expect(refreshSession).not.toHaveBeenCalled()
+		expect(fetchSpy).not.toHaveBeenCalled()
+		fetchSpy.mockRestore()
 	})
 	it('preserves the draft owner on temporary failure and backs off repeated requests', async () => {
 		start()

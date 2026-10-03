@@ -44,6 +44,14 @@ export const validWorkdayFilters = (value: WorkdayFilters): boolean =>
 	['MINE', 'TEAM', 'ALL'].includes(value.scope) &&
 	WORKDAY_PERIODS.includes(value.period) &&
 	isWorkdayTimeZone(value.timeZone) &&
+	(value.columnId === undefined) ===
+		(value.settingsVersion === undefined) &&
+	(value.columnId === undefined ||
+		(typeof value.columnId === 'string' &&
+			(WORKDAY_STATUSES.some(status => status === value.columnId) ||
+				isUuidV4(value.columnId)))) &&
+	(value.settingsVersion === undefined ||
+		integer(value.settingsVersion, 0)) &&
 	(value.teamId === undefined || isUuidV4(value.teamId)) &&
 	(value.assigneeSubject === undefined ||
 		isWorkdaySubject(value.assigneeSubject)) &&
@@ -206,7 +214,9 @@ export const parseWorkdayTaskPage = (
 	const total = WORKDAY_STATUSES.reduce((sum, key) => sum + counts[key], 0)
 	if (
 		!Number.isSafeInteger(total) ||
-		page.total !== (request.status ? counts[request.status] : total) ||
+		(request.columnId === undefined
+			? page.total !== (request.status ? counts[request.status] : total)
+			: page.total > (request.status ? counts[request.status] : total)) ||
 		(request.period === 'OVERDUE' &&
 			(counts.COMPLETED !== 0 ||
 				counts.CANCELLED !== 0 ||
@@ -377,6 +387,22 @@ export const validWorkdayCommand = (
 			)
 		case 'assignee':
 			return hasExactKeys(mutation, [...common, 'assignee']) && assignee()
+		case 'column':
+			return (
+				hasExactKeys(mutation, [
+					...common,
+					'columnId',
+					'settingsVersion',
+					'sourceStatus',
+					'targetStatus'
+				]) &&
+				typeof mutation.columnId === 'string' &&
+				(WORKDAY_STATUSES.some(status => status === mutation.columnId) ||
+					isUuidV4(mutation.columnId)) &&
+				integer(mutation.settingsVersion, 0) &&
+				status(mutation.sourceStatus) &&
+				status(mutation.targetStatus)
+			)
 		default:
 			return false
 	}
@@ -419,6 +445,8 @@ export const parseWorkdayCommandResult = (
 	)
 		return null
 	if (mutation.kind === 'status' && task.status !== mutation.status)
+		return null
+	if (mutation.kind === 'column' && task.status !== mutation.targetStatus)
 		return null
 	return task
 }

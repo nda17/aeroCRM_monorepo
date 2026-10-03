@@ -339,6 +339,7 @@ model SalesTask {
   title             String                @db.VarChar(200)
   dueAt             DateTime              @map("due_at")
   status            SalesTaskStatus       @default(OPEN)
+  boardColumnId     String?               @map("board_column_id") @db.Uuid
   assignedToSubject String                @map("assigned_to_subject") @db.VarChar(256)
   completedAt       DateTime?             @map("completed_at")
   assignedToMembershipId String?          @map("assigned_to_membership_id") @db.Uuid
@@ -353,13 +354,55 @@ model SalesTask {
   commands          TaskCommandReceipt[]
   timeline          TaskTimeline[]
   recurrence        TaskSeriesOccurrence?
+  boardColumn       PlannerBoardColumn?   @relation(fields: [boardColumnId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "tasks_board_column_fkey")
 
   @@unique([id, workspaceId])
   @@unique([id, dealId, workspaceId])
   @@index([workspaceId, status, dueAt])
+  @@index([workspaceId, boardColumnId, status, dueAt, id], map: "tasks_board_column_idx")
   @@index([workspaceId, teamId, status, dueAt, id], map: "tasks_team_workday_idx")
   @@index([workspaceId, assignedToSubject, status, dueAt, id], map: "tasks_assignee_workday_idx")
   @@map("tasks")
+  @@schema("crm_sales")
+}
+
+model PlannerSettings {
+  workspaceId    String @id @map("workspace_id") @db.Uuid
+  version        Int
+  templates      Json
+  defaultColumns Json @map("default_columns")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("planner_settings")
+  @@schema("crm_sales")
+}
+
+model PlannerBoardColumn {
+  id          String @id @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  status      SalesTaskStatus
+  name        String @db.VarChar(100)
+  position    Int
+  archived    Boolean @default(false)
+  tasks       SalesTask[]
+
+  @@unique([id, workspaceId])
+  @@index([workspaceId, position, id], map: "planner_board_columns_order_idx")
+  @@map("planner_board_columns")
+  @@schema("crm_sales")
+}
+
+model PlannerCommandReceipt {
+  commandId    String @id @map("command_id") @db.Uuid
+  workspaceId  String @map("workspace_id") @db.Uuid
+  actorSubject String @map("actor_subject") @db.VarChar(256)
+  requestHash  String @map("request_hash") @db.Char(64)
+  result       Json
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([workspaceId, createdAt], map: "planner_commands_workspace_idx")
+  @@map("planner_command_receipts")
   @@schema("crm_sales")
 }
 

@@ -50,9 +50,14 @@ import { CommerceFinanceService } from './commerce/commerce-finance.service';
 import { CommerceImportService } from './commerce/commerce-import.service';
 import { SalesImportController } from './imports/import.controller';
 import { SalesImportService } from './imports/import.service';
+import { PlannerController } from './planner/planner.controller';
+import { PlannerService } from './planner/planner.service';
 
 @Module({
-	imports: [ConfigModule.forRoot({ isGlobal: true }), CrmSalesPrismaModule],
+	imports: [
+		ConfigModule.forRoot({ isGlobal: true }),
+		CrmSalesPrismaModule
+	],
 	controllers: [
 		LiveChangesController,
 		CrmSalesHealthController,
@@ -60,6 +65,7 @@ import { SalesImportService } from './imports/import.service';
 		PipelineTemplateInstallationController,
 		SalesController,
 		WorkdayController,
+		PlannerController,
 		TaskSeriesController,
 		TaskNotificationsController,
 		ReminderRulesController,
@@ -78,6 +84,7 @@ import { SalesImportService } from './imports/import.service';
 		PipelineTemplateInstallationService,
 		SalesService,
 		WorkdayService,
+		PlannerService,
 		TaskSeriesService,
 		TaskNotificationsService,
 		TaskSeriesAuthorityClient,

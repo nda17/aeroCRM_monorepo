@@ -1,9 +1,12 @@
-import { API_URL } from '@/shared/config/api.config'
+import { API_URL } from '../config/api.config'
 import axios, { AxiosResponse, CreateAxiosDefaults } from 'axios'
 import { clearBrowserSession } from './clear-session'
 import { errorCatch, getContentType } from './error'
 import {
 	getAccessToken,
+	getTokenBinding,
+	getCurrentSessionBinding,
+	getSessionRevision,
 	isAccessTokenValid,
 	saveTokenStorage
 } from './token-storage'
@@ -48,12 +51,30 @@ export const refreshAccessToken = () => {
 		return refreshPromise
 	}
 
+	const revision = getSessionRevision()
+	const binding = getCurrentSessionBinding()
 	refreshPromise = requestRefreshToken()
 		.then(response => {
 			if (!response.data?.accessToken) {
 				throw new Error('Refresh response does not contain access token')
 			}
 
+			const next = getTokenBinding(response.data.accessToken)
+			// Another tab can replace the shared cookie without advancing this
+			// tab's in-memory revision. Re-read its binding before any write.
+			const current = getCurrentSessionBinding()
+			if (
+				getSessionRevision() !== revision ||
+				(current &&
+					(!next ||
+						current.subject !== next.subject ||
+						current.sessionId !== next.sessionId)) ||
+				(binding &&
+					(!next ||
+						binding.subject !== next.subject ||
+						binding.sessionId !== next.sessionId))
+			)
+				throw new Error('Session changed during renewal')
 			saveTokenStorage(response.data.accessToken)
 
 			if (!isAccessTokenValid(getAccessToken())) {
@@ -73,6 +94,9 @@ axiosInterceptorsRequest.interceptors.request.use(config => {
 	const accessToken = getAccessToken()
 
 	if (config?.headers && accessToken) {
+		;(
+			config as typeof config & { _sessionRevision?: number }
+		)._sessionRevision = getSessionRevision()
 		config.headers.Authorization = `Bearer ${accessToken}`
 	}
 
@@ -88,6 +112,23 @@ axiosInterceptorsRequest.interceptors.response.use(
 			errorCatch(error) === 'jwt expired' ||
 			errorCatch(error) === 'jwt must be provided'
 
+		const requestToken =
+			originalRequest?.headers?.Authorization?.toString().replace(
+				/^Bearer /,
+				''
+			)
+		const captured = getTokenBinding(requestToken ?? null)
+		const current = () => {
+			const active = getCurrentSessionBinding()
+			return (
+				originalRequest?._sessionRevision === getSessionRevision() &&
+				!!captured &&
+				!!active &&
+				captured.subject === active.subject &&
+				captured.sessionId === active.sessionId
+			)
+		}
+		if (isAuthenticationError && !current()) throw error
 		if (isAuthenticationError && originalRequest?._isRetry) {
 			clearBrowserSession()
 			throw error
@@ -99,8 +140,18 @@ axiosInterceptorsRequest.interceptors.response.use(
 			try {
 				await refreshAccessToken()
 				return axiosInterceptorsRequest.request(originalRequest)
-			} catch {
-				clearBrowserSession()
+			} catch (refreshError) {
+				if (
+					current() &&
+					axios.isAxiosError(refreshError) &&
+					refreshError.response?.status === 401
+				)
+					clearBrowserSession({
+						reason:
+							refreshError.response.data?.code === 'session_revoked'
+								? 'revoked'
+								: undefined
+					})
 			}
 		}
 

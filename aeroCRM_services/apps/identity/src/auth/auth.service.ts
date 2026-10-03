@@ -145,7 +145,7 @@ export class AuthService {
 		);
 		if (!verified.passwordHash)
 			throw new UnauthorizedException('Email verification code not found');
-		const user = await this.prisma.$transaction(async transaction => {
+		const user = await this.prisma.$transaction(async (transaction) => {
 			if (
 				await transaction.authIdentity.findUnique({
 					where: {
@@ -227,7 +227,7 @@ export class AuthService {
 			phone,
 			dto.code
 		);
-		const user = await this.prisma.$transaction(async transaction => {
+		const user = await this.prisma.$transaction(async (transaction) => {
 			if (
 				await transaction.authIdentity.findUnique({
 					where: {
@@ -292,7 +292,12 @@ export class AuthService {
 			where: { id: parsed.sessionId },
 			include: { user: { include: USER_INCLUDE } }
 		});
-		if (!session || session.revokedAt || session.expiresAt <= now) {
+		if (session?.revokedAt)
+			throw new UnauthorizedException({
+				code: 'session_revoked',
+				message: 'Invalid refresh token'
+			});
+		if (!session || session.expiresAt <= now) {
 			throw new UnauthorizedException('Invalid refresh token');
 		}
 		const matchesCurrent = await compare(
@@ -419,7 +424,7 @@ export class AuthService {
 		if (
 			phone &&
 			!user.authIdentities.find(
-				identity =>
+				(identity) =>
 					identity.type === AuthIdentityType.PHONE && identity.verifiedAt
 			)
 		) {
@@ -429,7 +434,7 @@ export class AuthService {
 		if (email) {
 			return this.emailRecovery.issue(user.id, email, password);
 		}
-		await this.prisma.$transaction(async transaction => {
+		await this.prisma.$transaction(async (transaction) => {
 			await transaction.user.update({
 				where: { id: user.id },
 				data: { password: await hash(password, PASSWORD_SALT_ROUNDS) }
@@ -448,7 +453,7 @@ export class AuthService {
 			where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
 			orderBy: { lastUsedAt: 'desc' }
 		});
-		return sessions.map(session => ({
+		return sessions.map((session) => ({
 			id: session.id,
 			userAgent: session.userAgent,
 			ipAddress: session.ipAddress,
@@ -473,9 +478,14 @@ export class AuthService {
 	}
 
 	async revokeAll(userId: string) {
-		await this.prisma.userSession.updateMany({
-			where: { userId, revokedAt: null },
-			data: { revokedAt: new Date() }
+		await this.prisma.$transaction(async (transaction) => {
+			await transaction.$queryRaw(
+				Prisma.sql`SELECT id FROM identity.users WHERE id = ${userId} FOR UPDATE`
+			);
+			await transaction.userSession.updateMany({
+				where: { userId, revokedAt: null },
+				data: { revokedAt: new Date() }
+			});
 		});
 		return true;
 	}
@@ -487,24 +497,37 @@ export class AuthService {
 		this.ensureActive(user);
 		const sessionId = randomUUID();
 		const refreshToken = this.refreshTokens.create(sessionId);
-		await this.prisma.userSession.create({
-			data: {
-				id: sessionId,
-				userId: user.id,
-				refreshTokenHash: await hash(
-					this.refreshTokens.hashInput(refreshToken),
-					PASSWORD_SALT_ROUNDS
-				),
-				userAgent: request?.get('user-agent')?.slice(0, 500),
-				ipAddress: request ? clientIp(request) : undefined,
-				expiresAt: new Date(Date.now() + 7 * 86_400_000)
-			}
+		const refreshTokenHash = await hash(
+			this.refreshTokens.hashInput(refreshToken),
+			PASSWORD_SALT_ROUNDS
+		);
+		return this.prisma.$transaction(async (transaction) => {
+			await transaction.$queryRaw(
+				Prisma.sql`SELECT id FROM identity.users WHERE id = ${user.id} FOR UPDATE`
+			);
+			const current = await transaction.user.findUnique({
+				where: { id: user.id },
+				include: USER_INCLUDE
+			});
+			if (!current) throw new UnauthorizedException('Invalid account');
+			this.ensureActive(current);
+			await transaction.userSession.create({
+				data: {
+					id: sessionId,
+					userId: current.id,
+					refreshTokenHash,
+					userAgent: request?.get('user-agent')?.slice(0, 500),
+					ipAddress: request ? clientIp(request) : undefined,
+					expiresAt: new Date(Date.now() + 7 * 86_400_000)
+				}
+			});
+			// A signing failure must roll back replacement of the previous session.
+			return {
+				user: publicUser(current),
+				accessToken: this.jwt.issue(current.id, current.rights, sessionId),
+				refreshToken
+			};
 		});
-		return {
-			user: publicUser(user),
-			accessToken: this.jwt.issue(user.id, user.rights, sessionId),
-			refreshToken
-		};
 	}
 
 	private async startPasswordSession(
@@ -527,7 +550,7 @@ export class AuthService {
 			this.refreshTokens.hashInput(refreshToken),
 			PASSWORD_SALT_ROUNDS
 		);
-		const user = await this.prisma.$transaction(async transaction => {
+		const result = await this.prisma.$transaction(async (transaction) => {
 			await transaction.$queryRaw(
 				Prisma.sql`SELECT id FROM identity.users WHERE id = ${candidate.id} FOR UPDATE`
 			);
@@ -560,14 +583,13 @@ export class AuthService {
 					expiresAt: new Date(Date.now() + 7 * 86_400_000)
 				}
 			});
-			return current;
+			return {
+				user: publicUser(current),
+				accessToken: this.jwt.issue(current.id, current.rights, sessionId),
+				refreshToken
+			};
 		});
-
-		return {
-			user: publicUser(user),
-			accessToken: this.jwt.issue(user.id, user.rights, sessionId),
-			refreshToken
-		};
+		return result;
 	}
 
 	private async requirePasswordLogin(
@@ -587,7 +609,7 @@ export class AuthService {
 		if (
 			type === AuthIdentityType.PHONE &&
 			!user.authIdentities.some(
-				identity =>
+				(identity) =>
 					identity.type === AuthIdentityType.PHONE && identity.verifiedAt
 			)
 		) {

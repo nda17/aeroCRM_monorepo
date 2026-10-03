@@ -1,6 +1,10 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import type {
+	PlannerSettings,
+	PlannerColumn
+} from '@/entities/crm-planner/model/planner.types'
 import {
 	closestCenter,
 	DndContext,
@@ -47,7 +51,8 @@ import {
 import { WorkdayPagination } from './WorkdayPagination'
 import {
 	useWorkdayReducedMotion,
-	workdayKeyboardCoordinates
+	workdayKeyboardCoordinates,
+	createWorkdayKeyboardCoordinates
 } from '../model/workday-drag'
 import styles from './MyDayScreen.module.scss'
 
@@ -171,6 +176,11 @@ const TaskDue = ({
 )
 
 interface CollectionProps {
+	planner?: PlannerSettings
+	settingsPending?: boolean
+	settingsError?: boolean
+	onReloadSettings?: () => void
+	onColumn?: (task: WorkdayTask, column: PlannerColumn) => void
 	filters: WorkdayFilters
 	view: WorkdayView
 	canWrite: boolean
@@ -181,7 +191,23 @@ interface CollectionProps {
 
 export const WorkdayCollection = (props: CollectionProps) =>
 	props.view === 'board' ? (
-		<WorkdayBoard {...props} />
+		props.onColumn && (!props.planner || props.settingsError) ? (
+			<ScreenState
+				variant={props.settingsError ? 'error' : 'loading'}
+				description={
+					props.settingsError
+						? 'Не удалось загрузить колонки планировщика.'
+						: 'Загружаем колонки планировщика.'
+				}
+				action={
+					props.settingsError ? (
+						<Button onClick={props.onReloadSettings}>Повторить</Button>
+					) : undefined
+				}
+			/>
+		) : (
+			<WorkdayBoard {...props} />
+		)
 	) : (
 		<WorkdayList {...props} />
 	)
@@ -287,13 +313,35 @@ const WorkdayList = ({
 }
 
 const WorkdayBoard = (props: CollectionProps) => {
+	const columns: PlannerColumn[] =
+		props.planner?.columns.filter(column => !column.archived) ??
+		WORKDAY_BOARD_STATUSES.map(status => ({
+			id: status,
+			name: WORKDAY_STATUS_LABELS[status],
+			status,
+			isDefault: true,
+			archived: false
+		}))
+	const [sourceColumnId, setSourceColumnId] = useState<string | null>(null)
+	const canWrite = props.canWrite && !props.settingsPending
+	const selectColumn = (task: WorkdayTask, id: string) => {
+		const column = columns.find(item => item.id === id)
+		if (!column || !canWrite) return
+		if (props.onColumn) props.onColumn(task, column)
+		else props.onStatus(task, column.status)
+	}
+
 	const [dragged, setDragged] = useState<WorkdayTask | null>(null)
 	const reducedMotion = useWorkdayReducedMotion()
 	const destination = useRef<{ left: number; top: number } | null>(null)
 	const sensors = useSensors(
 		useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
 		useSensor(KeyboardSensor, {
-			coordinateGetter: workdayKeyboardCoordinates,
+			coordinateGetter: props.planner
+				? createWorkdayKeyboardCoordinates(
+						columns.map(column => column.id)
+					)
+				: workdayKeyboardCoordinates,
 			scrollBehavior: reducedMotion ? 'auto' : 'smooth'
 		})
 	)
@@ -335,7 +383,7 @@ const WorkdayBoard = (props: CollectionProps) => {
 					onDragStart: () => 'Задача поднята. Выберите колонку стрелками.',
 					onDragOver: ({ over }) =>
 						over
-							? `Колонка: ${WORKDAY_STATUS_LABELS[over.id as WorkdayStatus]}.`
+							? `Колонка: ${columns.find(column => column.id === over.id)?.name ?? 'недоступна'}.`
 							: 'За пределами доски.',
 					onDragEnd: ({ over }) =>
 						over
@@ -347,8 +395,12 @@ const WorkdayBoard = (props: CollectionProps) => {
 			}}
 			onDragStart={({ active }) => {
 				destination.current = null
-				if (props.canWrite && active.data.current?.task)
+				if (canWrite && active.data.current?.task) {
+					setSourceColumnId(
+						active.data.current.columnId ?? active.data.current.task.status
+					)
 					setDragged(Object.freeze({ ...active.data.current.task }))
+				}
 			}}
 			onDragCancel={() => {
 				destination.current = null
@@ -358,29 +410,33 @@ const WorkdayBoard = (props: CollectionProps) => {
 			onDragEnd={({ active, over }) => {
 				const task = dragged
 				if (
-					props.canWrite &&
+					canWrite &&
 					task &&
 					active.id === task.id &&
 					over &&
 					over.data.current?.ready &&
-					WORKDAY_BOARD_STATUSES.some(status => status === over.id) &&
-					task.status !== over.id
+					columns.some(column => column.id === over.id) &&
+					sourceColumnId !== over.id
 				) {
 					destination.current = {
 						left: over.rect.left + 16,
 						top: over.rect.top + 64
 					}
-					props.onStatus(task, over.id as WorkdayStatus)
+					selectColumn(task, String(over.id))
 				} else destination.current = null
 				setDragged(null)
 			}}
 		>
 			<div className={styles.board} role="region" aria-label="Доска задач">
-				{WORKDAY_BOARD_STATUSES.map(status => (
+				{columns.map(column => (
 					<WorkdayColumn
-						key={status}
+						key={column.id}
 						{...props}
-						status={status}
+						canWrite={canWrite}
+						column={column}
+						columns={columns}
+						onSelectColumn={selectColumn}
+						sourceColumnId={sourceColumnId}
 						dragged={dragged}
 					/>
 				))}
@@ -417,24 +473,34 @@ const WorkdayBoard = (props: CollectionProps) => {
 
 const WorkdayColumn = ({
 	filters,
-	status,
+	column,
+	columns,
+	planner,
+	onSelectColumn,
+	sourceColumnId,
 	canWrite,
 	onOpen,
 	onStatus,
 	dragged
 }: CollectionProps & {
-	status: (typeof WORKDAY_BOARD_STATUSES)[number]
+	column: PlannerColumn
+	columns: PlannerColumn[]
+	onSelectColumn: (task: WorkdayTask, id: string) => void
+	sourceColumnId: string | null
 	dragged: WorkdayTask | null
 }) => {
 	const [page, setPage] = useState(1)
 	const { data, query, context } = useWorkdayTasks({
 		...filters,
-		status,
+		status: column.status,
+		...(planner
+			? { columnId: column.id, settingsVersion: planner.version }
+			: {}),
 		page
 	})
 	const names = useWorkdayNames(context, data?.items ?? [])
 	const { setNodeRef, isOver } = useDroppable({
-		id: status,
+		id: column.id,
 		disabled: !canWrite || query.isFetching || !data,
 		data: { ready: canWrite && !query.isFetching && !!data }
 	})
@@ -443,17 +509,22 @@ const WorkdayColumn = ({
 		!query.isFetching &&
 		!!data &&
 		!!dragged &&
-		dragged.status !== status
+		sourceColumnId !== column.id
 	return (
 		<section
 			ref={setNodeRef}
 			className={`${styles.column} ${isOver && canDrop ? styles.columnActive : ''}`}
-			aria-label={WORKDAY_STATUS_LABELS[status]}
+			aria-label={column.name}
 			aria-busy={query.isFetching}
 		>
 			<h2 className={styles.columnHeading}>
-				{WORKDAY_STATUS_LABELS[status]} <span>{data?.total ?? '—'}</span>
+				{column.name} <span>{data?.total ?? '—'}</span>
 			</h2>
+			{!column.isDefault ? (
+				<p className={styles.hint}>
+					Статус: {WORKDAY_STATUS_LABELS[column.status]}
+				</p>
+			) : null}
 			<NamesError names={names} />
 			{dragged && canDrop ? (
 				<div
@@ -491,13 +562,16 @@ const WorkdayColumn = ({
 							onStatus={onStatus}
 							commandContext={context}
 							assigneeName={names.name(task)}
+							columnId={column.id}
+							columns={planner ? columns : undefined}
+							onSelectColumn={onSelectColumn}
 						/>
 					))}
 				</ul>
 			)}
 			{data ? (
 				<WorkdayPagination
-					label={`Страницы колонки «${WORKDAY_STATUS_LABELS[status]}»`}
+					label={`Страницы колонки «${column.name}»`}
 					page={page}
 					pageSize={filters.pageSize}
 					total={data.total}
@@ -517,7 +591,10 @@ const WorkdayCard = ({
 	onOpen,
 	onStatus,
 	commandContext,
-	assigneeName
+	assigneeName,
+	columnId,
+	columns,
+	onSelectColumn
 }: {
 	task: WorkdayTask
 	enabled: boolean
@@ -527,6 +604,9 @@ const WorkdayCard = ({
 	onStatus: CollectionProps['onStatus']
 	commandContext: WorkdayCommandContext
 	assigneeName: string
+	columnId: string
+	columns?: PlannerColumn[]
+	onSelectColumn: (task: WorkdayTask, id: string) => void
 }) => {
 	const { unresolved } = useWorkdayTaskCommandState(
 		commandContext,
@@ -541,7 +621,7 @@ const WorkdayCard = ({
 	} = useDraggable({
 		id: task.id,
 		disabled: !enabled || unresolved,
-		data: { task }
+		data: { task, columnId }
 	})
 	return (
 		<li
@@ -582,13 +662,41 @@ const WorkdayCard = ({
 					Ответственный: {assigneeName}
 				</span>
 			</div>
-			<TaskStatus
-				task={task}
-				enabled={enabled}
-				onStatus={onStatus}
-				onOpen={onOpen}
-				commandContext={commandContext}
-			/>
+			{columns ? (
+				<div className={styles.copy}>
+					<SelectField
+						label={`Колонка задачи «${task.title}»`}
+						value={columnId}
+						disabled={!enabled || unresolved}
+						onChange={event => {
+							if (!unresolved) onSelectColumn(task, event.target.value)
+						}}
+					>
+						{columns.map(column => (
+							<option key={column.id} value={column.id}>
+								{column.name}
+							</option>
+						))}
+					</SelectField>
+					{unresolved ? (
+						<Button
+							variant="secondary"
+							size="sm"
+							onClick={() => onOpen(task)}
+						>
+							Проверить сохранение
+						</Button>
+					) : null}
+				</div>
+			) : (
+				<TaskStatus
+					task={task}
+					enabled={enabled}
+					onStatus={onStatus}
+					onOpen={onOpen}
+					commandContext={commandContext}
+				/>
+			)}
 		</li>
 	)
 }

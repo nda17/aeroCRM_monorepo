@@ -25,6 +25,7 @@ const roots = {
 	],
 	sales: [
 		'sales',
+		'crm-planner',
 		'crm-workday',
 		'crm-task-series',
 		'crm-task-notifications'

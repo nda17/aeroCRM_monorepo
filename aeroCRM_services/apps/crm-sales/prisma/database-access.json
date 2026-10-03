@@ -156,6 +156,20 @@
       "SELECT",
       "INSERT",
       "UPDATE"
+    ],
+    "planner_settings": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "planner_board_columns": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "planner_command_receipts": [
+      "SELECT",
+      "INSERT"
     ]
   },
   "sequences": {},
@@ -178,7 +192,11 @@
     "assert_workspace_open",
     "guard_workspace_business_write",
     "import_preview_immutable",
-    "import_binding_immutable"
+    "import_binding_immutable",
+    "guard_planner_board_column_identity",
+    "normalize_task_board_column"
   ],
-  "routineExecute": ["assert_workspace_open(uuid)"]
+  "routineExecute": [
+    "assert_workspace_open(uuid)"
+  ]
 }

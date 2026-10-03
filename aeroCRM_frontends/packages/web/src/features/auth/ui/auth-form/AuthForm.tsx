@@ -20,6 +20,7 @@ import { validEmail, validPassword, validPhoneCode } from '@/shared/regex'
 import clsx from 'clsx'
 import { NextPage } from 'next'
 import { Controller } from 'react-hook-form'
+import { useEffect, useState } from 'react'
 
 const AuthForm: NextPage<IAuthFormProps> = ({
 	isLogin,
@@ -27,6 +28,15 @@ const AuthForm: NextPage<IAuthFormProps> = ({
 	authReturnUrl: initialAuthReturnUrl
 }) => {
 	const authReturnUrl = useAuthReturnUrl(initialAuthReturnUrl)
+	const [sessionNotice, setSessionNotice] = useState<string | null>(null)
+	useEffect(() => {
+		if (
+			isLogin &&
+			new URLSearchParams(window.location.search).get('session') ===
+				'revoked'
+		)
+			setSessionNotice('Выполнен вход на другом устройстве')
+	}, [isLogin])
 	const {
 		turnstileContainerRef,
 		isTurnstileUnavailable,
@@ -54,11 +64,18 @@ const AuthForm: NextPage<IAuthFormProps> = ({
 
 	if (isLogin && isTurnstileUnavailable) {
 		return (
-			<LoginCodeFallback
-				authReturnUrl={authReturnUrl}
-				onAuthenticated={completeCodeLogin}
-				onRetryCaptcha={retryTurnstile}
-			/>
+			<>
+				{sessionNotice && (
+					<div className={styles['auth-alert']} role="alert">
+						{sessionNotice}
+					</div>
+				)}
+				<LoginCodeFallback
+					authReturnUrl={authReturnUrl}
+					onAuthenticated={completeCodeLogin}
+					onRetryCaptcha={retryTurnstile}
+				/>
+			</>
 		)
 	}
 
@@ -89,6 +106,11 @@ const AuthForm: NextPage<IAuthFormProps> = ({
 				</button>
 			</div>
 
+			{sessionNotice && (
+				<div className={styles['auth-alert']} role="alert">
+					{sessionNotice}
+				</div>
+			)}
 			{currentAuthMessage && (
 				<div className={styles['auth-alert']} role="alert">
 					{currentAuthMessage}

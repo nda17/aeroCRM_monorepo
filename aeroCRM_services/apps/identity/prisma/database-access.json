@@ -125,7 +125,11 @@
       "UPDATE",
       "DELETE"
     ],
-    "workspace_closure_fences": ["SELECT", "INSERT", "UPDATE"],
+    "workspace_closure_fences": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
     "heartbeats": [
       "SELECT",
       "INSERT",
@@ -159,7 +163,11 @@
     "assert_workspace_open",
     "guard_workspace_admission",
     "guard_workspace_reactivation",
-    "enforce_workspace_closure_fence"
+    "enforce_workspace_closure_fence",
+    "enforce_single_active_session",
+    "notify_session_revoked"
   ],
-  "routineExecute": ["assert_workspace_open(uuid)"]
+  "routineExecute": [
+    "assert_workspace_open(uuid)"
+  ]
 }

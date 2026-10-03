@@ -45,7 +45,7 @@ on:
         default: false
         required: true
       crm_sales_commerce_migration_env_hash:
-        description: SHA-256 of the private VPS migrations/crm-sales.env file; required only for the CRM Sales commerce migration
+        description: SHA-256 of sorted private crm-sales.env and identity.env migration file hashes; required only for the CRM Sales commerce migration
         required: false
       crm_intake_notifications_migration:
         description: Backend target only; apply the reviewed CRM Intake inbox notification ID default migration before switching images
@@ -150,7 +150,7 @@ on:
         required: true
       crm_sales_commerce_migration_env_hash:
         type: string
-        description: SHA-256 of the private VPS migrations/crm-sales.env file; required only for the CRM Sales commerce migration
+        description: SHA-256 of sorted private crm-sales.env and identity.env migration file hashes; required only for the CRM Sales commerce migration
         required: false
       crm_intake_notifications_migration:
         description: Backend target only; apply the reviewed CRM Intake inbox notification ID default migration before switching images
@@ -190,6 +190,15 @@ on:
         default: false
       crm_file_imports_migration_env_hash:
         description: SHA-256 of sorted private Customers and Sales migration env file hashes
+        required: false
+        type: string
+      crm_planner_customization_migration:
+        description: Backend target only; apply reviewed planner and Identity single-session migrations with a full manifest
+        required: false
+        type: boolean
+        default: false
+      crm_planner_customization_migration_env_hash:
+        description: SHA-256 of sorted private crm-sales.env and identity.env migration file hashes
         required: false
         type: string
       workspace_closure_migration:
@@ -279,6 +288,8 @@ jobs:
           MAIL_MIGRATION_HASH: ${{ inputs.crm_corporate_mail_migration_env_hash }}
           FILE_IMPORTS_MIGRATION: ${{ inputs.crm_file_imports_migration && 'true' || 'false' }}
           FILE_IMPORTS_MIGRATION_HASH: ${{ inputs.crm_file_imports_migration_env_hash }}
+          PLANNER_MIGRATION: ${{ inputs.crm_planner_customization_migration && 'true' || 'false' }}
+          PLANNER_MIGRATION_HASH: ${{ inputs.crm_planner_customization_migration_env_hash }}
           CLOSURE_MIGRATION: ${{ inputs.workspace_closure_migration && 'true' || 'false' }}
           CLOSURE_MIGRATION_HASH: ${{ inputs.workspace_closure_migration_env_hash }}
           IDENTITY_ACL_REPAIR: ${{ inputs.workspace_closure_identity_acl_repair && 'true' || 'false' }}
@@ -343,6 +354,16 @@ jobs:
               "$FILE_IMPORTS_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
           else
             [[ "$FILE_IMPORTS_MIGRATION" == false && -z "$FILE_IMPORTS_MIGRATION_HASH" ]]
+          fi
+          if [[ "$PLANNER_MIGRATION" == true ]]; then
+            [[ "$TARGET" == backend && "$CUTOVER" == false && "$CLOSURE_ENABLE" == false &&
+              "$CLOSURE_MIGRATION" == false && "$IDENTITY_ACL_REPAIR" == false &&
+              "$BILLING_MIGRATION" == false && "$CUSTOM_ROLES_MIGRATION" == false &&
+              "$SALES_COMMERCE_MIGRATION" == false && "$INTAKE_NOTIFICATIONS_MIGRATION" == false &&
+              "$MAIL_MIGRATION" == false && "$FILE_IMPORTS_MIGRATION" == false && "$MAIL_ENV_INSTALL" == false &&
+              "$PLANNER_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
+          else
+            [[ "$PLANNER_MIGRATION" == false && -z "$PLANNER_MIGRATION_HASH" ]]
           fi
           if [[ "$SALES_COMMERCE_MIGRATION" == true ]]; then
             [[ "$TARGET" == backend && "$CUTOVER" == false && "$SALES_COMMERCE_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
@@ -447,6 +468,7 @@ jobs:
           node --check infra/scripts/crm-custom-roles-migration.mjs
           node --check infra/scripts/crm-corporate-mail-migration.mjs
           node --check infra/scripts/crm-file-imports-migration.mjs
+          node --check infra/scripts/crm-planner-customization-migration.mjs
           node --check infra/scripts/crm-sales-commerce-migration.mjs
           node --check infra/scripts/crm-intake-notifications-migration.mjs
           node --check infra/scripts/workspace-closure-migration.mjs
@@ -454,6 +476,7 @@ jobs:
           node --check infra/scripts/backend-rollback-compatibility-guard.mjs
           node infra/scripts/crm-sales-commerce-migration.mjs --policy-self-test
           node infra/scripts/crm-file-imports-migration.mjs --policy-self-test
+          node infra/scripts/crm-planner-customization-migration.mjs --policy-self-test
           node infra/scripts/crm-intake-notifications-migration.mjs --policy-self-test
           node infra/scripts/workspace-closure-migration.mjs --policy-self-test
           node infra/scripts/workspace-closure-enable.mjs --policy-self-test
@@ -488,7 +511,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ inputs.ci_run_id }}
           SHA: ${{ needs.verify.outputs.sha }}
-          REQUIRE_UNIFORM: ${{ (inputs.billing_capacity_migration || inputs.crm_custom_roles_migration || inputs.crm_sales_commerce_migration || inputs.crm_intake_notifications_migration || inputs.crm_corporate_mail_migration || inputs.crm_file_imports_migration || inputs.workspace_closure_migration || inputs.workspace_closure_identity_acl_repair || inputs.workspace_closure_enable || inputs.crm_contracts_cutover) && 'true' || 'false' }}
+          REQUIRE_UNIFORM: ${{ (inputs.billing_capacity_migration || inputs.crm_custom_roles_migration || inputs.crm_sales_commerce_migration || inputs.crm_intake_notifications_migration || inputs.crm_corporate_mail_migration || inputs.crm_file_imports_migration || inputs.crm_planner_customization_migration || inputs.workspace_closure_migration || inputs.workspace_closure_identity_acl_repair || inputs.workspace_closure_enable || inputs.crm_contracts_cutover) && 'true' || 'false' }}
         run: |
           set -euo pipefail
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name backend-manifest --dir manifest
@@ -526,6 +549,8 @@ jobs:
           MAIL_MIGRATION_HASH: ${{ inputs.crm_corporate_mail_migration_env_hash }}
           FILE_IMPORTS_MIGRATION: ${{ inputs.crm_file_imports_migration && 'true' || 'false' }}
           FILE_IMPORTS_MIGRATION_HASH: ${{ inputs.crm_file_imports_migration_env_hash }}
+          PLANNER_MIGRATION: ${{ inputs.crm_planner_customization_migration && 'true' || 'false' }}
+          PLANNER_MIGRATION_HASH: ${{ inputs.crm_planner_customization_migration_env_hash }}
           CLOSURE_MIGRATION: ${{ inputs.workspace_closure_migration && 'true' || 'false' }}
           CLOSURE_MIGRATION_HASH: ${{ inputs.workspace_closure_migration_env_hash }}
           IDENTITY_ACL_REPAIR: ${{ inputs.workspace_closure_identity_acl_repair && 'true' || 'false' }}
@@ -613,6 +638,10 @@ jobs:
             node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --crm-file-imports")
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
           fi
+          if [ "$ROLE" = backend ] && [ "$PLANNER_MIGRATION" = true ]; then
+            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --crm-planner-customization")
+            [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
+          fi
           if [ "$ROLE" = backend ] && [ "$INTAKE_NOTIFICATIONS_MIGRATION" = true ]; then
             node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --crm-intake-notifications")
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
@@ -639,7 +668,7 @@ jobs:
               manifest_env="$manifest_env CRM_MAIL_ENV_INSTALL='true' CRM_MAIL_ENV_BEFORE_HASH='$MAIL_ENV_BEFORE_HASH' CRM_MAIL_ENV_BUNDLE_HASH='$MAIL_ENV_BUNDLE_HASH'"
             fi
             if [ "$CLOSURE_ENABLE" = true ]; then manifest_env=; fi
-            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && $manifest_env REVIEWED_INFRA_DIR='$stage' '$stage/scripts/release.sh' '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH' '$INTAKE_NOTIFICATIONS_MIGRATION' '$INTAKE_NOTIFICATIONS_MIGRATION_HASH' '$CLOSURE_MIGRATION' '$CLOSURE_MIGRATION_HASH' '$IDENTITY_ACL_REPAIR' '$IDENTITY_ENV_HASH' '$MAIL_MIGRATION' '$MAIL_MIGRATION_HASH' '$FILE_IMPORTS_MIGRATION' '$FILE_IMPORTS_MIGRATION_HASH'"
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && $manifest_env REVIEWED_INFRA_DIR='$stage' '$stage/scripts/release.sh' '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH' '$INTAKE_NOTIFICATIONS_MIGRATION' '$INTAKE_NOTIFICATIONS_MIGRATION_HASH' '$CLOSURE_MIGRATION' '$CLOSURE_MIGRATION_HASH' '$IDENTITY_ACL_REPAIR' '$IDENTITY_ENV_HASH' '$MAIL_MIGRATION' '$MAIL_MIGRATION_HASH' '$FILE_IMPORTS_MIGRATION' '$FILE_IMPORTS_MIGRATION_HASH' '$PLANNER_MIGRATION' '$PLANNER_MIGRATION_HASH'"
           else
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash'"
           fi

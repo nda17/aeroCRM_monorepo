@@ -35,7 +35,11 @@ const taskCommandError = (error: unknown) => {
 				? 'Связанная сделка закрыта. Сначала верните сделку в работу, затем измените задачу.'
 				: code === 'crm_task_command_conflict'
 					? 'Этот запрос уже обработан с другими параметрами. Обновите данные задачи.'
-					: undefined
+					: code === 'crm_planner_settings_conflict'
+						? 'Настройки планировщика изменились. Обновите данные и повторите изменение.'
+						: code === 'crm_planner_column_unavailable'
+							? 'Колонка планировщика недоступна. Обновите данные.'
+							: undefined
 	return message
 		? new AuthenticatedApiError('conflict', message)
 		: undefined
@@ -67,6 +71,8 @@ export const listWorkdayTasks = async (
 		assigneeSubject,
 		search,
 		status,
+		columnId,
+		settingsVersion,
 		from,
 		to
 	} = request
@@ -87,6 +93,10 @@ export const listWorkdayTasks = async (
 					...(assigneeSubject !== undefined ? { assigneeSubject } : {}),
 					...(search !== undefined ? { search } : {}),
 					...(status !== undefined ? { status } : {}),
+					...(columnId !== undefined ? { columnId } : {}),
+					...(settingsVersion !== undefined
+						? { settingsVersion: String(settingsVersion) }
+						: {}),
 					...(from !== undefined ? { from } : {}),
 					...(to !== undefined ? { to } : {})
 				}
@@ -199,7 +209,13 @@ export const mutateWorkdayTask = async (
 				? { ...versioned, title: mutation.title, dueAt: mutation.dueAt }
 				: mutation.kind === 'status'
 					? { ...versioned, status: mutation.status }
-					: { ...versioned, assignee: mutation.assignee }
+					: mutation.kind === 'assignee'
+						? { ...versioned, assignee: mutation.assignee }
+						: {
+								...versioned,
+								columnId: mutation.columnId,
+								settingsVersion: mutation.settingsVersion
+							}
 	}
 	return checked(
 		parseWorkdayCommandResult(
@@ -209,7 +225,7 @@ export const mutateWorkdayTask = async (
 				url:
 					mutation.kind === 'create'
 						? root
-						: `${root}/${mutation.id}/${mutation.kind}`,
+						: `${root}/${mutation.id}/${mutation.kind === 'column' ? 'column' : mutation.kind}`,
 				headers: { 'Idempotency-Key': captured.commandId },
 				data,
 				mapError: taskCommandError

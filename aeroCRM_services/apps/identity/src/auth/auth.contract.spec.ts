@@ -187,12 +187,16 @@ async function passwordRaceService() {
 						})
 					},
 					userSession: {
-						create: jest.fn(async ({ data }: { data: { id: string } }) => {
-							await hooks.beforeSessionCreate?.();
-							events.push('session-create');
-							state.sessions.set(data.id, { revokedAt: null });
-							return data;
-						})
+						create: jest.fn(
+							async ({ data }: { data: { id: string } }) => {
+								await hooks.beforeSessionCreate?.();
+								events.push('session-create');
+								state.sessions.set(data.id, {
+									revokedAt: null
+								});
+								return data;
+							}
+						)
 					}
 				};
 				transactions.push(transaction);
@@ -300,16 +304,22 @@ describe('public auth frozen contracts', () => {
 		['Admin1', 'Admin1'],
 		['alice-', 'alice-'],
 		['  Cafe\u0301  ', 'Café']
-	] as const)('accepts and normalizes display name %s', async (input, expected) => {
-		const pipe = new ValidationPipe({ whitelist: true, transform: true });
+	] as const)(
+		'accepts and normalizes display name %s',
+		async (input, expected) => {
+			const pipe = new ValidationPipe({
+				whitelist: true,
+				transform: true
+			});
 
-		await expect(
-			pipe.transform(
-				{ name: input },
-				{ type: 'body', metatype: UpdateProfileDto }
-			)
-		).resolves.toEqual({ name: expected });
-	});
+			await expect(
+				pipe.transform(
+					{ name: input },
+					{ type: 'body', metatype: UpdateProfileDto }
+				)
+			).resolves.toEqual({ name: expected });
+		}
+	);
 
 	it.each([
 		['control characters', 'Anna\nMaria'],
@@ -396,13 +406,14 @@ describe('public auth frozen contracts', () => {
 			expect.any(String)
 		);
 		const second = service();
-		jest
-			.spyOn(second.auth['emailVerification'], 'issue')
-			.mockImplementation(async scope => ({
-				value: scope.value,
-				expiresAt: new Date(),
-				resendAvailableAt: new Date()
-			}));
+		jest.spyOn(
+			second.auth['emailVerification'],
+			'issue'
+		).mockImplementation(async scope => ({
+			value: scope.value,
+			expiresAt: new Date(),
+			resendAvailableAt: new Date()
+		}));
 
 		const resent = await second.auth.resendEmailCode({
 			email: 'USER@example.com'
@@ -477,7 +488,9 @@ describe('public auth frozen contracts', () => {
 				verificationChallenge: {
 					deleteMany: jest.fn().mockResolvedValue({ count: 1 })
 				},
-				user: { create: jest.fn().mockResolvedValue({ id: 'new-user' }) }
+				user: {
+					create: jest.fn().mockResolvedValue({ id: 'new-user' })
+				}
 			};
 			const value = service({
 				prisma: {
@@ -495,12 +508,13 @@ describe('public auth frozen contracts', () => {
 				expiresAt: new Date(Date.now() + 60_000),
 				lastSentAt: new Date()
 			});
-			jest
-				.spyOn(value.auth['emailVerification'], 'consume')
-				.mockResolvedValue();
-			jest
-				.spyOn(value.auth, 'startSession')
-				.mockResolvedValue({ accessToken: 'access' } as never);
+			jest.spyOn(
+				value.auth['emailVerification'],
+				'consume'
+			).mockResolvedValue();
+			jest.spyOn(value.auth, 'startSession').mockResolvedValue({
+				accessToken: 'access'
+			} as never);
 
 			await expect(scenario.register(value.auth)).resolves.toEqual({
 				accessToken: 'access'
@@ -621,6 +635,91 @@ describe('public auth frozen contracts', () => {
 	});
 });
 
+describe('session creation and access-token signing transaction boundary', () => {
+	it('signs the session token only after persisting the session under the user lock', async () => {
+		const user = activeUser();
+		const transaction = {
+			$queryRaw: jest.fn(),
+			user: { findUnique: jest.fn().mockResolvedValue(user) },
+			userSession: { create: jest.fn() }
+		};
+		const value = service({
+			jwt: { issue: jest.fn().mockReturnValue('signed-access-token') },
+			prisma: { $transaction: jest.fn(callback => callback(transaction)) }
+		});
+
+		await expect(value.auth.startSession(user)).resolves.toMatchObject({
+			accessToken: 'signed-access-token',
+			user: { id: user.id }
+		});
+		expect(transaction.$queryRaw).toHaveBeenCalledTimes(1);
+		expect(transaction.userSession.create).toHaveBeenCalledTimes(1);
+		expect(
+			transaction.userSession.create.mock.invocationCallOrder[0]
+		).toBeLessThan(value.jwt.issue.mock.invocationCallOrder[0]);
+		expect(value.prisma.$transaction).toHaveBeenCalledTimes(1);
+	});
+
+	it('rolls back a newly created session when token signing fails', async () => {
+		const user = activeUser();
+		const transaction = {
+			$queryRaw: jest.fn(),
+			user: { findUnique: jest.fn().mockResolvedValue(user) },
+			userSession: { create: jest.fn() }
+		};
+		const signingError = new Error('signing key unavailable');
+		const value = service({
+			jwt: {
+				issue: jest.fn(() => {
+					throw signingError;
+				})
+			},
+			prisma: {
+				$transaction: jest.fn(async callback => callback(transaction))
+			}
+		});
+
+		await expect(value.auth.startSession(user)).rejects.toBe(signingError);
+		expect(transaction.userSession.create).toHaveBeenCalledTimes(1);
+		expect(value.jwt.issue).toHaveBeenCalledTimes(1);
+		expect(value.prisma.$transaction).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps password-session creation inside the same transaction as signing', async () => {
+		const user = { ...activeUser(), password: await hash('ValidPass1', 4) };
+		const transaction = {
+			$queryRaw: jest.fn(),
+			user: { findFirst: jest.fn().mockResolvedValue(user) },
+			userSession: { create: jest.fn() }
+		};
+		const signingError = new Error('signing key unavailable');
+		const value = service({
+			users: { findByIdentity: jest.fn().mockResolvedValue(user) },
+			jwt: {
+				issue: jest.fn(() => {
+					throw signingError;
+				})
+			},
+			prisma: {
+				$transaction: jest.fn(async callback => callback(transaction))
+			}
+		});
+
+		await expect(
+			value.auth.login({
+				email: 'user@example.com',
+				password: 'ValidPass1'
+			})
+		).rejects.toBe(signingError);
+		expect(transaction.$queryRaw).toHaveBeenCalledTimes(1);
+		expect(transaction.userSession.create).toHaveBeenCalledTimes(1);
+		expect(value.jwt.issue.mock.invocationCallOrder[0]).toBeGreaterThan(
+			transaction.userSession.create.mock.invocationCallOrder[0]
+		);
+		expect(value.prisma.$transaction).toHaveBeenCalledTimes(1);
+	});
+});
+
 describe('refresh cookie fail-closed contract', () => {
 	const previousMode = process.env.MODE;
 	const previousDomain = process.env.AUTH_COOKIE_DOMAIN;
@@ -633,8 +732,7 @@ describe('refresh cookie fail-closed contract', () => {
 	afterEach(() => {
 		if (previousMode === undefined) delete process.env.MODE;
 		else process.env.MODE = previousMode;
-		if (previousDomain === undefined)
-			delete process.env.AUTH_COOKIE_DOMAIN;
+		if (previousDomain === undefined) delete process.env.AUTH_COOKIE_DOMAIN;
 		else process.env.AUTH_COOKIE_DOMAIN = previousDomain;
 	});
 
@@ -718,7 +816,11 @@ describe('refresh cookie fail-closed contract', () => {
 
 	it('keeps the refresh cookie on a temporary service failure', async () => {
 		const controller = new AuthController(
-			{ refresh: jest.fn().mockRejectedValue(new Error('database unavailable')) } as any,
+			{
+				refresh: jest
+					.fn()
+					.mockRejectedValue(new Error('database unavailable'))
+			} as any,
 			{} as any,
 			new RefreshTokenService(),
 			{} as any,

@@ -12,6 +12,8 @@ import { AuthSettingsService } from './auth/auth-settings.service';
 import { AuthController } from './auth/auth.controller';
 import { IdentityAuthGuard } from './auth/auth.guard';
 import { AuthService } from './auth/auth.service';
+import { SessionEventsController } from './auth/session-events.controller';
+import { SessionEventsService } from './auth/session-events.service';
 import { EmailVerificationService } from './auth/email-verification.service';
 import { EmailPasswordRecoveryService } from './auth/email-password-recovery.service';
 import { TurnstileGuard } from './auth/turnstile.guard';
@@ -64,6 +66,7 @@ const API_CONTROLLERS =
 	PROCESS_ROLE === 'api'
 		? [
 				AuthController,
+				SessionEventsController,
 				LoginOtpController,
 				AuthSettingsController,
 				OAuthController,
@@ -90,6 +93,7 @@ const API_PROVIDERS =
 				AuthRateLimitGuard,
 				AuthSettingsService,
 				AuthService,
+				SessionEventsService,
 				EmailVerificationService,
 				EmailPasswordRecoveryService,
 				LoginOtpService,

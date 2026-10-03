@@ -669,7 +669,10 @@ try {
 			});
 			await flush(tx);
 		}),
-		error => error?.code === 'P2003' || error?.meta?.code === '23503'
+		error =>
+			error?.code === 'P2003' ||
+			error?.meta?.code === '23503' ||
+			String(error?.message).includes('crm_workspace_change_refused')
 	);
 	for (const status of ['COMPLETED', 'CANCELLED']) {
 		await assert.rejects(

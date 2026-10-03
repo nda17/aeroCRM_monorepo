@@ -46,8 +46,11 @@ export const WorkdayNextTaskSuggestion = (props: Props) => {
 		}
 	}, [])
 	const bound =
-		command.mutation.kind === 'status' &&
-		command.mutation.status === 'COMPLETED' &&
+		((command.mutation.kind === 'status' &&
+			command.mutation.status === 'COMPLETED') ||
+			(command.mutation.kind === 'column' &&
+				command.mutation.targetStatus === 'COMPLETED' &&
+				command.mutation.sourceStatus !== 'COMPLETED')) &&
 		task.status === 'COMPLETED' &&
 		command.mutation.id === task.id &&
 		task.version === command.mutation.expectedVersion + 1 &&

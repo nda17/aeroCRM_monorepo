@@ -59,7 +59,11 @@
 	@apply border-primary ring-2 ring-primary/20;
 }
 .columnHeading {
-	@apply flex items-center justify-between gap-3 font-semibold text-crm-text;
+	@apply flex items-center justify-between gap-3 font-semibold text-crm-text [overflow-wrap:anywhere];
+
+	> span {
+		@apply shrink-0;
+	}
 }
 .cards {
 	@apply flex min-w-0 flex-col gap-3;

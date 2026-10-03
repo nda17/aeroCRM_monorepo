@@ -7,7 +7,7 @@ import { create } from 'zustand'
 interface SessionStore extends SessionState {
 	setChecking: () => void
 	setAuthenticated: (session: AuthenticatedSession) => void
-	setAnonymous: () => void
+	setAnonymous: (message?: string) => void
 	setError: (message: string) => void
 }
 
@@ -34,11 +34,11 @@ export const useSessionStore = create<SessionStore>(set => ({
 			errorMessage: null,
 			sessionRevision: state.sessionRevision + 1
 		})),
-	setAnonymous: () =>
+	setAnonymous: message =>
 		set(state => ({
 			status: 'anonymous',
 			session: null,
-			errorMessage: null,
+			errorMessage: message ?? null,
 			sessionRevision: state.sessionRevision
 		})),
 	setError: errorMessage =>

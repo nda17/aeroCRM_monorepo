@@ -52,6 +52,49 @@ vi.mock('@/entities/crm-access', async () => ({
 	)),
 	useCrmWorkspaceAccess: () => workspace
 }))
+vi.mock('@/entities/crm-planner/model/use-planner-settings', () => ({
+	usePlannerSettings: () => ({
+		context: { canRead: true, current: () => true },
+		query: { isFetching: false, isError: false, refetch: vi.fn() },
+		canManage: false,
+		data: {
+			schemaVersion: 1,
+			workspaceId,
+			version: 0,
+			templates: [],
+			columns: [
+				{
+					id: 'OPEN',
+					name: 'К выполнению',
+					status: 'OPEN',
+					isDefault: true,
+					archived: false
+				},
+				{
+					id: 'IN_PROGRESS',
+					name: 'В работе',
+					status: 'IN_PROGRESS',
+					isDefault: true,
+					archived: false
+				},
+				{
+					id: 'COMPLETED',
+					name: 'Готово',
+					status: 'COMPLETED',
+					isDefault: true,
+					archived: false
+				},
+				{
+					id: 'CANCELLED',
+					name: 'Отменено',
+					status: 'CANCELLED',
+					isDefault: true,
+					archived: false
+				}
+			]
+		}
+	})
+}))
 vi.mock('@/shared/api/authenticated-http-client', async () => ({
 	...(await vi.importActual<
 		typeof import('@/shared/api/authenticated-http-client')
@@ -425,19 +468,28 @@ describe('MyDay actual permission query lifecycle', () => {
 			vi.mocked(mutateWorkdayTask).mockImplementation(
 				async (_token, command) => {
 					const mutation = command.mutation
-					expect(mutation.kind).toBe('status')
-					if (mutation.kind !== 'status')
-						throw new Error('Expected status command')
 					expect(commands.has(command.commandId)).toBe(false)
-					expect(mutation.expectedVersion).toBe(current.version)
 					commands.add(command.commandId)
+					let nextStatus: WorkdayTask['status']
+					if (surface === 'board') {
+						expect(mutation.kind).toBe('column')
+						if (mutation.kind !== 'column')
+							throw new Error('Expected column command')
+						expect(mutation.expectedVersion).toBe(current.version)
+						expect(mutation.settingsVersion).toBe(0)
+						expect(mutation.sourceStatus).toBe(current.status)
+						nextStatus = mutation.targetStatus
+					} else if (mutation.kind !== 'status') {
+						throw new Error('Expected status command')
+					} else {
+						expect(mutation.expectedVersion).toBe(current.version)
+						nextStatus = mutation.status
+					}
 					current = {
 						...current,
-						status: mutation.status,
+						status: nextStatus,
 						version: current.version + 1,
-						completedAt: ['COMPLETED', 'CANCELLED'].includes(
-							mutation.status
-						)
+						completedAt: ['COMPLETED', 'CANCELLED'].includes(nextStatus)
 							? task.dueAt
 							: null
 					}
@@ -462,7 +514,9 @@ describe('MyDay actual permission query lifecycle', () => {
 				const control =
 					surface === 'drawer'
 						? screen.getByRole('button', { name: label })
-						: await screen.findByLabelText(`Статус задачи «${task.title}»`)
+						: await screen.findByLabelText(
+								`${surface === 'board' ? 'Колонка' : 'Статус'} задачи «${task.title}»`
+							)
 				await waitFor(() =>
 					expect(control).toHaveProperty('disabled', false)
 				)
@@ -502,7 +556,7 @@ describe('MyDay actual permission query lifecycle', () => {
 				fireEvent.click(screen.getByRole('button', { name: 'Готово' }))
 			} else {
 				const status = await screen.findByLabelText(
-					`Статус задачи «${task.title}»`
+					`${surface === 'board' ? 'Колонка' : 'Статус'} задачи «${task.title}»`
 				)
 				await waitFor(() =>
 					expect(status).toHaveProperty('disabled', false)
@@ -610,7 +664,9 @@ describe('MyDay actual permission query lifecycle', () => {
 			const recover = await screen.findByRole('button', {
 				name: 'Проверить сохранение'
 			})
-			const status = screen.getByLabelText(`Статус задачи «${task.title}»`)
+			const status = screen.getByLabelText(
+				`${viewMode === 'board' ? 'Колонка' : 'Статус'} задачи «${task.title}»`
+			)
 			expect(status).toHaveProperty('disabled', true)
 			fireEvent.change(status, { target: { value: 'IN_PROGRESS' } })
 			expect(mutateWorkdayTask).toHaveBeenCalledTimes(1)

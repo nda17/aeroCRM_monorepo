@@ -19,10 +19,16 @@ import {
 import { salesScope } from '../sales/sales.service';
 import type { SalesListQuery } from '../sales/sales.dto';
 import { SalesAssigneeClient } from './sales-assignee.client';
+import {
+	plannerColumn,
+	plannerColumnWhere,
+	readPlannerSettings
+} from '../planner/planner-settings';
 import type {
 	AssignWorkdayTaskDto,
 	CreateWorkdayTaskDto,
 	EditWorkdayTaskDto,
+	MoveWorkdayTaskDto,
 	SetTaskStatusDto,
 	TaskAssigneeDto,
 	WorkdayQuery
@@ -37,6 +43,7 @@ type Command =
 	| CreateWorkdayTaskDto
 	| EditWorkdayTaskDto
 	| SetTaskStatusDto
+	| MoveWorkdayTaskDto
 	| AssignWorkdayTaskDto;
 
 export function workdayScope(
@@ -133,6 +140,13 @@ export class WorkdayService {
 			throw new ForbiddenException();
 		if (query.teamId && !access.teamIds.includes(query.teamId))
 			throw new ForbiddenException();
+		if (
+			(query.columnId === undefined) !==
+			(query.settingsVersion === undefined)
+		)
+			throw new BadRequestException(
+				'columnId and settingsVersion must be provided together'
+			);
 		const now = new Date(),
 			range = workdayPeriod(query, now);
 		const teamIds = query.teamId ? [query.teamId] : access.teamIds;
@@ -172,29 +186,46 @@ export class WorkdayService {
 			query.period === 'OVERDUE'
 				? overdue
 				: { AND: [base, ...(range ? [{ dueAt: range }] : [])] };
-		const where: Prisma.SalesTaskWhereInput = {
-			AND: [period, ...(query.status ? [{ status: query.status }] : [])]
-		};
-		const grouped = this.prisma.salesTask.groupBy({
-			by: ['status'],
-			where: period,
-			orderBy: { status: 'asc' },
-			_count: { _all: true }
-		});
 		const [total, rows, groups, overdueCount] =
 			await this.prisma.$transaction(
-				[
-					this.prisma.salesTask.count({ where }),
-					this.prisma.salesTask.findMany({
-						where,
-						include: { deal: true },
-						orderBy: [{ dueAt: 'asc' }, { id: 'asc' }],
-						skip: (query.page - 1) * query.pageSize,
-						take: query.pageSize
-					}),
-					grouped,
-					this.prisma.salesTask.count({ where: overdue })
-				],
+				async tx => {
+					const column =
+						query.columnId === undefined
+							? null
+							: plannerColumn(
+									await readPlannerSettings(tx, access.workspaceId),
+									query.columnId,
+									query.settingsVersion!
+								);
+					if (column && query.status && query.status !== column.status)
+						throw new BadRequestException(
+							'Task status differs from planner column'
+						);
+					const where: Prisma.SalesTaskWhereInput = {
+						AND: [
+							period,
+							...(query.status ? [{ status: query.status }] : []),
+							...(column ? [plannerColumnWhere(column)] : [])
+						]
+					};
+					return Promise.all([
+						tx.salesTask.count({ where }),
+						tx.salesTask.findMany({
+							where,
+							include: { deal: true },
+							orderBy: [{ dueAt: 'asc' }, { id: 'asc' }],
+							skip: (query.page - 1) * query.pageSize,
+							take: query.pageSize
+						}),
+						tx.salesTask.groupBy({
+							by: ['status'],
+							where: period,
+							orderBy: { status: 'asc' },
+							_count: { _all: true }
+						}),
+						tx.salesTask.count({ where: overdue })
+					]);
+				},
 				{ isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }
 			);
 		const counts = { OPEN: 0, IN_PROGRESS: 0, COMPLETED: 0, CANCELLED: 0 };
@@ -290,6 +321,14 @@ export class WorkdayService {
 	) {
 		return this.command(access, dto, 'ASSIGNED', id, token);
 	}
+	move(
+		access: SalesAccess,
+		id: string,
+		dto: MoveWorkdayTaskDto,
+		token: string
+	) {
+		return this.command(access, dto, 'MOVED', id, token);
+	}
 
 	private async command(
 		initial: SalesAccess,
@@ -335,6 +374,19 @@ export class WorkdayService {
 							await this.visible(tx, access, prior.taskId);
 							return prior.result;
 						}
+						const move =
+							kind === 'MOVED' ? (dto as MoveWorkdayTaskDto) : null;
+						if (move)
+							await tx.$executeRaw(
+								Prisma.sql`SELECT crm_sales.assert_workspace_open(${access.workspaceId}::uuid)`
+							);
+						const targetColumn = move
+							? plannerColumn(
+									await readPlannerSettings(tx, access.workspaceId),
+									move.columnId,
+									move.settingsVersion
+								)
+							: null;
 						const previous = id
 							? await this.visible(tx, access, id)
 							: null;
@@ -363,7 +415,9 @@ export class WorkdayService {
 							// Status changes must not reopen or otherwise mutate that deal.
 							if (
 								deal.archivedAt ||
-								(deal.status !== 'OPEN' && kind !== 'STATUS_CHANGED')
+								(deal.status !== 'OPEN' &&
+									kind !== 'STATUS_CHANGED' &&
+									kind !== 'MOVED')
 							)
 								conflict('crm_task_deal_closed');
 							await tx.$queryRaw(
@@ -412,10 +466,19 @@ export class WorkdayService {
 									title: edit.title.trim(),
 									dueAt: validDate(edit.dueAt)
 								};
-							} else if (kind === 'STATUS_CHANGED') {
-								const status = (dto as SetTaskStatusDto).status;
+							} else if (kind === 'STATUS_CHANGED' || kind === 'MOVED') {
+								const status = targetColumn
+									? targetColumn.status
+									: (dto as SetTaskStatusDto).status;
 								data = {
 									status,
+									...(targetColumn
+										? {
+												boardColumnId: targetColumn.isDefault
+													? null
+													: targetColumn.id
+											}
+										: {}),
 									completedAt: isActive(status)
 										? null
 										: previous.status === status
@@ -487,7 +550,12 @@ export class WorkdayService {
 								taskId: task.id,
 								commandId: dto.commandId,
 								actorSubject: access.subject,
-								kind,
+								kind:
+									kind === 'MOVED'
+										? previous?.status === task.status
+											? 'EDITED'
+											: 'STATUS_CHANGED'
+										: kind,
 								before: previous ? taskDto(previous) : Prisma.DbNull,
 								after: result.task
 							}

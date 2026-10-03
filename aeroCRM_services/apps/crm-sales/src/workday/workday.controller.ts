@@ -22,6 +22,7 @@ import {
 	AssignWorkdayTaskDto,
 	CreateWorkdayTaskDto,
 	EditWorkdayTaskDto,
+	MoveWorkdayTaskDto,
 	SetTaskStatusDto,
 	WorkdayQuery
 } from './workday.dto';
@@ -114,6 +115,23 @@ export class WorkdayController {
 	) {
 		this.key(dto.commandId, key);
 		return this.service.assign(
+			request.salesAccess,
+			id,
+			dto,
+			request.headers.authorization!
+		);
+	}
+	@Post(':id/column')
+	@HttpCode(200)
+	@SalesPermission('sales:write')
+	column(
+		@Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+		@Body() dto: MoveWorkdayTaskDto,
+		@Req() request: SalesRequest,
+		@Headers('idempotency-key') key?: string
+	) {
+		this.key(dto.commandId, key);
+		return this.service.move(
 			request.salesAccess,
 			id,
 			dto,

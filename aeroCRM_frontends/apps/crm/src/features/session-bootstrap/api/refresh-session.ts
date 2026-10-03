@@ -10,7 +10,8 @@ export type SessionBootstrapErrorKind = 'anonymous' | 'temporary'
 export class SessionBootstrapError extends Error {
 	constructor(
 		readonly kind: SessionBootstrapErrorKind,
-		message: string
+		message: string,
+		readonly reason?: 'revoked'
 	) {
 		super(message)
 		this.name = 'SessionBootstrapError'
@@ -85,7 +86,11 @@ export const refreshSession = async (): Promise<AuthenticatedSession> => {
 		if (axios.isAxiosError(error) && error.response?.status === 401) {
 			throw new SessionBootstrapError(
 				'anonymous',
-				'Требуется вход в аккаунт.'
+				'Требуется вход в аккаунт.',
+				isRecord(error.response.data) &&
+					error.response.data.code === 'session_revoked'
+					? 'revoked'
+					: undefined
 			)
 		}
 

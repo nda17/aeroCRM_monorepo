@@ -65,6 +65,9 @@ vi.mock('@/features/edit-customer', () => ({
 	)
 }))
 vi.mock('@/entities/crm-access', () => ({ getCrmPermissions: vi.fn() }))
+vi.mock('@/entities/crm-planner/model/use-planner-settings', () => ({
+	usePlannerSettings: () => ({ context: { canRead: false } })
+}))
 vi.mock('@/entities/sales', () => ({
 	getSalesDeal: vi.fn(),
 	listSalesTimeline: vi.fn(),

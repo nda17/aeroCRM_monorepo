@@ -100,6 +100,9 @@ vi.mock('@/entities/crm-access', async () => ({
 	}),
 	getCrmPermissions: vi.fn()
 }))
+vi.mock('@/entities/crm-planner/model/use-planner-settings', () => ({
+	usePlannerSettings: () => ({ context: { canRead: false } })
+}))
 vi.mock('@/entities/crm-workday/api/workday.api', async () => ({
 	...(await vi.importActual<
 		typeof import('@/entities/crm-workday/api/workday.api')

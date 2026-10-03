@@ -1,0 +1,27 @@
+.content {
+	@apply flex min-w-0 flex-col gap-5;
+}
+.section {
+	@apply flex min-w-0 flex-col gap-3;
+	h3 {
+		@apply text-base font-semibold text-crm-text;
+	}
+}
+.row {
+	@apply flex min-w-0 flex-col gap-3 rounded-xl border border-crm-border bg-crm-surface-muted p-3;
+}
+.fields {
+	@apply grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2;
+}
+.actions {
+	@apply flex min-w-0 flex-wrap items-center gap-2;
+}
+.hint {
+	@apply text-sm leading-6 text-crm-muted;
+}
+.error {
+	@apply flex flex-col items-start gap-3 rounded-xl border border-crm-danger/30 bg-crm-danger/5 p-4 text-sm text-crm-danger;
+}
+.archived {
+	@apply border-dashed;
+}

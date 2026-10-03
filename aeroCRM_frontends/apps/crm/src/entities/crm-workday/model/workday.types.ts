@@ -41,6 +41,8 @@ export type WorkdayFilters = WorkdayPagination &
 		assigneeSubject?: string
 		search?: string
 		status?: WorkdayStatus
+		columnId?: string
+		settingsVersion?: number
 	}
 export type WorkdayListRequest = WorkdayBinding & WorkdayFilters
 export interface WorkdayTask {
@@ -113,6 +115,15 @@ export type WorkdayMutation =
 			id: string
 			expectedVersion: number
 			assignee: WorkdayAssignee
+	  }
+	| {
+			kind: 'column'
+			id: string
+			expectedVersion: number
+			columnId: string
+			settingsVersion: number
+			sourceStatus: WorkdayStatus
+			targetStatus: WorkdayStatus
 	  }
 export interface WorkdayCommand extends WorkdayBinding {
 	commandId: string

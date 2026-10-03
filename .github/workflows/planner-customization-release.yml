@@ -1,0 +1,45 @@
+name: aeroCRM planner and single session release
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Green CI run ID for this exact production commit
+        required: true
+      sha:
+        description: Full 40-character backend commit SHA
+        required: true
+      infra_sha:
+        description: Full commit SHA of reviewed private infrastructure repo
+        required: true
+      backend_env_hash:
+        description: Approved aggregate backend env hash on VPS
+        required: true
+      migration_env_hash:
+        description: SHA-256 of sorted private crm-sales.env and identity.env migration file hashes
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  release:
+    uses: ./.github/workflows/release.yml
+    with:
+      target: backend
+      ci_run_id: ${{ inputs.ci_run_id }}
+      sha: ${{ inputs.sha }}
+      infra_sha: ${{ inputs.infra_sha }}
+      backend_env_hash: ${{ inputs.backend_env_hash }}
+      crm_planner_customization_migration: true
+      crm_planner_customization_migration_env_hash: ${{ inputs.migration_env_hash }}
+      billing_capacity_migration: false
+      crm_custom_roles_migration: false
+      crm_sales_commerce_migration: false
+      crm_intake_notifications_migration: false
+      crm_corporate_mail_migration: false
+      crm_file_imports_migration: false
+      workspace_closure_migration: false
+      workspace_closure_identity_acl_repair: false
+      workspace_closure_enable: false
+      crm_contracts_cutover: false
+      crm_contracts_cutover_resume: false
+    secrets: inherit

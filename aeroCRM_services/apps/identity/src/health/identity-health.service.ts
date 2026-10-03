@@ -37,6 +37,22 @@ export class IdentityHealthService {
 				.$queryRaw`SELECT c.browser_token_hash, c.identity_verified_at, r.count FROM identity.login_otp_challenges c FULL JOIN identity.login_otp_rate_limits r ON false LIMIT 0`;
 			await this.prisma
 				.$queryRaw`SELECT i.acceptance_id, i.email_verified_at, m.version, m.created_by_product, m.created_by_invitation_id FROM identity.workspace_invitations i FULL JOIN identity.workspace_members m ON false LIMIT 0`;
+			const invariant = await this.prisma.$queryRaw<
+				Array<{ ready: boolean }>
+			>`
+				SELECT (
+				 EXISTS (SELECT 1 FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+				  WHERE i.indrelid = 'identity.user_sessions'::regclass
+				   AND c.relname = 'user_sessions_one_active_per_user' AND i.indisunique AND i.indisvalid
+				   AND pg_get_expr(i.indpred, i.indrelid) = '(revoked_at IS NULL)'
+				   AND pg_get_indexdef(i.indexrelid, 1, true) = 'user_id')
+				 AND (SELECT count(*) FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
+				  WHERE t.tgrelid = 'identity.user_sessions'::regclass AND NOT t.tgisinternal
+				   AND t.tgenabled IN ('O', 'A') AND p.pronamespace = 'identity'::regnamespace
+				   AND ((t.tgname = 'user_sessions_single_active' AND p.proname = 'enforce_single_active_session')
+				    OR (t.tgname = 'user_sessions_revocation_signal' AND p.proname = 'notify_session_revoked'))) = 2
+				) AS ready`;
+			if (invariant[0]?.ready !== true) throw new Error();
 			const identity = await this.prisma.serviceIdentity.findUnique({
 				where: { id: 'singleton' },
 				select: { serviceName: true, databaseId: true }

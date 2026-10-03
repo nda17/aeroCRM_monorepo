@@ -17,6 +17,7 @@ import {
 } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { isSessionRecoveryReadError } from '@/shared/api/authenticated-http-client'
+import toast from 'react-hot-toast'
 import { installSessionRenewal } from './session-renewal'
 
 let pendingBootstrap: Promise<AuthenticatedSession> | null = null
@@ -53,15 +54,36 @@ export const useSessionBootstrap = () => {
 	// result synchronously before the authenticated workspace can render.
 	useLayoutEffect(
 		() =>
-			installSessionRenewal(() => {
-				void queryClient
-					.refetchQueries({
-						type: 'active',
-						predicate: query =>
-							query.state.status === 'error' &&
-							isSessionRecoveryReadError(query.state.error)
-					})
-					.catch(() => undefined)
+			installSessionRenewal(
+				() => {
+					void queryClient
+						.refetchQueries({
+							type: 'active',
+							predicate: query =>
+								query.state.status === 'error' &&
+								isSessionRecoveryReadError(query.state.error)
+						})
+						.catch(() => undefined)
+				},
+				() => {
+					void queryClient.cancelQueries()
+					queryClient.clear()
+					toast.error('Выполнен вход на другом устройстве')
+				}
+			),
+		[queryClient]
+	)
+
+	useLayoutEffect(
+		() =>
+			useSessionStore.subscribe((state, previous) => {
+				if (
+					previous.status === 'authenticated' &&
+					state.status !== 'authenticated'
+				) {
+					void queryClient.cancelQueries()
+					queryClient.clear()
+				}
 			}),
 		[queryClient]
 	)
@@ -102,7 +124,11 @@ export const useSessionBootstrap = () => {
 				) {
 					retryAllowed.current = false
 					setRetryAt(null)
-					setAnonymous()
+					setAnonymous(
+						error.reason === 'revoked'
+							? 'Выполнен вход на другом устройстве'
+							: undefined
+					)
 					return
 				}
 

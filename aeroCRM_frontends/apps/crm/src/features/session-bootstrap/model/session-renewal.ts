@@ -1,3 +1,5 @@
+import { startSessionEvents } from '@/shared/api/session-events'
+import { getRuntimeConfig } from '@/shared/config/runtime'
 import {
 	useSessionStore,
 	type AuthenticatedSession
@@ -78,10 +80,14 @@ interface Binding {
 }
 
 /** A mounted bootstrap owns this in-memory lease; no bearer enters React/cache. */
-export const installSessionRenewal = (onRenewed?: () => void) => {
+export const installSessionRenewal = (
+	onRenewed?: () => void,
+	onRevoked?: () => void
+) => {
 	let mounted = true
 	let binding: Binding | null = null
 	let timer: ReturnType<typeof setTimeout> | undefined
+	let stopEvents: (() => void) | undefined
 	const stopTimer = () => {
 		if (timer !== undefined) clearTimeout(timer)
 		timer = undefined
@@ -97,12 +103,19 @@ export const installSessionRenewal = (onRenewed?: () => void) => {
 			state.sessionRevision === expected.revision
 		)
 	}
-	const invalidate = (expected: Binding) => {
+	const invalidate = (expected: Binding, revoked = false) => {
 		if (!current(expected)) return
 		stopTimer()
+		stopEvents?.()
+		stopEvents = undefined
 		binding = null
 		expected.bearer = ''
-		useSessionStore.getState().setAnonymous()
+		useSessionStore
+			.getState()
+			.setAnonymous(
+				revoked ? 'Выполнен вход на другом устройстве' : undefined
+			)
+		if (revoked) onRevoked?.()
 	}
 	const schedule = (expected: Binding) => {
 		stopTimer()
@@ -160,7 +173,7 @@ export const installSessionRenewal = (onRenewed?: () => void) => {
 					error instanceof SessionBootstrapError &&
 					error.kind === 'anonymous'
 				) {
-					invalidate(expected)
+					invalidate(expected, error.reason === 'revoked')
 					throw unauthorized()
 				}
 				expected.failures += 1
@@ -199,6 +212,15 @@ export const installSessionRenewal = (onRenewed?: () => void) => {
 			}
 		}
 	}
+	const resolveToken = async (expected: Binding) => {
+		if (!current(expected)) throw unauthorized()
+		if (
+			expected.metadata &&
+			expected.metadata.expiresAt - Date.now() <= RENEW_EARLY_MS
+		)
+			await renew(expected)
+		return lease(expected)
+	}
 	const unregister = registerSessionTransport(async anchor => {
 		const expected = binding
 		if (!expected || expected.anchor !== anchor || !current(expected))
@@ -216,6 +238,8 @@ export const installSessionRenewal = (onRenewed?: () => void) => {
 		const state = useSessionStore.getState()
 		if (binding && current(binding)) return
 		stopTimer()
+		stopEvents?.()
+		stopEvents = undefined
 		if (binding) binding.bearer = ''
 		binding = null
 		if (!mounted || state.status !== 'authenticated' || !state.session)
@@ -240,6 +264,22 @@ export const installSessionRenewal = (onRenewed?: () => void) => {
 			retryAt: 0
 		}
 		schedule(binding)
+		const expected = binding
+		if (metadata)
+			stopEvents = startSessionEvents({
+				url: getRuntimeConfig().apiBaseUrl + '/auth/session/events',
+				isCurrent: () => current(expected),
+				token: async () => (await resolveToken(expected)).accessToken,
+				onRevoked: () => invalidate(expected, true),
+				onUnauthorized: async () => {
+					if (!current(expected)) return
+					try {
+						await renew(expected)
+					} catch {
+						/* renewal classifies transient errors */
+					}
+				}
+			})
 	}
 	const catchUp = () => {
 		const expected = binding
@@ -264,6 +304,7 @@ export const installSessionRenewal = (onRenewed?: () => void) => {
 	return () => {
 		mounted = false
 		stopTimer()
+		stopEvents?.()
 		unsubscribe()
 		unregister()
 		if (binding) binding.bearer = ''
