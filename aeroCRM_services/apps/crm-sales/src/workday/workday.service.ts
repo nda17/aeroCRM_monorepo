@@ -22,7 +22,8 @@ import { SalesAssigneeClient } from './sales-assignee.client';
 import {
 	plannerColumn,
 	plannerColumnWhere,
-	readPlannerSettings
+	readPlannerSettings,
+	retryablePlannerTransaction
 } from '../planner/planner-settings';
 import type {
 	AssignWorkdayTaskDto,
@@ -583,13 +584,7 @@ export class WorkdayService {
 					}
 				);
 			} catch (error) {
-				if (
-					attempt === 2 ||
-					!error ||
-					typeof error !== 'object' ||
-					!('code' in error) ||
-					error.code !== 'P2034'
-				)
+				if (attempt === 2 || !retryablePlannerTransaction(error))
 					throw error;
 			}
 		}

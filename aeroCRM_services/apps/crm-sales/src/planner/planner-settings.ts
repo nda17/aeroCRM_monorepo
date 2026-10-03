@@ -248,3 +248,18 @@ export function plannerColumnWhere(
 				boardColumn: { is: { archived: false } }
 			};
 }
+
+export function retryablePlannerTransaction(error: unknown): boolean {
+	if (!error || typeof error !== 'object' || !('code' in error))
+		return false;
+	if (error.code === 'P2034') return true;
+	// Raw workspace-fence statements retain PostgreSQL's SQLSTATE in P2010.
+	if (error.code !== 'P2010' || !('meta' in error)) return false;
+	const meta = error.meta;
+	return (
+		!!meta &&
+		typeof meta === 'object' &&
+		'code' in meta &&
+		(meta.code === '40001' || meta.code === '40P01')
+	);
+}

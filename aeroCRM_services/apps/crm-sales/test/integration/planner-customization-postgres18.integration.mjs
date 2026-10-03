@@ -66,6 +66,64 @@ const workday = new WorkdayService(runtime, authorization, {
 		role: 'OWNER'
 	})
 });
+// Force a Serializable snapshot before the other writer commits its workspace fence.
+// No timing sleeps: the paused first raw fence is released only after the winner commits.
+function fenceBarrier(prisma) {
+	let entered, release;
+	const ready = new Promise(resolve => {
+		entered = resolve;
+	});
+	const gate = new Promise(resolve => {
+		release = resolve;
+	});
+	let paused = false;
+	const rawFailures = [];
+	let attempts = 0;
+	const client = new Proxy(prisma, {
+		get(target, key) {
+			if (key !== '$transaction') return Reflect.get(target, key);
+			return (operation, options) =>
+				target.$transaction(async tx => {
+					attempts++;
+					const intercepted = new Proxy(tx, {
+						get(transaction, method) {
+							if (method !== '$executeRaw')
+								return Reflect.get(transaction, method);
+							return async sql => {
+								if (
+									!paused &&
+									sql.strings
+										?.join('')
+										.includes('assert_workspace_open')
+								) {
+									paused = true;
+									entered();
+									await gate;
+								}
+								try {
+									return await transaction.$executeRaw(sql);
+								} catch (error) {
+									rawFailures.push({
+										code: error?.code,
+										sqlState: error?.meta?.code
+									});
+									throw error;
+								}
+							};
+						}
+					});
+					return operation(intercepted);
+				}, options);
+		}
+	});
+	return {
+		client,
+		ready,
+		release,
+		rawFailures,
+		attempts: () => attempts
+	};
+}
 const token = 'Bearer planner-local-test';
 const http = (status, code) => error =>
 	error?.getStatus?.() === status &&
@@ -496,23 +554,173 @@ try {
 		}),
 		dbError('append only')
 	);
-	const task = (await workday.detail(actor, reopened.task.id)).task;
-	const raceCommand = command(restored);
-	raceCommand.columns.find(item => item.id === customId).archived = true;
-	const race = await Promise.allSettled([
-		workday.move(
-			actor,
-			task.id,
-			move(task, customId, restored.version),
-			token
-		),
-		planner.save(actor, raceCommand, token)
-	]);
-	assert.equal(race[1].status, 'fulfilled');
-	if (race[0].status === 'rejected')
-		assert.ok(http(409, 'crm_planner_settings_conflict')(race[0].reason));
+	for (const winner of ['archive', 'move']) {
+		let snapshot = await planner.settings(actor, actor.workspaceId);
+		if (
+			snapshot.columns.find(item => item.id === customId).archived
+		) {
+			const restore = command(snapshot);
+			restore.columns.find(item => item.id === customId).archived =
+				false;
+			snapshot = await planner.save(actor, restore, token);
+		}
+		const task = (await workday.detail(actor, reopened.task.id)).task;
+		const archive = command(snapshot);
+		archive.columns.find(item => item.id === customId).archived =
+			true;
+		const placement = move(task, customId, snapshot.version);
+		const barrier = fenceBarrier(runtime);
+		let reauthorizations = 0;
+		const raceAccess = {
+			authorize: async () => {
+				reauthorizations++;
+				return current;
+			}
+		};
+		const pausedPlanner = new PlannerService(
+			barrier.client,
+			raceAccess
+		);
+		const pausedWorkday = new WorkdayService(
+			barrier.client,
+			raceAccess,
+			{
+				authorize: async (_token, _access, assignee) => ({
+					...assignee,
+					dataScope: 'ALL',
+					teamIds: [],
+					role: 'OWNER'
+				})
+			}
+		);
+		const loser = (
+			winner === 'archive'
+				? pausedWorkday.move(actor, task.id, placement, token)
+				: pausedPlanner.save(actor, archive, token)
+		).then(
+			value => ({ status: 'fulfilled', value }),
+			reason => ({ status: 'rejected', reason })
+		);
+		let watchdog, winnerResult;
+		try {
+			await Promise.race([
+				barrier.ready,
+				loser.then(() => {
+					throw new Error(
+						'Race command settled before the fence barrier'
+					);
+				}),
+				new Promise((_, reject) => {
+					watchdog = setTimeout(
+						() =>
+							reject(new Error('Fence barrier deadline exceeded')),
+						10000
+					);
+				})
+			]);
+			if (winner === 'archive')
+				winnerResult = await planner.save(actor, archive, token);
+			else
+				winnerResult = await workday.move(
+					actor,
+					task.id,
+					placement,
+					token
+				);
+		} finally {
+			clearTimeout(watchdog);
+			barrier.release();
+		}
+		const result = await loser;
+		assert.deepEqual(
+			barrier.rawFailures,
+			[{ code: 'P2010', sqlState: '40001' }],
+			winner + ' forces raw serialization failure'
+		);
+		assert.equal(
+			barrier.attempts(),
+			2,
+			winner + ' retries the full transaction'
+		);
+		assert.equal(
+			reauthorizations,
+			2,
+			winner + ' reauthorizes the retry'
+		);
+		if (winner === 'archive') {
+			assert.equal(result.status, 'rejected');
+			assert.ok(
+				http(409, 'crm_planner_settings_conflict')(result.reason)
+			);
+		} else {
+			assert.equal(result.status, 'fulfilled', String(result.reason));
+			assert.equal(result.value.version, snapshot.version + 1);
+		}
+		const after = await planner.settings(actor, actor.workspaceId);
+		const afterTask = (await workday.detail(actor, task.id)).task;
+		assert.equal(
+			after.version,
+			snapshot.version + 1,
+			'archive increments once'
+		);
+		assert.equal(
+			afterTask.version,
+			task.version + (winner === 'move' ? 1 : 0),
+			'move increments once'
+		);
+		assert.equal(
+			await runtime.plannerCommandReceipt.count({
+				where: { commandId: archive.commandId }
+			}),
+			1
+		);
+		assert.equal(
+			await runtime.taskCommandReceipt.count({
+				where: { commandId: placement.commandId }
+			}),
+			winner === 'move' ? 1 : 0
+		);
+		assert.deepEqual(
+			await planner.save(actor, archive, token),
+			winner === 'archive' ? winnerResult : result.value,
+			'immutable archive replay'
+		);
+		if (winner === 'move') {
+			assert.deepEqual(
+				await workday.move(actor, task.id, placement, token),
+				winnerResult,
+				'immutable move replay after archive'
+			);
+			assert.equal(
+				await runtime.taskTimeline.count({
+					where: { commandId: placement.commandId }
+				}),
+				1
+			);
+		}
+		assert.equal(
+			(await planner.settings(actor, actor.workspaceId)).version,
+			after.version
+		);
+		assert.equal(
+			(await workday.detail(actor, task.id)).task.version,
+			afterTask.version
+		);
+		const pages = await Promise.all(
+			after.columns
+				.filter(
+					item => !item.archived && item.status === afterTask.status
+				)
+				.map(item => list(item, after.version))
+		);
+		assert.equal(
+			pages.reduce((sum, page) => sum + page.total, 0),
+			1,
+			winner + ' cannot hide or duplicate a card'
+		);
+	}
 	const latest = await planner.settings(actor, actor.workspaceId);
-	const latestTask = (await workday.detail(actor, task.id)).task;
+	const latestTask = (await workday.detail(actor, reopened.task.id)).task;
 	const pages = await Promise.all(
 		latest.columns
 			.filter(item => !item.archived && item.status === latestTask.status)

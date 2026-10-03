@@ -14,6 +14,7 @@ import type { SavePlannerSettingsDto } from './planner.dto';
 import {
 	plannerConflict,
 	readPlannerSettings,
+	retryablePlannerTransaction,
 	validatePlannerItems
 } from './planner-settings';
 
@@ -197,13 +198,7 @@ export class PlannerService {
 					error.code === 'P2002'
 				)
 					plannerConflict();
-				if (
-					attempt === 2 ||
-					!error ||
-					typeof error !== 'object' ||
-					!('code' in error) ||
-					error.code !== 'P2034'
-				)
+				if (attempt === 2 || !retryablePlannerTransaction(error))
 					throw error;
 			}
 		}
