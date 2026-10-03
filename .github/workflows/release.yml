@@ -45,7 +45,7 @@ on:
         default: false
         required: true
       crm_sales_commerce_migration_env_hash:
-        description: SHA-256 of sorted private crm-sales.env and identity.env migration file hashes; required only for the CRM Sales commerce migration
+        description: SHA-256 of the private VPS migrations/crm-sales.env file; required only for the CRM Sales commerce migration
         required: false
       crm_intake_notifications_migration:
         description: Backend target only; apply the reviewed CRM Intake inbox notification ID default migration before switching images
@@ -150,7 +150,7 @@ on:
         required: true
       crm_sales_commerce_migration_env_hash:
         type: string
-        description: SHA-256 of sorted private crm-sales.env and identity.env migration file hashes; required only for the CRM Sales commerce migration
+        description: SHA-256 of the private VPS migrations/crm-sales.env file; required only for the CRM Sales commerce migration
         required: false
       crm_intake_notifications_migration:
         description: Backend target only; apply the reviewed CRM Intake inbox notification ID default migration before switching images
