@@ -1,5 +1,5 @@
 .dialog {
-	@apply fixed inset-y-0 m-0 h-dvh max-h-dvh w-full overflow-hidden border-0 bg-transparent p-0 text-crm-text;
+	@apply fixed inset-y-0 m-0 h-dvh max-h-dvh w-full max-w-none overflow-hidden border-0 bg-transparent p-0 text-crm-text;
 }
 
 .dialog::backdrop {
@@ -15,19 +15,59 @@
 }
 
 .sm {
-	@apply max-w-none sm:max-w-sm;
+	--drawer-preset-width: 384px;
 }
 
 .md {
-	@apply max-w-none sm:max-w-lg;
+	--drawer-preset-width: 512px;
 }
 
 .lg {
-	@apply max-w-none sm:max-w-2xl;
+	--drawer-preset-width: 672px;
+}
+
+@media (min-width: 640px) {
+	.dialog {
+		width: var(--drawer-width, var(--drawer-preset-width));
+		max-width: calc(100vw - 24px);
+	}
 }
 
 .fullscreen {
-	@apply inset-x-0 max-w-none border-x-0 sm:max-w-none;
+	@apply inset-x-0 w-full max-w-none border-x-0;
+}
+
+.resizing {
+	cursor: ew-resize;
+	user-select: none;
+}
+
+.resizeHandle {
+	@apply absolute inset-y-0 z-10 hidden w-3 cursor-ew-resize items-center justify-center sm:flex;
+	touch-action: none;
+	user-select: none;
+
+	&::after {
+		@apply h-12 w-1 rounded-full bg-crm-border transition-colors;
+		content: '';
+	}
+
+	&:hover::after,
+	&:focus-visible::after {
+		@apply bg-primary;
+	}
+
+	&:focus-visible {
+		@apply outline-none ring-2 ring-inset ring-primary/40;
+	}
+}
+
+.right .resizeHandle {
+	left: 0;
+}
+
+.left .resizeHandle {
+	right: 0;
 }
 
 .panel {
