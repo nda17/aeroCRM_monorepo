@@ -33,7 +33,7 @@ export class EmailService {
 		to: string,
 		subject: string,
 		html: string,
-		options: { messageId?: string } = {}
+		options: { messageId?: string; text?: string } = {}
 	) {
 		return this.mailer.sendMail({
 			to,
@@ -56,8 +56,12 @@ export class EmailService {
 		data: { subject: string; message: string },
 		options: { messageId?: string } = {}
 	) {
-		const html = render(AdminBroadcastEmail(data));
-		return this.sendEmail(to, data.subject, html, options);
+		const email = AdminBroadcastEmail(data);
+		const html = render(email);
+		return this.sendEmail(to, data.subject, html, {
+			...options,
+			text: render(email, { plainText: true })
+		});
 	}
 
 	sendSubscriptionExpiryReminder(
@@ -65,13 +69,17 @@ export class EmailService {
 		data: SubscriptionExpiryReminderPayload,
 		options: { messageId?: string } = {}
 	) {
-		const html = render(SubscriptionExpiryReminderEmail(data));
+		const email = SubscriptionExpiryReminderEmail(data);
+		const html = render(email);
 		const subject =
 			data.daysBeforeExpiry === 0
 				? 'Сегодня последний день подписки aeroCRM'
 				: `Подписка aeroCRM закончится через ${this.getDaysLabel(data.daysBeforeExpiry)}`;
 
-		return this.sendEmail(to, subject, html, options);
+		return this.sendEmail(to, subject, html, {
+			...options,
+			text: render(email, { plainText: true })
+		});
 	}
 
 	sendCrmInvitation(
@@ -80,17 +88,17 @@ export class EmailService {
 		expiresAt: string,
 		eventId: string
 	) {
-		const html = render(
-			CrmInvitationEmail({
-				invitationId,
-				email: to,
-				expiresAtLabel: new Date(expiresAt).toLocaleString('ru-RU', {
-					timeZone: 'Europe/Moscow'
-				})
+		const email = CrmInvitationEmail({
+			invitationId,
+			email: to,
+			expiresAtLabel: new Date(expiresAt).toLocaleString('ru-RU', {
+				timeZone: 'Europe/Moscow'
 			})
-		);
+		});
+		const html = render(email);
 		return this.sendEmail(to, 'Приглашение в aeroCRM', html, {
-			messageId: `<${eventId}.crm-invitation@aerocrm.space>`
+			messageId: `<${eventId}.crm-invitation@aerocrm.space>`,
+			text: render(email, { plainText: true })
 		});
 	}
 
@@ -109,14 +117,13 @@ export class EmailService {
 		content: ReminderContent,
 		eventId: string
 	) {
-		const html = render(
-			CrmTaskReminderEmail({
-				...content,
-				dueAtLabel: new Date(content.dueAt).toLocaleString('ru-RU', {
-					timeZone: content.timeZone
-				})
+		const email = CrmTaskReminderEmail({
+			...content,
+			dueAtLabel: new Date(content.dueAt).toLocaleString('ru-RU', {
+				timeZone: content.timeZone
 			})
-		);
+		});
+		const html = render(email);
 		return this.sendEmail(
 			to,
 			content.trigger === 'ASSIGNED'
@@ -124,7 +131,8 @@ export class EmailService {
 				: 'Напоминание о задаче aeroCRM',
 			html,
 			{
-				messageId: `<${eventId}.crm-task-reminder@aerocrm.space>`
+				messageId: `<${eventId}.crm-task-reminder@aerocrm.space>`,
+				text: render(email, { plainText: true })
 			}
 		);
 	}
@@ -134,30 +142,34 @@ export class EmailService {
 		client: boolean,
 		eventId: string
 	) {
+		const email = SupportNotificationEmail({ content, client });
 		return this.sendEmail(
 			to,
 			client
 				? 'Вам ответила поддержка'
 				: 'Новое сообщение в поддержке aeroCRM',
-			render(SupportNotificationEmail({ content, client })),
+			render(email),
 			{
-				messageId: `<${eventId}.support-notification@aerocrm.space>`
+				messageId: `<${eventId}.support-notification@aerocrm.space>`,
+				text: render(email, { plainText: true })
 			}
 		);
 	}
 	sendCrmIntakeSla(to: string, content: SlaContent, eventId: string) {
+		const email = CrmIntakeSlaEmail({
+			...content,
+			dueAtLabel: new Date(content.dueAt).toLocaleString('ru-RU', {
+				timeZone: content.timeZone
+			})
+		});
 		return this.sendEmail(
 			to,
 			'Обращение без ответа в aeroCRM',
-			render(
-				CrmIntakeSlaEmail({
-					...content,
-					dueAtLabel: new Date(content.dueAt).toLocaleString('ru-RU', {
-						timeZone: content.timeZone
-					})
-				})
-			),
-			{ messageId: `<${eventId}.crm-intake-sla@aerocrm.space>` }
+			render(email),
+			{
+				messageId: `<${eventId}.crm-intake-sla@aerocrm.space>`,
+				text: render(email, { plainText: true })
+			}
 		);
 	}
 }

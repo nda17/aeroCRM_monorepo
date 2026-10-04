@@ -933,6 +933,14 @@ jobs:
         if: matrix.service == 'identity'
         working-directory: aeroCRM_services/apps/identity
         run: pnpm exec jest --runInBand --testPathPattern=src/auth
+      - name: Verify Identity email transport contracts
+        if: matrix.service == 'identity'
+        working-directory: aeroCRM_services/apps/identity
+        run: pnpm exec jest --runInBand --testPathPattern=src/transports
+      - name: Verify notification email MIME contracts
+        if: matrix.service == 'notification-delivery'
+        working-directory: aeroCRM_services/apps/notification-delivery
+        run: pnpm exec jest --runInBand --testPathPattern='src/email|crm-invitation-delivery|crm-task-reminder|crm-intake-sla'
   corporate-mail-unit:
     runs-on: ubuntu-latest
     steps:
