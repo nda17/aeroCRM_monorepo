@@ -10,6 +10,9 @@
 .note {
 	@apply break-words text-sm leading-6 text-crm-muted;
 }
+.dealLink {
+	@apply inline-flex min-h-11 items-center self-start rounded-lg px-3 py-2 text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary;
+}
 .error {
 	@apply break-words rounded-lg border border-crm-danger/20 bg-crm-danger/10 p-3 text-sm leading-6 text-crm-danger;
 }

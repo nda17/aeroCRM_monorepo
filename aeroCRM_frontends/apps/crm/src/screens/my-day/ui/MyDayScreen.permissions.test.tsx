@@ -39,7 +39,18 @@ import {
 	PendingCommandProvider
 } from '@/shared/lib/pending-command'
 import MyDayScreen from './MyDayScreen'
-import PlannerPage, { metadata } from '@/app/(workspace)/planner/page'
+import PlannerPage from '@/app/(workspace)/planner/page'
+import TasksPage, { metadata } from '@/app/(workspace)/tasks/page'
+
+const navigation = vi.hoisted(() => ({
+	redirect: vi.fn((url: string) => {
+		throw new Error(`REDIRECT:${url}`)
+	})
+}))
+vi.mock('next/navigation', async importOriginal => ({
+	...(await importOriginal<typeof import('next/navigation')>()),
+	redirect: navigation.redirect
+}))
 
 let client: QueryClient
 let permissions: CrmPermissions
@@ -237,8 +248,19 @@ beforeEach(() => {
 			page: request.page,
 			pageSize: request.pageSize,
 			items:
-				!request.status || request.status === task.status ? [task] : [],
-			total: !request.status || request.status === task.status ? 1 : 0
+				!request.status ||
+				request.status === task.status ||
+				(request.status === 'ACTIVE' &&
+					(task.status === 'OPEN' || task.status === 'IN_PROGRESS'))
+					? [task]
+					: [],
+			total:
+				!request.status ||
+				request.status === task.status ||
+				(request.status === 'ACTIVE' &&
+					(task.status === 'OPEN' || task.status === 'IN_PROGRESS'))
+					? 1
+					: 0
 		})
 	)
 	vi.mocked(getWorkdayTask).mockResolvedValue(task)
@@ -268,8 +290,8 @@ describe('MyDay actual permission query lifecycle', () => {
 				permissions:
 					state === 'READ_ONLY' ? ['sales:read'] : permissions.permissions
 			}
-			render(
-				await PlannerPage({
+				render(
+				await TasksPage({
 					searchParams: Promise.resolve({
 						task: task.id,
 						workspaceId: 'untrusted-workspace'
@@ -305,8 +327,8 @@ describe('MyDay actual permission query lifecycle', () => {
 	])(
 		'ignores malformed or repeated deep-link task parameters: %s',
 		async value => {
-			render(
-				await PlannerPage({
+				render(
+				await TasksPage({
 					searchParams: Promise.resolve({ task: value })
 				}),
 				{ wrapper: Wrapper }
@@ -407,13 +429,64 @@ describe('MyDay actual permission query lifecycle', () => {
 		expect(screen.queryByLabelText('Название задачи')).toBeNull()
 		expect(screen.queryByText('Чужая задача')).toBeNull()
 	})
-	it('shows the planner heading and metadata on the existing workday page', async () => {
-		expect(metadata.title).toBe('Планировщик')
+	it('shows the Tasks heading and metadata on the canonical workday page', async () => {
+		expect(metadata.title).toBe('Задачи')
 		render(<MyDayScreen />, { wrapper: Wrapper })
 		expect(
-			await screen.findByRole('heading', { level: 1, name: 'Планировщик' })
+			await screen.findByRole('heading', { level: 1, name: 'Задачи' })
 		).toBeTruthy()
 		expect(screen.queryByRole('heading', { name: 'Мой день' })).toBeNull()
+	})
+	it('keeps the ACTIVE list filter when opening the overdue shortcut', async () => {
+		render(<MyDayScreen />, { wrapper: Wrapper })
+		await screen.findByRole('button', { name: task.title })
+		fireEvent.click(
+			screen.getByRole('button', { name: /Просрочено за все дни/ })
+		)
+		await waitFor(() =>
+			expect(listWorkdayTasks).toHaveBeenCalledWith(
+				'token',
+				expect.objectContaining({
+					period: 'OVERDUE',
+					status: 'ACTIVE',
+					page: 1
+				})
+			)
+		)
+	})
+	it('clears ACTIVE on the board and restores it when returning to the list', async () => {
+		render(<MyDayScreen />, { wrapper: Wrapper })
+		await screen.findByRole('button', { name: task.title })
+		fireEvent.click(screen.getByRole('button', { name: 'Доска' }))
+		await waitFor(() =>
+			expect(listWorkdayTasks).toHaveBeenCalledWith(
+				'token',
+				expect.objectContaining({ status: 'CANCELLED' })
+			)
+		)
+		fireEvent.click(screen.getByRole('button', { name: 'Список' }))
+		await waitFor(() =>
+			expect(listWorkdayTasks).toHaveBeenCalledWith(
+				'token',
+				expect.objectContaining({ status: 'ACTIVE' })
+			)
+		)
+	})
+	it('redirects legacy planner links to Tasks without losing repeated query values', async () => {
+		await expect(
+			PlannerPage({
+				searchParams: Promise.resolve({
+					task: task.id,
+					filter: ['mine', 'team'],
+					empty: ''
+				})
+			})
+		).rejects.toThrow(
+			`REDIRECT:/tasks?task=${task.id}&filter=mine&filter=team&empty=`
+		)
+		expect(navigation.redirect).toHaveBeenCalledExactlyOnceWith(
+			`/tasks?task=${task.id}&filter=mine&filter=team&empty=`
+		)
 	})
 	it('allows timezone filtering with READ_ONLY access without a task mutation', async () => {
 		permissions = {
@@ -448,7 +521,11 @@ describe('MyDay actual permission query lifecycle', () => {
 			vi.mocked(listWorkdayTasks).mockImplementation(
 				async (_token, request) => {
 					const visible =
-						!request.status || request.status === current.status
+						!request.status ||
+						request.status === current.status ||
+						(request.status === 'ACTIVE' &&
+							(current.status === 'OPEN' ||
+								current.status === 'IN_PROGRESS'))
 					return {
 						...page,
 						page: request.page,
@@ -510,7 +587,20 @@ describe('MyDay actual permission query lifecycle', () => {
 				['COMPLETED', 'Готово'],
 				['OPEN', 'К выполнению']
 			] as const
-			for (const [index, [status, label]] of changes.entries()) {
+			for (const [status, label] of changes) {
+				if (surface === 'list') {
+					const advanced = screen.getByText(
+						'Поиск и дополнительные фильтры'
+					)
+					if (!(advanced.parentElement as HTMLDetailsElement).open)
+						fireEvent.click(advanced)
+					fireEvent.change(screen.getByRole('combobox', { name: 'Статус' }), {
+						target: { value: current.status }
+					})
+					fireEvent.click(screen.getByRole('button', { name: 'Применить' }))
+					await waitFor(() => expect(client.isFetching()).toBe(0))
+				}
+				const successCount = vi.mocked(toast.success).mock.calls.length
 				const control =
 					surface === 'drawer'
 						? screen.getByRole('button', { name: label })
@@ -523,7 +613,7 @@ describe('MyDay actual permission query lifecycle', () => {
 				if (surface === 'drawer') fireEvent.click(control)
 				else fireEvent.change(control, { target: { value: status } })
 				await waitFor(() =>
-					expect(toast.success).toHaveBeenCalledTimes(index + 1)
+					expect(toast.success).toHaveBeenCalledTimes(successCount + 1)
 				)
 				await waitFor(() => expect(client.isFetching()).toBe(0))
 				expect(current.status).toBe(status)

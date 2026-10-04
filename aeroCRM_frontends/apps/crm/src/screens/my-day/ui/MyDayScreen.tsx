@@ -197,13 +197,13 @@ const MyDayContent = ({
 			>
 				<div className={styles.screen}>
 					<PageHeader
-						title="Планировщик"
+						title="Задачи"
 						description={
 							<HelpHint
-								label="Планировщик"
-								description="Фильтры меняют только список задач. Завершение задачи сохраняется отдельно; повторяющиеся задачи создаются по расписанию."
+								label="Задачи"
+								description="По умолчанию показаны незавершённые задачи по сроку. Задача по сделке здесь и в её карточке — одна запись. Завершённые и отменённые задачи доступны через фильтр статуса."
 							>
-								Задачи на день, просрочки и новые обращения.
+								Что сделать по клиентам и другим делам.
 							</HelpHint>
 						}
 						actions={
@@ -221,7 +221,7 @@ const MyDayContent = ({
 										disabled={command.locked}
 										onClick={() => setSettingsOpen(true)}
 									>
-										Настройки планировщика
+										Настройки задач
 									</Button>
 								) : null}
 								<ActionMenu
@@ -349,7 +349,7 @@ const MyDayContent = ({
 							setView(next)
 							setFilters(value => ({
 								...value,
-								status: undefined,
+								status: next === 'list' ? 'ACTIVE' : undefined,
 								page: 1
 							}))
 							return true
@@ -413,12 +413,14 @@ const MyDayContent = ({
 								className={`${styles.summaryItem} ${styles.overdue}`}
 								disabled={command.pending || command.ambiguous}
 								onClick={() => {
+									if (!command.canClose()) return
+									setSelected(null)
 									setFilters(value => ({
 										...value,
 										period: 'OVERDUE',
 										from: undefined,
 										to: undefined,
-										status: undefined,
+										status: view === 'list' ? 'ACTIVE' : undefined,
 										page: 1
 									}))
 									toast('Показаны просроченные задачи')

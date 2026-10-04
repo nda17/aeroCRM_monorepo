@@ -239,6 +239,23 @@ const mount = (children: ReactNode) =>
 	)
 
 describe('Sales workflow forms', () => {
+	it('links a deal next task into the tasks screen in the same workspace', async () => {
+		mount(
+			<DealDetailsDrawer
+				id={deal.id}
+				pipelines={[pipeline]}
+				onClose={vi.fn()}
+				onSaved={vi.fn()}
+			/>
+		)
+		const link = await screen.findByRole('link', {
+			name: 'Открыть задачу'
+		})
+		expect(link.getAttribute('href')).toBe(
+			`/tasks?task=${deal.nextTask!.id}&workspaceId=${workspaceId}`
+		)
+	})
+
 	it('converts rubles without floating point or negative / overflowing amounts', () => {
 		expect(parseRublesToMinor('1250,50')).toBe(125050)
 		expect(parseRublesToMinor('0.01')).toBe(1)

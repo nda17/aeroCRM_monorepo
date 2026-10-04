@@ -41,7 +41,7 @@ export const CustomRoleFields = ({
 			[
 				['customers', 'Контакты и компании'],
 				['intake', 'Обращения'],
-				['sales', 'Сделки, задачи и планировщик']
+				['sales', 'Сделки и задачи']
 			] as const
 		).map(([section, label]) => (
 			<SelectField

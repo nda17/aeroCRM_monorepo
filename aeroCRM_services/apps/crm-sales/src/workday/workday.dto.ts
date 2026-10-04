@@ -105,8 +105,8 @@ export class WorkdayQuery extends SalesListQuery {
 	@Matches(/^\d{4}-\d{2}-\d{2}$/)
 	to?: string;
 	@ValidateIf(optional)
-	@IsIn(['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'])
-	status?: SetTaskStatusDto['status'];
+	@IsIn(['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'ACTIVE'])
+	status?: SetTaskStatusDto['status'] | 'ACTIVE';
 	@ValidateIf(optional)
 	@IsString()
 	@Matches(columnIdPattern)

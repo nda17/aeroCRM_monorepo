@@ -3,6 +3,7 @@
 import { useDirtyForm } from '@/shared/lib/dirty-form'
 
 import { useLayoutEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import toast from 'react-hot-toast'
 import {
 	useWorkdayTask,
@@ -286,6 +287,33 @@ const TaskEditor = ({
 								Загрузить актуальную задачу
 							</Button>
 						</div>
+					) : null}
+					{baseline.dealId ? (
+						<section
+							className={styles.section}
+							aria-label="Связанная сделка"
+						>
+							<p className={styles.note}>
+								Результат общения и следующий шаг сохраняются в карточке
+								сделки.
+							</p>
+							<Link
+								className={styles.dealLink}
+								href={`/deals?dealId=${encodeURIComponent(baseline.dealId)}&workspaceId=${encodeURIComponent(baseline.workspaceId)}`}
+								onClick={event => {
+									if (
+										!read.context.current() ||
+										!read.context.canRead ||
+										read.query.isError ||
+										read.query.isFetching ||
+										!command.canClose()
+									)
+										event.preventDefault()
+								}}
+							>
+								Открыть сделку
+							</Link>
+						</section>
 					) : null}
 					<section
 						className={styles.section}

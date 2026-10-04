@@ -27,7 +27,7 @@ const setup = (view: 'list' | 'board' = 'list') => {
 	return { onChange, onViewChange }
 }
 describe('MyDay filters', () => {
-	it('quick overdue view preserves the current scope and timezone and removes an incompatible completed filter', () => {
+	it('quick overdue view preserves ACTIVE with current scope and timezone', () => {
 		const onChange = vi.fn()
 		render(
 			<WorkdayFilters
@@ -49,6 +49,26 @@ describe('MyDay filters', () => {
 			...initialWorkdayFilters(),
 			scope: 'TEAM',
 			timeZone: 'Asia/Vladivostok',
+			period: 'OVERDUE',
+			status: 'ACTIVE',
+			from: undefined,
+			to: undefined
+		})
+	})
+	it('quick overdue on the board clears the list-only ACTIVE filter', () => {
+		const onChange = vi.fn()
+		render(
+			<WorkdayFilters
+				value={initialWorkdayFilters()}
+				allowedScopes={['MINE']}
+				view="board"
+				onChange={onChange}
+				onViewChange={vi.fn()}
+			/>
+		)
+		fireEvent.click(screen.getByRole('button', { name: 'Просроченные' }))
+		expect(onChange).toHaveBeenCalledWith({
+			...initialWorkdayFilters(),
 			period: 'OVERDUE',
 			status: undefined,
 			from: undefined,

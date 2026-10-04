@@ -20,7 +20,7 @@ const nextConfig = {
 		return [
 			{
 				source: '/my-day',
-				destination: '/planner',
+				destination: '/tasks',
 				permanent: true
 			},
 			{

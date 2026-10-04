@@ -36,9 +36,9 @@ const taskCommandError = (error: unknown) => {
 				: code === 'crm_task_command_conflict'
 					? 'Этот запрос уже обработан с другими параметрами. Обновите данные задачи.'
 					: code === 'crm_planner_settings_conflict'
-						? 'Настройки планировщика изменились. Обновите данные и повторите изменение.'
+						? 'Настройки задач изменились. Обновите данные и повторите изменение.'
 						: code === 'crm_planner_column_unavailable'
-							? 'Колонка планировщика недоступна. Обновите данные.'
+							? 'Колонка доски недоступна. Обновите данные.'
 							: undefined
 	return message
 		? new AuthenticatedApiError('conflict', message)

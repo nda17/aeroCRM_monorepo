@@ -139,7 +139,7 @@ const Panel = ({ onClose }: { onClose: () => void }) => {
 			}
 			size="lg"
 			onClose={close}
-			description="Регулярные дела создаются автоматически и появляются в Планировщике как обычные задачи."
+			description="Регулярные дела создаются автоматически и появляются в разделе «Задачи»."
 		>
 			<div className={styles.content}>
 				{!context.canWrite ? (

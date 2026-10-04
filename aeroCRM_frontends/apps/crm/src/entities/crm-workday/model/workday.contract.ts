@@ -55,7 +55,9 @@ export const validWorkdayFilters = (value: WorkdayFilters): boolean =>
 	(value.teamId === undefined || isUuidV4(value.teamId)) &&
 	(value.assigneeSubject === undefined ||
 		isWorkdaySubject(value.assigneeSubject)) &&
-	(value.status === undefined || status(value.status)) &&
+	(value.status === undefined ||
+		value.status === 'ACTIVE' ||
+		status(value.status)) &&
 	(value.search === undefined ||
 		(typeof value.search === 'string' && value.search.length <= 200)) &&
 	expectedWorkdayRange(value, '2026-01-01T12:00:00.000Z') !== undefined
@@ -212,11 +214,17 @@ export const parseWorkdayTaskPage = (
 	)
 		return null
 	const total = WORKDAY_STATUSES.reduce((sum, key) => sum + counts[key], 0)
+	const filteredTotal =
+		request.status === 'ACTIVE'
+			? counts.OPEN + counts.IN_PROGRESS
+			: request.status
+				? counts[request.status]
+				: total
 	if (
 		!Number.isSafeInteger(total) ||
 		(request.columnId === undefined
-			? page.total !== (request.status ? counts[request.status] : total)
-			: page.total > (request.status ? counts[request.status] : total)) ||
+			? page.total !== filteredTotal
+			: page.total > filteredTotal) ||
 		(request.period === 'OVERDUE' &&
 			(counts.COMPLETED !== 0 ||
 				counts.CANCELLED !== 0 ||
@@ -231,7 +239,10 @@ export const parseWorkdayTaskPage = (
 				(request.assigneeSubject !== undefined &&
 					task.assignedToSubject !== request.assigneeSubject) ||
 				(request.teamId !== undefined && task.teamId !== request.teamId) ||
-				(request.status !== undefined && task.status !== request.status) ||
+				(request.status !== undefined &&
+					(request.status === 'ACTIVE'
+						? !active(task.status)
+						: task.status !== request.status)) ||
 				(range !== null &&
 					!(task.dueAt >= range.from && task.dueAt < range.until)) ||
 				(request.period === 'OVERDUE' &&

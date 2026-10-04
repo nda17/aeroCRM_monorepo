@@ -155,7 +155,7 @@ describe('workspace permission contract', () => {
 	})
 	it('keeps default destinations and inbox acceptance tied to effective permissions', () => {
 		expect(crmDefaultRoute({ ...base, permissions: ['sales:read'] })).toBe(
-			'/planner'
+			'/tasks'
 		)
 		expect(
 			crmDefaultRoute({ ...base, permissions: ['sales:analytics'] })

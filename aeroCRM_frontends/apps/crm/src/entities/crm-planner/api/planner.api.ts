@@ -21,7 +21,7 @@ const valid = (condition: boolean) => {
 	if (!condition)
 		throw new AuthenticatedApiError(
 			'validation',
-			'Проверьте настройки планировщика и повторите попытку.'
+			'Проверьте настройки задач и повторите попытку.'
 		)
 }
 const plannerCommandError = (error: unknown) => {
@@ -29,9 +29,9 @@ const plannerCommandError = (error: unknown) => {
 	const code: unknown = error.response.data?.code
 	const message =
 		code === 'crm_planner_settings_conflict'
-			? 'Настройки планировщика изменились. Обновите данные и повторите попытку.'
+			? 'Настройки задач изменились. Обновите данные и повторите попытку.'
 			: code === 'crm_planner_column_unavailable'
-				? 'Колонка планировщика недоступна. Обновите данные.'
+				? 'Колонка доски недоступна. Обновите данные.'
 				: undefined
 	return message
 		? new AuthenticatedApiError('conflict', message)

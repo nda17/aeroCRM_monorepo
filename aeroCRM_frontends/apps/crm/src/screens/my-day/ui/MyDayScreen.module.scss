@@ -46,6 +46,12 @@
 .copy {
 	@apply flex min-w-0 flex-col items-start gap-2;
 }
+.taskGroup {
+	@apply flex min-w-0 flex-col gap-3;
+}
+.groupHeading {
+	@apply text-lg font-semibold text-crm-text;
+}
 .taskTitle {
 	@apply min-h-11 max-w-full break-words text-left font-semibold text-crm-text underline-offset-4 hover:underline focus-visible:rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary;
 }

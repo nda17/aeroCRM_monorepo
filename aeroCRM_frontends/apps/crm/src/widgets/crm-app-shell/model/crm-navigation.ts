@@ -18,11 +18,11 @@ export interface CrmNavigationItem {
 
 export const CRM_NAVIGATION = [
 	{
-		href: '/planner',
-		icon: 'clock',
-		label: 'Планировщик',
+		href: '/tasks',
+		icon: 'tasks',
+		label: 'Задачи',
 		description:
-			'Здесь задачи собраны по датам: выберите день или период и переключайтесь между списком и доской.'
+			'Просроченные, сегодняшние и предстоящие задачи по сделкам и другим делам. Список и доска показывают одни и те же задачи.'
 	},
 	{
 		href: '/inbox',
@@ -51,13 +51,6 @@ export const CRM_NAVIGATION = [
 		label: 'Каталог',
 		description:
 			'Общий каталог товаров и услуг для сделок и предложений. Импорт из Excel или CSV меняет данные каталога.'
-	},
-	{
-		href: '/tasks',
-		icon: 'tasks',
-		label: 'Задачи',
-		description:
-			'Здесь собраны задачи по сделкам: назначайте сроки и ответственных, отмечайте завершённые действия.'
 	},
 	{
 		href: '/contacts',

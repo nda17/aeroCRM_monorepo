@@ -77,16 +77,11 @@ const SettingsContent = ({
 			onClose={onClose}
 		/>
 	) : (
-		<Drawer
-			isOpen
-			onClose={onClose}
-			title="Настройки планировщика"
-			size="lg"
-		>
+		<Drawer isOpen onClose={onClose} title="Настройки задач" size="lg">
 			{state.query.isError || state.context.permissions.isError ? (
 				<ScreenState
 					variant="error"
-					description="Не удалось загрузить настройки планировщика."
+					description="Не удалось загрузить настройки задач."
 					action={
 						<Button onClick={() => void state.query.refetch()}>
 							Повторить
@@ -122,7 +117,7 @@ const SettingsForm = ({
 		JSON.stringify(draft) !== JSON.stringify(baseline) ||
 		!!newTitle ||
 		!!newName
-	const form = useDirtyForm({ dirty, label: 'Настройки планировщика' })
+	const form = useDirtyForm({ dirty, label: 'Настройки задач' })
 	const command = useMemoryCommand<
 		SavePlannerSettingsCommand,
 		PlannerSettings
@@ -153,7 +148,7 @@ const SettingsForm = ({
 			form.markClean()
 			void client.invalidateQueries({ queryKey: ['crm-planner'] })
 			void client.invalidateQueries({ queryKey: ['crm-workday'] })
-			toast.success('Настройки планировщика сохранены')
+			toast.success('Настройки задач сохранены')
 		}
 	)
 	const stale = !!query.data && query.data.version !== baseline.version
@@ -225,7 +220,7 @@ const SettingsForm = ({
 				if (!command.locked) onClose()
 			}}
 			dirtyFormIds={[form.id]}
-			title="Настройки планировщика"
+			title="Настройки задач"
 			description="Общие типовые действия и колонки для всех сотрудников рабочего пространства."
 			size="lg"
 			footer={
@@ -405,11 +400,8 @@ const SettingsForm = ({
 							</p>
 						) : null}
 					</section>
-					<section
-						className={styles.section}
-						aria-label="Колонки планировщика"
-					>
-						<h3>Колонки планировщика</h3>
+					<section className={styles.section} aria-label="Колонки доски">
+						<h3>Колонки доски</h3>
 						<p className={styles.hint}>
 							При переносе в колонку задача получает указанный статус.
 							Четыре основные колонки принимают новые задачи и задачи из

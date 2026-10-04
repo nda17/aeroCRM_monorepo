@@ -530,6 +530,23 @@ export const DealDetailsDrawer = ({
 						</strong>
 						{deal.nextTask ? (
 							<div className={styles.actions}>
+								<Link
+									className={styles.contactLink}
+									href={`/tasks?task=${encodeURIComponent(deal.nextTask.id)}&workspaceId=${encodeURIComponent(deal.workspaceId)}`}
+									onClick={event => {
+										if (
+											!context.canRead ||
+											context.permissions.isFetching ||
+											detail.isError ||
+											detail.isFetching ||
+											commerceBusy ||
+											!command.canClose()
+										)
+											event.preventDefault()
+									}}
+								>
+									Открыть задачу
+								</Link>
 								<time dateTime={deal.nextTask.dueAt}>
 									{salesDate(deal.nextTask.dueAt)}
 								</time>

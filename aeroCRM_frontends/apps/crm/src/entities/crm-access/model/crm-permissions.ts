@@ -32,7 +32,7 @@ export interface CrmPermissions {
 
 export const crmDefaultRoute = (authority: CrmPermissions) => {
 	if (authority.permissions.includes('intake:read')) return '/inbox'
-	if (authority.permissions.includes('sales:read')) return '/planner'
+	if (authority.permissions.includes('sales:read')) return '/tasks'
 	if (authority.permissions.includes('customers:read')) return '/contacts'
 	if (authority.permissions.includes('sales:analytics'))
 		return '/analytics'

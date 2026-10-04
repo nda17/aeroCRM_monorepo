@@ -90,11 +90,11 @@ describe('Planner settings API', () => {
 	it.each([
 		[
 			'crm_planner_settings_conflict',
-			'Настройки планировщика изменились. Обновите данные и повторите попытку.'
+			'Настройки задач изменились. Обновите данные и повторите попытку.'
 		],
 		[
 			'crm_planner_column_unavailable',
-			'Колонка планировщика недоступна. Обновите данные.'
+			'Колонка доски недоступна. Обновите данные.'
 		]
 	])('maps known conflict %s to a safe message', async (code, message) => {
 		request.mockResolvedValue(response(3))

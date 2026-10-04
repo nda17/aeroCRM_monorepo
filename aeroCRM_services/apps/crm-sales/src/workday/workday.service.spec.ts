@@ -415,6 +415,49 @@ describe('workday task commands', () => {
 });
 
 describe('workday listing', () => {
+	it('filters ACTIVE before count and pagination while keeping all-status counts', async () => {
+		const { service, tx } = harness();
+		tx.salesTask.count
+			.mockResolvedValueOnce(3)
+			.mockResolvedValueOnce(2);
+		tx.salesTask.groupBy.mockResolvedValueOnce([
+			{ status: 'OPEN', _count: { _all: 2 } },
+			{ status: 'IN_PROGRESS', _count: { _all: 1 } },
+			{ status: 'COMPLETED', _count: { _all: 4 } },
+			{ status: 'CANCELLED', _count: { _all: 1 } }
+		] as never);
+		const query = Object.assign(new WorkdayQuery(), {
+			workspaceId,
+			page: 2,
+			pageSize: 1,
+			period: 'ALL',
+			status: 'ACTIVE'
+		});
+
+		const result = await service.list(actor, query);
+
+		expect(result.total).toBe(3);
+		expect(result.counts).toEqual({
+			OPEN: 2,
+			IN_PROGRESS: 1,
+			COMPLETED: 4,
+			CANCELLED: 1
+		});
+		expect(result.items).toHaveLength(1);
+		expect(tx.salesTask.count.mock.calls[0][0].where).toEqual(
+			expect.objectContaining({
+				AND: expect.arrayContaining([
+					expect.objectContaining({
+						status: { in: ['OPEN', 'IN_PROGRESS'] }
+					})
+				])
+			})
+		);
+		expect(tx.salesTask.findMany.mock.calls[0][0]).toMatchObject({
+			skip: 1,
+			take: 1
+		});
+	});
 	it('applies scope, calendar and status before pagination; counts come from the same snapshot', async () => {
 		const { service, tx, prisma } = harness();
 		const query = Object.assign(new WorkdayQuery(), {
@@ -508,6 +551,20 @@ describe('workday DTO boundaries', () => {
 				type: 'body',
 				metatype: metatype as typeof CreateWorkdayTaskDto
 			})
+		).rejects.toBeInstanceOf(BadRequestException);
+	});
+	it('accepts ACTIVE only as a query filter, never as a task status mutation', async () => {
+		await expect(
+			pipe.transform(
+				{ workspaceId, status: 'ACTIVE' },
+				{ type: 'query', metatype: WorkdayQuery }
+			)
+		).resolves.toMatchObject({ status: 'ACTIVE' });
+		await expect(
+			pipe.transform(
+				{ ...base, expectedVersion: 1, status: 'ACTIVE' },
+				{ type: 'body', metatype: SetTaskStatusDto }
+			)
 		).rejects.toBeInstanceOf(BadRequestException);
 	});
 });

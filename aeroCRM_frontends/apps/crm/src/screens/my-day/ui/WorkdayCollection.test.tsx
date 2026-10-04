@@ -131,9 +131,13 @@ let namesRows: AssigneeLabels['items']
 let namesError: boolean
 let unavailable: 'IN_PROGRESS' | 'OPEN' | undefined
 let fetching: 'IN_PROGRESS' | 'OPEN' | undefined
-const element = (view: 'list' | 'board', canWrite = true) => (
+const element = (
+	view: 'list' | 'board',
+	canWrite = true,
+	filters: WorkdayFilters = initialWorkdayFilters()
+) => (
 	<WorkdayCollection
-		filters={initialWorkdayFilters()}
+		filters={filters}
 		view={view}
 		canWrite={canWrite}
 		onOpen={onOpen}
@@ -141,8 +145,11 @@ const element = (view: 'list' | 'board', canWrite = true) => (
 		onPage={onPage}
 	/>
 )
-const setup = (view: 'list' | 'board', canWrite = true) =>
-	render(element(view, canWrite))
+const setup = (
+	view: 'list' | 'board',
+	canWrite = true,
+	filters?: WorkdayFilters
+) => render(element(view, canWrite, filters))
 const rect = (left = 20, top = 80, width = 260, height = 160) =>
 	new DOMRect(left, top, width, height)
 const handle = () =>
@@ -256,11 +263,13 @@ beforeEach(() => {
 						: {
 								items:
 									!filters.status || filters.status === 'OPEN'
-										? pageTasks
-										: [],
+										|| filters.status === 'ACTIVE'
+									? pageTasks
+									: [],
 								total:
 									!filters.status ||
 									filters.status === 'OPEN' ||
+									filters.status === 'ACTIVE' ||
 									filters.status === 'CANCELLED'
 										? 21
 										: 0,
@@ -281,6 +290,56 @@ afterEach(() => {
 })
 
 describe('MyDay server-paged list and board', () => {
+	it('renders ACTIVE tasks once under local overdue, today and upcoming groups', () => {
+		const overdue = { ...task, dueAt: '2026-09-07T09:59:59.999Z' }
+		const linkedToday = {
+			...task,
+			id: 'linked-today',
+			title: 'Связанная сегодняшняя задача',
+			dealId: 'deal-id',
+			dueAt: '2026-09-07T10:00:00.000Z',
+			status: 'IN_PROGRESS' as const
+		}
+		const upcoming = {
+			...task,
+			id: 'upcoming-task',
+			title: 'Будущая задача',
+			dueAt: '2026-09-07T21:00:00.000Z'
+		}
+		const completed = {
+			...task,
+			id: 'completed-task',
+			title: 'Завершённая задача',
+			status: 'COMPLETED' as const,
+			completedAt: '2026-09-07T08:00:00.000Z'
+		}
+		pageTasks = [overdue, linkedToday, upcoming, completed]
+		setup('list')
+
+		const regions = ['Просроченные', 'Сегодня', 'Предстоящие'].map(
+			label => screen.getByRole('heading', { name: label }).closest('section')!
+		)
+		expect(regions.map(region => region.getAttribute('aria-label'))).toEqual([
+			'Просроченные',
+			'Сегодня',
+			'Предстоящие'
+		])
+		expect(within(regions[0]).getByRole('button', { name: task.title })).toBeTruthy()
+		expect(
+			within(regions[1]).getByRole('button', {
+				name: linkedToday.title
+			})
+		).toBeTruthy()
+		expect(within(regions[1]).getByText('По сделке')).toBeTruthy()
+		expect(
+			within(regions[2]).getByRole('button', { name: upcoming.title })
+		).toBeTruthy()
+		expect(screen.queryByText(completed.title)).toBeNull()
+		fireEvent.click(
+			within(regions[1]).getByRole('button', { name: linkedToday.title })
+		)
+		expect(onOpen).toHaveBeenCalledExactlyOnceWith(linkedToday)
+	})
 	it.each(['list', 'board'] as const)(
 		'renders exact employee labels and self without per-task queries in %s',
 		view => {
@@ -463,6 +522,35 @@ describe('MyDay server-paged list and board', () => {
 		).toBeNull()
 		fireEvent.click(screen.getByRole('button', { name: 'Повторить' }))
 		expect(refetch).toHaveBeenCalledOnce()
+	})
+	it('offers a return to the last valid page when the active list shrinks', () => {
+		vi.mocked(useWorkdayTasks).mockReturnValue({
+			query: { isError: false, isFetching: false, refetch },
+			context,
+			data: {
+				schemaVersion: 1,
+				workspaceId: 'workspace',
+				subject: 'actor',
+				page: 2,
+				pageSize: 20,
+				total: 20,
+				items: [],
+				counts: { OPEN: 20, IN_PROGRESS: 0, COMPLETED: 1, CANCELLED: 0 },
+				overdueCount: 0,
+				asOf: '2026-09-07T10:00:00.000Z',
+				timeZone: 'Europe/Moscow',
+				range: null
+			}
+		} as never)
+		setup('list', true, { ...initialWorkdayFilters(), page: 2 })
+
+		expect(screen.getByText('На этой странице задач больше нет')).toBeTruthy()
+		expect(screen.queryByText('Нет задач по выбранным условиям')).toBeNull()
+		fireEvent.click(screen.getByRole('button', { name: 'Вернуться к задачам' }))
+		expect(onPage).toHaveBeenCalledExactlyOnceWith(1)
+		expect(
+			screen.getByRole('navigation', { name: 'Страницы списка задач' })
+		).toBeTruthy()
 	})
 	it('shows an unavailable column count as unknown, not zero or empty', () => {
 		unavailable = 'IN_PROGRESS'

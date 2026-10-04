@@ -43,6 +43,7 @@ import {
 } from '@/shared/ui'
 import {
 	isWorkdayOverdue,
+	groupWorkdayTasks,
 	workdayDate,
 	WORKDAY_BOARD_STATUSES,
 	WORKDAY_STATUS_LABELS,
@@ -196,8 +197,8 @@ export const WorkdayCollection = (props: CollectionProps) =>
 				variant={props.settingsError ? 'error' : 'loading'}
 				description={
 					props.settingsError
-						? 'Не удалось загрузить колонки планировщика.'
-						: 'Загружаем колонки планировщика.'
+						? 'Не удалось загрузить колонки доски.'
+						: 'Загружаем колонки доски.'
 				}
 				action={
 					props.settingsError ? (
@@ -286,9 +287,61 @@ const WorkdayList = ({
 			) : !data.items.length ? (
 				<ScreenState
 					variant="empty"
-					title="Нет задач по выбранным условиям"
-					description="Выберите другой период или создайте задачу."
+					title={
+						data.total > 0
+							? 'На этой странице задач больше нет'
+							: 'Нет задач по выбранным условиям'
+					}
+					description={
+						data.total > 0
+							? 'Список изменился. Остальные задачи доступны на предыдущих страницах.'
+							: 'Выберите другой период или создайте задачу.'
+					}
+					action={
+						data.total > 0 ? (
+							<Button
+								disabled={query.isFetching}
+								onClick={() =>
+									onPage(
+										Math.max(1, Math.ceil(data.total / filters.pageSize))
+									)
+								}
+							>
+								Вернуться к задачам
+							</Button>
+						) : undefined
+					}
 				/>
+			) : filters.status === 'ACTIVE' ? (
+				<>
+					{data.total > filters.pageSize ? (
+						<p className={styles.hint}>
+							Задачи идут по сроку, начиная с самых ранних. Показаны{' '}
+							{(filters.page - 1) * filters.pageSize + 1}–
+							{(filters.page - 1) * filters.pageSize + data.items.length}{' '}
+							из {data.total}; остальные — на следующих или предыдущих
+							страницах.
+						</p>
+					) : null}
+					{groupWorkdayTasks(data.items, data.asOf, filters.timeZone).map(
+						group => (
+							<section
+								key={group.id}
+								className={styles.taskGroup}
+								aria-label={group.title}
+							>
+								<h2 className={styles.groupHeading}>{group.title}</h2>
+								<DataTable
+									caption={group.title}
+									mobileLayout="cards"
+									rows={group.items}
+									columns={columns}
+									getRowKey={task => task.id}
+								/>
+							</section>
+						)
+					)}
+				</>
 			) : (
 				<DataTable
 					caption="Задачи выбранного периода"

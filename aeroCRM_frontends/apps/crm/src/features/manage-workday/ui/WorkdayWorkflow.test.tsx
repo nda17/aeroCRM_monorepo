@@ -359,6 +359,17 @@ afterEach(() => {
 })
 
 describe('Workday task detail and commands', () => {
+	it('links a deal task back to its deal in the same workspace', async () => {
+		currentTask = { ...currentTask, dealId: deal.id }
+		render(<WorkdayTaskDrawer taskId={taskId} onClose={vi.fn()} />, {
+			wrapper: Wrapper
+		})
+		await loadTask()
+		expect(
+			screen.getByRole('link', { name: 'Открыть сделку' }).getAttribute('href')
+		).toBe(`/deals?dealId=${deal.id}&workspaceId=${workspaceId}`)
+	})
+
 	it('offers an optional follow-up only after confirmed completion, preserving the old assignment', async () => {
 		currentTask = {
 			...currentTask,

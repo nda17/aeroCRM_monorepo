@@ -363,14 +363,14 @@ describe('CRM navigation descriptions', () => {
 		)
 		const link = within(
 			screen.getByRole('navigation', { name: 'Мобильная навигация CRM' })
-		).getByRole('link', { name: 'Планировщик' })
+		).getByRole('link', { name: 'Задачи' })
 		pointer(link, 'over', 'touch')
 		pointer(link, 'down', 'touch')
 		fireEvent.focus(link)
 		act(() => vi.advanceTimersByTime(300))
 		expect(screen.queryByRole('tooltip')).toBeNull()
 		fireEvent.click(link)
-		expect(link.getAttribute('href')).toBe('/planner')
+		expect(link.getAttribute('href')).toBe('/tasks')
 		expect(screen.queryByRole('dialog')).toBeNull()
 	})
 	it('keeps mobile keyboard descriptions inside the dialog top layer and consumes only the first Escape', () => {
@@ -379,7 +379,7 @@ describe('CRM navigation descriptions', () => {
 			screen.getByRole('button', { name: 'Открыть навигацию CRM' })
 		)
 		const dialog = screen.getByRole('dialog')
-		const link = within(dialog).getByRole('link', { name: 'Планировщик' })
+		const link = within(dialog).getByRole('link', { name: 'Задачи' })
 		fireEvent.focus(link)
 		expect(screen.getByRole('tooltip').parentElement).toBe(dialog)
 		const firstEscape = createEvent.keyDown(link, { key: 'Escape' })
@@ -434,19 +434,21 @@ describe('CRM navigation descriptions', () => {
 })
 
 describe('aeroCRM application shell', () => {
-	it('uses the canonical planner route consistently in desktop and mobile navigation', () => {
-		fixture.pathname = '/planner'
+	it('uses one canonical Tasks route consistently in desktop and mobile navigation', () => {
+		fixture.pathname = '/tasks'
 		mount()
+		expect(CRM_NAVIGATION.filter(item => item.label === 'Задачи')).toHaveLength(1)
+		expect(CRM_NAVIGATION[0]).toMatchObject({ label: 'Задачи', href: '/tasks' })
 		const desktopLink = within(mainNavigation()).getByRole('link', {
-			name: 'Планировщик'
+			name: 'Задачи'
 		})
-		expect(desktopLink.getAttribute('href')).toBe('/planner')
+		expect(desktopLink.getAttribute('href')).toBe('/tasks')
 		expect(desktopLink.getAttribute('aria-current')).toBe('page')
 		const context = document.querySelector(
 			'[aria-label="Текущий раздел"]'
 		)!
 		expect(
-			within(context as HTMLElement).getByText('Планировщик')
+			within(context as HTMLElement).getByText('Задачи')
 		).toBeTruthy()
 		fireEvent.click(
 			screen.getByRole('button', { name: 'Открыть навигацию CRM' })
@@ -455,8 +457,8 @@ describe('aeroCRM application shell', () => {
 			screen.getByRole('navigation', {
 				name: 'Мобильная навигация CRM'
 			})
-		).getByRole('link', { name: 'Планировщик' })
-		expect(mobileLink.getAttribute('href')).toBe('/planner')
+		).getByRole('link', { name: 'Задачи' })
+		expect(mobileLink.getAttribute('href')).toBe('/tasks')
 		expect(mobileLink.getAttribute('aria-current')).toBe('page')
 		expect(screen.queryByText('Мой день')).toBeNull()
 	})

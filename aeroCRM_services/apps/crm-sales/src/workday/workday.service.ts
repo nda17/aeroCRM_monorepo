@@ -198,14 +198,24 @@ export class WorkdayService {
 									query.columnId,
 									query.settingsVersion!
 								);
-					if (column && query.status && query.status !== column.status)
+					if (
+						column &&
+						query.status &&
+						(query.status === 'ACTIVE'
+							? !isActive(column.status)
+							: query.status !== column.status)
+					)
 						throw new BadRequestException(
 							'Task status differs from planner column'
 						);
 					const where: Prisma.SalesTaskWhereInput = {
 						AND: [
 							period,
-							...(query.status ? [{ status: query.status }] : []),
+							...(query.status === 'ACTIVE'
+								? [{ status: { in: [...active] } }]
+								: query.status
+									? [{ status: query.status }]
+									: []),
 							...(column ? [plannerColumnWhere(column)] : [])
 						]
 					};

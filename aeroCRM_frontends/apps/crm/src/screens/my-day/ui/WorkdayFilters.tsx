@@ -6,8 +6,7 @@ import {
 	validWorkdayFilters,
 	type WorkdayFilters as Filters,
 	type WorkdayPeriod,
-	type WorkdayScope,
-	type WorkdayStatus
+	type WorkdayScope
 } from '@/entities/crm-workday'
 import { Button, HelpHint, SelectField, TextField } from '@/shared/ui'
 import { useRef, useState, type FormEvent } from 'react'
@@ -31,7 +30,7 @@ const periods: Record<WorkdayPeriod, string> = {
 	WEEK: 'Неделя',
 	DAY: 'Выбрать день',
 	RANGE: 'Период',
-	ALL: 'Все задачи',
+	ALL: 'Все сроки',
 	OVERDUE: 'Просроченные'
 }
 const scopes: Record<WorkdayScope, string> = {
@@ -61,7 +60,7 @@ export const WorkdayFilters = ({
 	const [to, setTo] = useState(value.to ?? '')
 	const [timeZone, setTimeZone] = useState(value.timeZone)
 	const [search, setSearch] = useState(value.search ?? '')
-	const [status, setStatus] = useState<WorkdayStatus | ''>(
+	const [status, setStatus] = useState<Filters['status'] | ''>(
 		value.status ?? ''
 	)
 	const [people, setPeople] = useState<WorkdayPeopleFilterValue>({
@@ -120,7 +119,7 @@ export const WorkdayFilters = ({
 					role="group"
 					aria-label="Быстрый выбор периода"
 				>
-					{(['TODAY', 'TOMORROW', 'WEEK', 'OVERDUE'] as const).map(
+					{(['ALL', 'OVERDUE', 'TODAY', 'WEEK'] as const).map(
 						nextPeriod => (
 							<Button
 								key={nextPeriod}
@@ -135,7 +134,7 @@ export const WorkdayFilters = ({
 										to: undefined,
 										page: 1,
 										...(nextPeriod === 'OVERDUE'
-											? { status: undefined }
+											? { status: view === 'list' ? 'ACTIVE' : undefined }
 											: {})
 									}
 									if (onChange(next) !== false)
@@ -229,10 +228,11 @@ export const WorkdayFilters = ({
 								label="Статус"
 								value={status}
 								onChange={e =>
-									setStatus(e.target.value as WorkdayStatus | '')
+									setStatus(e.target.value as Filters['status'] | '')
 								}
 							>
 								<option value="">Все статусы</option>
+								<option value="ACTIVE">Незавершённые</option>
 								{Object.entries(WORKDAY_STATUS_LABELS).map(
 									([key, label]) => (
 										<option key={key} value={key}>

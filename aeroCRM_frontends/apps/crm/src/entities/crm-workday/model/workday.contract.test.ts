@@ -258,6 +258,47 @@ describe('Workday server period, pagination and counts', () => {
 		).toBe(7)
 		expect(parseWorkdayTaskPage(response, request)).toBeNull()
 	})
+	it('accepts an ACTIVE page with base-period counts for every status', () => {
+		const inProgress = {
+			...task,
+			id: otherId,
+			dueAt: '2026-09-07T13:00:00.000Z',
+			status: 'IN_PROGRESS' as const
+		}
+		const response = {
+			...page,
+			total: 2,
+			items: [task, inProgress],
+			counts: {
+				OPEN: 1,
+				IN_PROGRESS: 1,
+				COMPLETED: 1,
+				CANCELLED: 1
+			}
+		}
+
+		expect(
+			parseWorkdayTaskPage(response, { ...request, status: 'ACTIVE' })
+		).toMatchObject({ total: 2, counts: response.counts })
+	})
+	it('rejects terminal rows or an ACTIVE total that disagrees with active counts', () => {
+		const completed = { ...task, status: 'COMPLETED', completedAt: date }
+		const response = {
+			...page,
+			total: 1,
+			items: [completed],
+			counts: { OPEN: 1, IN_PROGRESS: 0, COMPLETED: 1, CANCELLED: 0 }
+		}
+		expect(
+			parseWorkdayTaskPage(response, { ...request, status: 'ACTIVE' })
+		).toBeNull()
+		expect(
+			parseWorkdayTaskPage(
+				{ ...page, total: 2 },
+				{ ...request, status: 'ACTIVE' }
+			)
+		).toBeNull()
+	})
 	it('allows empty out-of-range pages but rejects partial or duplicate server pages', () => {
 		expect(
 			parseWorkdayTaskPage(
