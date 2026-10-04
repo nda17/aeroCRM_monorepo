@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
 	listSalesDeals,
 	listSalesTasks,
+	listSalesTimelineV2,
 	mutateSales,
 	type SalesMutation
 } from './sales.api'
@@ -315,6 +316,128 @@ describe('Sales API request and response binding', () => {
 		await expect(execute(mutation)).rejects.toMatchObject({
 			kind: 'temporary'
 		})
+	})
+	it('records an interaction with deal CAS and accepts the unchanged current next task', async () => {
+		const mutation: SalesMutation = {
+			kind: 'interaction',
+			id,
+			expectedVersion: 1,
+			result: 'CALL_REACHED',
+			comment: 'Обсудили условия'
+		}
+		request.mockResolvedValue({
+			schemaVersion: 1,
+			deal: { ...deal, version: 2 }
+		})
+		await expect(execute(mutation)).resolves.toEqual({
+			...deal,
+			version: 2
+		})
+		expect(request).toHaveBeenCalledExactlyOnceWith({
+			accessToken: 'token',
+			method: 'POST',
+			url: `/crm/sales/deals/${id}/interaction-results`,
+			headers: { 'Idempotency-Key': commandId },
+			data: {
+				schemaVersion: 1,
+				workspaceId,
+				commandId,
+				expectedVersion: 1,
+				result: 'CALL_REACHED',
+				comment: 'Обсудили условия'
+			}
+		})
+	})
+	it('rejects interaction responses with wrong CAS version, workspace, deal, or schema', async () => {
+		const mutation: SalesMutation = {
+			kind: 'interaction',
+			id,
+			expectedVersion: 1,
+			result: 'MEETING_HELD',
+			comment: ''
+		}
+		for (const response of [
+			{ schemaVersion: 1, deal: { ...deal, version: 3 } },
+			{ schemaVersion: 1, deal: { ...deal, id: contactId, version: 2 } },
+			{
+				schemaVersion: 1,
+				deal: { ...deal, workspaceId: contactId, version: 2 }
+			},
+			{ schemaVersion: 2, deal: { ...deal, version: 2 } }
+		]) {
+			request.mockResolvedValue(response)
+			await expect(execute(mutation)).rejects.toMatchObject({
+				kind: 'temporary'
+			})
+		}
+	})
+	it('checks a submitted interaction next task when the caller requests one', async () => {
+		const mutation: SalesMutation = {
+			kind: 'interaction',
+			id,
+			expectedVersion: 1,
+			result: 'CALL_NO_ANSWER',
+			comment: '',
+			nextTask
+		}
+		request.mockResolvedValue({
+			schemaVersion: 1,
+			deal: { ...deal, version: 2 }
+		})
+		await execute(mutation)
+		expect(request.mock.calls[0][0].data).toMatchObject({ nextTask })
+		request.mockResolvedValue({
+			schemaVersion: 1,
+			deal: {
+				...deal,
+				version: 2,
+				nextTask: { ...task, title: 'Другое действие' }
+			}
+		})
+		await expect(execute(mutation)).rejects.toMatchObject({
+			kind: 'temporary'
+		})
+	})
+	it('loads v2 timeline from its strict endpoint and pagination contract', async () => {
+		const row = {
+			id: taskId,
+			dealId: id,
+			kind: 'MEETING_HELD',
+			actorSubject: 'actor',
+			outcome: 'Встреча проведена',
+			fromStageId: stageId,
+			toStageId: stageId,
+			createdAt: date
+		}
+		const response = {
+			schemaVersion: 2,
+			page: 2,
+			pageSize: 10,
+			total: 11,
+			items: [row]
+		}
+		request.mockResolvedValue(response)
+		await expect(
+			listSalesTimelineV2('token', workspaceId, id, 2)
+		).resolves.toEqual(response)
+		expect(request).toHaveBeenCalledExactlyOnceWith({
+			accessToken: 'token',
+			method: 'GET',
+			url: `/crm/sales/deals/${id}/timeline-v2`,
+			params: { workspaceId, page: '2', pageSize: '10' }
+		})
+		for (const invalid of [
+			{ ...response, schemaVersion: 1 },
+			{ ...response, page: 1 },
+			{ ...response, items: [{ ...row, dealId: contactId }] },
+			{ ...response, items: [{ ...row, kind: 'UNKNOWN' }] },
+			{ ...response, items: [{ ...row, detail: 'unexpected' }] }
+		]) {
+			request.mockResolvedValue(invalid)
+			await expect(
+				listSalesTimelineV2('token', workspaceId, id, 2)
+			).rejects.toMatchObject({ kind: 'temporary' })
+		}
 	})
 	it('sends server pagination and excludes archived deals / completed tasks', async () => {
 		const page = { schemaVersion: 1, page: 2, pageSize: 20, total: 21 }

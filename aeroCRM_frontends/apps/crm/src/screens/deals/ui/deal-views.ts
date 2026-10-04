@@ -1,5 +1,6 @@
 import { isUuidV4 } from '@/shared/lib/contract'
 import type { SalesDealFilters } from '@/entities/sales'
+import type { SavedDealParameters } from '@/entities/crm-saved-views'
 
 export interface DealView extends SalesDealFilters {
 	search: string
@@ -156,4 +157,23 @@ export const requestDealFilters = (view: DealView): SalesDealFilters => ({
 	...(view.createdFrom ? { createdFrom: view.createdFrom } : {}),
 	...(view.createdTo ? { createdTo: view.createdTo } : {}),
 	...(view.sort !== 'created_desc' ? { sort: view.sort } : {})
+})
+
+/** Saved overdue views must evaluate the deadline again whenever they open. */
+export const savedDealParameters = (
+	view: DealView
+): SavedDealParameters => ({
+	search: view.search,
+	pipelineId: view.pipelineId,
+	status: view.status,
+	withoutNextAction: view.withoutNextAction,
+	layout: view.layout,
+	sort: view.sort ?? 'created_desc',
+	...(view.stageId ? { stageId: view.stageId } : {}),
+	...(view.assignedToSubject
+		? { assignedToSubject: view.assignedToSubject }
+		: {}),
+	...(view.overdue ? { overdue: true } : {}),
+	...(view.createdFrom ? { createdFrom: view.createdFrom } : {}),
+	...(view.createdTo ? { createdTo: view.createdTo } : {})
 })

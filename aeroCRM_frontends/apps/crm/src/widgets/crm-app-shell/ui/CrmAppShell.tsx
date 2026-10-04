@@ -16,6 +16,7 @@ import {
 } from '@/entities/crm-access'
 import { getCurrentAccount, useSessionStore } from '@/entities/session'
 import { getEmployeeProfile } from '@/entities/crm-team'
+import { billingHref } from '@/entities/crm-billing'
 import { useWorkspaceBranding } from '@/entities/crm-workspace-branding'
 import { getRuntimeConfig } from '@/shared/config/runtime'
 import { ThemeSwitcher } from '@/shared/ui/theme-switcher/ThemeSwitcher'
@@ -25,6 +26,7 @@ import { CrmNavigationLink } from './CrmNavigationLink'
 import {
 	AppIcon,
 	BrandLogo,
+	Button,
 	Drawer,
 	HelpHint,
 	ReadOnlyBanner,
@@ -153,6 +155,8 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 			? permissions.data
 			: undefined
 	const home = authority ? crmDefaultRoute(authority) : '/inbox'
+	const renewHref =
+		authority?.role === 'OWNER' ? billingHref(access.workspaceId) : null
 	const entryRedirect =
 		pathname === '/inbox' &&
 		authority &&
@@ -443,7 +447,22 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 					{access.isReadOnly ? (
 						<ReadOnlyBanner
 							title="aeroCRM доступна только для чтения"
-							description="Данные сохранены. Просмотр доступен, а экспорт — пользователям с соответствующими правами. Для изменений и приёма новых заявок продлите доступ."
+							description={
+								renewHref
+									? 'Данные сохранены. Продлите доступ, чтобы редактировать их и принимать новые заявки.'
+									: 'Данные сохранены и доступны для просмотра. Для возобновления изменений обратитесь к владельцу пространства.'
+							}
+							action={
+								renewHref ? (
+									<Button
+										size="sm"
+										variant="secondary"
+										onClick={() => router.push(renewHref)}
+									>
+										Продлить доступ
+									</Button>
+								) : undefined
+							}
 						/>
 					) : null}
 					{entryRedirect ? <ScreenState variant="loading" /> : children}

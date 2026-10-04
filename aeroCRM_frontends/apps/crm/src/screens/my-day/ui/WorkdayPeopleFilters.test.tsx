@@ -530,7 +530,7 @@ describe('people filters inside the Workday apply form', () => {
 				teamId: ids[1]
 			})
 		)
-		fireEvent.click(screen.getByText('Поиск и дополнительные фильтры'))
+		fireEvent.click(screen.getByText('Дополнительные фильтры'))
 		await ready()
 		fireEvent.change(screen.getByLabelText('Чьи задачи'), {
 			target: { value: 'MINE' }
@@ -563,7 +563,7 @@ describe('people filters inside the Workday apply form', () => {
 				ctx
 			)
 		)
-		fireEvent.click(screen.getByText('Поиск и дополнительные фильтры'))
+		fireEvent.click(screen.getByText('Дополнительные фильтры'))
 		fireEvent.click(screen.getByRole('button', { name: 'Применить' }))
 		expect(submitted).not.toHaveBeenCalled()
 		expect(authenticatedRequest).not.toHaveBeenCalled()

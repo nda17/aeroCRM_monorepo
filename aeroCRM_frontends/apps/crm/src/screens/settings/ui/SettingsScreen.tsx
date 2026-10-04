@@ -497,8 +497,8 @@ const SettingsScreen = () => {
 				/>
 			) : (
 				<>
-					{!context.canManage ? (
-						<ReadOnlyBanner description="Можно просматривать сотрудников, приглашения и отделы. Изменения, включая отключение доступа, недоступны до восстановления подписки или прав." />
+					{workspace.canWrite && !context.canManage ? (
+						<ReadOnlyBanner description="Можно просматривать сотрудников, приглашения и отделы. Для изменений запросите права у владельца пространства." />
 					) : null}
 					{quota.isError ? (
 						<div className={styles.notice} role="alert">

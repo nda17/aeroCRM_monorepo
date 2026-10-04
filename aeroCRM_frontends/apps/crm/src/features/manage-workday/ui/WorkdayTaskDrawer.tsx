@@ -39,6 +39,7 @@ import styles from './WorkdayTaskDrawer.module.scss'
 
 export interface WorkdayTaskDrawerProps {
 	taskId: string
+	mode?: 'details' | 'reschedule'
 	onClose: () => void
 	timeZone?: string
 	onCreateNextTask?: (deal: SalesDeal | null) => boolean | void
@@ -56,7 +57,8 @@ const TaskFrame = ({
 	taskId,
 	onClose,
 	timeZone,
-	onCreateNextTask
+	onCreateNextTask,
+	mode = 'details'
 }: WorkdayTaskDrawerProps) => {
 	const read = useWorkdayTask(taskId)
 	const temporary =
@@ -81,6 +83,7 @@ const TaskFrame = ({
 		<TaskEditor
 			read={read}
 			initial={task}
+			mode={mode}
 			onClose={onClose}
 			timeZone={timeZone}
 			onCreateNextTask={onCreateNextTask}
@@ -112,10 +115,12 @@ const TaskEditor = ({
 	initial,
 	onClose,
 	timeZone,
-	onCreateNextTask
+	onCreateNextTask,
+	mode
 }: {
 	read: ReturnType<typeof useWorkdayTask>
 	initial: WorkdayTask
+	mode: 'details' | 'reschedule'
 	onClose: () => void
 	timeZone?: string
 	onCreateNextTask?: WorkdayTaskDrawerProps['onCreateNextTask']
@@ -204,8 +209,10 @@ const TaskEditor = ({
 	const timeline = useWorkdayTimeline(initial.id, historyPage)
 	const close = () => {
 		if (command.canClose()) {
-			mounted.current = false
-			draftGuard.confirmDiscard(onClose)
+			draftGuard.confirmDiscard(() => {
+				mounted.current = false
+				onClose()
+			})
 		}
 	}
 	const reload = async () => {
@@ -232,11 +239,11 @@ const TaskEditor = ({
 			dirtyFormIds={[draftGuard.id]}
 			isOpen
 			onClose={close}
-			title="Задача"
+			title={mode === 'reschedule' ? 'Перенести задачу' : 'Задача'}
 			description={
 				baseline.dealId ? 'Задача по сделке' : 'Самостоятельная задача'
 			}
-			size="lg"
+			size={mode === 'reschedule' ? 'md' : 'lg'}
 		>
 			{command.context.permissions.isFetching ? (
 				<ScreenState
@@ -288,7 +295,7 @@ const TaskEditor = ({
 							</Button>
 						</div>
 					) : null}
-					{baseline.dealId ? (
+					{baseline.dealId && mode === 'details' ? (
 						<section
 							className={styles.section}
 							aria-label="Связанная сделка"
@@ -319,15 +326,36 @@ const TaskEditor = ({
 						className={styles.section}
 						aria-label="Параметры задачи"
 					>
-						<TextField
-							label="Название задачи"
-							value={title}
-							maxLength={200}
-							disabled={locked || changedAssignee}
-							onChange={event =>
-								setDraft({ baseline, title: event.target.value, due })
-							}
-						/>
+						{mode === 'reschedule' ? (
+							<strong>{title}</strong>
+						) : (
+							<TextField
+								label="Название задачи"
+								value={title}
+								maxLength={200}
+								disabled={locked || changedAssignee}
+								onChange={event =>
+									setDraft({ baseline, title: event.target.value, due })
+								}
+							/>
+						)}
+						{mode === 'reschedule' ? (
+							<Button
+								variant="secondary"
+								disabled={locked}
+								onClick={() => {
+									const tomorrow = new Date()
+									tomorrow.setDate(tomorrow.getDate() + 1)
+									setDraft({
+										baseline,
+										title,
+										due: `${taskLocalDate(tomorrow.toISOString()).slice(0, 10)}T${taskLocalDate(baseline.dueAt).slice(11)}`
+									})
+								}}
+							>
+								Завтра в то же время
+							</Button>
+						) : null}
 						<TextField
 							label="Срок выполнения"
 							type="datetime-local"
@@ -360,198 +388,217 @@ const TaskEditor = ({
 										})
 								}}
 							>
-								Сохранить название и срок
+								{mode === 'reschedule'
+									? 'Сохранить новый срок'
+									: 'Сохранить название и срок'}
 							</Button>
 						</div>
 					</section>
-					<section className={styles.section} aria-label="Статус задачи">
-						<h3 className={styles.heading}>
-							Статус: {workdayStatusLabels[baseline.status]}
-						</h3>
-						<div className={styles.actions}>
-							{WORKDAY_STATUSES.map(status => (
-								<Button
-									key={status}
-									tooltip={`Перевести задачу в состояние «${workdayStatusLabels[status]}». Срок и ответственный сохранятся.`}
-									variant="secondary"
-									disabled={
-										locked ||
-										edited ||
-										changedAssignee ||
-										status === baseline.status
-									}
-									onClick={() =>
-										void command.execute({
-											kind: 'status',
-											id: baseline.id,
-											expectedVersion: baseline.version,
-											status
-										})
-									}
-								>
-									{workdayStatusLabels[status]}
-								</Button>
-							))}
-						</div>
-						{edited ? (
-							<p className={styles.note}>
-								Сначала сохраните изменение названия или срока.
-							</p>
-						) : null}
-					</section>
-					{completion &&
-					onCreateNextTask &&
-					baseline.status === 'COMPLETED' &&
-					baseline.version === completion.task.version ? (
-						<WorkdayNextTaskSuggestion
-							key={completion.command.commandId}
-							completion={completion}
-							context={command.context}
-							disabled={locked || edited || changedAssignee}
-							onDismiss={() => setCompletion(null)}
-							onCreate={deal => {
-								if (
-									!command.context.canWrite ||
-									!command.context.current() ||
-									!command.canClose()
-								)
-									return false
-								return onCreateNextTask(deal)
-							}}
-						/>
-					) : null}
-					<section
-						className={styles.section}
-						aria-label="Назначение ответственного"
+					<div
+						hidden={mode === 'reschedule'}
+						inert={mode === 'reschedule'}
 					>
-						<h3 className={styles.heading}>Ответственный</h3>
-						<p className={styles.note}>
-							{resolved && !changedAssignee
-								? assigneeDisplayName(resolved)
-								: 'Текущее назначение сохраняется до явного выбора сотрудника.'}
-						</p>
-						<AssigneeSelect
-							options={options}
-							value={selected}
-							disabled={locked || edited}
-							onChange={value =>
-								setAssignee({
-									subject: value.subject,
-									membershipId: value.membershipId
-								})
-							}
-						/>
-						<Button
-							disabled={locked || edited || !changedAssignee || !resolved}
-							tooltip="Назначить выбранного сотрудника ответственным за эту задачу."
-							onClick={() => {
-								if (resolved && !locked && !edited)
-									void command.execute({
-										kind: 'assignee',
-										id: baseline.id,
-										expectedVersion: baseline.version,
-										assignee: {
-											subject: resolved.subject,
-											membershipId: resolved.membershipId
+						<section className={styles.section} aria-label="Статус задачи">
+							<h3 className={styles.heading}>
+								Статус: {workdayStatusLabels[baseline.status]}
+							</h3>
+							<div className={styles.actions}>
+								{WORKDAY_STATUSES.map(status => (
+									<Button
+										key={status}
+										tooltip={`Перевести задачу в состояние «${workdayStatusLabels[status]}». Срок и ответственный сохранятся.`}
+										variant="secondary"
+										disabled={
+											locked ||
+											edited ||
+											changedAssignee ||
+											status === baseline.status
 										}
-									})
-							}}
-						>
-							Назначить ответственного
-						</Button>
-						{changedAssignee ? (
-							<p className={styles.note}>
-								Сначала сохраните назначение ответственного или выберите
-								текущее назначение обратно.
-							</p>
+										onClick={() =>
+											void command.execute({
+												kind: 'status',
+												id: baseline.id,
+												expectedVersion: baseline.version,
+												status
+											})
+										}
+									>
+										{workdayStatusLabels[status]}
+									</Button>
+								))}
+							</div>
+							{edited ? (
+								<p className={styles.note}>
+									Сначала сохраните изменение названия или срока.
+								</p>
+							) : null}
+						</section>
+						{completion &&
+						onCreateNextTask &&
+						baseline.status === 'COMPLETED' &&
+						baseline.version === completion.task.version ? (
+							<WorkdayNextTaskSuggestion
+								key={completion.command.commandId}
+								completion={completion}
+								context={command.context}
+								disabled={locked || edited || changedAssignee}
+								onDismiss={() => setCompletion(null)}
+								onCreate={deal => {
+									if (
+										!command.context.canWrite ||
+										!command.context.current() ||
+										!command.canClose()
+									)
+										return false
+									return onCreateNextTask(deal)
+								}}
+							/>
 						) : null}
-					</section>
-					<WorkdayCommandState command={command} />
-					<section className={styles.section} aria-label="История задачи">
-						<h3 className={styles.heading}>История задачи</h3>
-						{timeline.data ? (
-							<>
-								<ol className={styles.history}>
-									{timeline.data.items.map(item => (
-										<li key={item.id}>
-											<strong>
-												{
-													{
-														CREATED: 'Задача создана',
-														EDITED: 'Название или срок изменены',
-														STATUS_CHANGED: 'Статус изменён',
-														ASSIGNED: 'Ответственный изменён'
-													}[item.kind]
-												}
-											</strong>
-											<p className={styles.note}>
-												<time dateTime={item.createdAt}>
-													{workdayDateLabel(item.createdAt, timeZone)}
-												</time>
-											</p>
-											<p className={styles.note}>
-												{item.kind === 'STATUS_CHANGED'
-													? `${item.before ? workdayStatusLabels[item.before.status] : '—'} → ${workdayStatusLabels[item.after.status]}`
-													: item.after.title}
-											</p>
-										</li>
-									))}
-								</ol>
-								{timeline.data.total === 0 ? (
-									<p className={styles.note}>
-										История изменений пока пуста.
-									</p>
-								) : null}
-								<nav
-									className={styles.pagination}
-									aria-label="Страницы истории"
-								>
-									<Button
-										variant="secondary"
-										disabled={
-											historyPage === 1 || timeline.query.isFetching
-										}
-										onClick={() => {
-											setHistoryPage(historyPage - 1)
-											toast('Предыдущая страница истории')
-										}}
-									>
-										Назад
-									</Button>
-									<span>
-										{historyPage} /{' '}
-										{Math.max(1, Math.ceil(timeline.data.total / 25))}
-									</span>
-									<Button
-										variant="secondary"
-										disabled={
-											historyPage * 25 >= timeline.data.total ||
-											timeline.query.isFetching
-										}
-										onClick={() => {
-											setHistoryPage(historyPage + 1)
-											toast('Следующая страница истории')
-										}}
-									>
-										Далее
-									</Button>
-								</nav>
-							</>
-						) : (
-							<ScreenState
-								compact
-								variant={timeline.query.isError ? 'error' : 'loading'}
-								description="История загружается отдельно с сервера."
-								action={
-									timeline.query.isError ? (
-										<Button onClick={() => void timeline.query.refetch()}>
-											Повторить загрузку истории
-										</Button>
-									) : undefined
+						<section
+							className={styles.section}
+							aria-label="Назначение ответственного"
+						>
+							<h3 className={styles.heading}>Ответственный</h3>
+							<p className={styles.note}>
+								{resolved && !changedAssignee
+									? assigneeDisplayName(resolved)
+									: 'Текущее назначение сохраняется до явного выбора сотрудника.'}
+							</p>
+							<AssigneeSelect
+								options={options}
+								value={selected}
+								disabled={locked || edited}
+								onChange={value =>
+									setAssignee({
+										subject: value.subject,
+										membershipId: value.membershipId
+									})
 								}
 							/>
-						)}
-					</section>
+							<Button
+								disabled={
+									locked || edited || !changedAssignee || !resolved
+								}
+								tooltip="Назначить выбранного сотрудника ответственным за эту задачу."
+								onClick={() => {
+									if (resolved && !locked && !edited)
+										void command.execute({
+											kind: 'assignee',
+											id: baseline.id,
+											expectedVersion: baseline.version,
+											assignee: {
+												subject: resolved.subject,
+												membershipId: resolved.membershipId
+											}
+										})
+								}}
+							>
+								Назначить ответственного
+							</Button>
+							{changedAssignee ? (
+								<p className={styles.note}>
+									Сначала сохраните назначение ответственного или выберите
+									текущее назначение обратно.
+								</p>
+							) : null}
+						</section>
+					</div>
+					<WorkdayCommandState command={command} />
+					<div
+						hidden={mode === 'reschedule'}
+						inert={mode === 'reschedule'}
+					>
+						<section
+							className={styles.section}
+							aria-label="История задачи"
+						>
+							<h3 className={styles.heading}>История задачи</h3>
+							{timeline.data ? (
+								<>
+									<ol className={styles.history}>
+										{timeline.data.items.map(item => (
+											<li key={item.id}>
+												<strong>
+													{
+														{
+															CREATED: 'Задача создана',
+															EDITED: 'Название или срок изменены',
+															STATUS_CHANGED: 'Статус изменён',
+															ASSIGNED: 'Ответственный изменён'
+														}[item.kind]
+													}
+												</strong>
+												<p className={styles.note}>
+													<time dateTime={item.createdAt}>
+														{workdayDateLabel(item.createdAt, timeZone)}
+													</time>
+												</p>
+												<p className={styles.note}>
+													{item.kind === 'STATUS_CHANGED'
+														? `${item.before ? workdayStatusLabels[item.before.status] : '—'} → ${workdayStatusLabels[item.after.status]}`
+														: item.after.title}
+												</p>
+											</li>
+										))}
+									</ol>
+									{timeline.data.total === 0 ? (
+										<p className={styles.note}>
+											История изменений пока пуста.
+										</p>
+									) : null}
+									<nav
+										className={styles.pagination}
+										aria-label="Страницы истории"
+									>
+										<Button
+											variant="secondary"
+											disabled={
+												historyPage === 1 || timeline.query.isFetching
+											}
+											onClick={() => {
+												setHistoryPage(historyPage - 1)
+												toast('Предыдущая страница истории')
+											}}
+										>
+											Назад
+										</Button>
+										<span>
+											{historyPage} /{' '}
+											{Math.max(1, Math.ceil(timeline.data.total / 25))}
+										</span>
+										<Button
+											variant="secondary"
+											disabled={
+												historyPage * 25 >= timeline.data.total ||
+												timeline.query.isFetching
+											}
+											onClick={() => {
+												setHistoryPage(historyPage + 1)
+												toast('Следующая страница истории')
+											}}
+										>
+											Далее
+										</Button>
+									</nav>
+								</>
+							) : (
+								<ScreenState
+									compact
+									variant={timeline.query.isError ? 'error' : 'loading'}
+									description="История загружается отдельно с сервера."
+									action={
+										timeline.query.isError ? (
+											<Button
+												onClick={() => void timeline.query.refetch()}
+											>
+												Повторить загрузку истории
+											</Button>
+										) : undefined
+									}
+								/>
+							)}
+						</section>
+					</div>
 					<div className={styles.footer}>
 						<Button variant="secondary" onClick={close}>
 							Закрыть

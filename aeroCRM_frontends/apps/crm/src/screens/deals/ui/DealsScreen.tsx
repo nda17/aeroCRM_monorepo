@@ -1,6 +1,8 @@
 'use client'
 
 import { useDirtyFormGuard } from '@/shared/lib/dirty-form'
+import { SavedViewsControl } from '@/features/manage-saved-views/ui/SavedViewsControl'
+import type { SavedDealParameters } from '@/entities/crm-saved-views'
 
 import {
 	listSalesDeals,
@@ -21,7 +23,6 @@ import {
 	DataTable,
 	HelpHint,
 	PageHeader,
-	ReadOnlyBanner,
 	ScreenState,
 	SelectField,
 	StatusBadge,
@@ -53,6 +54,7 @@ import {
 	readStoredDealViews,
 	writeDealViewLocation,
 	requestDealFilters,
+	savedDealParameters,
 	type DealView
 } from './deal-views'
 
@@ -74,9 +76,7 @@ const DealsWorkspaceScreen = ({
 		filters: dealViewFromSearch(routeSearch, stored.last)
 	}))
 	const filters = routeView.filters
-	const [savedViews, setSavedViews] = useState(stored.saved)
-	const [viewName, setViewName] = useState('')
-	const [savingView, setSavingView] = useState(false)
+	const [legacyViews, setLegacyViews] = useState(stored.saved)
 	const [page, setPage] = useState(1)
 	const { search, pipelineId, status, withoutNextAction, layout } = filters
 	const [searchInput, setSearchInput] = useState(search)
@@ -103,27 +103,17 @@ const DealsWorkspaceScreen = ({
 		setFilters({ ...filters, ...patch })
 		setPage(1)
 	}
-	const persistViews = (next = savedViews) => {
-		try {
-			window.localStorage.setItem(
-				storageKey,
-				JSON.stringify({ last: filters, saved: next })
-			)
-			return true
-		} catch {
-			return false
-		}
-	}
+
 	useEffect(() => {
 		try {
 			window.localStorage.setItem(
 				storageKey,
-				JSON.stringify({ last: filters, saved: savedViews })
+				JSON.stringify({ last: filters, saved: legacyViews })
 			)
 		} catch {
 			/* Browsers can disable storage; current filters remain usable. */
 		}
-	}, [filters, savedViews, storageKey])
+	}, [filters, legacyViews, storageKey])
 
 	const applyView = (next: DealView) => {
 		setFilters(next)
@@ -179,6 +169,96 @@ const DealsWorkspaceScreen = ({
 	)
 	const emptyPage =
 		!!deals.data && deals.data.total > 0 && deals.data.items.length === 0
+	const hasFilters = Boolean(
+		search ||
+		pipelineId ||
+		status ||
+		withoutNextAction ||
+		filters.assignedToSubject ||
+		filters.overdue ||
+		filters.stageId ||
+		filters.createdFrom ||
+		filters.createdTo
+	)
+	const canCreate =
+		context.canWrite &&
+		context.permissions.data?.permissions.includes('customers:read') &&
+		!pipelines.isError &&
+		!pipelines.isFetching &&
+		!!pipelines.data?.length
+	const resetFilters = () =>
+		applyView({
+			...defaultDealView,
+			layout,
+			pipelineId: layout === 'board' ? pipelineId : ''
+		})
+	const activeChips: { id: string; label: string; remove: () => void }[] =
+		[]
+	if (search)
+		activeChips.push({
+			id: 'search',
+			label: `Поиск: ${search}`,
+			remove: () => applyView({ ...filters, search: '' })
+		})
+	if (pipelineId && layout === 'list')
+		activeChips.push({
+			id: 'pipeline',
+			label: `Воронка: ${activePipeline?.name ?? 'выбрана'}`,
+			remove: () => updateFilters({ pipelineId: '', stageId: undefined })
+		})
+	if (status)
+		activeChips.push({
+			id: 'status',
+			label: `Статус: ${{ OPEN: 'В работе', WON: 'Успешно', LOST: 'Отказ' }[status] ?? status}`,
+			remove: () => updateFilters({ status: '', stageId: undefined })
+		})
+	if (filters.stageId)
+		activeChips.push({
+			id: 'stage',
+			label: `Этап: ${activePipeline?.stages.find(stage => stage.id === filters.stageId)?.name ?? 'выбран'}`,
+			remove: () => updateFilters({ stageId: undefined })
+		})
+	if (filters.assignedToSubject)
+		activeChips.push({
+			id: 'assignee',
+			label:
+				filters.assignedToSubject === context.session?.userId
+					? 'Мои сделки'
+					: 'Выбран сотрудник',
+			remove: () => updateFilters({ assignedToSubject: undefined })
+		})
+	if (withoutNextAction)
+		activeChips.push({
+			id: 'withoutNextAction',
+			label: 'Без следующего действия',
+			remove: () => updateFilters({ withoutNextAction: false })
+		})
+	if (filters.overdue)
+		activeChips.push({
+			id: 'overdue',
+			label: 'Просроченные',
+			remove: () =>
+				updateFilters({ overdue: undefined, overdueBefore: undefined })
+		})
+	if (filters.overdueBefore)
+		activeChips.push({
+			id: 'overdueBefore',
+			label: `Просрочка до: ${new Date(filters.overdueBefore).toLocaleDateString('ru-RU')}`,
+			remove: () => updateFilters({ overdueBefore: undefined })
+		})
+	if (filters.createdFrom || filters.createdTo)
+		activeChips.push({
+			id: 'createdPeriod',
+			label: `Дата создания: ${filters.createdFrom ? new Date(filters.createdFrom).toLocaleDateString('ru-RU') : 'начала'} — ${filters.createdTo ? new Date(Date.parse(filters.createdTo) - 1).toLocaleDateString('ru-RU') : 'сегодня'}`,
+			remove: () =>
+				updateFilters({ createdFrom: undefined, createdTo: undefined })
+		})
+	if (filters.sort && filters.sort !== 'created_desc')
+		activeChips.push({
+			id: 'sort',
+			label: `Порядок: ${{ updated_desc: 'недавно изменённые', amount_desc: 'по сумме', next_action_asc: 'по сроку действия' }[filters.sort]}`,
+			remove: () => updateFilters({ sort: 'created_desc' })
+		})
 	const reload = async () => {
 		const result = await Promise.all([
 			context.permissions.refetch(),
@@ -347,10 +427,6 @@ const DealsWorkspaceScreen = ({
 				/>
 			) : (
 				<>
-					{!context.workspace.canWrite ||
-					context.permissions.data?.state === 'READ_ONLY' ? (
-						<ReadOnlyBanner description="Вы можете просматривать сделки и историю. Изменения возобновятся после активации подписки." />
-					) : null}
 					<div className={styles.toolbar}>
 						<div
 							className={styles.quickViews}
@@ -502,7 +578,7 @@ const DealsWorkspaceScreen = ({
 							Найти
 						</Button>
 						<details className={styles.moreFilters}>
-							<summary>Фильтры и сохранённые виды</summary>
+							<summary>Дополнительные фильтры</summary>
 							<div className={styles.filterOptions}>
 								<SelectField
 									label="Сортировка"
@@ -520,32 +596,6 @@ const DealsWorkspaceScreen = ({
 										По сроку действия
 									</option>
 								</SelectField>
-								<div className={styles.savedViews}>
-									<SelectField
-										label="Сохранённые представления"
-										value=""
-										onChange={event => {
-											const savedView = savedViews.find(
-												view => view.id === event.target.value
-											)
-											if (savedView) applyView(savedView.filters)
-										}}
-									>
-										<option value="">Выберите представление</option>
-										{savedViews.map(view => (
-											<option key={view.id} value={view.id}>
-												{view.name}
-											</option>
-										))}
-									</SelectField>
-									<Button
-										size="sm"
-										variant="ghost"
-										onClick={() => setSavingView(value => !value)}
-									>
-										{savingView ? 'Скрыть' : 'Сохранить вид'}
-									</Button>
-								</div>
 								<label className={styles.nextActionFilter}>
 									<input
 										type="checkbox"
@@ -562,109 +612,39 @@ const DealsWorkspaceScreen = ({
 							</div>
 						</details>
 					</form>
-					{savingView ? (
-						<form
-							className={styles.saveViewForm}
-							onSubmit={event => {
-								event.preventDefault()
-								const name = viewName.trim()
-								if (!name) return
-								if (
-									savedViews.length >= 10 &&
-									!savedViews.some(view => view.name === name)
-								) {
-									toast.error('Можно сохранить до 10 представлений')
-									return
-								}
-								const existing = savedViews.find(
-									view => view.name === name
-								)
-								const next = [
-									...savedViews.filter(view => view.name !== name),
-									{
-										id: existing?.id || crypto.randomUUID(),
-										name,
-										filters
-									}
-								]
-								if (!persistViews(next)) {
-									toast.error(
-										'Браузер не разрешил сохранить представление'
-									)
-									return
-								}
-								setSavedViews(next)
-								setViewName('')
-								setSavingView(false)
-								toast.success('Представление сохранено в этом браузере')
-							}}
+					<SavedViewsControl
+						context={context}
+						scope="DEALS"
+						parameters={savedDealParameters(filters)}
+						onOpen={parameters =>
+							applyView(parameters as SavedDealParameters)
+						}
+						legacy={legacyViews.map(view => ({
+							id: view.id,
+							name: view.name,
+							parameters: savedDealParameters(view.filters)
+						}))}
+						onImported={() => setLegacyViews([])}
+					/>
+
+					{activeChips.length ? (
+						<div
+							className={styles.activeFilters}
+							aria-label="Применённые фильтры сделок"
 						>
-							<TextField
-								label="Название представления"
-								value={viewName}
-								onChange={event => setViewName(event.target.value)}
-								maxLength={60}
-								required
-								placeholder="Например, мои крупные сделки"
-							/>
-							<Button type="submit" size="sm">
-								Сохранить представление
-							</Button>
-							{savedViews.length ? (
-								<SelectField
-									label="Удалить представление"
-									value=""
-									onChange={event => {
-										const next = savedViews.filter(
-											view => view.id !== event.target.value
-										)
-										if (!persistViews(next)) {
-											toast.error('Не удалось сохранить изменение')
-											return
-										}
-										setSavedViews(next)
-										toast.success('Представление удалено')
-									}}
+							{activeChips.map(chip => (
+								<Button
+									key={chip.id}
+									size="sm"
+									variant="secondary"
+									onClick={chip.remove}
+									aria-label={`Убрать фильтр: ${chip.label}`}
 								>
-									<option value="">Выберите для удаления</option>
-									{savedViews.map(view => (
-										<option key={view.id} value={view.id}>
-											{view.name}
-										</option>
-									))}
-								</SelectField>
-							) : null}
-						</form>
-					) : null}
-					{filters.createdFrom ||
-					filters.createdTo ||
-					filters.stageId ||
-					filters.assignedToSubject ||
-					filters.overdue ? (
-						<div className={styles.activeFilters}>
-							<span>
-								{filters.createdFrom && filters.createdTo
-									? `Дата создания: ${new Date(filters.createdFrom).toLocaleDateString('ru-RU')} — ${new Date(Date.parse(filters.createdTo) - 1).toLocaleDateString('ru-RU')}. `
-									: ''}
-								{filters.assignedToSubject
-									? filters.assignedToSubject === context.session?.userId
-										? 'Только мои сделки. '
-										: 'Выбран сотрудник. '
-									: ''}
-								{filters.overdue ? 'Есть просроченное действие. ' : ''}
-								{filters.stageId ? 'Выбран этап. ' : ''}
-							</span>
-							<Button
-								size="sm"
-								variant="ghost"
-								onClick={() =>
-									applyView({
-										...defaultDealView,
-										layout,
-										pipelineId: layout === 'board' ? pipelineId : ''
-									})
-								}
-							>
+									{chip.label}
+									<AppIcon name="close" size={14} />
+								</Button>
+							))}
+							<Button size="sm" variant="ghost" onClick={resetFilters}>
 								Сбросить фильтры
 							</Button>
 						</div>
@@ -719,31 +699,34 @@ const DealsWorkspaceScreen = ({
 						<ScreenState
 							variant="empty"
 							title={
-								search ||
-								status ||
-								pipelineId ||
-								withoutNextAction ||
-								filters.assignedToSubject ||
-								filters.overdue ||
-								filters.stageId ||
-								filters.createdFrom
+								hasFilters
 									? 'Подходящих сделок нет'
-									: 'Создайте первую сделку'
+									: canCreate
+										? 'Создайте первую сделку'
+										: 'Сделок пока нет'
 							}
 							description={
-								withoutNextAction
-									? 'Нет открытых сделок без запланированных задач по выбранным условиям. Измените фильтры, чтобы увидеть другие сделки.'
-									: 'Выберите контакт, сумму и первое действие — и начните работу с клиентом.'
+								hasFilters
+									? 'Измените или сбросьте фильтры, чтобы увидеть другие сделки.'
+									: canCreate
+										? 'Выберите контакт, сумму и первое действие — и начните работу с клиентом.'
+										: 'Здесь появятся доступные вам сделки. Сейчас создание сделки недоступно.'
 							}
 							action={
-								<Button
-									tooltip="Выбрать клиента, сумму сделки и первое действие по ней"
-									disabledTooltip="Для новой сделки нужны права изменения сделок, просмотра контактов и доступная воронка."
-									disabled={!context.canWrite || !pipelines.data?.length}
-									onClick={() => setCreateOpen(true)}
-								>
-									Новая сделка
-								</Button>
+								hasFilters ? (
+									<Button variant="secondary" onClick={resetFilters}>
+										Сбросить фильтры
+									</Button>
+								) : canCreate ? (
+									<Button
+										tooltip="Выбрать клиента, сумму сделки и первое действие по ней"
+										disabledTooltip="Для новой сделки нужны права изменения сделок, просмотра контактов и доступная воронка."
+										disabled={!context.canWrite || !pipelines.data?.length}
+										onClick={() => setCreateOpen(true)}
+									>
+										Новая сделка
+									</Button>
+								) : undefined
 							}
 						/>
 					) : (

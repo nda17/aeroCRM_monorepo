@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import toast from 'react-hot-toast'
+import type { WorkdayFilters as Filters } from '@/entities/crm-workday'
 import { initialWorkdayFilters } from '../model/workday-view'
 import { WorkdayFilters } from './WorkdayFilters'
 
@@ -75,9 +76,9 @@ describe('MyDay filters', () => {
 			to: undefined
 		})
 	})
-	it('does not announce success if the caller rejects apply or a view switch', () => {
-		const onChange = vi.fn(() => false)
-		const onViewChange = vi.fn(() => false)
+	it('does not announce success for ordinary period, filter, or view changes', () => {
+		const onChange = vi.fn()
+		const onViewChange = vi.fn()
 		render(
 			<WorkdayFilters
 				value={initialWorkdayFilters()}
@@ -87,16 +88,36 @@ describe('MyDay filters', () => {
 				onViewChange={onViewChange}
 			/>
 		)
+		fireEvent.change(screen.getByLabelText('Поиск по задаче'), {
+			target: { value: 'Встреча' }
+		})
 		fireEvent.click(screen.getByRole('button', { name: 'Применить' }))
+		fireEvent.click(screen.getByRole('button', { name: 'Неделя' }))
 		fireEvent.click(screen.getByRole('button', { name: 'Доска' }))
-		expect(onChange).toHaveBeenCalledOnce()
-		expect(onViewChange).toHaveBeenCalledOnce()
+		fireEvent.click(screen.getByRole('button', { name: 'Список' }))
+		expect(onChange).toHaveBeenCalledTimes(2)
+		expect(onViewChange).toHaveBeenCalledTimes(2)
 		expect(toast.success).not.toHaveBeenCalled()
 		expect(toast).not.toHaveBeenCalled()
 	})
 	it('exposes only permitted scopes and applies search on submit', () => {
 		const { onChange } = setup()
-		fireEvent.click(screen.getByText('Поиск и дополнительные фильтры'))
+		expect(screen.getByLabelText('Поиск по задаче')).toBeTruthy()
+		expect(
+			(
+				screen
+					.getByLabelText('Часовой пояс')
+					.closest('details') as HTMLDetailsElement
+			).open
+		).toBe(false)
+		expect(
+			(
+				screen
+					.getByLabelText('Статус')
+					.closest('details') as HTMLDetailsElement
+			).open
+		).toBe(false)
+		fireEvent.click(screen.getByText('Дополнительные фильтры'))
 		expect(
 			screen.queryByRole('option', { name: 'Вся команда' })
 		).toBeNull()
@@ -109,6 +130,65 @@ describe('MyDay filters', () => {
 			...initialWorkdayFilters(),
 			search: 'Встреча'
 		})
+	})
+	it('removes one active filter chip while preserving the remaining filters', () => {
+		const onChange = vi.fn()
+		const value = {
+			...initialWorkdayFilters(),
+			period: 'WEEK' as const,
+			scope: 'TEAM' as const,
+			search: 'звонок',
+			status: 'ACTIVE' as const,
+			page: 4
+		} as Filters
+		render(
+			<WorkdayFilters
+				value={value}
+				allowedScopes={['MINE', 'TEAM']}
+				view="list"
+				onChange={onChange}
+				onViewChange={vi.fn()}
+			/>
+		)
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Снять фильтр: Поиск: звонок' })
+		)
+		expect(onChange).toHaveBeenCalledWith({
+			...value,
+			search: undefined,
+			page: 1
+		})
+		expect(toast).not.toHaveBeenCalled()
+	})
+	it('resets active filter chips to the allowed default scope and all periods', () => {
+		const onChange = vi.fn()
+		const value = {
+			...initialWorkdayFilters(),
+			period: 'WEEK' as const,
+			scope: 'TEAM' as const,
+			search: 'звонок',
+			status: 'ACTIVE' as const
+		} as Filters
+		render(
+			<WorkdayFilters
+				value={value}
+				allowedScopes={['MINE', 'TEAM']}
+				view="list"
+				onChange={onChange}
+				onViewChange={vi.fn()}
+			/>
+		)
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Сбросить фильтры' })
+		)
+		expect(onChange).toHaveBeenCalledWith({
+			period: 'ALL',
+			scope: 'MINE',
+			timeZone: value.timeZone,
+			page: 1,
+			pageSize: value.pageSize
+		})
+		expect(toast).not.toHaveBeenCalled()
 	})
 	it('requires explicit dates before querying a range and includes its end date', () => {
 		const { onChange } = setup()
@@ -138,7 +218,7 @@ describe('MyDay filters', () => {
 	})
 	it('cannot select an unknown timezone and leaves the valid filter unchanged', () => {
 		const { onChange } = setup()
-		fireEvent.click(screen.getByText('Поиск и дополнительные фильтры'))
+		fireEvent.click(screen.getByText('Дополнительные фильтры'))
 		fireEvent.change(screen.getByLabelText('Часовой пояс'), {
 			target: { value: 'unknown' }
 		})
@@ -152,7 +232,7 @@ describe('MyDay filters', () => {
 	})
 	it('changes timezone only on apply, preserving the existing date/filter contract', () => {
 		const { onChange } = setup()
-		fireEvent.click(screen.getByText('Поиск и дополнительные фильтры'))
+		fireEvent.click(screen.getByText('Дополнительные фильтры'))
 		fireEvent.change(screen.getByLabelText('Часовой пояс'), {
 			target: { value: 'Asia/Vladivostok' }
 		})

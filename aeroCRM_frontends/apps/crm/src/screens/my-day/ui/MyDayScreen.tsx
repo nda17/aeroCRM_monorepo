@@ -1,6 +1,8 @@
 'use client'
 
 import { useDirtyFormGuard } from '@/shared/lib/dirty-form'
+import { SavedViewsControl } from '@/features/manage-saved-views/ui/SavedViewsControl'
+import type { SavedTaskParameters } from '@/entities/crm-saved-views'
 import { usePlannerSettings } from '@/entities/crm-planner/model/use-planner-settings'
 import type { PlannerColumn } from '@/entities/crm-planner/model/planner.types'
 import { PlannerSettingsDrawer } from '@/features/manage-planner/ui/PlannerSettingsDrawer'
@@ -61,6 +63,9 @@ const MyDayContent = ({
 	const [filters, setFilters] = useState<Filters>(initialWorkdayFilters)
 	const [view, setView] = useState<WorkdayView>('list')
 	const [selected, setSelected] = useState<string | null>(initialTaskId)
+	const [taskMode, setTaskMode] = useState<'details' | 'reschedule'>(
+		'details'
+	)
 	const [seriesOpen, setSeriesOpen] = useState(false)
 	const [creating, setCreating] = useState<{
 		deal: SalesDeal | null
@@ -84,6 +89,22 @@ const MyDayContent = ({
 		setCompletion(null)
 		setCreating({ deal })
 		return true
+	}
+	const savedParameters: SavedTaskParameters = {
+		layout: view,
+		period: filters.period,
+		timeZone: filters.timeZone,
+		scope: filters.scope,
+		...(filters.from ? { from: filters.from } : {}),
+		...(filters.to ? { to: filters.to } : {}),
+		...(view === 'list' && filters.status
+			? { status: filters.status }
+			: {}),
+		...(filters.search ? { search: filters.search } : {}),
+		...(filters.teamId ? { teamId: filters.teamId } : {}),
+		...(filters.assigneeSubject
+			? { assigneeSubject: filters.assigneeSubject }
+			: {})
 	}
 	const overview = useWorkdayTasks({
 		...filters,
@@ -271,8 +292,8 @@ const MyDayContent = ({
 							</>
 						}
 					/>
-					{!context.canWrite ? (
-						<ReadOnlyBanner description="Задачи доступны для просмотра. Изменения требуют соответствующих прав и действующего доступа." />
+					{context.workspace.canWrite && !context.canWrite ? (
+						<ReadOnlyBanner description="Ваша роль разрешает просмотр задач. Для изменения обратитесь к администратору пространства." />
 					) : null}
 					{settingsOpen ? (
 						<PlannerSettingsDrawer
@@ -327,6 +348,35 @@ const MyDayContent = ({
 							onDismiss={() => setCompletion(null)}
 						/>
 					) : null}
+					<SavedViewsControl
+						context={context}
+						scope="TASKS"
+						parameters={savedParameters}
+						onOpen={parameters => {
+							if (!command.canClose() || !context.current()) return false
+							const next = parameters as SavedTaskParameters
+							if (
+								!context.scopes.some(scope => scope === next.scope) ||
+								(next.teamId &&
+									!context.permissions.data?.teamIds.includes(next.teamId))
+							) {
+								toast.error(
+									'Параметры представления недоступны при текущих правах. Выберите другие фильтры.'
+								)
+								return false
+							}
+							draftGuard.confirmDiscard(() => {
+								const { layout: nextView, ...nextFilters } = next
+								setSelected(null)
+								setView(nextView)
+								setFilters({
+									...nextFilters,
+									page: 1,
+									pageSize: 20
+								} as Filters)
+							})
+						}}
+					/>
 					<WorkdayFilters
 						key={JSON.stringify(filters)}
 						value={filters}
@@ -457,7 +507,31 @@ const MyDayContent = ({
 						canWrite={context.canWrite && !command.locked}
 						onOpen={task => {
 							if (command.canClose())
-								draftGuard.confirmDiscard(() => setSelected(task.id))
+								draftGuard.confirmDiscard(() => {
+									setTaskMode('details')
+									setSelected(task.id)
+								})
+						}}
+						onReschedule={task => {
+							if (command.canClose() && context.canWrite)
+								draftGuard.confirmDiscard(() => {
+									setTaskMode('reschedule')
+									setSelected(task.id)
+								})
+						}}
+						onResetFilters={() => {
+							if (command.canClose())
+								draftGuard.confirmDiscard(() => {
+									setSelected(null)
+									setFilters({
+										...initialWorkdayFilters(),
+										status: undefined,
+										scope: context.scopes.some(scope => scope === 'MINE')
+											? 'MINE'
+											: context.scopes[0],
+										timeZone: filters.timeZone
+									})
+								})
 						}}
 						onStatus={updateStatus}
 						onPage={page => {
@@ -468,6 +542,7 @@ const MyDayContent = ({
 					{selected ? (
 						<WorkdayTaskDrawer
 							taskId={selected}
+							mode={taskMode}
 							timeZone={filters.timeZone}
 							onCreateNextTask={createNextTask}
 							onClose={() => {

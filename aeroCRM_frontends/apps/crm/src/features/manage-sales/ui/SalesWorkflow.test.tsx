@@ -12,6 +12,7 @@ import {
 import {
 	getSalesDeal,
 	listSalesTimeline,
+	listSalesTimelineV2,
 	mutateSales,
 	type SalesDeal,
 	type SalesPipeline
@@ -71,7 +72,11 @@ vi.mock('@/entities/crm-planner/model/use-planner-settings', () => ({
 vi.mock('@/entities/sales', () => ({
 	getSalesDeal: vi.fn(),
 	listSalesTimeline: vi.fn(),
+	listSalesTimelineV2: vi.fn(),
 	mutateSales: vi.fn()
+}))
+vi.mock('./DealCommercePanel', () => ({
+	DealCommercePanel: () => null
 }))
 vi.mock('../model/use-sales-session', () => ({ useSalesSession: vi.fn() }))
 vi.mock('react-hot-toast', () => ({
@@ -218,6 +223,13 @@ beforeEach(() => {
 	vi.mocked(getSalesDeal).mockResolvedValue(deal)
 	vi.mocked(listSalesTimeline).mockResolvedValue({
 		schemaVersion: 1,
+		page: 1,
+		pageSize: 10,
+		total: 0,
+		items: []
+	})
+	vi.mocked(listSalesTimelineV2).mockResolvedValue({
+		schemaVersion: 2,
 		page: 1,
 		pageSize: 10,
 		total: 0,
@@ -441,6 +453,160 @@ describe('Sales workflow forms', () => {
 		)
 		expect(await screen.findByText('Нет следующего действия')).toBeTruthy()
 		expect(screen.queryByText('Сделка закрыта')).toBeNull()
+	})
+	it('keeps interaction drafts mounted across the deal tabs', async () => {
+		mount(
+			<DealDetailsDrawer
+				id={deal.id}
+				pipelines={[pipeline]}
+				onClose={vi.fn()}
+				onSaved={vi.fn()}
+			/>
+		)
+		const result = await screen.findByRole('combobox', {
+			name: 'Итог звонка или встречи'
+		})
+		fireEvent.change(result, { target: { value: 'CALL_REACHED' } })
+		fireEvent.change(
+			screen.getByRole('textbox', { name: 'Комментарий' }),
+			{
+				target: { value: 'Договорились связаться в пятницу' }
+			}
+		)
+		fireEvent.click(screen.getByRole('tab', { name: 'КП и оплаты' }))
+		fireEvent.click(screen.getByRole('tab', { name: 'История' }))
+		fireEvent.click(screen.getByRole('tab', { name: 'Обзор' }))
+		expect(result).toHaveProperty('value', 'CALL_REACHED')
+		expect(
+			screen.getByRole('textbox', { name: 'Комментарий' })
+		).toHaveProperty('value', 'Договорились связаться в пятницу')
+	})
+	it('retries an unknown interaction with the exact same command and does not add a task implicitly', async () => {
+		vi.mocked(mutateSales).mockRejectedValueOnce(
+			new AuthenticatedApiError('temporary', 'Ответ не подтверждён')
+		)
+		mount(
+			<DealDetailsDrawer
+				id={deal.id}
+				pipelines={[pipeline]}
+				onClose={vi.fn()}
+				onSaved={vi.fn()}
+			/>
+		)
+		fireEvent.change(
+			await screen.findByRole('combobox', {
+				name: 'Итог звонка или встречи'
+			}),
+			{ target: { value: 'CALL_REACHED' } }
+		)
+		fireEvent.change(
+			screen.getByRole('textbox', { name: 'Комментарий' }),
+			{
+				target: { value: 'Ответил, ждёт предложение' }
+			}
+		)
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Сохранить результат общения' })
+		)
+		await screen.findByRole('button', { name: 'Проверить сохранение' })
+		const original = vi.mocked(mutateSales).mock.calls[0][1]
+		expect(original.mutation).toEqual({
+			kind: 'interaction',
+			id: deal.id,
+			expectedVersion: deal.version,
+			result: 'CALL_REACHED',
+			comment: 'Ответил, ждёт предложение'
+		})
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Проверить сохранение' })
+		)
+		await waitFor(() => expect(mutateSales).toHaveBeenCalledTimes(2))
+		expect(vi.mocked(mutateSales).mock.calls[1][1]).toBe(original)
+		expect(vi.mocked(mutateSales).mock.calls[1][1].commandId).toBe(
+			vi.mocked(mutateSales).mock.calls[0][1].commandId
+		)
+	})
+	it('adopts a confirmed refreshed deal version only while the interaction form is clean', async () => {
+		const queryKey = ['sales', 'deal', ...context.key, deal.id]
+		const renderDrawer = () =>
+			mount(
+				<DealDetailsDrawer
+					id={deal.id}
+					pipelines={[pipeline]}
+					onClose={vi.fn()}
+					onSaved={vi.fn()}
+				/>
+			)
+		const refreshed = { ...deal, version: 4 }
+		renderDrawer()
+		await screen.findByRole('combobox', {
+			name: 'Итог звонка или встречи'
+		})
+		await waitFor(() =>
+			expect(client.getQueryState(queryKey)?.fetchStatus).toBe('idle')
+		)
+		act(() => client.setQueryData(queryKey, refreshed))
+		await waitFor(() =>
+			expect(client.getQueryData(queryKey)).toMatchObject({ version: 4 })
+		)
+		fireEvent.change(
+			screen.getByRole('combobox', { name: 'Итог звонка или встречи' }),
+			{ target: { value: 'MEETING_HELD' } }
+		)
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Сохранить результат общения' })
+		)
+		await waitFor(() => expect(mutateSales).toHaveBeenCalledOnce())
+		expect(vi.mocked(mutateSales).mock.calls[0][1].mutation).toMatchObject(
+			{
+				kind: 'interaction',
+				expectedVersion: 4,
+				result: 'MEETING_HELD'
+			}
+		)
+
+		cleanup()
+		client.clear()
+		client = new QueryClient({
+			defaultOptions: {
+				queries: { retry: false },
+				mutations: { retry: false }
+			}
+		})
+		vi.mocked(mutateSales).mockClear()
+		renderDrawer()
+		await screen.findByRole('combobox', {
+			name: 'Итог звонка или встречи'
+		})
+		await waitFor(() =>
+			expect(client.getQueryState(queryKey)?.fetchStatus).toBe('idle')
+		)
+		fireEvent.change(
+			screen.getByRole('textbox', { name: 'Комментарий' }),
+			{
+				target: { value: 'Черновик основан на версии 3' }
+			}
+		)
+		act(() => client.setQueryData(queryKey, refreshed))
+		await waitFor(() =>
+			expect(client.getQueryData(queryKey)).toMatchObject({ version: 4 })
+		)
+		fireEvent.change(
+			screen.getByRole('combobox', { name: 'Итог звонка или встречи' }),
+			{ target: { value: 'CALL_NO_ANSWER' } }
+		)
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Сохранить результат общения' })
+		)
+		await waitFor(() => expect(mutateSales).toHaveBeenCalledOnce())
+		expect(vi.mocked(mutateSales).mock.calls[0][1].mutation).toMatchObject(
+			{
+				kind: 'interaction',
+				expectedVersion: 3,
+				result: 'CALL_NO_ANSWER',
+				comment: 'Черновик основан на версии 3'
+			}
+		)
 	})
 	it('does not create without contacts permission', async () => {
 		context.permissions.data!.permissions = ['sales:read', 'sales:write']

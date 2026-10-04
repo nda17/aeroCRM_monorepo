@@ -7,8 +7,11 @@ import {
 	parseSalesDeal,
 	parseSalesDealResult,
 	parseSalesPage,
+	parseSalesPageV2,
 	parseSalesTask,
 	parseTimelineEntry,
+	parseTimelineEntryV2,
+	type SalesInteractionResult,
 	type SalesDealFilters
 } from '../model/sales.contract'
 
@@ -164,6 +167,26 @@ export const listSalesTimeline = async (
 	if (!result) throw invalidContractError()
 	return result
 }
+export const listSalesTimelineV2 = async (
+	accessToken: string,
+	workspaceId: string,
+	dealId: string,
+	page: number
+) => {
+	const result = parseSalesPageV2(
+		await authenticatedRequest({
+			accessToken,
+			method: 'GET',
+			url: `/crm/sales/deals/${dealId}/timeline-v2`,
+			params: { workspaceId, page: String(page), pageSize: '10' }
+		}),
+		page,
+		10,
+		row => parseTimelineEntryV2(row, dealId)
+	)
+	if (!result) throw invalidContractError()
+	return result
+}
 export interface SalesNextTask {
 	title: string
 	dueAt: string
@@ -195,6 +218,14 @@ export type SalesMutation =
 			outcome: string
 			nextTask: SalesNextTask
 	  }
+	| {
+			kind: 'interaction'
+			id: string
+			expectedVersion: number
+			result: SalesInteractionResult
+			comment: string
+			nextTask?: SalesNextTask
+	  }
 	| { kind: 'archive'; id: string; expectedVersion: number }
 export interface SalesCommand {
 	workspaceId: string
@@ -221,7 +252,9 @@ export const mutateSales = async (
 			? '/crm/sales/deals'
 			: kind === 'complete'
 				? `/crm/sales/tasks/${id}/complete`
-				: `/crm/sales/deals/${id}/${kind}`
+				: kind === 'interaction'
+					? `/crm/sales/deals/${id}/interaction-results`
+					: `/crm/sales/deals/${id}/${kind}`
 	const result = parseSalesDealResult(
 		await authenticatedRequest({
 			accessToken,
@@ -248,13 +281,17 @@ export const mutateSales = async (
 		(kind === 'transition' &&
 			(result.version !== mutation.expectedVersion + 1 ||
 				result.stageId !== mutation.targetStageId)) ||
+		(kind === 'interaction' &&
+			result.version !== mutation.expectedVersion + 1) ||
 		(kind === 'archive' &&
 			result.version !== mutation.expectedVersion + 1) ||
 		(kind === 'complete' && result.nextTask?.id === mutation.id) ||
 		('nextTask' in mutation && mutation.nextTask
 			? result.nextTask?.title !== mutation.nextTask.title.trim() ||
 				result.nextTask?.dueAt !== mutation.nextTask.dueAt
-			: kind !== 'archive' && result.nextTask !== null)
+			: kind !== 'archive' &&
+				kind !== 'interaction' &&
+				result.nextTask !== null)
 	)
 		throw invalidContractError()
 	return result

@@ -31,11 +31,13 @@
 }
 
 .select {
-	@apply min-h-11 appearance-none pr-10 lg:min-h-10;
+	@apply min-h-11 appearance-none lg:min-h-10;
+	padding-inline-end: 2.75rem;
 }
 
 .selectIcon {
-	@apply pointer-events-none absolute right-3 top-1/2 inline-flex -translate-y-1/2 text-crm-muted;
+	@apply pointer-events-none absolute top-1/2 inline-flex -translate-y-1/2 text-crm-muted;
+	inset-inline-end: 0.875rem;
 }
 
 .select:disabled + .selectIcon {

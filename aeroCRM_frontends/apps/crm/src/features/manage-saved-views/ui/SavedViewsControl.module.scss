@@ -1,0 +1,27 @@
+.control {
+	@apply flex min-w-0 flex-col gap-2 rounded-xl border border-crm-border bg-crm-surface p-3;
+}
+.heading {
+	@apply flex flex-wrap items-center justify-between gap-2;
+}
+.title {
+	@apply text-sm font-semibold text-crm-text;
+}
+.list {
+	@apply flex flex-wrap items-center gap-2;
+	button {
+		@apply min-w-0 max-w-full break-words text-left;
+	}
+}
+.actions {
+	@apply flex flex-wrap items-center gap-2;
+}
+.editor {
+	@apply flex flex-wrap items-end gap-2 border-t border-crm-border pt-3;
+	> div {
+		@apply min-w-0 basis-full sm:flex-1 sm:basis-auto;
+	}
+}
+.message {
+	@apply text-sm text-crm-muted;
+}

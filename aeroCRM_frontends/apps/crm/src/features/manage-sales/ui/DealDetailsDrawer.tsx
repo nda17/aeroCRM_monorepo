@@ -7,7 +7,7 @@ import { getCustomer } from '@/entities/customer'
 import Link from 'next/link'
 import {
 	getSalesDeal,
-	listSalesTimeline,
+	listSalesTimelineV2,
 	type SalesDeal,
 	type SalesPipeline
 } from '@/entities/sales'
@@ -20,7 +20,7 @@ import {
 	TextareaField
 } from '@/shared/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useId, useState, type FormEvent } from 'react'
 import toast from 'react-hot-toast'
 import { useSalesCommand } from '../model/use-sales-command'
 import { useSalesSession } from '../model/use-sales-session'
@@ -28,6 +28,7 @@ import { SalesCommandState } from './SalesCommandState'
 import { NextActionFields } from './NextActionFields'
 import { useSalesAssignees } from '../model/use-sales-assignees'
 import { DealCommercePanel } from './DealCommercePanel'
+import { InteractionResultForm } from './InteractionResultForm'
 import styles from './SalesWorkflow.module.scss'
 
 export const salesMoney = (minor: number) =>
@@ -50,27 +51,43 @@ const historyLabels = {
 	CREATED: 'Сделка создана',
 	TRANSITIONED: 'Этап изменён',
 	TASK_COMPLETED: 'Действие выполнено',
-	ARCHIVED: 'Сделка архивирована'
+	ARCHIVED: 'Сделка архивирована',
+	CALL_REACHED: 'Дозвонился',
+	CALL_NO_ANSWER: 'Не ответил',
+	MEETING_HELD: 'Встреча состоялась'
 } as const
 
 const DealEditor = ({
 	deal,
 	pipeline,
 	enabled,
-	command
+	command,
+	onDirtyChange
 }: {
 	deal: SalesDeal
 	pipeline: SalesPipeline | undefined
 	enabled: boolean
 	command: ReturnType<typeof useSalesCommand>
+	onDirtyChange: (dirty: boolean) => void
 }) => {
-	const [expectedVersion] = useState(deal.version)
-	const [initialStageId] = useState(deal.stageId)
+	const [expectedVersion, setExpectedVersion] = useState(deal.version)
+	const [initialStageId, setInitialStageId] = useState(deal.stageId)
 	const [targetStageId, setTargetStageId] = useState(deal.stageId)
 	const [outcome, setOutcome] = useState('')
 	const [taskTitle, setTaskTitle] = useState('')
 	const [due, setDue] = useState('')
 	const [confirmArchive, setConfirmArchive] = useState(false)
+	const dirty =
+		targetStageId !== initialStageId || !!outcome || !!taskTitle || !!due
+	if (!dirty && !command.locked && expectedVersion !== deal.version) {
+		setExpectedVersion(deal.version)
+		setInitialStageId(deal.stageId)
+		setTargetStageId(deal.stageId)
+	}
+	useEffect(() => {
+		onDirtyChange(dirty)
+	}, [dirty, onDirtyChange])
+	useEffect(() => () => onDirtyChange(false), [onDirtyChange])
 	useDirtyForm({
 		dirty:
 			targetStageId !== initialStageId ||
@@ -109,7 +126,7 @@ const DealEditor = ({
 	}
 	return (
 		<section className={styles.section}>
-			<h3>Результат и следующий шаг</h3>
+			<h3>Этап и следующий шаг</h3>
 			{!enabled ? (
 				<p className={styles.muted}>
 					Изменения доступны после проверки актуальных данных и прав.
@@ -166,6 +183,13 @@ const DealEditor = ({
 						</p>
 					)}
 				</fieldset>
+				<Button
+					type="submit"
+					disabled={!enabled || command.locked}
+					isLoading={command.pending}
+				>
+					Сохранить результат
+				</Button>
 			</form>
 			{confirmArchive ? (
 				<div className={styles.error}>
@@ -227,6 +251,17 @@ export const DealDetailsDrawer = ({
 	const [openedAt] = useState(() => Date.now())
 	const [editorRevision, setEditorRevision] = useState(0)
 	const [commerceBusy, setCommerceBusy] = useState(false)
+	const [stageDirty, setStageDirty] = useState(false)
+	const [interactionDirty, setInteractionDirty] = useState(false)
+	const [tab, setTab] = useState<'overview' | 'commerce' | 'history'>(
+		'overview'
+	)
+	const tabsId = useId()
+	const tabs = [
+		{ id: 'overview', label: 'Обзор' },
+		{ id: 'commerce', label: 'КП и оплаты' },
+		{ id: 'history', label: 'История' }
+	] as const
 	const detail = useQuery({
 		queryKey: ['sales', 'deal', ...context.key, id],
 		enabled: context.canRead && !!context.session,
@@ -240,14 +275,14 @@ export const DealDetailsDrawer = ({
 		gcTime: 0
 	})
 	const history = useQuery({
-		queryKey: ['sales', 'timeline', ...context.key, id, page],
+		queryKey: ['sales', 'timeline-v2', ...context.key, id, page],
 		enabled:
 			context.canRead &&
 			!!context.session &&
 			!!detail.data &&
 			!detail.isError,
 		queryFn: () =>
-			listSalesTimeline(
+			listSalesTimelineV2(
 				context.session!.accessToken,
 				context.workspace.workspaceId,
 				id,
@@ -385,22 +420,22 @@ export const DealDetailsDrawer = ({
 				context.canRead && showDetail ? pipeline?.name : undefined
 			}
 			footer={
-				context.canRead && showDetail && deal ? (
+				tab === 'overview' && context.canRead && showDetail && deal ? (
 					<Button
 						type="submit"
-						form="deal-result-form"
+						form="deal-interaction-form"
 						disabled={
 							!context.canWrite ||
 							detail.isFetching ||
 							detail.isError ||
-							!pipeline ||
+							stageDirty ||
 							commerceBusy ||
 							command.locked
 						}
 						isLoading={command.pending}
-						tooltip="Сохранить результат и следующее действие либо закрыть сделку на выбранном этапе"
+						tooltip="Записать итог разговора и выбранное следующее действие"
 					>
-						Сохранить результат
+						Сохранить результат общения
 					</Button>
 				) : null
 			}
@@ -562,84 +597,185 @@ export const DealDetailsDrawer = ({
 							</p>
 						) : null}
 					</section>
-					<DealCommercePanel
-						context={context}
-						dealId={deal.id}
-						customerDetailsSuggestion={quoteCustomerDetails}
-						onBusyChange={setCommerceBusy}
-						onSaved={() => {
-							onSaved()
-							void detail.refetch()
-						}}
-					/>
-					<DealEditor
-						key={editorRevision}
-						deal={deal}
-						pipeline={pipeline}
-						enabled={
-							context.canWrite &&
-							!detail.isFetching &&
-							!detail.isError &&
-							!commerceBusy &&
-							!!pipeline
-						}
-						command={command}
-					/>
-					<section className={styles.section}>
-						<h3>История сделки</h3>
-						{history.isError ? (
-							<ScreenState
-								variant="error"
-								compact
-								action={
-									<Button
-										variant="secondary"
-										onClick={() => void history.refetch()}
-									>
-										Повторить
-									</Button>
+					<div
+						className={styles.tabs}
+						role="tablist"
+						aria-label="Разделы сделки"
+					>
+						{tabs.map((item, index) => (
+							<button
+								key={item.id}
+								type="button"
+								role="tab"
+								id={`${tabsId}-${item.id}-tab`}
+								aria-controls={`${tabsId}-${item.id}`}
+								aria-selected={tab === item.id}
+								tabIndex={tab === item.id ? 0 : -1}
+								disabled={command.pending || command.ambiguous}
+								onClick={() => setTab(item.id)}
+								onKeyDown={event => {
+									const next =
+										event.key === 'ArrowRight'
+											? (index + 1) % tabs.length
+											: event.key === 'ArrowLeft'
+												? (index + tabs.length - 1) % tabs.length
+												: event.key === 'Home'
+													? 0
+													: event.key === 'End'
+														? tabs.length - 1
+														: -1
+									if (next < 0) return
+									event.preventDefault()
+									setTab(tabs[next].id)
+									document
+										.getElementById(`${tabsId}-${tabs[next].id}-tab`)
+										?.focus()
+								}}
+							>
+								{item.label}
+							</button>
+						))}
+					</div>
+					<div
+						role="tabpanel"
+						id={`${tabsId}-commerce`}
+						aria-labelledby={`${tabsId}-commerce-tab`}
+						hidden={tab !== 'commerce'}
+						inert={tab !== 'commerce'}
+					>
+						{stageDirty || interactionDirty ? (
+							<p className={styles.muted}>
+								Сохраните или очистите результат общения и изменения этапа
+								во вкладке «Обзор», чтобы изменять КП и оплаты.
+							</p>
+						) : null}
+						<DealCommercePanel
+							context={{
+								...context,
+								canWrite:
+									context.canWrite &&
+									!stageDirty &&
+									!interactionDirty &&
+									!command.locked
+							}}
+							dealId={deal.id}
+							customerDetailsSuggestion={quoteCustomerDetails}
+							onBusyChange={setCommerceBusy}
+							onSaved={() => {
+								onSaved()
+								void detail.refetch()
+							}}
+						/>
+					</div>
+					<div
+						role="tabpanel"
+						id={`${tabsId}-overview`}
+						aria-labelledby={`${tabsId}-overview-tab`}
+						hidden={tab !== 'overview'}
+						inert={tab !== 'overview'}
+						className={styles.overviewPanel}
+					>
+						{stageDirty || commerceBusy ? (
+							<p className={styles.muted}>
+								Завершите редактирование этапа или КП перед сохранением
+								результата общения.
+							</p>
+						) : null}
+						<InteractionResultForm
+							key={`interaction-${editorRevision}`}
+							deal={deal}
+							command={command}
+							onDirtyChange={setInteractionDirty}
+							enabled={
+								context.canWrite &&
+								!detail.isFetching &&
+								!detail.isError &&
+								!commerceBusy &&
+								!stageDirty
+							}
+						/>
+						<details className={styles.stageDetails}>
+							<summary>Изменить этап или закрыть сделку</summary>
+							<DealEditor
+								key={editorRevision}
+								deal={deal}
+								pipeline={pipeline}
+								enabled={
+									context.canWrite &&
+									!detail.isFetching &&
+									!detail.isError &&
+									!commerceBusy &&
+									!interactionDirty &&
+									!!pipeline
 								}
+								command={command}
+								onDirtyChange={setStageDirty}
 							/>
-						) : history.isPending ? (
-							<ScreenState variant="loading" compact />
-						) : (
-							<>
-								<ol className={styles.history}>
-									{history.data?.items.map(item => (
-										<li key={item.id}>
-											<strong>{historyLabels[item.kind]}</strong>
-											{item.outcome ? <p>{item.outcome}</p> : null}
-											<time dateTime={item.createdAt}>
-												{salesDate(item.createdAt)}
-											</time>
-										</li>
-									))}
-								</ol>
-								<div className={styles.pagination}>
-									<Button
-										size="sm"
-										variant="ghost"
-										disabled={page === 1 || history.isFetching}
-										onClick={() => setPage(value => value - 1)}
-									>
-										Назад
-									</Button>
-									<span>Страница {page}</span>
-									<Button
-										size="sm"
-										variant="ghost"
-										disabled={
-											page * 10 >= (history.data?.total || 0) ||
-											history.isFetching
-										}
-										onClick={() => setPage(value => value + 1)}
-									>
-										Далее
-									</Button>
-								</div>
-							</>
-						)}
-					</section>
+						</details>
+					</div>
+					<div
+						role="tabpanel"
+						id={`${tabsId}-history`}
+						aria-labelledby={`${tabsId}-history-tab`}
+						hidden={tab !== 'history'}
+						inert={tab !== 'history'}
+					>
+						<section className={styles.section}>
+							<h3>История сделки</h3>
+							{history.isError ? (
+								<ScreenState
+									variant="error"
+									compact
+									action={
+										<Button
+											variant="secondary"
+											onClick={() => void history.refetch()}
+										>
+											Повторить
+										</Button>
+									}
+								/>
+							) : history.isPending ? (
+								<ScreenState variant="loading" compact />
+							) : (
+								<>
+									<ol className={styles.history}>
+										{history.data?.items.map(item => (
+											<li key={item.id}>
+												<strong>{historyLabels[item.kind]}</strong>
+												{item.outcome ? <p>{item.outcome}</p> : null}
+												<time dateTime={item.createdAt}>
+													{salesDate(item.createdAt)}
+												</time>
+											</li>
+										))}
+									</ol>
+									<div className={styles.pagination}>
+										<Button
+											size="sm"
+											variant="ghost"
+											disabled={page === 1 || history.isFetching}
+											onClick={() => setPage(value => value - 1)}
+										>
+											Назад
+										</Button>
+										<span>Страница {page}</span>
+										<Button
+											size="sm"
+											variant="ghost"
+											disabled={
+												page * 10 >= (history.data?.total || 0) ||
+												history.isFetching
+											}
+											onClick={() => setPage(value => value + 1)}
+										>
+											Далее
+										</Button>
+									</div>
+								</>
+							)}
+						</section>
+					</div>
 				</div>
 			)}
 		</Drawer>

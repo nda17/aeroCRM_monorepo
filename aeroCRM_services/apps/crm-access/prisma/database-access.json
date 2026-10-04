@@ -18,6 +18,11 @@
       "INSERT",
       "UPDATE"
     ],
+    "crm_saved_views": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
     "crm_workspace_members": [
       "SELECT",
       "INSERT",

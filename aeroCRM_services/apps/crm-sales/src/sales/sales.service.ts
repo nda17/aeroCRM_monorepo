@@ -18,6 +18,7 @@ import type {
 	CompleteTaskDto,
 	CreateDealDto,
 	DealListQuery,
+	InteractionResultDto,
 	NextTaskDto,
 	SalesAnalyticsQuery,
 	SalesCommandDto,
@@ -323,11 +324,31 @@ export class SalesService {
 		dealId: string,
 		query: SalesListQuery
 	) {
+		return this.timelinePage(access, dealId, query, false);
+	}
+
+	async timelineV2(
+		access: SalesAccess,
+		dealId: string,
+		query: SalesListQuery
+	) {
+		return this.timelinePage(access, dealId, query, true);
+	}
+
+	private async timelinePage(
+		access: SalesAccess,
+		dealId: string,
+		query: SalesListQuery,
+		includeInteractions: boolean
+	) {
 		this.permission(access, 'sales:read');
 		await this.visible(this.prisma, access, dealId);
 		const where = {
 			workspaceId: access.workspaceId,
 			dealId,
+			kind: includeInteractions
+				? undefined
+				: { in: ['CREATED', 'TRANSITIONED', 'TASK_COMPLETED', 'ARCHIVED'] },
 			deal: { AND: [salesScope(access), { archivedAt: null }] }
 		};
 		const [total, rows] = await this.prisma.$transaction([
@@ -340,7 +361,7 @@ export class SalesService {
 			})
 		]);
 		return {
-			schemaVersion: 1 as const,
+			schemaVersion: includeInteractions ? (2 as const) : (1 as const),
 			page: query.page,
 			pageSize: query.pageSize,
 			total,
@@ -647,6 +668,54 @@ export class SalesService {
 					dto.outcome.trim(),
 					deal.stageId,
 					stage.id
+				);
+				return id;
+			}
+		);
+	}
+
+	async interactionResult(
+		access: SalesAccess,
+		id: string,
+		dto: InteractionResultDto
+	) {
+		this.permission(access, 'sales:write');
+		if (dto.nextTask) this.nextTask(dto.nextTask);
+		return this.command(
+			access,
+			dto,
+			'RECORD_INTERACTION_RESULT',
+			id,
+			async transaction => {
+				const deal = await this.visible(transaction, access, id);
+				if (dto.nextTask && deal.status !== 'OPEN')
+					throw new BadRequestException(
+						'Следующее действие доступно только для открытой сделки'
+					);
+				const nextTaskId = dto.nextTask ? randomUUID() : null;
+				await this.updateDeal(
+					transaction,
+					access,
+					deal,
+					dto.expectedVersion,
+					nextTaskId ? { nextTaskId } : {}
+				);
+				if (nextTaskId && dto.nextTask)
+					await this.createTask(
+						transaction,
+						{ ...access, subject: deal.assignedToSubject },
+						id,
+						nextTaskId,
+						dto.nextTask
+					);
+				await this.event(
+					transaction,
+					access,
+					id,
+					dto.result,
+					dto.comment.trim(),
+					deal.stageId,
+					deal.stageId
 				);
 				return id;
 			}

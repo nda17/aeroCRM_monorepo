@@ -444,8 +444,8 @@ const CatalogWorkspace = ({ context }: { context: CommerceContext }) => {
 				<ScreenState variant="permission" />
 			) : (
 				<>
-					{!context.canWrite && (
-						<ReadOnlyBanner description="Доступен просмотр каталога. Изменение позиций и импорт требуют права изменения сделок и активной подписки." />
+					{context.workspace.canWrite && !context.canWrite && (
+						<ReadOnlyBanner description="Доступен просмотр каталога. Для изменения позиций и импорта запросите права у администратора пространства." />
 					)}
 					<p className={styles.muted}>
 						Каталог необязателен: в сделку можно добавить разовую строку
@@ -531,8 +531,40 @@ const CatalogWorkspace = ({ context }: { context: CommerceContext }) => {
 					) : (
 						<ScreenState
 							variant="empty"
-							title={search ? 'Позиции не найдены' : 'Каталог пока пуст'}
-							description="Создайте товар или услугу вручную либо загрузите Excel или CSV."
+							title={
+								search
+									? 'Позиции не найдены'
+									: page > 1
+										? 'На этой странице нет позиций'
+										: 'Каталог пока пуст'
+							}
+							description={
+								search
+									? 'Измените запрос или сбросьте поиск.'
+									: page > 1
+										? 'Вернитесь на первую страницу каталога.'
+										: context.canWrite
+											? 'Создайте товар или услугу вручную либо загрузите Excel или CSV.'
+											: 'Товары и услуги появятся здесь после добавления сотрудником с правом редактирования.'
+							}
+							action={
+								search || page > 1 ? (
+									<Button
+										variant="secondary"
+										onClick={() => {
+											setSearch('')
+											setSearchInput('')
+											setPage(1)
+										}}
+									>
+										{search ? 'Сбросить поиск' : 'На первую страницу'}
+									</Button>
+								) : context.canWrite ? (
+									<Button onClick={() => setEditor('new')}>
+										Добавить позицию
+									</Button>
+								) : undefined
+							}
 						/>
 					)}
 				</>

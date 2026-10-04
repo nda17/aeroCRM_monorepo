@@ -4,8 +4,10 @@ import {
 	parseSalesDeal,
 	parseSalesDealResult,
 	parseSalesPage,
+	parseSalesPageV2,
 	parseSalesTask,
-	parseTimelineEntry
+	parseTimelineEntry,
+	parseTimelineEntryV2
 } from './sales.contract'
 
 const workspaceId = '11111111-1111-4111-8111-111111111111'
@@ -199,5 +201,72 @@ describe('Sales exact contracts', () => {
 		expect(
 			parseTimelineEntry({ ...entry, phone: '+79000000001' }, dealId)
 		).toBeNull()
+	})
+	it('accepts only the strict v2 timeline union and schema', () => {
+		const base = {
+			id: taskId,
+			dealId,
+			actorSubject: 'actor',
+			outcome: 'Разговор состоялся',
+			fromStageId: stageId,
+			toStageId: stageId,
+			createdAt: date
+		}
+		const kinds = [
+			'CREATED',
+			'TRANSITIONED',
+			'TASK_COMPLETED',
+			'ARCHIVED',
+			'CALL_REACHED',
+			'CALL_NO_ANSWER',
+			'MEETING_HELD'
+		] as const
+		for (const kind of kinds)
+			expect(parseTimelineEntryV2({ ...base, kind }, dealId)).toEqual({
+				...base,
+				kind
+			})
+		expect(
+			parseTimelineEntryV2({ ...base, kind: 'CALL_REACHED' }, contactId)
+		).toBeNull()
+		expect(
+			parseTimelineEntryV2(
+				{ ...base, kind: 'CALL_REACHED', actorId: 'actor' },
+				dealId
+			)
+		).toBeNull()
+		expect(
+			parseTimelineEntryV2({ ...base, kind: 'UNKNOWN' }, dealId)
+		).toBeNull()
+		expect(
+			parseTimelineEntry({ ...base, kind: 'CALL_REACHED' }, dealId)
+		).toBeNull()
+	})
+	it('binds v2 page schema and pagination while rejecting v1 or duplicate rows', () => {
+		const row = {
+			id: taskId,
+			dealId,
+			kind: 'CALL_REACHED',
+			actorSubject: 'actor',
+			outcome: 'Разговор состоялся',
+			fromStageId: stageId,
+			toStageId: stageId,
+			createdAt: date
+		}
+		const page = {
+			schemaVersion: 2,
+			page: 3,
+			pageSize: 10,
+			total: 21,
+			items: [row]
+		}
+		const parse = (value: unknown) =>
+			parseSalesPageV2(value, 3, 10, entry =>
+				parseTimelineEntryV2(entry, dealId)
+			)
+		expect(parse(page)).toEqual(page)
+		expect(parse({ ...page, schemaVersion: 1 })).toBeNull()
+		expect(parse({ ...page, page: 2 })).toBeNull()
+		expect(parse({ ...page, items: [row, row] })).toBeNull()
 	})
 })

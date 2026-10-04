@@ -156,8 +156,8 @@ const SlaForm = ({
 	}
 	return (
 		<form className={styles.form} onSubmit={submit}>
-			{!context.canWrite ? (
-				<ReadOnlyBanner description="Настройки SLA доступны для просмотра. Изменения разрешены владельцу и администратору при действующем доступе к CRM." />
+			{context.workspace.canWrite && !context.canWrite ? (
+				<ReadOnlyBanner description="Настройки SLA доступны для просмотра. Для изменений нужны права владельца или администратора CRM." />
 			) : null}
 			<label className={styles.check}>
 				<input

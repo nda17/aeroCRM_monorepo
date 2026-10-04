@@ -120,12 +120,14 @@ const TaskStatus = ({
 	enabled,
 	onStatus,
 	onOpen,
+	onReschedule,
 	commandContext
 }: {
 	task: WorkdayTask
 	enabled: boolean
 	onStatus: (task: WorkdayTask, status: WorkdayStatus) => void
 	onOpen: (task: WorkdayTask) => void
+	onReschedule?: (task: WorkdayTask) => void
 	commandContext: WorkdayCommandContext
 }) => {
 	const { unresolved } = useWorkdayTaskCommandState(
@@ -134,6 +136,33 @@ const TaskStatus = ({
 	)
 	return (
 		<div className={styles.copy}>
+			{task.status === 'OPEN' || task.status === 'IN_PROGRESS' ? (
+				<div className={styles.quickActions}>
+					<Button
+						size="sm"
+						disabled={!enabled || unresolved}
+						aria-label={`Готово: ${task.title}`}
+						onClick={() => {
+							if (!unresolved) onStatus(task, 'COMPLETED')
+						}}
+					>
+						Готово
+					</Button>
+					{onReschedule ? (
+						<Button
+							size="sm"
+							variant="secondary"
+							disabled={!enabled || unresolved}
+							aria-label={`Перенести: ${task.title}`}
+							onClick={() => {
+								if (!unresolved) onReschedule(task)
+							}}
+						>
+							Перенести
+						</Button>
+					) : null}
+				</div>
+			) : null}
 			<SelectField
 				label={`Статус задачи «${task.title}»`}
 				labelHidden
@@ -177,6 +206,8 @@ const TaskDue = ({
 )
 
 interface CollectionProps {
+	onReschedule?: (task: WorkdayTask) => void
+	onResetFilters?: () => void
 	planner?: PlannerSettings
 	settingsPending?: boolean
 	settingsError?: boolean
@@ -217,6 +248,8 @@ const WorkdayList = ({
 	filters,
 	canWrite,
 	onOpen,
+	onReschedule,
+	onResetFilters,
 	onStatus,
 	onPage
 }: CollectionProps) => {
@@ -266,6 +299,7 @@ const WorkdayList = ({
 					enabled={canWrite && !query.isFetching}
 					onStatus={onStatus}
 					onOpen={onOpen}
+					onReschedule={onReschedule}
 					commandContext={context}
 				/>
 			)
@@ -295,7 +329,9 @@ const WorkdayList = ({
 					description={
 						data.total > 0
 							? 'Список изменился. Остальные задачи доступны на предыдущих страницах.'
-							: 'Выберите другой период или создайте задачу.'
+							: canWrite
+								? 'Измените фильтры или создайте задачу кнопкой «Новая задача».'
+								: 'Измените фильтры, чтобы найти доступные вам задачи.'
 					}
 					action={
 						data.total > 0 ? (
@@ -308,6 +344,10 @@ const WorkdayList = ({
 								}
 							>
 								Вернуться к задачам
+							</Button>
+						) : onResetFilters ? (
+							<Button variant="secondary" onClick={onResetFilters}>
+								Сбросить фильтры
 							</Button>
 						) : undefined
 					}

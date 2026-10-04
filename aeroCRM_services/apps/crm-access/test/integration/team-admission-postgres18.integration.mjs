@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { runSavedViewsPostgresCases } from './saved-views-postgres18.cases.mjs';
 
 const require = createRequire(import.meta.url);
 const { PrismaClient } = require('@prisma/crm-access-client');
@@ -160,6 +161,7 @@ try {
 			onboardingCompletedAt: now
 		}
 	});
+	await runSavedViewsPostgresCases(prisma, workspaceId);
 	// Optional CRM-owned branding: no backfill, exact command receipts, SQL CAS,
 	// least-privilege writes and no extra copies of the name in local audit.
 	const branding = new CrmWorkspaceBrandingService(prisma, auth);

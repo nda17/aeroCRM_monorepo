@@ -128,3 +128,15 @@
 .overviewLink {
 	@apply inline-flex min-h-11 items-center justify-center rounded-xl border border-crm-border bg-crm-surface px-3 py-2 text-sm font-medium text-crm-text hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
 }
+.filterChips {
+	@apply flex flex-wrap items-center gap-2;
+
+	button {
+		max-width: 100%;
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
+}
+.quickActions {
+	@apply flex flex-wrap gap-2;
+}

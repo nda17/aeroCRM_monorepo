@@ -86,3 +86,27 @@
 		@apply text-base;
 	}
 }
+.tabs {
+	@apply flex gap-1 border-b border-crm-border;
+
+	button {
+		@apply min-w-0 flex-1 rounded-t-lg px-3 py-3 text-sm font-semibold text-crm-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+		&[aria-selected='true'] {
+			@apply bg-primary/10 text-primary;
+		}
+	}
+}
+.overviewPanel:not([hidden]) {
+	@apply flex flex-col gap-4;
+}
+.stageDetails {
+	summary {
+		@apply cursor-pointer py-3 text-sm font-semibold text-primary;
+	}
+}
+.nextTaskToggle {
+	@apply flex items-start gap-2 text-sm;
+	input {
+		@apply mt-1 h-4 w-4 shrink-0 accent-primary;
+	}
+}

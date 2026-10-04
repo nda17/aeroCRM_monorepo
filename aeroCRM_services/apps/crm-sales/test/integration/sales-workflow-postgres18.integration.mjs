@@ -160,7 +160,7 @@ try {
 						new Proxy(transaction, {
 							get(target, property) {
 								if (property === 'salesTask')
-									return { ...target.salesTask, create: async () => ({}) };
+					return { ...target.salesTask, create: async () => ({}) };
 								const value = Reflect.get(target, property);
 								return typeof value === 'function'
 									? value.bind(target)
@@ -2089,6 +2089,160 @@ try {
 			error => error?.meta?.code === '42501'
 		);
 	}
+	const interactionDeal = (
+		await service.create(
+			access,
+			{
+				...command,
+				commandId: randomUUID(),
+				title: 'Проверка результата взаимодействия'
+			},
+			'Bearer test'
+		)
+	).deal;
+	const currentTaskBeforeInteraction =
+		await prisma.salesTask.findUniqueOrThrow({
+			where: { id: interactionDeal.nextTask.id }
+		});
+	const interactionTaskCount = await prisma.salesTask.count({
+		where: { dealId: interactionDeal.id }
+	});
+	const noNextTaskInteraction = {
+		schemaVersion: 1,
+		commandId: randomUUID(),
+		workspaceId: access.workspaceId,
+		expectedVersion: interactionDeal.version,
+		result: 'CALL_NO_ANSWER',
+		comment: 'Не ответил'
+	};
+	const recordedNoAnswer = await service.interactionResult(
+		access,
+		interactionDeal.id,
+		noNextTaskInteraction
+	);
+	assert.equal(recordedNoAnswer.deal.version, interactionDeal.version + 1);
+	assert.equal(recordedNoAnswer.deal.status, 'OPEN');
+	assert.equal(
+		recordedNoAnswer.deal.nextTask.id,
+		interactionDeal.nextTask.id
+	);
+	assert.deepEqual(
+		await prisma.salesTask.findUniqueOrThrow({
+			where: { id: interactionDeal.nextTask.id }
+		}),
+		currentTaskBeforeInteraction,
+		'Recording a result without a replacement preserves the current task row'
+	);
+	assert.equal(
+		await prisma.salesTask.count({ where: { dealId: interactionDeal.id } }),
+		interactionTaskCount,
+		'Recording a result without a replacement creates no task'
+	);
+	assert.deepEqual(
+		await service.interactionResult(
+			access,
+			interactionDeal.id,
+			noNextTaskInteraction
+		),
+		recordedNoAnswer,
+		'Replaying the same interaction command returns its durable receipt'
+	);
+	const legacyTimeline = await service.timeline(access, interactionDeal.id, {
+		workspaceId: access.workspaceId,
+		page: 1,
+		pageSize: 1
+	});
+	assert.equal(legacyTimeline.schemaVersion, 1);
+	assert.equal(legacyTimeline.total, 1);
+	assert.equal(legacyTimeline.items[0].kind, 'CREATED');
+	const expandedTimeline = await service.timelineV2(
+		access,
+		interactionDeal.id,
+		{ workspaceId: access.workspaceId, page: 1, pageSize: 10 }
+	);
+	assert.equal(expandedTimeline.schemaVersion, 2);
+	assert.equal(expandedTimeline.total, 2);
+	assert.ok(
+		expandedTimeline.items.some(item => item.kind === 'CALL_NO_ANSWER')
+	);
+	const withNextTaskCommand = {
+		schemaVersion: 1,
+		commandId: randomUUID(),
+		workspaceId: access.workspaceId,
+		expectedVersion: recordedNoAnswer.deal.version,
+		result: 'CALL_REACHED',
+		comment: 'Обсудили условия',
+		nextTask: {
+			title: 'Подготовить предложение',
+			dueAt: new Date(Date.now() + 2 * 86400000).toISOString()
+		}
+	};
+	const recordedCall = await service.interactionResult(
+		access,
+		interactionDeal.id,
+		withNextTaskCommand
+	);
+	assert.equal(recordedCall.deal.version, recordedNoAnswer.deal.version + 1);
+	assert.equal(recordedCall.deal.nextTask.title, 'Подготовить предложение');
+	assert.notEqual(recordedCall.deal.nextTask.id, interactionDeal.nextTask.id);
+	assert.deepEqual(
+		await prisma.salesTask.findUniqueOrThrow({
+			where: { id: interactionDeal.nextTask.id }
+		}),
+		currentTaskBeforeInteraction,
+		'Adding a follow-up changes the deal pointer but leaves the earlier task intact'
+	);
+	assert.equal(
+		await prisma.salesTask.count({
+			where: {
+				dealId: interactionDeal.id,
+				status: { in: ['OPEN', 'IN_PROGRESS'] }
+			}
+		}),
+		2,
+		'Adding a follow-up preserves the earlier active task and creates one new task'
+	);
+	const beforeReadOnlyInteraction = await service.detail(
+		access,
+		interactionDeal.id
+	);
+	const readOnlyAccess = { ...access, state: 'READ_ONLY' };
+	await assert.rejects(
+		service.interactionResult(readOnlyAccess, interactionDeal.id, {
+			...withNextTaskCommand,
+			commandId: randomUUID(),
+			expectedVersion: recordedCall.deal.version
+		}),
+		error => error.status === 403
+	);
+	assert.deepEqual(
+		await service.detail(readOnlyAccess, interactionDeal.id),
+		beforeReadOnlyInteraction,
+		'READ_ONLY still permits reading the deal after rejecting writes'
+	);
+	const closedInteractionDeal = await service.transition(
+		access,
+		interactionDeal.id,
+		{
+			schemaVersion: 1,
+			commandId: randomUUID(),
+			workspaceId: access.workspaceId,
+			expectedVersion: recordedCall.deal.version,
+			targetStageId: wonStage.id,
+			outcome: 'Закрыли после звонка'
+		}
+	);
+	await assert.rejects(
+		service.interactionResult(access, interactionDeal.id, {
+			...withNextTaskCommand,
+			commandId: randomUUID(),
+			expectedVersion: closedInteractionDeal.deal.version
+		}),
+		error => error.status === 400
+	);
+	console.log(
+		'PASS CRM Sales interactions PostgreSQL 18: preserved current task without replacement, command replay, v1 timeline filtering before page totals, v2 event visibility, additive follow-up, OPEN-only follow-up, and READ_ONLY access'
+	);
 	console.log(
 		'CRM Sales PostgreSQL 18 workflow, tenant scope, replay, CAS and next-action invariants passed'
 	);

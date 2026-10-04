@@ -370,9 +370,13 @@ const ContactsScreen = ({
 									? 'Ничего не найдено'
 									: page > 1
 										? 'На этой странице нет записей'
-										: kind === 'contacts'
-											? 'Добавьте первого клиента'
-											: 'Добавьте первую компанию'
+										: !canWrite
+											? kind === 'contacts'
+												? 'Контактов пока нет'
+												: 'Компаний пока нет'
+											: kind === 'contacts'
+												? 'Добавьте первого клиента'
+												: 'Добавьте первую компанию'
 							}
 							description={
 								search
@@ -382,7 +386,22 @@ const ContactsScreen = ({
 										: 'Записи появятся здесь после добавления.'
 							}
 							action={
-								canWrite && !search && page === 1 ? (
+								search ? (
+									<Button
+										variant="secondary"
+										onClick={() => {
+											setSearch('')
+											setSearchDraft('')
+											setPage(1)
+										}}
+									>
+										Сбросить поиск
+									</Button>
+								) : page > 1 ? (
+									<Button variant="secondary" onClick={() => setPage(1)}>
+										На первую страницу
+									</Button>
+								) : canWrite ? (
 									<Button
 										tooltip={
 											kind === 'contacts'

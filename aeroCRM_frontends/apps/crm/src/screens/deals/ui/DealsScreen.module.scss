@@ -47,17 +47,8 @@
 .layoutToggle {
 	@apply flex items-center gap-1 rounded-xl border border-crm-border bg-crm-surface p-1;
 }
-.savedViews {
-	@apply flex min-w-0 items-end gap-2 sm:col-span-2;
-	> div {
-		@apply min-w-0 flex-1;
-	}
-}
-.saveViewForm {
-	@apply flex flex-wrap items-end gap-3 rounded-xl border border-crm-border bg-crm-surface p-3;
-}
 .activeFilters {
-	@apply flex flex-wrap items-center justify-between gap-2 text-sm text-crm-muted;
+	@apply flex flex-wrap items-center gap-2 text-sm text-crm-muted;
 }
 .boardRegion {
 	@apply flex min-w-0 flex-col gap-3;

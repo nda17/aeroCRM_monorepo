@@ -129,3 +129,13 @@ export class CompleteTaskDto extends VersionedSalesCommand {
 	@Type(() => NextTaskDto)
 	nextTask!: NextTaskDto;
 }
+
+export class InteractionResultDto extends VersionedSalesCommand {
+	@IsIn(['CALL_REACHED', 'CALL_NO_ANSWER', 'MEETING_HELD'])
+	result!: 'CALL_REACHED' | 'CALL_NO_ANSWER' | 'MEETING_HELD';
+	@IsString() @MaxLength(4000) comment!: string;
+	@IsOptional()
+	@ValidateNested()
+	@Type(() => NextTaskDto)
+	nextTask?: NextTaskDto;
+}

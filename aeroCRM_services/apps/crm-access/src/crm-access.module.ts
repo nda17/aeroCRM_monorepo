@@ -59,6 +59,8 @@ import { WorkspaceClosureController } from './workspace-closure/workspace-closur
 import { WorkspaceClosureService } from './workspace-closure/workspace-closure.service';
 import { WorkspaceClosureClient } from './workspace-closure/workspace-closure.client';
 import { WorkspaceClosureWorker } from './workspace-closure/workspace-closure.worker';
+import { SavedViewsController } from './saved-views/saved-views.controller';
+import { SavedViewsService } from './saved-views/saved-views.service';
 
 const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 
@@ -77,6 +79,7 @@ const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 					CrmPermissionsController,
 					CrmAuthorizationController,
 					CrmTeamController,
+					SavedViewsController,
 					CrmCustomRoleController,
 					CrmEmployeeProfileController,
 					CrmWorkspaceBrandingController,
@@ -100,6 +103,7 @@ const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 		CrmAccessService,
 		CrmAccessHealthService,
 		CrmTeamService,
+		SavedViewsService,
 		CrmCustomRoleService,
 		CrmEmployeeProfileService,
 		CrmWorkspaceBrandingService,

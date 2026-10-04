@@ -38,6 +38,7 @@ import {
 	commandOwner,
 	PendingCommandProvider
 } from '@/shared/lib/pending-command'
+import { DirtyFormProvider } from '@/shared/lib/dirty-form'
 import MyDayScreen from './MyDayScreen'
 import PlannerPage from '@/app/(workspace)/planner/page'
 import TasksPage, { metadata } from '@/app/(workspace)/tasks/page'
@@ -139,6 +140,9 @@ vi.mock('./WorkdayPeopleFilters', () => ({
 			return null
 		}
 	)
+}))
+vi.mock('@/features/manage-saved-views/ui/SavedViewsControl', () => ({
+	SavedViewsControl: () => null
 }))
 vi.mock('react-hot-toast', () => ({
 	default: Object.assign(vi.fn(), {
@@ -468,6 +472,117 @@ describe('MyDay actual permission query lifecycle', () => {
 		})
 		expect(screen.queryByLabelText('Название задачи')).toBeNull()
 	})
+	it('reschedules from the list with the same command after an unknown response', async () => {
+		vi.mocked(mutateWorkdayTask).mockRejectedValueOnce(
+			new AuthenticatedApiError('temporary', 'Неизвестный результат')
+		)
+		vi.mocked(mutateWorkdayTask).mockResolvedValue({
+			...task,
+			version: 2
+		})
+		render(<MyDayScreen />, { wrapper: Wrapper })
+		await findTaskButton()
+		fireEvent.click(
+			screen.getByRole('button', { name: `Перенести: ${task.title}` })
+		)
+		await screen.findByRole('heading', { name: 'Перенести задачу' })
+		expect(screen.getAllByText(task.title).length).toBeGreaterThan(1)
+		expect(screen.getByText(/^Статус:/).closest('[hidden]')).not.toBeNull()
+		const due = screen.getByLabelText(
+			'Срок выполнения'
+		) as HTMLInputElement
+		const originalDue = due.value
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Завтра в то же время' })
+		)
+		expect(due.value).not.toBe(originalDue)
+		expect(due.value.slice(11)).toBe(originalDue.slice(11))
+		const tomorrowDueAt = new Date(due.value).toISOString()
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Сохранить новый срок' })
+		)
+		await screen.findByRole('button', { name: 'Проверить результат' })
+		const original = vi.mocked(mutateWorkdayTask).mock.calls[0][1]
+		expect(original.mutation).toEqual({
+			kind: 'edit',
+			id: task.id,
+			expectedVersion: task.version,
+			title: task.title,
+			dueAt: tomorrowDueAt
+		})
+		const retry = screen.getByRole('button', {
+			name: 'Проверить результат'
+		})
+		expect(retry).toHaveProperty('disabled', false)
+		await act(async () => {
+			fireEvent.click(retry)
+		})
+		await waitFor(() => expect(mutateWorkdayTask).toHaveBeenCalledTimes(2))
+		expect(vi.mocked(mutateWorkdayTask).mock.calls[1][1]).toBe(original)
+	})
+	it('keeps a task mounted after cancelling close confirmation so a later reload works', async () => {
+		const refreshed = { ...task, title: 'Актуальное название', version: 2 }
+		const GuardedWrapper = ({ children }: PropsWithChildren) => {
+			const state = useSessionStore()
+			const owner = commandOwner(
+				state.session?.userId,
+				state.sessionRevision
+			)
+			return (
+				<QueryClientProvider client={client}>
+					<PendingCommandProvider owner={owner} readOwner={readOwner}>
+						<DirtyFormProvider owner={owner} readOwner={readOwner}>
+							{children}
+						</DirtyFormProvider>
+					</PendingCommandProvider>
+				</QueryClientProvider>
+			)
+		}
+		render(<MyDayScreen />, { wrapper: GuardedWrapper })
+		await openTask()
+		vi.mocked(getWorkdayTask).mockResolvedValue(refreshed)
+		fireEvent.change(titleField(), {
+			target: { value: 'Несохранённый черновик' }
+		})
+		fireEvent.click(screen.getByRole('button', { name: 'Закрыть' }))
+		fireEvent.click(
+			await screen.findByRole('button', {
+				name: 'Продолжить редактирование'
+			})
+		)
+		const detailQuery = client
+			.getQueryCache()
+			.getAll()
+			.find(
+				query =>
+					query.queryKey[0] === 'crm-workday' &&
+					query.queryKey[1] === 'detail'
+			)
+		expect(detailQuery).toBeTruthy()
+		await act(async () => {
+			await client.refetchQueries({
+				queryKey: detailQuery!.queryKey,
+				exact: true
+			})
+		})
+		const reload = await screen.findByRole('button', {
+			name: 'Загрузить актуальную задачу'
+		})
+		fireEvent.click(reload)
+		fireEvent.click(
+			await screen.findByRole('button', {
+				name: 'Продолжить редактирование'
+			})
+		)
+		fireEvent.click(reload)
+		fireEvent.click(
+			await screen.findByRole('button', { name: 'Отбросить изменения' })
+		)
+		await waitFor(() =>
+			expect(titleField()).toHaveProperty('value', 'Актуальное название')
+		)
+		expect(getWorkdayTask).toHaveBeenCalled()
+	})
 	it.each(['session', 'workspace', 'scope'] as const)(
 		'discards a linked task on a confirmed %s boundary without reopening it',
 		async boundary => {
@@ -585,7 +700,7 @@ describe('MyDay actual permission query lifecycle', () => {
 		}
 		render(<MyDayScreen />, { wrapper: Wrapper })
 		await findTaskButton()
-		fireEvent.click(screen.getByText('Поиск и дополнительные фильтры'))
+		fireEvent.click(screen.getByText('Дополнительные фильтры'))
 		const select = screen.getByRole('combobox', { name: 'Часовой пояс' })
 		expect(select).toHaveProperty('disabled', false)
 		fireEvent.change(select, { target: { value: 'Asia/Vladivostok' } })
@@ -678,9 +793,7 @@ describe('MyDay actual permission query lifecycle', () => {
 			] as const
 			for (const [status, label] of changes) {
 				if (surface === 'list') {
-					const advanced = screen.getByText(
-						'Поиск и дополнительные фильтры'
-					)
+					const advanced = screen.getByText('Дополнительные фильтры')
 					if (!(advanced.parentElement as HTMLDetailsElement).open)
 						fireEvent.click(advanced)
 					fireEvent.change(

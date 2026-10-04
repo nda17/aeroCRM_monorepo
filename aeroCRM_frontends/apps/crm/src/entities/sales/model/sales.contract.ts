@@ -77,8 +77,29 @@ export interface SalesTimelineEntry {
 	toStageId: string | null
 	createdAt: string
 }
+export type SalesInteractionResult =
+	| 'CALL_REACHED'
+	| 'CALL_NO_ANSWER'
+	| 'MEETING_HELD'
+export interface SalesTimelineEntryV2 {
+	id: string
+	dealId: string
+	kind: SalesTimelineEntry['kind'] | SalesInteractionResult
+	actorSubject: string
+	outcome: string
+	fromStageId: string | null
+	toStageId: string | null
+	createdAt: string
+}
 export interface SalesPage<T> {
 	schemaVersion: 1
+	page: number
+	pageSize: number
+	total: number
+	items: T[]
+}
+export interface SalesPageV2<T> {
+	schemaVersion: 2
 	page: number
 	pageSize: number
 	total: number
@@ -247,6 +268,45 @@ export const parseSalesPage = <T extends { id: string }>(
 		items: items as T[]
 	}
 }
+export const parseSalesPageV2 = <T extends { id: string }>(
+	value: unknown,
+	page: number,
+	pageSize: number,
+	parser: (row: unknown) => T | null
+): SalesPageV2<T> | null => {
+	if (
+		!isRecord(value) ||
+		!hasExactKeys(value, [
+			'schemaVersion',
+			'page',
+			'pageSize',
+			'total',
+			'items'
+		]) ||
+		value.schemaVersion !== 2 ||
+		value.page !== page ||
+		value.pageSize !== pageSize ||
+		!Number.isSafeInteger(value.total) ||
+		Number(value.total) < 0 ||
+		!Array.isArray(value.items) ||
+		value.items.length > pageSize ||
+		value.items.length > Number(value.total)
+	)
+		return null
+	const items = value.items.map(parser)
+	if (
+		items.some(item => !item) ||
+		new Set(items.map(item => item?.id)).size !== items.length
+	)
+		return null
+	return {
+		schemaVersion: 2,
+		page,
+		pageSize,
+		total: Number(value.total),
+		items: items as T[]
+	}
+}
 export const parsePipelines = (
 	value: unknown,
 	workspaceId: string
@@ -334,4 +394,41 @@ export const parseTimelineEntry = (
 	)
 		return null
 	return value as unknown as SalesTimelineEntry
+}
+export const parseTimelineEntryV2 = (
+	value: unknown,
+	dealId: string
+): SalesTimelineEntryV2 | null => {
+	if (
+		!isRecord(value) ||
+		!hasExactKeys(value, [
+			'id',
+			'dealId',
+			'kind',
+			'actorSubject',
+			'outcome',
+			'fromStageId',
+			'toStageId',
+			'createdAt'
+		]) ||
+		!isUuidV4(value.id) ||
+		value.dealId !== dealId ||
+		![
+			'CREATED',
+			'TRANSITIONED',
+			'TASK_COMPLETED',
+			'ARCHIVED',
+			'CALL_REACHED',
+			'CALL_NO_ANSWER',
+			'MEETING_HELD'
+		].includes(String(value.kind)) ||
+		!isNonEmptyString(value.actorSubject, 256) ||
+		typeof value.outcome !== 'string' ||
+		value.outcome.length > 4000 ||
+		!nullableUuid(value.fromStageId) ||
+		!nullableUuid(value.toStageId) ||
+		!isIsoDate(value.createdAt)
+	)
+		return null
+	return value as unknown as SalesTimelineEntryV2
 }

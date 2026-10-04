@@ -109,8 +109,63 @@ export const WorkdayFilters = ({
 			toast.error('Проверьте даты и параметры выбранного периода')
 			return
 		}
-		if (onChange(next) !== false) toast.success('Фильтры применены')
+		onChange(next)
 	}
+	const clearFilter = (patch: Partial<Filters>) => {
+		const next = { ...value, ...patch, page: 1 } as Filters
+		if (validWorkdayFilters(next)) onChange(next)
+	}
+	const chips: { label: string; patch: Partial<Filters> }[] = [
+		...(value.period !== 'ALL'
+			? [
+					{
+						label: periods[value.period],
+						patch: {
+							period: 'ALL' as const,
+							from: undefined,
+							to: undefined
+						}
+					}
+				]
+			: []),
+		...(value.scope !== 'MINE' && allowedScopes.includes('MINE')
+			? [
+					{
+						label: scopes[value.scope],
+						patch: {
+							scope: 'MINE' as const,
+							teamId: undefined,
+							assigneeSubject: undefined
+						}
+					}
+				]
+			: []),
+		...(value.search
+			? [{ label: `Поиск: ${value.search}`, patch: { search: undefined } }]
+			: []),
+		...(value.status && view === 'list'
+			? [
+					{
+						label:
+							value.status === 'ACTIVE'
+								? 'Незавершённые'
+								: WORKDAY_STATUS_LABELS[value.status],
+						patch: { status: undefined }
+					}
+				]
+			: []),
+		...(value.teamId
+			? [{ label: 'Выбран отдел', patch: { teamId: undefined } }]
+			: []),
+		...(value.assigneeSubject
+			? [
+					{
+						label: 'Выбран сотрудник',
+						patch: { assigneeSubject: undefined }
+					}
+				]
+			: [])
+	]
 	return (
 		<section className={styles.filters} aria-label="Период и вид задач">
 			<div className={styles.toolbar}>
@@ -137,10 +192,7 @@ export const WorkdayFilters = ({
 											? { status: view === 'list' ? 'ACTIVE' : undefined }
 											: {})
 									}
-									if (onChange(next) !== false)
-										toast(
-											`Показаны задачи: ${periods[nextPeriod].toLowerCase()}`
-										)
+									onChange(next)
 								}}
 							>
 								{periods[nextPeriod]}
@@ -158,10 +210,7 @@ export const WorkdayFilters = ({
 							key={mode}
 							variant={view === mode ? 'primary' : 'secondary'}
 							aria-pressed={view === mode}
-							onClick={() => {
-								if (onViewChange(mode) !== false)
-									toast(mode === 'list' ? 'Задачи списком' : 'Доска задач')
-							}}
+							onClick={() => onViewChange(mode)}
 						>
 							{mode === 'list' ? 'Список' : 'Доска'}
 						</Button>
@@ -169,6 +218,14 @@ export const WorkdayFilters = ({
 				</div>
 			</div>
 			<form className={styles.filterGrid} onSubmit={submit}>
+				<TextField
+					label="Поиск по задаче"
+					type="search"
+					placeholder="Название задачи"
+					value={search}
+					maxLength={200}
+					onChange={e => setSearch(e.target.value)}
+				/>
 				<SelectField
 					label="Период"
 					value={period}
@@ -217,7 +274,7 @@ export const WorkdayFilters = ({
 					/>
 				) : null}
 				<details className={styles.advanced}>
-					<summary>Поиск и дополнительные фильтры</summary>
+					<summary>Дополнительные фильтры</summary>
 					<div className={styles.advancedGrid}>
 						<WorkdayTimeZoneSelect
 							value={timeZone}
@@ -242,12 +299,6 @@ export const WorkdayFilters = ({
 								)}
 							</SelectField>
 						) : null}
-						<TextField
-							label="Поиск по задаче"
-							value={search}
-							maxLength={200}
-							onChange={e => setSearch(e.target.value)}
-						/>
 						{peopleContext ? (
 							<WorkdayPeopleFilters
 								ref={peopleRef}
@@ -267,6 +318,41 @@ export const WorkdayFilters = ({
 					Применить
 				</Button>
 			</form>
+			{chips.length ? (
+				<div
+					className={styles.filterChips}
+					aria-label="Активные фильтры задач"
+				>
+					{chips.map(chip => (
+						<Button
+							key={chip.label}
+							size="sm"
+							variant="secondary"
+							aria-label={`Снять фильтр: ${chip.label}`}
+							onClick={() => clearFilter(chip.patch)}
+						>
+							{chip.label} <span aria-hidden="true">×</span>
+						</Button>
+					))}
+					<Button
+						size="sm"
+						variant="ghost"
+						onClick={() =>
+							onChange({
+								period: 'ALL',
+								scope: allowedScopes.includes('MINE')
+									? 'MINE'
+									: allowedScopes[0],
+								timeZone: value.timeZone,
+								page: 1,
+								pageSize: value.pageSize
+							})
+						}
+					>
+						Сбросить фильтры
+					</Button>
+				</div>
+			) : null}
 			{view === 'board' ? (
 				<p className={styles.hint}>
 					На доске показаны все статусы, включая отменённые задачи. Каждая

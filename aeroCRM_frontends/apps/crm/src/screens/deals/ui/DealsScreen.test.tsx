@@ -66,6 +66,9 @@ vi.mock('@/features/export-records', () => ({
 vi.mock('@/features/import-records/ui/ImportRecordsControl', () => ({
 	ImportRecordsControl: () => null
 }))
+vi.mock('@/features/manage-saved-views/ui/SavedViewsControl', () => ({
+	SavedViewsControl: () => null
+}))
 vi.mock('react-hot-toast', () => ({
 	default: Object.assign(vi.fn(), {
 		success: vi.fn(),
@@ -134,7 +137,7 @@ const checkbox = () =>
 		name: 'Без следующего действия'
 	}) as HTMLInputElement
 const ready = async () => {
-	const filters = await screen.findByText('Фильтры и сохранённые виды')
+	const filters = await screen.findByText('Дополнительные фильтры')
 	if (!filters.parentElement?.hasAttribute('open'))
 		fireEvent.click(filters)
 	await screen.findByRole('button', { name: 'Новый заказ Клиент' })
@@ -410,6 +413,34 @@ describe('deal list without-next-action filter', () => {
 		).toBe('WON')
 		expect(screen.queryByText('Создайте первую сделку')).toBeNull()
 	})
+	it('resets filters from an empty filtered result and returns to the available deals', async () => {
+		render(view())
+		await ready()
+		fireEvent.change(screen.getByLabelText('Статус'), {
+			target: { value: 'WON' }
+		})
+		fireEvent.click(checkbox())
+		await screen.findByText('Подходящих сделок нет')
+		const resetButtons = screen.getAllByRole('button', {
+			name: 'Сбросить фильтры'
+		})
+		fireEvent.click(resetButtons[resetButtons.length - 1])
+		await screen.findByRole('button', { name: 'Новый заказ Клиент' })
+		expect(screen.queryByText('Подходящих сделок нет')).toBeNull()
+		expect(screen.getByLabelText('Статус')).toHaveProperty('value', '')
+		expect(listSalesDeals).toHaveBeenLastCalledWith(
+			'test-token',
+			workspaceId,
+			1,
+			20,
+			'',
+			'',
+			'',
+			false,
+			{}
+		)
+		expect(toast).not.toHaveBeenCalled()
+	})
 	it('does not describe an OPEN deal without a task as a closed deal', async () => {
 		render(view())
 		await ready()
@@ -458,6 +489,46 @@ describe('deal list without-next-action filter', () => {
 				}) as HTMLButtonElement
 			).disabled
 		).toBe(true)
+	})
+	it('shows a read-only empty state without a create action', async () => {
+		vi.mocked(useSalesSession).mockReturnValue({
+			...context,
+			canWrite: false,
+			workspace: { ...context.workspace, canWrite: false },
+			permissions: {
+				...context.permissions,
+				data: {
+					...context.permissions.data,
+					role: 'OWNER',
+					state: 'READ_ONLY'
+				}
+			}
+		} as never)
+		vi.mocked(listSalesDeals).mockResolvedValue({
+			schemaVersion: 1,
+			page: 1,
+			pageSize: 20,
+			total: 0,
+			items: []
+		})
+		render(view())
+		await screen.findByText('Сделок пока нет')
+		expect(
+			screen.getByText(
+				'Здесь появятся доступные вам сделки. Сейчас создание сделки недоступно.'
+			)
+		).toBeTruthy()
+		expect(screen.queryByText('Создайте первую сделку')).toBeNull()
+		expect(
+			(
+				screen.getByRole('button', {
+					name: 'Новая сделка'
+				}) as HTMLButtonElement
+			).disabled
+		).toBe(true)
+		expect(
+			screen.queryByRole('button', { name: /создать первую сделку/i })
+		).toBeNull()
 	})
 	it('shows pipeline management only with the explicit permission and write access', async () => {
 		const basePermissions = context.permissions.data
@@ -795,23 +866,14 @@ describe('deal views and server pipeline', () => {
 		)
 		expect(screen.getByText(/Дата создания: 01.09.2026/)).toBeTruthy()
 	})
-	it('remembers filters and named views only in their user and workspace scope', async () => {
+	it('remembers deal filters only in their user and workspace scope', async () => {
 		const rendered = render(view())
 		await ready()
 		fireEvent.click(screen.getByRole('button', { name: 'Мои сделки' }))
-		fireEvent.click(screen.getByRole('button', { name: 'Сохранить вид' }))
-		fireEvent.change(screen.getByLabelText(/Название представления/), {
-			target: { value: 'Моя работа' }
-		})
-		fireEvent.click(
-			screen.getByRole('button', { name: 'Сохранить представление' })
-		)
-		expect(screen.getByRole('option', { name: 'Моя работа' })).toBeTruthy()
 		rendered.unmount()
 		window.history.replaceState(null, '', '/deals')
 		const restored = render(view())
 		await ready()
-		expect(screen.getByRole('option', { name: 'Моя работа' })).toBeTruthy()
 		expect(listSalesDeals).toHaveBeenLastCalledWith(
 			'test-token',
 			workspaceId,
@@ -832,7 +894,6 @@ describe('deal views and server pipeline', () => {
 		} as never)
 		render(view())
 		await ready()
-		expect(screen.queryByRole('option', { name: 'Моя работа' })).toBeNull()
 		expect(listSalesDeals).toHaveBeenLastCalledWith(
 			'test-token',
 			workspaceId,

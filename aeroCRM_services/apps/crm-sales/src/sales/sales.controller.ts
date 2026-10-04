@@ -21,6 +21,7 @@ import {
 	CompleteTaskDto,
 	CreateDealDto,
 	DealListQuery,
+	InteractionResultDto,
 	SalesAnalyticsQuery,
 	SalesListQuery,
 	TransitionDealDto,
@@ -69,6 +70,16 @@ export class SalesController {
 		return this.service.timeline(request.salesAccess, id, query);
 	}
 
+	@Get('deals/:id/timeline-v2')
+	@SalesPermission('sales:read')
+	timelineV2(
+		@Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+		@Query() query: SalesListQuery,
+		@Req() request: SalesRequest
+	) {
+		return this.service.timelineV2(request.salesAccess, id, query);
+	}
+
 	@Get('tasks')
 	@SalesPermission('sales:read')
 	tasks(@Query() query: SalesListQuery, @Req() request: SalesRequest) {
@@ -111,6 +122,19 @@ export class SalesController {
 	) {
 		this.commandKey(dto.commandId, key);
 		return this.service.transition(request.salesAccess, id, dto);
+	}
+
+	@Post('deals/:id/interaction-results')
+	@HttpCode(200)
+	@SalesPermission('sales:write')
+	interactionResult(
+		@Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+		@Body() dto: InteractionResultDto,
+		@Req() request: SalesRequest,
+		@Headers('idempotency-key') key?: string
+	) {
+		this.commandKey(dto.commandId, key);
+		return this.service.interactionResult(request.salesAccess, id, dto);
 	}
 
 	@Post('tasks/:id/complete')

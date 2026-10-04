@@ -184,7 +184,11 @@ describe('Real CRM team settings', () => {
 				'disabled',
 				true
 			)
-		expect(screen.getByText(/включая отключение доступа/)).toBeTruthy()
+		expect(
+			screen.getByText(
+				'Можно просматривать сотрудников, приглашения и отделы. Для изменений запросите права у владельца пространства.'
+			)
+		).toBeTruthy()
 	})
 	it('never requests the directory for a manager without read-team permission', async () => {
 		context.canRead = false
