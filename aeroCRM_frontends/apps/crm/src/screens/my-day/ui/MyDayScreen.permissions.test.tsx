@@ -55,6 +55,42 @@ vi.mock('next/navigation', async importOriginal => ({
 let client: QueryClient
 let permissions: CrmPermissions
 const workspace = { workspaceId, canWrite: true }
+const plannerSettings = {
+	schemaVersion: 1 as const,
+	workspaceId,
+	version: 0,
+	templates: [],
+	columns: [
+		{
+			id: 'OPEN',
+			name: 'К выполнению',
+			status: 'OPEN',
+			isDefault: true,
+			archived: false
+		},
+		{
+			id: 'IN_PROGRESS',
+			name: 'В работе',
+			status: 'IN_PROGRESS',
+			isDefault: true,
+			archived: false
+		},
+		{
+			id: 'COMPLETED',
+			name: 'Готово',
+			status: 'COMPLETED',
+			isDefault: true,
+			archived: false
+		},
+		{
+			id: 'CANCELLED',
+			name: 'Отменено',
+			status: 'CANCELLED',
+			isDefault: true,
+			archived: false
+		}
+	]
+}
 // Deliberately keep the real permission hook AND its getter/parser. Mocking the
 // getter's transport is necessary because the hook calls the module-local getter.
 vi.mock('@/entities/crm-access', async () => ({
@@ -62,49 +98,6 @@ vi.mock('@/entities/crm-access', async () => ({
 		'@/entities/crm-access'
 	)),
 	useCrmWorkspaceAccess: () => workspace
-}))
-vi.mock('@/entities/crm-planner/model/use-planner-settings', () => ({
-	usePlannerSettings: () => ({
-		context: { canRead: true, current: () => true },
-		query: { isFetching: false, isError: false, refetch: vi.fn() },
-		canManage: false,
-		data: {
-			schemaVersion: 1,
-			workspaceId,
-			version: 0,
-			templates: [],
-			columns: [
-				{
-					id: 'OPEN',
-					name: 'К выполнению',
-					status: 'OPEN',
-					isDefault: true,
-					archived: false
-				},
-				{
-					id: 'IN_PROGRESS',
-					name: 'В работе',
-					status: 'IN_PROGRESS',
-					isDefault: true,
-					archived: false
-				},
-				{
-					id: 'COMPLETED',
-					name: 'Готово',
-					status: 'COMPLETED',
-					isDefault: true,
-					archived: false
-				},
-				{
-					id: 'CANCELLED',
-					name: 'Отменено',
-					status: 'CANCELLED',
-					isDefault: true,
-					archived: false
-				}
-			]
-		}
-	})
 }))
 vi.mock('@/shared/api/authenticated-http-client', async () => ({
 	...(await vi.importActual<
@@ -181,8 +174,42 @@ const deferred = <T,>() => {
 	return { promise, resolve, reject }
 }
 const titleField = () => screen.getByLabelText('Название задачи')
+const findTaskButton = async () => {
+	await screen.findByRole('button', { name: task.title })
+	await waitFor(() =>
+		expect(
+			client
+				.getQueryCache()
+				.findAll({ queryKey: ['crm-planner'] })
+				.some(query => query.state.status === 'success')
+		).toBe(true)
+	)
+	await waitFor(() => expect(client.isFetching()).toBe(0))
+	return screen.getByRole('button', { name: task.title })
+}
+const permissionsReadCount = () =>
+	vi
+		.mocked(authenticatedRequest)
+		.mock.calls.filter(
+			([request]) => request.url === '/crm/access/permissions'
+		).length
+const waitForPermissionReadsToSettle = async () => {
+	let previous = -1
+	let stableSamples = 0
+	for (let sample = 0; sample < 8 && stableSamples < 2; sample++) {
+		await waitFor(() => expect(client.isFetching()).toBe(0))
+		const current = permissionsReadCount()
+		stableSamples = current === previous ? stableSamples + 1 : 0
+		previous = current
+		if (stableSamples < 2)
+			await act(async () => {
+				await new Promise(resolve => setTimeout(resolve, 25))
+			})
+	}
+	expect(stableSamples).toBeGreaterThanOrEqual(2)
+}
 const openTask = async () => {
-	fireEvent.click(await screen.findByRole('button', { name: task.title }))
+	fireEvent.click(await findTaskButton())
 	await waitFor(() => {
 		expect(titleField()).toHaveProperty('disabled', false)
 		expect(titleField().closest('[hidden]')).toBeNull()
@@ -238,9 +265,10 @@ beforeEach(() => {
 		}
 	})
 	vi.mocked(authenticatedRequest).mockImplementation(async request => {
-		if (request.url !== '/crm/access/permissions')
-			throw new Error(`Unexpected test request ${request.url}`)
-		return permissions
+		if (request.url === '/crm/access/permissions') return permissions
+		if (request.url === '/crm/sales/planner/settings')
+			return plannerSettings
+		throw new Error(`Unexpected test request ${request.url}`)
 	})
 	vi.mocked(listWorkdayTasks).mockImplementation(
 		async (_token, request) => ({
@@ -281,6 +309,67 @@ afterEach(() => {
 })
 
 describe('MyDay actual permission query lifecycle', () => {
+	it.each([
+		{ surface: 'list', state: 'ACTIVE' },
+		{ surface: 'list', state: 'READ_ONLY' },
+		{ surface: 'board', state: 'ACTIVE' },
+		{ surface: 'board', state: 'READ_ONLY' }
+	] as const)(
+		'keeps the $surface collection stable through same-scope permission refresh for $state access',
+		async ({ surface, state }) => {
+			permissions = {
+				...permissions,
+				state,
+				permissions:
+					state === 'READ_ONLY'
+						? ['sales:read']
+						: ['sales:read', 'sales:write']
+			}
+			render(<MyDayScreen />, { wrapper: Wrapper })
+			await waitFor(() =>
+				expect(
+					client
+						.getQueryCache()
+						.findAll({ queryKey: ['crm-planner'] })
+						.some(query => query.state.status === 'success')
+				).toBe(true)
+			)
+			await waitForPermissionReadsToSettle()
+			await findTaskButton()
+			await waitFor(() => expect(client.isFetching()).toBe(0))
+			expect(
+				screen.queryByText('Счётчики временно недоступны.')
+			).toBeNull()
+			if (surface === 'board') {
+				fireEvent.click(screen.getByRole('button', { name: 'Доска' }))
+				await waitFor(() => expect(client.isFetching()).toBe(0))
+			}
+			const before = permissionsReadCount()
+			const response = deferred<CrmPermissions>()
+			vi.mocked(authenticatedRequest).mockReturnValueOnce(response.promise)
+			let pending!: Promise<void>
+			await act(async () => {
+				pending = client.refetchQueries({ queryKey: ['crm-permissions'] })
+				await Promise.resolve()
+			})
+			await screen.findByText(/Проверяем актуальные права доступа/)
+			expect(permissionsReadCount()).toBe(before + 1)
+			await act(async () => {
+				response.resolve(permissions)
+				await pending
+			})
+			await waitFor(() => expect(client.isFetching()).toBe(0))
+			await findTaskButton()
+			expect(
+				screen.queryByText('Счётчики временно недоступны.')
+			).toBeNull()
+			const settledCount = permissionsReadCount()
+			await act(async () => {
+				await new Promise(resolve => setTimeout(resolve, 100))
+			})
+			expect(permissionsReadCount()).toBe(settledCount)
+		}
+	)
 	it.each(['ACTIVE', 'READ_ONLY'] as const)(
 		'opens a planner deep link with a current server-bound task read under %s access',
 		async state => {
@@ -290,7 +379,7 @@ describe('MyDay actual permission query lifecycle', () => {
 				permissions:
 					state === 'READ_ONLY' ? ['sales:read'] : permissions.permissions
 			}
-				render(
+			render(
 				await TasksPage({
 					searchParams: Promise.resolve({
 						task: task.id,
@@ -327,13 +416,13 @@ describe('MyDay actual permission query lifecycle', () => {
 	])(
 		'ignores malformed or repeated deep-link task parameters: %s',
 		async value => {
-				render(
+			render(
 				await TasksPage({
 					searchParams: Promise.resolve({ task: value })
 				}),
 				{ wrapper: Wrapper }
 			)
-			await screen.findByRole('button', { name: task.title })
+			await findTaskButton()
 			expect(getWorkdayTask).not.toHaveBeenCalled()
 			expect(screen.queryByLabelText('Название задачи')).toBeNull()
 		}
@@ -439,7 +528,7 @@ describe('MyDay actual permission query lifecycle', () => {
 	})
 	it('keeps the ACTIVE list filter when opening the overdue shortcut', async () => {
 		render(<MyDayScreen />, { wrapper: Wrapper })
-		await screen.findByRole('button', { name: task.title })
+		await findTaskButton()
 		fireEvent.click(
 			screen.getByRole('button', { name: /Просрочено за все дни/ })
 		)
@@ -456,7 +545,7 @@ describe('MyDay actual permission query lifecycle', () => {
 	})
 	it('clears ACTIVE on the board and restores it when returning to the list', async () => {
 		render(<MyDayScreen />, { wrapper: Wrapper })
-		await screen.findByRole('button', { name: task.title })
+		await findTaskButton()
 		fireEvent.click(screen.getByRole('button', { name: 'Доска' }))
 		await waitFor(() =>
 			expect(listWorkdayTasks).toHaveBeenCalledWith(
@@ -495,7 +584,7 @@ describe('MyDay actual permission query lifecycle', () => {
 			permissions: ['sales:read']
 		}
 		render(<MyDayScreen />, { wrapper: Wrapper })
-		await screen.findByRole('button', { name: task.title })
+		await findTaskButton()
 		fireEvent.click(screen.getByText('Поиск и дополнительные фильтры'))
 		const select = screen.getByRole('combobox', { name: 'Часовой пояс' })
 		expect(select).toHaveProperty('disabled', false)
@@ -574,7 +663,7 @@ describe('MyDay actual permission query lifecycle', () => {
 				}
 			)
 			render(<MyDayScreen />, { wrapper: Wrapper })
-			await screen.findByRole('button', { name: task.title })
+			await findTaskButton()
 			if (surface === 'board')
 				fireEvent.click(screen.getByRole('button', { name: 'Доска' }))
 			if (surface === 'drawer') await openTask()
@@ -594,10 +683,15 @@ describe('MyDay actual permission query lifecycle', () => {
 					)
 					if (!(advanced.parentElement as HTMLDetailsElement).open)
 						fireEvent.click(advanced)
-					fireEvent.change(screen.getByRole('combobox', { name: 'Статус' }), {
-						target: { value: current.status }
-					})
-					fireEvent.click(screen.getByRole('button', { name: 'Применить' }))
+					fireEvent.change(
+						screen.getByRole('combobox', { name: 'Статус' }),
+						{
+							target: { value: current.status }
+						}
+					)
+					fireEvent.click(
+						screen.getByRole('button', { name: 'Применить' })
+					)
 					await waitFor(() => expect(client.isFetching()).toBe(0))
 				}
 				const successCount = vi.mocked(toast.success).mock.calls.length
@@ -638,7 +732,7 @@ describe('MyDay actual permission query lifecycle', () => {
 			}
 			vi.mocked(mutateWorkdayTask).mockResolvedValue(completed)
 			render(<MyDayScreen />, { wrapper: Wrapper })
-			await screen.findByRole('button', { name: task.title })
+			await findTaskButton()
 			if (surface === 'board')
 				fireEvent.click(screen.getByRole('button', { name: 'Доска' }))
 			if (surface === 'drawer') {
@@ -691,7 +785,7 @@ describe('MyDay actual permission query lifecycle', () => {
 			completedAt: task.dueAt
 		})
 		render(<MyDayScreen />, { wrapper: Wrapper })
-		await screen.findByRole('button', { name: task.title })
+		await findTaskButton()
 		fireEvent.change(
 			screen.getByLabelText(`Статус задачи «${task.title}»`),
 			{ target: { value: 'COMPLETED' } }
@@ -709,7 +803,7 @@ describe('MyDay actual permission query lifecycle', () => {
 	})
 	it('settles real stale permission observers without a collection mount/refetch loop', async () => {
 		render(<MyDayScreen />, { wrapper: Wrapper })
-		await screen.findByRole('button', { name: task.title })
+		await findTaskButton()
 		await waitFor(() => expect(client.isFetching()).toBe(0))
 		const calls = vi.mocked(authenticatedRequest).mock.calls.length
 		expect(calls).toBeLessThan(12)
@@ -748,7 +842,7 @@ describe('MyDay actual permission query lifecycle', () => {
 			const original = vi.mocked(mutateWorkdayTask).mock.calls[0][1]
 			view.rerender(<></>)
 			view.rerender(<MyDayScreen />)
-			await screen.findByRole('button', { name: task.title })
+			await findTaskButton()
 			if (viewMode === 'board')
 				fireEvent.click(screen.getByRole('button', { name: 'Доска' }))
 			const recover = await screen.findByRole('button', {
@@ -781,7 +875,7 @@ describe('MyDay actual permission query lifecycle', () => {
 			new AuthenticatedApiError('temporary', 'Unknown result')
 		)
 		render(<MyDayScreen />, { wrapper: Wrapper })
-		await screen.findByRole('button', { name: task.title })
+		await findTaskButton()
 		fireEvent.change(
 			screen.getByLabelText(`Статус задачи «${task.title}»`),
 			{ target: { value: 'IN_PROGRESS' } }
@@ -822,7 +916,7 @@ describe('MyDay actual permission query lifecycle', () => {
 	})
 	it('keeps a creation draft mounted through the real background permission refresh', async () => {
 		render(<MyDayScreen />, { wrapper: Wrapper })
-		await screen.findByRole('button', { name: task.title })
+		await findTaskButton()
 		fireEvent.click(screen.getByRole('button', { name: 'Новая задача' }))
 		await waitFor(() =>
 			expect(titleField()).toHaveProperty('disabled', false)
@@ -874,7 +968,7 @@ describe('MyDay actual permission query lifecycle', () => {
 			response.resolve(permissions)
 			await response.pending
 		})
-		await screen.findByRole('button', { name: task.title })
+		await findTaskButton()
 		expect(screen.queryByLabelText('Название задачи')).toBeNull()
 		expect(
 			screen.getByRole('button', { name: 'Новая задача' })
@@ -885,7 +979,7 @@ describe('MyDay actual permission query lifecycle', () => {
 	})
 	it('refreshes tasks and the workspace-scoped Inbox summary using confirmed access', async () => {
 		render(<MyDayScreen />, { wrapper: Wrapper })
-		await screen.findByRole('button', { name: task.title })
+		await findTaskButton()
 		const invalidate = vi.spyOn(client, 'invalidateQueries')
 		fireEvent.click(screen.getByRole('button', { name: 'Обновить' }))
 		await waitFor(() =>

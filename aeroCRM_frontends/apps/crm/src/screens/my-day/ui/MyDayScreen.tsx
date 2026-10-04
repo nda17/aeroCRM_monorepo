@@ -51,6 +51,10 @@ const MyDayContent = ({
 }) => {
 	const context = useWorkdaySession()
 	const planner = usePlannerSettings()
+	// Keep the bound collection mounted while access is being reverified.
+	const boundPlanner = planner.query.isError
+		? undefined
+		: planner.query.data
 	const [settingsOpen, setSettingsOpen] = useState(false)
 	const draftGuard = useDirtyFormGuard()
 	const client = useQueryClient()
@@ -441,9 +445,9 @@ const MyDayContent = ({
 							context.key,
 							{ ...filters, page: undefined },
 							view,
-							planner.data?.version
+							boundPlanner?.version
 						])}
-						planner={planner.data}
+						planner={boundPlanner}
 						settingsPending={planner.query.isFetching}
 						settingsError={planner.query.isError}
 						onReloadSettings={() => void planner.query.refetch()}
