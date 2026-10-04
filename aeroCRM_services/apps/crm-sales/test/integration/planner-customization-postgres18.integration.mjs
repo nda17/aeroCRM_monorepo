@@ -484,13 +484,15 @@ try {
 	);
 	assert.equal(reopened.task.status, 'OPEN');
 	assert.equal(reopened.task.completedAt, null);
+	const filterActor = { ...actor, workspaceId: randomUUID() };
+	current = filterActor;
 	const activePrefix = `active-pagination-${randomUUID()}`;
 	const createFilterTask = (suffix, dueAt) =>
 		workday.create(
-			actor,
+			filterActor,
 			{
 				schemaVersion: 1,
-				workspaceId: actor.workspaceId,
+				workspaceId: filterActor.workspaceId,
 				commandId: randomUUID(),
 				title: `${activePrefix}-${suffix}`,
 				dueAt,
@@ -503,11 +505,11 @@ try {
 		'2026-09-07T08:00:00.000Z'
 	);
 	await workday.status(
-		actor,
+		filterActor,
 		terminalFixture.task.id,
 		{
 			schemaVersion: 1,
-			workspaceId: actor.workspaceId,
+			workspaceId: filterActor.workspaceId,
 			commandId: randomUUID(),
 			expectedVersion: terminalFixture.task.version,
 			status: 'COMPLETED'
@@ -523,11 +525,11 @@ try {
 		'2026-09-07T11:00:00.000Z'
 	);
 	await workday.status(
-		actor,
+		filterActor,
 		inProgressFixture.task.id,
 		{
 			schemaVersion: 1,
-			workspaceId: actor.workspaceId,
+			workspaceId: filterActor.workspaceId,
 			commandId: randomUUID(),
 			expectedVersion: inProgressFixture.task.version,
 			status: 'IN_PROGRESS'
@@ -535,15 +537,15 @@ try {
 		token
 	);
 	const activeQuery = Object.assign(new WorkdayQuery(), {
-		workspaceId: actor.workspaceId,
+		workspaceId: filterActor.workspaceId,
 		scope: 'ALL',
 		period: 'ALL',
 		search: activePrefix,
 		pageSize: 1,
 		status: 'ACTIVE'
 	});
-	const activePage1 = await workday.list(actor, activeQuery);
-	const activePage2 = await workday.list(actor, { ...activeQuery, page: 2 });
+	const activePage1 = await workday.list(filterActor, activeQuery);
+	const activePage2 = await workday.list(filterActor, { ...activeQuery, page: 2 });
 	assert.equal(activePage1.total, 2);
 	assert.equal(activePage1.counts.OPEN, 1);
 	assert.equal(activePage1.counts.IN_PROGRESS, 1);
@@ -561,6 +563,7 @@ try {
 			item => item.status === 'OPEN' || item.status === 'IN_PROGRESS'
 		)
 	);
+	current = actor;
 	const foreignWorkspace = randomUUID(),
 		foreignId = randomUUID();
 	await runtime.plannerBoardColumn.create({
