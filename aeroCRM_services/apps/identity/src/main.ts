@@ -1,9 +1,11 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
+import type { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import { IdentityHttpExceptionFilter } from './common/http-exception.filter';
 import { identityRequestContext } from './common/request-context';
 import { IdentityModule } from './identity.module';
+import { terminateFailedBootstrap } from './runtime/bootstrap-failure';
 import {
 	IDENTITY_GLOBAL_PREFIX_EXCLUDES,
 	identityCorsOrigins,
@@ -15,12 +17,15 @@ import {
 	parseIdentityProcessRole
 } from './runtime/identity-runtime.service';
 
+let application: INestApplication | undefined;
+
 async function bootstrap(): Promise<void> {
 	const role = parseIdentityProcessRole(process.env.IDENTITY_PROCESS_ROLE);
 	const port = parseIdentityPort(role);
 	const app = await NestFactory.create(IdentityModule, {
 		forceCloseConnections: true
 	});
+	application = app;
 	const instance = app.getHttpAdapter().getInstance();
 	if (typeof instance?.set === 'function') {
 		instance.set(
@@ -62,11 +67,7 @@ async function bootstrap(): Promise<void> {
 	);
 }
 
-void bootstrap().catch(error => {
-	Logger.error(
-		error instanceof Error ? error.message : 'Identity bootstrap failed',
-		undefined,
-		'Bootstrap'
-	);
-	process.exitCode = 1;
+void bootstrap().catch(() => {
+	Logger.error('Identity bootstrap failed', undefined, 'Bootstrap');
+	return terminateFailedBootstrap(application);
 });

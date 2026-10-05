@@ -1,7 +1,7 @@
 name: aeroCRM CI
 on:
   push:
-    branches: [dev_0.1.0/feature/standalone-crm, dev_0.2.0/feature/selective-backend-release, dev_0.3.0/feature/draft-protection-and-corporate-mail, dev_0.4.0/feature/crm-file-imports, dev_0.5.0/feature/planner-customization, dev_0.5.1/fix/mail-deliverability, dev_0.6.0/feature/crm-ux-unification, prod_0.1.0]
+    branches: [dev_0.1.0/feature/standalone-crm, dev_0.2.0/feature/selective-backend-release, dev_0.3.0/feature/draft-protection-and-corporate-mail, dev_0.4.0/feature/crm-file-imports, dev_0.5.0/feature/planner-customization, dev_0.5.1/fix/mail-deliverability, dev_0.6.0/feature/crm-ux-unification, dev_0.6.1/fix/rabbitmq-cold-start, prod_0.1.0]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -1031,6 +1031,37 @@ jobs:
         if: matrix.service == 'notification-delivery'
         working-directory: aeroCRM_services/apps/notification-delivery
         run: pnpm exec jest --runInBand --testPathPattern='src/email|crm-invitation-delivery|crm-task-reminder|crm-intake-sla'
+  bootstrap-recovery-unit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [identity, platform, reporting]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: aeroCRM_services/apps/${{ matrix.service }}/pnpm-lock.yaml
+      - name: Install frozen service dependencies
+        working-directory: aeroCRM_services/apps/${{ matrix.service }}
+        run: pnpm install --frozen-lockfile
+      - name: Generate service Prisma client
+        working-directory: aeroCRM_services/apps/${{ matrix.service }}
+        run: pnpm prisma:generate
+      - name: Check bootstrap types
+        working-directory: aeroCRM_services/apps/${{ matrix.service }}
+        run: pnpm typecheck
+      - name: Lint bootstrap implementation and specs
+        working-directory: aeroCRM_services/apps/${{ matrix.service }}
+        run: pnpm exec eslint src/main.ts src/main.spec.ts src/runtime/bootstrap-failure.ts src/runtime/bootstrap-failure.spec.ts --max-warnings=0
+      - name: Verify failed bootstrap cleanup and process exit
+        working-directory: aeroCRM_services/apps/${{ matrix.service }}
+        run: pnpm exec jest --runInBand --testPathPattern='main.spec|bootstrap-failure.spec'
   corporate-mail-unit:
     runs-on: ubuntu-latest
     steps:

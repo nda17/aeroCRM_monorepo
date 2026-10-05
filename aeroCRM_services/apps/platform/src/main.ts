@@ -4,6 +4,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { PlatformHttpExceptionFilter } from './common/platform-http-exception.filter';
 import { platformRequestContextMiddleware } from './common/platform-request-context';
 import { PlatformModule } from './platform.module';
+import { terminateFailedBootstrap } from './runtime/bootstrap-failure';
 import {
 	getPlatformCorsAllowedOrigins,
 	getPlatformListenHost,
@@ -16,6 +17,8 @@ import {
 	parsePlatformProcessRole
 } from './runtime/platform-runtime.service';
 
+let application: NestExpressApplication | undefined;
+
 async function bootstrap(): Promise<void> {
 	const role = parsePlatformProcessRole(process.env.PLATFORM_PROCESS_ROLE);
 	const port = parsePlatformPort(role);
@@ -25,6 +28,7 @@ async function bootstrap(): Promise<void> {
 			forceCloseConnections: true
 		}
 	);
+	application = app;
 	app.useBodyParser('json', { limit: PLATFORM_JSON_BODY_LIMIT_BYTES });
 	const instance = app.getHttpAdapter().getInstance();
 	if (typeof instance?.set === 'function') {
@@ -61,11 +65,7 @@ async function bootstrap(): Promise<void> {
 	);
 }
 
-void bootstrap().catch(error => {
-	Logger.error(
-		error instanceof Error ? error.message : 'Platform bootstrap failed',
-		undefined,
-		'Bootstrap'
-	);
-	process.exitCode = 1;
+void bootstrap().catch(() => {
+	Logger.error('Platform bootstrap failed', undefined, 'Bootstrap');
+	return terminateFailedBootstrap(application);
 });

@@ -8,10 +8,14 @@ import {
 	parseReportingPort
 } from './config/reporting-network.config';
 import { ReportingModule } from './reporting.module';
+import { terminateFailedBootstrap } from './runtime/bootstrap-failure';
 import { parseReportingProcessRole } from './runtime/reporting-runtime.service';
 import { Logger, ValidationPipe } from '@nestjs/common';
+import type { INestApplication } from '@nestjs/common';
 import type { CustomOrigin } from '@nestjs/common/interfaces/external/cors-options.interface';
 import { NestFactory } from '@nestjs/core';
+
+let application: INestApplication | undefined;
 
 async function bootstrap(): Promise<void> {
 	const role = parseReportingProcessRole(
@@ -26,6 +30,7 @@ async function bootstrap(): Promise<void> {
 		logger: new ReportingJsonLogger(),
 		forceCloseConnections: true
 	});
+	application = app;
 	if (role === 'all' || role === 'api') {
 		const allowedOrigins = parseReportingCorsAllowedOrigins(
 			process.env.CORS_ALLOWED_ORIGINS
@@ -54,7 +59,7 @@ async function bootstrap(): Promise<void> {
 	);
 }
 
-void bootstrap().catch(error => {
-	new ReportingJsonLogger().fatal(error, 'Bootstrap');
-	process.exitCode = 1;
+void bootstrap().catch(() => {
+	new ReportingJsonLogger().fatal('Reporting bootstrap failed', 'Bootstrap');
+	return terminateFailedBootstrap(application);
 });
