@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { MAIL_LIMITS } from './mail.config';
 import { MailController, MailUploadScopeGuard } from './mail.controller';
 import { MailService } from './mail.service';
+import { LiveChangesService } from '../live/live-changes.service';
 
 const workspaceId = '11111111-1111-4111-8111-111111111111';
 const mailboxId = '22222222-2222-4222-8222-222222222222';
@@ -27,6 +28,7 @@ describe('CRM mail upload multipart parser route', () => {
 			controllers: [MailController],
 			providers: [
 				{ provide: MailService, useValue: mail },
+				{ provide: LiveChangesService, useValue: { open: jest.fn() } },
 				MailUploadScopeGuard
 			]
 		}).compile();
