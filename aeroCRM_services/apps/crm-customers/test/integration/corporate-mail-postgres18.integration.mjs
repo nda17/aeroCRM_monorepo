@@ -1688,5 +1688,9 @@ try {
     "Corporate mail PG18: 14 table guards, worker notification eligibility and deduplication, notification scope/read idempotence, strict runtime role, service cancellation, idempotency, workspace FK, admission/fence races, post-fence settlement, immutable content, and append-only ledgers passed.",
   );
 } finally {
-  await Promise.all([runtime.$disconnect(), migrator.$disconnect()]);
+  await Promise.all([
+    runtime.$disconnect(),
+    migrator.$disconnect(),
+    listener.end(),
+  ]);
 }
