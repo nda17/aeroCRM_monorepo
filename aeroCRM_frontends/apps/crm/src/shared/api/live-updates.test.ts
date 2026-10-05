@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { QueryClient } from '@tanstack/react-query'
 import { readLiveStream, startLiveUpdates } from './live-updates'
 import { resolveSessionTransport } from './session-transport'
+import { liveInvalidator } from '@/features/live-updates/LiveUpdates'
 
 vi.mock('./session-transport', () => ({
 	resolveSessionTransport: vi.fn()
@@ -24,6 +26,46 @@ const stream = (...chunks: string[]) =>
 		}
 	})
 describe('live updates', () => {
+	it.each([
+		[
+			'mail',
+			[
+				'crm-mail-notifications',
+				'mail-workspace-messages',
+				'mail-mailboxes'
+			]
+		],
+		[
+			'collaboration',
+			[
+				'workspace-directory',
+				'workspace-chat-messages',
+				'crm-chat-notifications'
+			]
+		]
+	] as const)(
+		'invalidates active %s data roots on a committed invalidate event',
+		async (owner, expectedRoots) => {
+			vi.useFakeTimers()
+			const invalidateQueries = vi.fn().mockResolvedValue(undefined)
+			const client = { invalidateQueries } as unknown as QueryClient
+			const invalidator = liveInvalidator(client, owner, () => true)
+			invalidator.event('invalidate')
+			await vi.advanceTimersByTimeAsync(300)
+			const filters = invalidateQueries.mock.calls[0]?.[0]
+			expect(filters?.refetchType).toBe('active')
+			const accepts = (key: string) =>
+				filters?.predicate?.({
+					isActive: () => true,
+					queryKey: [key]
+				} as never)
+			for (const root of expectedRoots) expect(accepts(root)).toBe(true)
+			expect(accepts('unrelated-query-root')).toBe(false)
+			invalidator.stop()
+			vi.useRealTimers()
+		}
+	)
+
 	it('parses fragmented frames, ignores heartbeats and rejects business payloads', async () => {
 		const event = vi.fn()
 		await readLiveStream(

@@ -23,6 +23,8 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { MailService } from './mail.service';
+import { LiveChangesService } from '../live/live-changes.service';
+import { assertMailPermission } from './mail-authorization.client';
 import {
 	MailConnectDto,
 	MailReconnectDto,
@@ -61,7 +63,10 @@ export class MailUploadScopeGuard implements CanActivate {
 }
 @Controller('crm/customers/mail')
 export class MailController {
-	constructor(private readonly mail: MailService) {}
+	constructor(
+		private readonly mail: MailService,
+		private readonly live: LiveChangesService
+	) {}
 	private async command(
 		token: string | undefined,
 		key: string | undefined,
@@ -96,6 +101,46 @@ export class MailController {
 			throw new ForbiddenException();
 		return result;
 	}
+	@Get('notifications-v2')
+	@Header('Cache-Control', 'no-store')
+	async notificationsV2(
+		@Headers('authorization') token: string | undefined,
+		@Query() query: MailNotificationsQuery
+	) {
+		const a = await this.mail.authority(token, query.workspaceId);
+		const result = await this.mail.notifications(a, query, 2);
+		if (
+			JSON.stringify(await this.mail.authority(token, query.workspaceId)) !==
+			JSON.stringify(a)
+		)
+			throw new ForbiddenException();
+		return result;
+	}
+	@Get('events')
+	async events(
+		@Headers('authorization') token: string | undefined,
+		@Query('workspaceId', new ParseUUIDPipe({ version: '4' }))
+		workspaceId: string,
+		@Res() response: Response
+	) {
+		const authorize = async () => {
+			this.mail.enabled();
+			const a = await this.mail.authority(token, workspaceId);
+			assertMailPermission(a, 'mail:read');
+			return a;
+		};
+		const initial = await authorize();
+		return this.live.open(
+			workspaceId,
+			initial.customer.subject,
+			response,
+			async () => {
+				if (JSON.stringify(await authorize()) !== JSON.stringify(initial))
+					throw new ForbiddenException();
+			}
+		);
+	}
+
 	@Put('notifications/:id/read')
 	@Header('Cache-Control', 'no-store')
 	async readNotification(

@@ -74,8 +74,22 @@ export class CrmAccessHealthService {
 				.$queryRaw`SELECT c.revision, c.admission_ceiling, c.pending_operation_id, c.pending_target_seats, c.latest_committed_operation_id, o.state, o.request_hash, o.next_check_at, o.release_fence FROM crm_access.crm_billing_capacity c FULL JOIN crm_access.crm_billing_operations o ON false LIMIT 0`;
 			await this.prisma
 				.$queryRaw`SELECT workspace_id, display_name, version, updated_at FROM crm_access.crm_workspace_branding LIMIT 0`;
-			const [customRoleContract] = await this.prisma
-				.$queryRaw<{ allowed: boolean }[]>`SELECT crm_access.is_valid_custom_role_permissions(ARRAY['sales:read']::text[]) AS allowed`;
+			await this.prisma
+				.$queryRaw`SELECT e.version, c.last_sequence, p.read_through_sequence, m.sender_membership_id FROM crm_access.crm_directory_entries e FULL JOIN crm_access.crm_chat_conversations c ON false FULL JOIN crm_access.crm_chat_participants p ON false FULL JOIN crm_access.crm_chat_messages m ON false LIMIT 0`;
+			const [collaboration] = await this.prisma.$queryRaw<
+				{ enabled: boolean }[]
+			>`
+				SELECT count(*) = 13 AS enabled FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+				WHERE n.nspname='crm_access' AND t.tgenabled IN ('O','A') AND (
+				 (c.relname IN ('crm_directory_entries','crm_chat_conversations','crm_chat_participants','crm_chat_messages') AND t.tgname='workspace_closure_business_guard') OR
+				 (c.relname IN ('crm_directory_entries','crm_chat_conversations','crm_chat_participants','crm_chat_messages','crm_workspace_members','crm_invitation_intents','crm_admissions') AND t.tgname='workspace_collaboration_signal') OR
+				 (c.relname='crm_chat_messages' AND t.tgname='crm_chat_message_immutable') OR
+				 (c.relname='crm_workspace_access' AND t.tgname='provision_workspace_collaboration'))`;
+			if (!collaboration?.enabled)
+				throw new Error('Workspace collaboration schema is not ready');
+			const [customRoleContract] = await this.prisma.$queryRaw<
+				{ allowed: boolean }[]
+			>`SELECT crm_access.is_valid_custom_role_permissions(ARRAY['sales:read']::text[]) AS allowed`;
 			if (!customRoleContract?.allowed)
 				throw new Error('CRM custom role runtime is not ready');
 			if (!this.rabbit.isReady() || !this.outbox.isReady())

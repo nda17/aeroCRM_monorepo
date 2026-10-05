@@ -210,6 +210,15 @@ on:
         description: SHA-256 of sorted private crm-access.env and crm-sales.env migration file hashes
         required: false
         type: string
+      crm_workspace_collaboration_migration:
+        description: Backend target only; apply reviewed CRM Access collaboration and Customers mail live migrations with a full manifest
+        required: false
+        type: boolean
+        default: false
+      crm_workspace_collaboration_migration_env_hash:
+        description: SHA-256 of sorted private crm-access.env and crm-customers.env migration file hashes
+        required: false
+        type: string
       workspace_closure_migration:
         description: Backend target only; apply the reviewed seven-service workspace closure migration with the closure gate OFF
         type: boolean
@@ -301,6 +310,8 @@ jobs:
           PLANNER_MIGRATION_HASH: ${{ inputs.crm_planner_customization_migration_env_hash }}
           UX_MIGRATION: ${{ inputs.crm_ux_unification_migration && 'true' || 'false' }}
           UX_MIGRATION_HASH: ${{ inputs.crm_ux_unification_migration_env_hash }}
+          COLLABORATION_MIGRATION: ${{ inputs.crm_workspace_collaboration_migration && 'true' || 'false' }}
+          COLLABORATION_MIGRATION_HASH: ${{ inputs.crm_workspace_collaboration_migration_env_hash }}
           CLOSURE_MIGRATION: ${{ inputs.workspace_closure_migration && 'true' || 'false' }}
           CLOSURE_MIGRATION_HASH: ${{ inputs.workspace_closure_migration_env_hash }}
           IDENTITY_ACL_REPAIR: ${{ inputs.workspace_closure_identity_acl_repair && 'true' || 'false' }}
@@ -386,6 +397,17 @@ jobs:
               "$UX_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
           else
             [[ "$UX_MIGRATION" == false && -z "$UX_MIGRATION_HASH" ]]
+          fi
+          if [[ "$COLLABORATION_MIGRATION" == true ]]; then
+            [[ "$TARGET" == backend && "$CUTOVER" == false && "$CLOSURE_ENABLE" == false &&
+              "$CLOSURE_MIGRATION" == false && "$IDENTITY_ACL_REPAIR" == false &&
+              "$BILLING_MIGRATION" == false && "$CUSTOM_ROLES_MIGRATION" == false &&
+              "$SALES_COMMERCE_MIGRATION" == false && "$INTAKE_NOTIFICATIONS_MIGRATION" == false &&
+              "$MAIL_MIGRATION" == false && "$FILE_IMPORTS_MIGRATION" == false &&
+              "$PLANNER_MIGRATION" == false && "$UX_MIGRATION" == false && "$MAIL_ENV_INSTALL" == false &&
+              "$COLLABORATION_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
+          else
+            [[ "$COLLABORATION_MIGRATION" == false && -z "$COLLABORATION_MIGRATION_HASH" ]]
           fi
           if [[ "$SALES_COMMERCE_MIGRATION" == true ]]; then
             [[ "$TARGET" == backend && "$CUTOVER" == false && "$SALES_COMMERCE_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
@@ -492,6 +514,7 @@ jobs:
           node --check infra/scripts/crm-file-imports-migration.mjs
           node --check infra/scripts/crm-planner-customization-migration.mjs
           node --check infra/scripts/crm-ux-unification-migration.mjs
+          node --check infra/scripts/workspace-collaboration-migration.mjs
           node --check infra/scripts/crm-sales-commerce-migration.mjs
           node --check infra/scripts/crm-intake-notifications-migration.mjs
           node --check infra/scripts/workspace-closure-migration.mjs
@@ -501,6 +524,7 @@ jobs:
           node infra/scripts/crm-file-imports-migration.mjs --policy-self-test
           node infra/scripts/crm-planner-customization-migration.mjs --policy-self-test
           node infra/scripts/crm-ux-unification-migration.mjs --policy-self-test
+          node infra/scripts/workspace-collaboration-migration.mjs --policy-self-test
           node infra/scripts/crm-intake-notifications-migration.mjs --policy-self-test
           node infra/scripts/workspace-closure-migration.mjs --policy-self-test
           node infra/scripts/workspace-closure-enable.mjs --policy-self-test
@@ -535,7 +559,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ inputs.ci_run_id }}
           SHA: ${{ needs.verify.outputs.sha }}
-          REQUIRE_UNIFORM: ${{ (inputs.billing_capacity_migration || inputs.crm_custom_roles_migration || inputs.crm_sales_commerce_migration || inputs.crm_intake_notifications_migration || inputs.crm_corporate_mail_migration || inputs.crm_file_imports_migration || inputs.crm_planner_customization_migration || inputs.crm_ux_unification_migration || inputs.workspace_closure_migration || inputs.workspace_closure_identity_acl_repair || inputs.workspace_closure_enable || inputs.crm_contracts_cutover) && 'true' || 'false' }}
+          REQUIRE_UNIFORM: ${{ (inputs.billing_capacity_migration || inputs.crm_custom_roles_migration || inputs.crm_sales_commerce_migration || inputs.crm_intake_notifications_migration || inputs.crm_corporate_mail_migration || inputs.crm_file_imports_migration || inputs.crm_planner_customization_migration || inputs.crm_ux_unification_migration || inputs.crm_workspace_collaboration_migration || inputs.workspace_closure_migration || inputs.workspace_closure_identity_acl_repair || inputs.workspace_closure_enable || inputs.crm_contracts_cutover) && 'true' || 'false' }}
         run: |
           set -euo pipefail
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name backend-manifest --dir manifest
@@ -577,6 +601,8 @@ jobs:
           PLANNER_MIGRATION_HASH: ${{ inputs.crm_planner_customization_migration_env_hash }}
           UX_MIGRATION: ${{ inputs.crm_ux_unification_migration && 'true' || 'false' }}
           UX_MIGRATION_HASH: ${{ inputs.crm_ux_unification_migration_env_hash }}
+          COLLABORATION_MIGRATION: ${{ inputs.crm_workspace_collaboration_migration && 'true' || 'false' }}
+          COLLABORATION_MIGRATION_HASH: ${{ inputs.crm_workspace_collaboration_migration_env_hash }}
           CLOSURE_MIGRATION: ${{ inputs.workspace_closure_migration && 'true' || 'false' }}
           CLOSURE_MIGRATION_HASH: ${{ inputs.workspace_closure_migration_env_hash }}
           IDENTITY_ACL_REPAIR: ${{ inputs.workspace_closure_identity_acl_repair && 'true' || 'false' }}
@@ -696,8 +722,11 @@ jobs:
             if [[ "$UX_MIGRATION" == true ]]; then
               node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --crm-ux-unification")
             fi
+            if [[ "$COLLABORATION_MIGRATION" == true ]]; then
+              node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --workspace-collaboration")
+            fi
             if [ "$CLOSURE_ENABLE" = true ]; then manifest_env=; fi
-            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && $manifest_env REVIEWED_INFRA_DIR='$stage' '$stage/scripts/release.sh' '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH' '$INTAKE_NOTIFICATIONS_MIGRATION' '$INTAKE_NOTIFICATIONS_MIGRATION_HASH' '$CLOSURE_MIGRATION' '$CLOSURE_MIGRATION_HASH' '$IDENTITY_ACL_REPAIR' '$IDENTITY_ENV_HASH' '$MAIL_MIGRATION' '$MAIL_MIGRATION_HASH' '$FILE_IMPORTS_MIGRATION' '$FILE_IMPORTS_MIGRATION_HASH' '$PLANNER_MIGRATION' '$PLANNER_MIGRATION_HASH' '$UX_MIGRATION' '$UX_MIGRATION_HASH'"
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && $manifest_env REVIEWED_INFRA_DIR='$stage' '$stage/scripts/release.sh' '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH' '$INTAKE_NOTIFICATIONS_MIGRATION' '$INTAKE_NOTIFICATIONS_MIGRATION_HASH' '$CLOSURE_MIGRATION' '$CLOSURE_MIGRATION_HASH' '$IDENTITY_ACL_REPAIR' '$IDENTITY_ENV_HASH' '$MAIL_MIGRATION' '$MAIL_MIGRATION_HASH' '$FILE_IMPORTS_MIGRATION' '$FILE_IMPORTS_MIGRATION_HASH' '$PLANNER_MIGRATION' '$PLANNER_MIGRATION_HASH' '$UX_MIGRATION' '$UX_MIGRATION_HASH' '$COLLABORATION_MIGRATION' '$COLLABORATION_MIGRATION_HASH'"
           else
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash'"
           fi

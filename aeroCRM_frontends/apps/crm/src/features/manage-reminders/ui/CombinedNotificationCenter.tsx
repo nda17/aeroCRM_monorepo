@@ -10,7 +10,19 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { useSessionStore } from '@/entities/session'
-import type { TaskNotification } from '@/entities/crm-task-notifications'
+import type {
+	TaskNotification,
+	TaskNotificationPage
+} from '@/entities/crm-task-notifications'
+import {
+	listChatNotifications,
+	readChatConversation
+} from '@/entities/workspace-collaboration'
+import {
+	useCollaboration,
+	useCollaborationCommand
+} from '@/features/workspace-collaboration/model/use-collaboration'
+import { CommandNotice } from '@/features/workspace-collaboration/ui/CommandNotice'
 import { AppIcon, Button, Drawer, useTooltip } from '@/shared/ui'
 import { invalidContractError } from '@/shared/api/authenticated-http-client'
 import {
@@ -26,6 +38,43 @@ import {
 import type { ReminderContext } from '../model/use-reminder-session'
 import styles from './TaskNotificationCenter.module.scss'
 
+type Source = NotificationSource | 'chat'
+export type NotificationTab = 'all' | 'tasks' | Source
+const sourceLabels = {
+	intake: 'Заявки',
+	mail: 'Почта',
+	support: 'Поддержка',
+	chat: 'Сообщения',
+	tasks: 'Задачи'
+}
+const eventLabels = {
+	intake: 'Новая заявка',
+	mail: 'Входящее письмо',
+	support: 'Ответ поддержки',
+	chat: 'Сообщение коллеги'
+}
+const notificationHref = (
+	source: Source,
+	item: CrmNotification,
+	workspaceId: string
+) => {
+	const base = '?workspaceId=' + encodeURIComponent(workspaceId)
+	if (source === 'intake')
+		return '/inbox' + base + '&entry=' + item.targetId
+	if (source === 'mail')
+		return (
+			'/mail' +
+			base +
+			'&mailboxId=' +
+			item.mailboxId +
+			'&messageId=' +
+			item.targetId
+		)
+	if (source === 'chat')
+		return '/messages' + base + '&conversationId=' + item.targetId
+	return '/planner' + base + '&supportConversation=' + item.targetId
+}
+
 type NotificationHead = {
 	items: readonly (Pick<CrmNotification, 'id' | 'createdAt' | 'readAt'> &
 		Partial<Pick<TaskNotification, 'kind' | 'dueAt'>>)[]
@@ -35,9 +84,10 @@ type HeadObservation = {
 	intake: NotificationHead | null
 	support: NotificationHead | null
 	mail: NotificationHead | null
+	chat: NotificationHead | null
 	tasks: NotificationHead | null
 	open: boolean
-	markers: Partial<Record<NotificationSource | 'tasks', HeadMarker>>
+	markers: Partial<Record<Source | 'tasks', HeadMarker>>
 	notice: number
 }
 
@@ -73,6 +123,7 @@ export function CombinedNotificationCenter({
 	taskCount,
 	taskSnapshot,
 	taskContent,
+	onTaskRead,
 	tab,
 	setTab
 }: {
@@ -80,10 +131,11 @@ export function CombinedNotificationCenter({
 	open: boolean
 	setOpen: (open: boolean) => void
 	taskCount: number | null
-	taskSnapshot: NotificationHead | null
+	taskSnapshot: TaskNotificationPage | null
 	taskContent: ReactNode
-	tab: 'tasks' | NotificationSource
-	setTab: (tab: 'tasks' | NotificationSource) => void
+	onTaskRead: (item: TaskNotification) => Promise<void>
+	tab: NotificationTab
+	setTab: (tab: NotificationTab) => void
 }) {
 	const [page, setPage] = useState(1)
 	const [unread, setUnread] = useState(false)
@@ -98,6 +150,14 @@ export function CombinedNotificationCenter({
 		}
 	}, [])
 	const mailContext = useMailContext()
+	const collaboration = useCollaboration()
+	const chatRead = useCollaborationCommand(
+		collaboration,
+		'chat:notification-read',
+		readChatConversation,
+		() => undefined,
+		false
+	)
 	const session = context.session
 	const current = () =>
 		live.current &&
@@ -126,25 +186,48 @@ export function CombinedNotificationCenter({
 		mailContext.capabilities.data?.enabled === true &&
 		mailContext.capabilities.data.mailPermissions.includes('mail:read')
 	const load = async (
-		source: NotificationSource,
+		source: Source,
 		requestedPage: number,
 		requestedUnread: boolean
 	) => {
 		if (
 			!current() ||
-			(source === 'mail' && (!sameMailContext || !mailContext.current()))
+			(source === 'mail' &&
+				(!sameMailContext || !mailContext.current())) ||
+			(source === 'chat' && !collaboration.current())
 		)
 			throw invalidContractError()
-		const result = await listCrmNotifications(
-			source,
-			session!.accessToken,
-			context.workspace.workspaceId,
-			requestedPage,
-			requestedUnread
-		)
+		const result =
+			source === 'chat'
+				? await listChatNotifications(session!.accessToken, {
+						workspaceId: context.workspace.workspaceId,
+						subject: session!.userId,
+						page: requestedPage,
+						pageSize: 10,
+						unreadOnly: requestedUnread
+					}).then(value => ({
+						...value,
+						items: value.items.map(item => ({
+							id: item.id,
+							title: item.title + ': ' + item.text.slice(0, 160),
+							createdAt: item.createdAt,
+							readAt: item.readAt,
+							targetId: item.conversationId,
+							sequence: item.sequence
+						}))
+					}))
+				: await listCrmNotifications(
+						source,
+						session!.accessToken,
+						context.workspace.workspaceId,
+						requestedPage,
+						requestedUnread
+					)
 		if (
 			!current() ||
-			(source === 'mail' && (!sameMailContext || !mailContext.current()))
+			(source === 'mail' &&
+				(!sameMailContext || !mailContext.current())) ||
+			(source === 'chat' && !collaboration.current())
 		)
 			throw invalidContractError()
 		return result
@@ -239,6 +322,39 @@ export function CombinedNotificationCenter({
 		(mailContext.capabilities.isSuccess && !canMail) ||
 		isMailAccessDenied(mail.error) ||
 		isMailAccessDenied(mailHead.error)
+	const chat = useQuery({
+		queryKey: [
+			'crm-chat-notifications',
+			context.key,
+			context.workspace.membership.membershipId,
+			tab === 'chat' ? page : 1,
+			tab === 'chat' && unread
+		],
+		queryFn: () =>
+			load('chat', tab === 'chat' ? page : 1, tab === 'chat' && unread),
+		enabled: collaboration.ready,
+		retry: false,
+		gcTime: 0,
+		refetchInterval: 30000
+	})
+	const chatHead = useQuery({
+		queryKey: [
+			'crm-chat-notifications',
+			context.key,
+			context.workspace.membership.membershipId,
+			1,
+			false
+		],
+		queryFn: () => load('chat', 1, false),
+		enabled: collaboration.ready,
+		retry: false,
+		gcTime: 0,
+		refetchInterval: 30000
+	})
+	const latestChat =
+		collaboration.ready && chatHead.isSuccess && !chat.isError
+			? chatHead.data
+			: null
 	const latestMail =
 		canMail && !deniedMail && !mail.isError && mailHead.isSuccess
 			? mailHead.data
@@ -252,6 +368,7 @@ export function CombinedNotificationCenter({
 		observed.intake !== latestIntake ||
 		observed.support !== latestSupport ||
 		observed.mail !== latestMail ||
+		observed.chat !== latestChat ||
 		observed.tasks !== taskSnapshot ||
 		observed.open !== open
 	) {
@@ -261,6 +378,7 @@ export function CombinedNotificationCenter({
 			['intake', latestIntake],
 			['support', latestSupport],
 			['mail', latestMail],
+			['chat', latestChat],
 			['tasks', taskSnapshot]
 		] as const) {
 			if (!head) continue
@@ -272,6 +390,7 @@ export function CombinedNotificationCenter({
 			intake: latestIntake,
 			support: latestSupport,
 			mail: latestMail,
+			chat: latestChat,
 			tasks: taskSnapshot,
 			open,
 			markers,
@@ -291,17 +410,39 @@ export function CombinedNotificationCenter({
 		taskCount,
 		deniedIntake ? 0 : (latestIntake?.unreadCount ?? null),
 		latestSupport?.unreadCount ?? null,
-		deniedMail ? 0 : (latestMail?.unreadCount ?? null)
+		deniedMail ? 0 : (latestMail?.unreadCount ?? null),
+		latestChat?.unreadCount ?? null
 	]
 	const count = counts.reduce<number>((sum, n) => sum + (n ?? 0), 0)
 	const partial = counts.some(n => n === null)
 	const hint = useTooltip<HTMLButtonElement>(
-		'Новые заявки, почта, ответы поддержки и ваши задачи.',
+		'Новые заявки, сообщения коллег, почта, ответы поддержки и ваши задачи.',
 		!open
 	)
-	const query = tab === 'intake' ? intake : tab === 'mail' ? mail : support
+	const query =
+		tab === 'intake'
+			? intake
+			: tab === 'mail'
+				? mail
+				: tab === 'chat'
+					? chat
+					: support
 	const refresh = async () => {
 		if (!current()) return
+		if (tab === 'all') {
+			await Promise.all([
+				canIntake ? intakeHead.refetch() : undefined,
+				supportHead.refetch(),
+				canMail ? mailHead.refetch() : undefined,
+				collaboration.ready ? chatHead.refetch() : undefined,
+				client.invalidateQueries({ queryKey: ['crm-task-notifications'] })
+			])
+			return
+		}
+		if (tab === 'chat') {
+			await Promise.all([chat.refetch(), chatHead.refetch()])
+			return
+		}
 		if (tab === 'mail') {
 			const fresh = await mailContext.capabilities.refetch()
 			if (
@@ -317,16 +458,23 @@ export function CombinedNotificationCenter({
 			await Promise.all([intake.refetch(), intakeHead.refetch()])
 		else await Promise.all([support.refetch(), supportHead.refetch()])
 	}
-	const mark = async (
-		source: NotificationSource,
-		item: CrmNotification
-	) => {
+	const mark = async (source: Source, item: CrmNotification) => {
 		if (
 			!current() ||
 			busy ||
 			(source === 'mail' && (!canMail || !mailContext.current()))
 		)
 			return
+		if (source === 'chat') {
+			if (item.readAt !== null || !item.sequence || chatRead.locked) return
+			await chatRead.execute(() => ({
+				...collaboration.binding,
+				conversationId: item.targetId,
+				commandId: crypto.randomUUID(),
+				throughSequence: item.sequence!
+			}))
+			return
+		}
 		setBusy(true)
 		try {
 			await readCrmNotification(
@@ -371,13 +519,53 @@ export function CombinedNotificationCenter({
 			}
 		}
 	}
+	const recent = [
+		...(
+			[
+				['intake', latestIntake],
+				['support', latestSupport],
+				['mail', latestMail],
+				['chat', latestChat]
+			] as const
+		).flatMap(([source, head]) =>
+			(head?.items ?? []).map(item => ({
+				id: source + ':' + item.id,
+				source: source as Source | 'tasks',
+				title: item.title,
+				at: item.createdAt,
+				readAt: item.readAt,
+				href: notificationHref(
+					source,
+					item,
+					context.workspace.workspaceId
+				),
+				mark: () => mark(source, item),
+				canMark:
+					item.readAt === null ||
+					(source !== 'support' && source !== 'chat')
+			}))
+		),
+		...(taskSnapshot?.items ?? []).map(item => ({
+			id: 'tasks:' + item.id,
+			source: 'tasks' as const,
+			title: item.title,
+			at: item.kind === 'DUE' ? item.dueAt : item.createdAt,
+			readAt: item.readAt,
+			href: item.href,
+			mark: () => onTaskRead(item),
+			canMark: true
+		}))
+	].sort(
+		(a, b) =>
+			Date.parse(b.at) - Date.parse(a.at) || a.id.localeCompare(b.id)
+	)
 	return (
 		<>
 			<div className={styles.triggerGroup}>
 				<button
 					{...hint.triggerProps}
 					type="button"
-					className={styles.trigger}
+					className={`${styles.trigger} ${count > 0 ? styles.hasUnread : ''}`}
 					aria-label={
 						partial
 							? 'Уведомления, часть счётчиков недоступна'
@@ -413,7 +601,7 @@ export function CombinedNotificationCenter({
 				isOpen={open}
 				onClose={() => setOpen(false)}
 				title="Уведомления"
-				description="Заявки, входящая почта, ответы поддержки, назначения и сроки задач."
+				description="Заявки, сообщения коллег, входящая почта, поддержка и задачи."
 				size="md"
 			>
 				<div className={styles.content}>
@@ -422,7 +610,17 @@ export function CombinedNotificationCenter({
 						role="group"
 						aria-label="Виды уведомлений"
 					>
-						{(['intake', 'mail', 'support', 'tasks'] as const).map(
+						<Button
+							variant={tab === 'all' ? 'primary' : 'secondary'}
+							aria-pressed={tab === 'all'}
+							onClick={() => {
+								setTab('all')
+								setPage(1)
+							}}
+						>
+							Все
+						</Button>
+						{(['intake', 'chat', 'mail', 'support', 'tasks'] as const).map(
 							source => (
 								<Button
 									key={source}
@@ -438,19 +636,22 @@ export function CombinedNotificationCenter({
 											intake: 'Заявки',
 											mail: 'Почта',
 											support: 'Поддержка',
-											tasks: 'Задачи'
+											tasks: 'Задачи',
+											chat: 'Сообщения'
 										}[source]
 									}
 									<span aria-hidden="true">
 										{' '}
 										·{' '}
-										{source === 'intake'
-											? (counts[1] ?? '…')
-											: source === 'mail'
-												? (counts[3] ?? '…')
-												: source === 'support'
-													? (counts[2] ?? '…')
-													: (counts[0] ?? '…')}
+										{source === 'chat'
+											? (counts[4] ?? '…')
+											: source === 'intake'
+												? (counts[1] ?? '…')
+												: source === 'mail'
+													? (counts[3] ?? '…')
+													: source === 'support'
+														? (counts[2] ?? '…')
+														: (counts[0] ?? '…')}
 									</span>
 								</Button>
 							)
@@ -461,7 +662,77 @@ export function CombinedNotificationCenter({
 							? `Известно непрочитанных: ${count}. Часть счётчиков пока недоступна.`
 							: `Всего непрочитанных во всех разделах: ${count}`}
 					</p>
-					{tab === 'tasks' ? (
+					<CommandNotice command={chatRead} />
+					{tab === 'all' ? (
+						<>
+							<div className={styles.controls}>
+								<label>
+									<input
+										type="checkbox"
+										checked={unread}
+										onChange={event => setUnread(event.target.checked)}
+									/>
+									Только непрочитанные
+								</label>
+								<Button variant="secondary" onClick={() => void refresh()}>
+									Обновить
+								</Button>
+							</div>
+							<p>
+								Последние события каждого раздела. Полная история доступна
+								во вкладках выше.
+							</p>
+							<ul className={styles.items}>
+								{recent
+									.filter(item => !unread || item.readAt === null)
+									.map(item => (
+										<li
+											key={item.id}
+											className={
+												item.readAt === null ? styles.unread : undefined
+											}
+										>
+											<span className={styles.kind}>
+												{sourceLabels[item.source]}
+											</span>
+											<Link
+												href={item.href}
+												onClick={event => {
+													if (!current() || busy || chatRead.locked) {
+														event.preventDefault()
+														return
+													}
+													setOpen(false)
+												}}
+											>
+												{item.title}
+											</Link>
+											<span>
+												{new Date(item.at).toLocaleString('ru-RU')}
+											</span>
+											<Button
+												variant="secondary"
+												disabled={busy || chatRead.locked || !item.canMark}
+												onClick={() => void item.mark()}
+											>
+												{item.readAt === null
+													? 'Отметить прочитанным'
+													: item.canMark
+														? 'Отметить непрочитанным'
+														: 'Прочитано'}
+											</Button>
+										</li>
+									))}
+							</ul>
+							{!recent.some(item => !unread || item.readAt === null) ? (
+								<p>
+									{partial
+										? 'Ожидаем доступные события…'
+										: 'Уведомлений пока нет.'}
+								</p>
+							) : null}
+						</>
+					) : tab === 'tasks' ? (
 						taskContent
 					) : (
 						<>
@@ -520,31 +791,14 @@ export function CombinedNotificationCenter({
 													}
 												>
 													<span className={styles.kind}>
-														{tab === 'intake'
-															? 'Новая заявка'
-															: tab === 'mail'
-																? 'Входящее письмо'
-																: 'Ответ поддержки'}
+														{eventLabels[tab]}
 													</span>
 													<Link
-														href={
-															tab === 'intake'
-																? '/inbox?workspaceId=' +
-																	context.workspace.workspaceId +
-																	'&entry=' +
-																	item.targetId
-																: tab === 'mail'
-																	? '/contacts?workspaceId=' +
-																		context.workspace.workspaceId +
-																		'&contactId=' +
-																		item.contactId +
-																		'&mailMessageId=' +
-																		item.targetId
-																	: '/planner?workspaceId=' +
-																		context.workspace.workspaceId +
-																		'&supportConversation=' +
-																		item.targetId
-														}
+														href={notificationHref(
+															tab,
+															item,
+															context.workspace.workspaceId
+														)}
 														onClick={event => {
 															if (
 																!current() ||
@@ -569,13 +823,15 @@ export function CombinedNotificationCenter({
 														variant="secondary"
 														disabled={
 															busy ||
-															(tab === 'support' && item.readAt !== null)
+															((tab === 'support' || tab === 'chat') &&
+																item.readAt !== null) ||
+															chatRead.locked
 														}
 														onClick={() => void mark(tab, item)}
 													>
 														{item.readAt === null
 															? 'Отметить прочитанным'
-															: tab === 'support'
+															: tab === 'support' || tab === 'chat'
 																? 'Прочитано'
 																: 'Отметить непрочитанным'}
 													</Button>

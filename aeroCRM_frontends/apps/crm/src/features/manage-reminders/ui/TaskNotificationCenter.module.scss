@@ -13,6 +13,9 @@
 .badge {
 	@apply absolute -right-1 -top-1 min-w-5 rounded-full bg-primary px-1 text-xs font-semibold leading-5 text-white;
 }
+.hasUnread {
+	@apply border-primary/50 bg-primary/10 text-primary;
+}
 .content {
 	@apply flex min-w-0 flex-col gap-4 text-sm text-crm-muted;
 }

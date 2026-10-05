@@ -17,7 +17,8 @@ export interface CrmNotification {
 	createdAt: string
 	readAt: string | null
 	targetId: string
-	contactId?: string
+	contactId?: string | null
+	mailboxId?: string
 	sequence?: number
 }
 export interface NotificationPage {
@@ -43,7 +44,7 @@ export async function listCrmNotifications(
 			source === 'intake'
 				? '/crm/intake/notifications'
 				: source === 'mail'
-					? '/crm/customers/mail/notifications'
+					? '/crm/customers/mail/notifications-v2'
 					: '/support/notifications',
 		params: {
 			page: String(page),
@@ -64,7 +65,7 @@ export async function listCrmNotifications(
 			'items',
 			...(source !== 'support' ? ['workspaceId'] : [])
 		]) ||
-		value.schemaVersion !== 1 ||
+		value.schemaVersion !== (source === 'mail' ? 2 : 1) ||
 		value.page !== page ||
 		value.pageSize !== 10 ||
 		(source !== 'support' && value.workspaceId !== workspaceId) ||
@@ -87,7 +88,7 @@ export async function listCrmNotifications(
 				...(source === 'intake'
 					? ['entryId']
 					: source === 'mail'
-						? ['messageId', 'contactId']
+						? ['messageId', 'mailboxId', 'contactId']
 						: ['conversationId', 'sequence'])
 			]) ||
 			!isUuidV4(row.id) ||
@@ -101,7 +102,9 @@ export async function listCrmNotifications(
 						? row.messageId
 						: row.conversationId
 			) ||
-			(source === 'mail' && !isUuidV4(row.contactId)) ||
+			(source === 'mail' &&
+				(!isUuidV4(row.mailboxId) ||
+					(row.contactId !== null && !isUuidV4(row.contactId)))) ||
 			(source === 'support' &&
 				(!Number.isInteger(row.sequence) || Number(row.sequence) < 1))
 		)
@@ -116,7 +119,12 @@ export async function listCrmNotifications(
 				: source === 'mail'
 					? row.messageId
 					: row.conversationId) as string,
-			...(source === 'mail' ? { contactId: row.contactId as string } : {}),
+			...(source === 'mail'
+				? {
+						contactId: row.contactId as string | null,
+						mailboxId: row.mailboxId as string
+					}
+				: {}),
 			...(source === 'support' ? { sequence: Number(row.sequence) } : {})
 		}
 	})

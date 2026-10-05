@@ -2,9 +2,11 @@ export type CrmNavigationIcon =
 	| 'clock'
 	| 'inbox'
 	| 'mail'
+	| 'chat'
 	| 'deals'
 	| 'tasks'
 	| 'contacts'
+	| 'user'
 	| 'analytics'
 	| 'settings'
 	| 'products'
@@ -30,6 +32,12 @@ export const CRM_NAVIGATION = [
 		label: 'Входящие',
 		description:
 			'Новые обращения поступают сюда из подключённых источников или создаются вручную. Принятие в работу выполняется отдельно.'
+	},
+	{
+		href: '/messages',
+		icon: 'chat',
+		label: 'Сообщения',
+		description: 'Личные диалоги с коллегами и общий чат пространства.'
 	},
 	{
 		href: '/mail',
@@ -65,6 +73,12 @@ export const CRM_NAVIGATION = [
 		label: 'Аналитика',
 		description:
 			'Показатели продаж и работы команды рассчитываются по данным сделок и задач выбранного пространства.'
+	},
+	{
+		href: '/directory',
+		icon: 'user',
+		label: 'Справочник',
+		description: 'Рабочие контакты сотрудников вашего пространства.'
 	},
 	{
 		href: '/settings',

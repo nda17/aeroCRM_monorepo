@@ -2,7 +2,10 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
-import { CombinedNotificationCenter } from './CombinedNotificationCenter'
+import {
+	CombinedNotificationCenter,
+	type NotificationTab
+} from './CombinedNotificationCenter'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import {
@@ -39,16 +42,14 @@ const TaskNotificationSession = ({
 	// Keep only drawer visibility while actor verification recovers. A new
 	// workspace/session/scope resets it; the panel still remounts per actor.
 	const [open, setOpen] = useState(false)
-	const [tab, setTab] = useState<'intake' | 'support' | 'mail' | 'tasks'>(
-		'intake'
-	)
+	const [tab, setTab] = useState<NotificationTab>('all')
 	return (
 		<TaskNotificationPanel
 			key={JSON.stringify([context.key, context.actor])}
 			context={context}
 			isOpen={open}
 			onOpenChange={setOpen}
-			render={({ count, content, latest }) => (
+			render={({ count, content, latest, mark }) => (
 				<CombinedNotificationCenter
 					context={context}
 					open={open}
@@ -56,6 +57,7 @@ const TaskNotificationSession = ({
 					taskCount={count}
 					taskSnapshot={latest}
 					taskContent={content}
+					onTaskRead={mark}
 					tab={tab}
 					setTab={setTab}
 				/>
@@ -76,6 +78,7 @@ export const TaskNotificationPanel = ({
 		count: number | null
 		content: ReactNode
 		latest: TaskNotificationPage | null
+		mark: (item: TaskNotification) => Promise<void>
 	}) => ReactNode
 }) => {
 	const [localOpen, setLocalOpen] = useState(false)
@@ -157,7 +160,9 @@ export const TaskNotificationPanel = ({
 	const visible = ready && query.isSuccess
 	const latest = ready && head.isSuccess ? head.data : null
 	const count = render
-		? (latest?.unreadCount ?? null)
+		? permissionDenied
+			? 0
+			: (latest?.unreadCount ?? null)
 		: visible
 			? query.data.unreadCount
 			: null
@@ -348,7 +353,12 @@ export const TaskNotificationPanel = ({
 		</div>
 	)
 	if (render)
-		return render({ count: permissionDenied ? 0 : count, content, latest })
+		return render({
+			count: permissionDenied ? 0 : count,
+			content,
+			latest,
+			mark
+		})
 	return (
 		<>
 			<button

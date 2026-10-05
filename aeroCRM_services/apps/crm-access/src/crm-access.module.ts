@@ -62,6 +62,13 @@ import { WorkspaceClosureWorker } from './workspace-closure/workspace-closure.wo
 import { SavedViewsController } from './saved-views/saved-views.controller';
 import { SavedViewsService } from './saved-views/saved-views.service';
 
+import { DirectoryController } from './directory/directory.controller';
+import { DirectoryService } from './directory/directory.service';
+import { WorkspaceChatController } from './workspace-chat/workspace-chat.controller';
+import { WorkspaceChatService } from './workspace-chat/workspace-chat.service';
+import { AccessLiveChangesController } from './live/live-changes.controller';
+import { AccessLiveChangesService } from './live/live-changes.service';
+
 const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 
 @Module({
@@ -75,6 +82,9 @@ const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 		...(role === 'api'
 			? [
 					CrmAccessController,
+					DirectoryController,
+					WorkspaceChatController,
+					AccessLiveChangesController,
 					WorkspaceClosureController,
 					CrmPermissionsController,
 					CrmAuthorizationController,
@@ -96,6 +106,9 @@ const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 	],
 	providers: [
 		CrmAuthorizationService,
+		DirectoryService,
+		WorkspaceChatService,
+		AccessLiveChangesService,
 		CrmInternalGuard,
 		IdentityAuthContextClient,
 		BillingEntitlementClient,

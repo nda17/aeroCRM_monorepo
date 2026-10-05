@@ -78,6 +78,8 @@ model CrmWorkspaceAccess {
   createdAt                     DateTime           @default(now()) @map("created_at")
   updatedAt                     DateTime           @updatedAt @map("updated_at")
   savedViews                    CrmSavedView[]
+  directoryEntries              CrmDirectoryEntry[]
+  chatConversations             CrmChatConversation[]
 
   @@index([lifecycle, updatedAt])
   @@map("crm_workspace_access")
@@ -215,6 +217,7 @@ model CrmInvitationIntent {
   middleName            String?        @map("middle_name") @db.VarChar(100)
   role                  CrmMemberRole
   customRoleId          String?        @map("custom_role_id") @db.Uuid
+  directoryEntries      CrmDirectoryEntry[]
   customRole            CrmCustomRole? @relation(fields: [customRoleId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
   teamIds               String[]       @default([]) @map("team_ids") @db.Uuid
   inviterSubject        String         @map("inviter_subject") @db.VarChar(256)
@@ -390,5 +393,84 @@ enum CrmAccessLifecycle {
   READ_ONLY
   SUSPENDED
 
+  @@schema("crm_access")
+}
+
+model CrmDirectoryEntry {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  sourceKey String @map("source_key") @db.VarChar(300)
+  subject String? @db.VarChar(256)
+  invitationId String? @map("invitation_id") @db.Uuid
+  firstName String? @map("first_name") @db.VarChar(100)
+  lastName String? @map("last_name") @db.VarChar(100)
+  middleName String? @map("middle_name") @db.VarChar(100)
+  phone String? @db.VarChar(64)
+  email String? @db.VarChar(254)
+  position String? @db.VarChar(100)
+  department String? @db.VarChar(100)
+  extension String? @db.VarChar(20)
+  telegram String? @db.VarChar(100)
+  version Int @default(1)
+  archivedAt DateTime? @map("archived_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  workspace CrmWorkspaceAccess @relation(fields:[workspaceId], references:[workspaceId], onDelete:Restrict)
+  invitation CrmInvitationIntent? @relation(fields:[invitationId,workspaceId],references:[id,workspaceId],onDelete:Restrict,onUpdate:NoAction,map:"crm_directory_invitation_fk")
+  @@unique([id,workspaceId])
+  @@unique([workspaceId,sourceKey])
+  @@unique([workspaceId,subject])
+  @@index([workspaceId,archivedAt,lastName,firstName,id])
+  @@map("crm_directory_entries")
+  @@schema("crm_access")
+}
+model CrmChatConversation {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  kind String @db.VarChar(16)
+  pairKey String @map("pair_key") @db.VarChar(64)
+  lastSequence Int @default(0) @map("last_sequence")
+  lastMessageAt DateTime? @map("last_message_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  workspace CrmWorkspaceAccess @relation(fields:[workspaceId], references:[workspaceId], onDelete:Restrict)
+  participants CrmChatParticipant[]
+  messages CrmChatMessage[]
+  @@unique([id,workspaceId])
+  @@unique([workspaceId,pairKey])
+  @@index([workspaceId,lastMessageAt,id])
+  @@map("crm_chat_conversations")
+  @@schema("crm_access")
+}
+model CrmChatParticipant {
+  workspaceId String @map("workspace_id") @db.Uuid
+  conversationId String @map("conversation_id") @db.Uuid
+  subject String @db.VarChar(256)
+  membershipId String @map("membership_id") @db.Uuid
+  readThroughSequence Int @default(0) @map("read_through_sequence")
+  readAt DateTime? @map("read_at")
+  conversation CrmChatConversation @relation(fields:[conversationId,workspaceId],references:[id,workspaceId],onDelete:Restrict)
+  sentMessages CrmChatMessage[]
+  @@id([conversationId,subject])
+  @@unique([conversationId,subject,workspaceId])
+  @@index([workspaceId,subject,membershipId])
+  @@map("crm_chat_participants")
+  @@schema("crm_access")
+}
+model CrmChatMessage {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  conversationId String @map("conversation_id") @db.Uuid
+  sequence Int
+  senderSubject String @map("sender_subject") @db.VarChar(256)
+  senderMembershipId String @map("sender_membership_id") @db.Uuid
+  senderName String @map("sender_name") @db.VarChar(302)
+  text String @db.VarChar(10000)
+  createdAt DateTime @default(now()) @map("created_at")
+  conversation CrmChatConversation @relation(fields:[conversationId,workspaceId],references:[id,workspaceId],onDelete:Restrict)
+  @@unique([id,workspaceId])
+  sender CrmChatParticipant @relation(fields:[conversationId,senderSubject,workspaceId],references:[conversationId,subject,workspaceId],onDelete:Restrict,onUpdate:NoAction,map:"crm_chat_sender_fk")
+  @@unique([conversationId,sequence])
+  @@index([workspaceId,conversationId,sequence])
+  @@map("crm_chat_messages")
   @@schema("crm_access")
 }

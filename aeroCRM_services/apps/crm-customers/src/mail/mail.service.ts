@@ -1412,7 +1412,11 @@ export class MailService {
 			}
 		};
 	}
-	private async notificationScope(a: MailAuthority, tx: MailTx) {
+	private async notificationScope(
+		a: MailAuthority,
+		tx: MailTx,
+		linkedOnly = false
+	) {
 		this.enabled();
 		const mailboxIds = await this.visibleMailboxIds(a, 'read', tx);
 		return {
@@ -1420,18 +1424,33 @@ export class MailService {
 			message: {
 				workspaceId: a.customer.workspaceId,
 				mailboxId: { in: mailboxIds },
-				mailContactLink_messageId: {
-					some: { state: 'LINKED', contact: customerScope(a.customer) }
-				}
+				OR: [
+					...(linkedOnly
+						? []
+						: [
+								{
+									mailContactLink_messageId: { none: { state: 'LINKED' } }
+								}
+							]),
+					{
+						mailContactLink_messageId: {
+							some: { state: 'LINKED', contact: customerScope(a.customer) }
+						}
+					}
+				]
 			}
 		};
 	}
-	async notifications(a: MailAuthority, query: MailNotificationsQuery) {
+	async notifications(
+		a: MailAuthority,
+		query: MailNotificationsQuery,
+		schemaVersion: 1 | 2 = 1
+	) {
 		if (query.workspaceId !== a.customer.workspaceId)
 			throw new ForbiddenException();
 		return this.prisma.$transaction(
 			async (tx) => {
-				const scope = await this.notificationScope(a, tx);
+				const scope = await this.notificationScope(a, tx, schemaVersion === 1);
 				const reader = {
 					recipientSubject: a.customer.subject,
 					recipientMembershipId: a.membershipId
@@ -1456,6 +1475,7 @@ export class MailService {
 							message: {
 								select: {
 									subject: true,
+									mailboxId: true,
 									mailContactLink_messageId: {
 										where: {
 											state: 'LINKED',
@@ -1471,7 +1491,7 @@ export class MailService {
 					})
 				]);
 				return {
-					schemaVersion: 1,
+					schemaVersion,
 					workspaceId: query.workspaceId,
 					page: query.page,
 					pageSize: query.pageSize,
@@ -1480,7 +1500,11 @@ export class MailService {
 					items: rows.map((row) => ({
 						id: row.id,
 						messageId: row.messageId,
-						contactId: row.message.mailContactLink_messageId[0].contactId!,
+						...(schemaVersion === 2
+							? { mailboxId: row.message.mailboxId }
+							: {}),
+						contactId:
+							row.message.mailContactLink_messageId[0]?.contactId ?? null,
 						title:
 							row.message.subject
 								.replace(/[\x00-\x1f\x7f]/g, ' ')

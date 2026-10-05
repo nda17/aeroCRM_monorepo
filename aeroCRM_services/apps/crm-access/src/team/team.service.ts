@@ -37,6 +37,10 @@ import {
 	queueTeamDelivery,
 	type TeamAuthority
 } from './team.util';
+import {
+	attachDirectoryInvitation,
+	collaborationSignal
+} from '../directory/directory.util';
 import { parseTeamEvent, teamRoute } from './team-messaging.contract';
 import type { TeamConsumer } from './team.util';
 import {
@@ -341,8 +345,8 @@ export class CrmTeamService {
 		const where = { workspaceId: query.workspaceId };
 		const [items, total] = await this.prisma.$transaction([
 			this.prisma.crmInvitationIntent.findMany({
-					where,
-					include: { customRole: true },
+				where,
+				include: { customRole: true },
 				skip: (query.page - 1) * query.pageSize,
 				take: query.pageSize,
 				orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]
@@ -546,6 +550,8 @@ export class CrmTeamService {
 						provisioningCommandId: randomUUID()
 					}
 				});
+				await attachDirectoryInvitation(tx, invitation);
+				await collaborationSignal(tx, dto.workspaceId);
 				await emitTeamEvent(
 					tx,
 					'provision',

@@ -16,6 +16,10 @@ import {
 	type IdentityInvitationAcceptance
 } from '../internal/identity-invitation.client';
 import { CrmAccessPrismaService } from '../prisma/crm-access-prisma.service';
+import {
+	bindDirectoryAdmission,
+	collaborationSignal
+} from '../directory/directory.util';
 import { CrmTeamService } from './team.service';
 import {
 	CrmBillingCapacityService,
@@ -143,7 +147,9 @@ export class CrmTeamAdmissionService {
 		});
 		// A concurrent local revocation wins even if Identity registration already committed.
 		const latest = await this.prisma.crmInvitationIntent.findUniqueOrThrow(
-			{ where: { id: intent.id } }
+			{
+				where: { id: intent.id }
+			}
 		);
 		if (latest.status === 'REVOKED') {
 			try {
@@ -474,15 +480,22 @@ export class CrmTeamAdmissionService {
 							customRoleId
 						}
 					});
-			if (!member && currentIntent?.firstName && currentIntent.lastName)
+			const directoryCard = await bindDirectoryAdmission(
+				tx,
+				workspaceId,
+				candidate.subject,
+				currentIntent?.id ?? null
+			);
+			await collaborationSignal(tx, workspaceId);
+			if (!member && directoryCard.firstName && directoryCard.lastName)
 				await tx.crmEmployeeProfile.createMany({
 					data: [
 						{
 							workspaceId,
 							subject: candidate.subject,
-							firstName: currentIntent.firstName,
-							lastName: currentIntent.lastName,
-							middleName: currentIntent.middleName
+							firstName: directoryCard.firstName,
+							lastName: directoryCard.lastName,
+							middleName: directoryCard.middleName
 						}
 					],
 					skipDuplicates: true

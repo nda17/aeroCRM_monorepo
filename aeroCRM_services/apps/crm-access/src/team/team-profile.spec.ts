@@ -74,6 +74,9 @@ const setup = (role = 'OWNER', state = 'ACTIVE') => {
 				return row;
 			})
 		},
+		crmDirectoryEntry: {
+			upsert: jest.fn().mockResolvedValue({})
+		},
 		crmTeamCommandReceipt: {
 			findUnique: jest
 				.fn()
@@ -131,6 +134,18 @@ describe('workspace-local CRM employee profiles', () => {
 			expect(result.profile).toMatchObject({ ...names, version: 1 });
 			expect(prisma.crmEmployeeProfile.create).toHaveBeenCalledWith({
 				data: { workspaceId, subject: actor.subject, ...names }
+			});
+			expect(prisma.crmDirectoryEntry.upsert).toHaveBeenCalledWith({
+				where: {
+					workspaceId_subject: { workspaceId, subject: actor.subject }
+				},
+				create: {
+					workspaceId,
+					subject: actor.subject,
+					sourceKey: `subject:${actor.subject}`,
+					...names
+				},
+				update: { ...names, version: { increment: 1 } }
 			});
 			expect(auth.authorizeSubject).not.toHaveBeenCalled();
 			expect(
@@ -284,7 +299,9 @@ describe('workspace-local CRM employee profiles', () => {
 		});
 		expect(prisma.$transaction).toHaveBeenCalledWith(
 			expect.any(Function),
-			{ isolationLevel: 'RepeatableRead' }
+			{
+				isolationLevel: 'RepeatableRead'
+			}
 		);
 	});
 });

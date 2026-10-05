@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
+import pg from "pg";
 
 const required = (name) => {
   const value = process.env[name];
@@ -41,6 +42,7 @@ const runtime = new PrismaClient({ datasources: { db: { url: runtimeUrl } } });
 const migrator = new PrismaClient({
   datasources: { db: { url: migrationUrl } },
 });
+const listener = new pg.Client({ connectionString: runtimeUrl });
 const workspaceId = randomUUID();
 const otherWorkspaceId = randomUUID();
 const subject = "corporate-mail-pg18-fixture";
@@ -77,6 +79,24 @@ const commandAuthority = {
 };
 const authorities = new Map([[workspaceId, commandAuthority]]);
 try {
+  await listener.connect();
+  await listener.query("LISTEN crm_live_changes_v1");
+  const liveChanges = [];
+  listener.on("notification", (event) => liveChanges.push(event.payload));
+  // This isolated test database is reused between local runs; retire only
+  // queued synthetic worker jobs owned by this fixture before claiming jobs.
+  await runtime.mailJob.updateMany({
+    where: {
+      state: { in: ["QUEUED", "RUNNING"] },
+      mailbox: { connection: { delegatedSubject: subject } },
+    },
+    data: {
+      state: "CANCELLED",
+      leaseOwner: null,
+      leaseUntil: null,
+      safeErrorCode: "INTEGRATION_FIXTURE_RESET",
+    },
+  });
   const [server] = await runtime.$queryRawUnsafe(
     "SELECT current_setting('server_version_num')::int AS version",
   );
@@ -467,10 +487,16 @@ try {
         targetId: folderId,
         workKey: `notification-worker:${key}:${randomUUID()}`,
         state: "QUEUED",
+        dueAt: new Date(Date.now() - 1000),
       },
     });
   const processSyncJob = async (kind) => {
-    const job = await worker.claim();
+    let job = null;
+    const deadline = Date.now() + 2000;
+    while (!job && Date.now() < deadline) {
+      job = await worker.claim();
+      if (!job) await new Promise((resolve) => setTimeout(resolve, 20));
+    }
     assert.equal(job?.kind, kind);
     await worker.sync(job);
     await runtime.mailJob.updateMany({
@@ -480,8 +506,20 @@ try {
     return job;
   };
   try {
+    liveChanges.length = 0;
     await syncJob("LIVE_SYNC", syncInboxId, "live");
     await processSyncJob("LIVE_SYNC");
+    const notificationDeadline = Date.now() + 1500;
+    while (
+      !liveChanges.includes(workspaceId) &&
+      Date.now() < notificationDeadline
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert(
+      liveChanges.includes(workspaceId),
+      "LIVE_SYNC emits a committed mail event",
+    );
     const liveMessage = await runtime.mailMessage.findFirstOrThrow({
       where: { workspaceId, mailboxId: syncMailboxId, uid: 1n },
     });
@@ -524,6 +562,44 @@ try {
       "backfill imports historical messages",
     );
     assert.equal(await runtime.mailNotification.count({ where: { workspaceId } }), 1);
+
+    // A row-trigger notification is visible to listeners only after commit.
+    liveChanges.length = 0;
+    const rolledBackMessageId = randomUUID();
+    await assert.rejects(
+      () =>
+        runtime.$transaction(async (tx) => {
+          await tx.mailMessage.create({
+            data: {
+              id: rolledBackMessageId,
+              workspaceId,
+              mailboxId: syncMailboxId,
+              folderId: syncInboxId,
+              folderGeneration: 1,
+              uidValidity: 7n,
+              uid: 777n,
+              direction: "INBOUND",
+              references: [],
+              from: [{ email: "rollback@example.org", name: null }],
+              to: [{ email: `worker-${workspaceId}@example.org`, name: null }],
+              cc: [],
+              bcc: [],
+              subject: "Rolled back event",
+              receivedAt: new Date(),
+              plainText: "This transaction must not signal",
+              bodyStatus: "COMPLETE",
+            },
+          });
+          throw new Error("rollback fixture");
+        }),
+      /rollback fixture/,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(
+      liveChanges.includes(workspaceId),
+      false,
+      "a rolled-back message insert does not publish its transactional notification",
+    );
 
     imapUidNext = 2;
     imapUids = [1];
@@ -649,10 +725,256 @@ try {
     });
   secondMembershipAuthority = {
       ...commandAuthority,
+      customer: {
+        ...commandAuthority.customer,
+        role: "MANAGER",
+        dataScope: "OWN",
+      },
       membershipId: secondMembership,
     };
+
+    // V1 remains linked-only, while v2 shows unmatched and ambiguous mail with
+    // its mailbox binding and hides mail linked outside the caller's data scope.
+    const foreignContactId = randomUUID();
+    await runtime.contact.create({
+      data: {
+        id: foreignContactId,
+        workspaceId,
+        name: "Foreign linked contact",
+        createdBySubject: "another-employee",
+      },
+    });
+    const notificationFixtures = [
+      { state: "UNMATCHED", uid: 801n, subject: "Unmatched notification" },
+      { state: "AMBIGUOUS", uid: 802n, subject: "Ambiguous notification" },
+      {
+        state: "LINKED",
+        uid: 803n,
+        subject: "Foreign linked notification",
+        contactId: foreignContactId,
+      },
+    ];
+    const fixtureIds = [];
+    for (const fixture of notificationFixtures) {
+      const messageId = randomUUID();
+      fixtureIds.push({ ...fixture, messageId });
+      await runtime.mailMessage.create({
+        data: {
+          id: messageId,
+          workspaceId,
+          mailboxId: syncMailboxId,
+          folderId: syncInboxId,
+          folderGeneration: 2,
+          uidValidity: 8n,
+          uid: fixture.uid,
+          direction: "INBOUND",
+          references: [],
+          from: [{ email: `fixture-${fixture.uid}@example.org`, name: null }],
+          to: [{ email: `worker-${workspaceId}@example.org`, name: null }],
+          cc: [],
+          bcc: [],
+          subject: fixture.subject,
+          receivedAt: new Date(),
+          plainText: fixture.subject,
+          bodyStatus: "COMPLETE",
+        },
+      });
+      await runtime.mailContactLink.create({
+        data: {
+          workspaceId,
+          mailboxId: syncMailboxId,
+          messageId,
+          externalEmail: `fixture-${fixture.uid}@example.org`,
+          state: fixture.state,
+          method: "EXACT",
+          actorSubject: subject,
+          ...(fixture.contactId ? { contactId: fixture.contactId } : {}),
+        },
+      });
+      await runtime.mailNotification.create({
+        data: { workspaceId, messageId },
+      });
+    }
+    const personalConnectionId = randomUUID();
+    const personalMailboxId = randomUUID();
+    const personalFolderId = randomUUID();
+    const personalMessageId = randomUUID();
+    await runtime.mailConnection.create({
+      data: {
+        id: personalConnectionId,
+        workspaceId,
+        delegatedSubject: subject,
+        delegatedMembershipId: membershipId,
+        provider: "IMAP_SMTP",
+        transport: { imap: {}, smtp: {} },
+        authMode: "PASSWORD",
+        credentialPrincipal: "personal@example.org",
+        keyId: "fixture-key",
+        state: "ACTIVE",
+      },
+    });
+    await runtime.mailMailbox.create({
+      data: {
+        id: personalMailboxId,
+        workspaceId,
+        connectionId: personalConnectionId,
+        kind: "PERSONAL",
+        ownerSubject: subject,
+        ownerMembershipId: membershipId,
+        canonicalAddress: `personal-${workspaceId}@example.org`,
+        displayName: "Membership-bound personal mailbox",
+        imapLogin: "personal@example.org",
+        smtpLogin: "personal@example.org",
+        sendMode: "AS",
+        enabled: true,
+      },
+    });
+    await runtime.mailFolder.create({
+      data: {
+        id: personalFolderId,
+        workspaceId,
+        mailboxId: personalMailboxId,
+        exactPath: "INBOX",
+        kind: "INBOX",
+        selected: true,
+        uidValidity: 3n,
+      },
+    });
+    await runtime.mailMessage.create({
+      data: {
+        id: personalMessageId,
+        workspaceId,
+        mailboxId: personalMailboxId,
+        folderId: personalFolderId,
+        folderGeneration: 1,
+        uidValidity: 3n,
+        uid: 1n,
+        direction: "INBOUND",
+        references: [],
+        from: [{ email: "personal-sender@example.org", name: null }],
+        to: [{ email: "personal@example.org", name: null }],
+        cc: [],
+        bcc: [],
+        subject: "Personal membership event",
+        receivedAt: new Date(),
+        plainText: "Visible only to the owning membership",
+        bodyStatus: "COMPLETE",
+      },
+    });
+    await runtime.mailContactLink.create({
+      data: {
+        workspaceId,
+        mailboxId: personalMailboxId,
+        messageId: personalMessageId,
+        externalEmail: "personal-sender@example.org",
+        state: "UNMATCHED",
+        method: "EXACT",
+        actorSubject: subject,
+      },
+    });
+    await runtime.mailNotification.create({
+      data: { workspaceId, messageId: personalMessageId },
+    });
+    const ownScopeAuthority = {
+      ...commandAuthority,
+      customer: {
+        ...commandAuthority.customer,
+        role: "MANAGER",
+        dataScope: "OWN",
+      },
+    };
+    const v2 = await mail.notifications(
+      ownScopeAuthority,
+      {
+        workspaceId,
+        page: 1,
+        pageSize: 10,
+        unreadOnly: "false",
+      },
+      2,
+    );
+    assert.equal(v2.schemaVersion, 2);
+    assert.equal(v2.total, 4);
+    assert(v2.items.every((item) =>
+      [syncMailboxId, personalMailboxId].includes(item.mailboxId),
+    ));
     assert.equal(
-      (await syncMailForNotifications.notifications(secondMembershipAuthority, {
+      v2.items.find((item) => item.messageId === fixtureIds[0].messageId)
+        ?.contactId,
+      null,
+    );
+    assert.equal(
+      v2.items.find((item) => item.messageId === fixtureIds[1].messageId)
+        ?.contactId,
+      null,
+    );
+    assert.equal(
+      v2.items.find((item) => item.messageId === personalMessageId)?.mailboxId,
+      personalMailboxId,
+      "PERSONAL notifications follow the exact owner membership",
+    );
+    assert.equal(
+      v2.items.some((item) => item.messageId === fixtureIds[2].messageId),
+      false,
+      "v2 hides a notification when its linked contact is outside the caller's data scope",
+    );
+    const legacyNotifications = await mail.notifications(ownScopeAuthority, {
+      workspaceId,
+      page: 1,
+      pageSize: 10,
+      unreadOnly: "false",
+    });
+    assert.equal(legacyNotifications.schemaVersion, 1);
+    assert.equal(
+      legacyNotifications.total,
+      1,
+      "v1 keeps its historical linked-only visibility",
+    );
+    assert.equal(
+      Object.hasOwn(legacyNotifications.items[0], "mailboxId"),
+      false,
+    );
+    assert.equal(
+      (
+        await mail.notifications(
+          secondMembershipAuthority,
+          {
+            workspaceId,
+            page: 1,
+            pageSize: 10,
+            unreadOnly: "false",
+          },
+          2,
+        )
+      ).total,
+      3,
+      "a shared mailbox grant is bound to the exact active membership",
+    );
+    const noGrantAuthority = {
+      ...secondMembershipAuthority,
+      membershipId: randomUUID(),
+    };
+    assert.equal(
+      (
+        await mail.notifications(
+          noGrantAuthority,
+          {
+            workspaceId,
+            page: 1,
+            pageSize: 10,
+            unreadOnly: "false",
+          },
+          2,
+        )
+      ).total,
+      0,
+      "another membership of the same subject cannot reuse the mailbox grant",
+    );
+    assert.equal(
+      (
+        await syncMailForNotifications.notifications(
+          secondMembershipAuthority,
+          {
         workspaceId,
         page: 1,
         pageSize: 10,
@@ -719,6 +1041,22 @@ try {
       unreadOnly: "false",
     });
     assert.equal(revokedList.total, 0);
+    assert.equal(
+      (
+        await syncMailForNotifications.notifications(
+          commandAuthority,
+          {
+            workspaceId,
+            page: 1,
+            pageSize: 10,
+            unreadOnly: "false",
+          },
+          2,
+        )
+      ).items.filter((item) => item.mailboxId === syncMailboxId).length,
+      0,
+      "revoking the exact membership grant removes shared-mail v2 events immediately",
+    );
     await assert.rejects(() =>
       syncMailForNotifications.readNotification(commandAuthority, notifications.items[0].id, {
         ...readInput,

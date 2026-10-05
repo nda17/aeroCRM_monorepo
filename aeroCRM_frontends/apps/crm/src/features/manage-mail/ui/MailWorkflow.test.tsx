@@ -196,13 +196,14 @@ describe('incoming mail notification contract', () => {
 	const notification = {
 		id: notificationId,
 		messageId,
+		mailboxId,
 		contactId,
 		title: 'Новое письмо от клиента',
 		createdAt: stamp,
 		readAt: null
 	}
 	const response = {
-		schemaVersion: 1,
+		schemaVersion: 2,
 		workspaceId,
 		page: 1,
 		pageSize: 10,
@@ -228,7 +229,7 @@ describe('incoming mail notification contract', () => {
 		expect(request).toHaveBeenCalledWith(
 			expect.objectContaining({
 				method: 'GET',
-				url: '/crm/customers/mail/notifications',
+				url: '/crm/customers/mail/notifications-v2',
 				params: {
 					page: '1',
 					unreadOnly: 'false',

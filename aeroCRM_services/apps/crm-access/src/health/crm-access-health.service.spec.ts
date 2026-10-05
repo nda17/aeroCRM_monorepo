@@ -27,11 +27,15 @@ describe('CrmAccessHealthService', () => {
 	it('requires its own database and exact service identity for readiness', async () => {
 		const health = createHealth({
 			crmWorkspaceMember: { findFirst: jest.fn().mockResolvedValue(null) },
-			$queryRaw: jest.fn().mockImplementation(async (parts: TemplateStringsArray) =>
-				parts.join('').includes('is_valid_custom_role_permissions')
-					? [{ allowed: true }]
-					: [{ '?column?': 1 }]
-			),
+			$queryRaw: jest
+				.fn()
+				.mockImplementation(async (parts: TemplateStringsArray) =>
+					parts.join('').includes('is_valid_custom_role_permissions')
+						? [{ allowed: true }]
+						: parts.join('').includes('count(*) = 13')
+							? [{ enabled: true }]
+							: [{ '?column?': 1 }]
+				),
 			serviceIdentity: {
 				findUnique: jest.fn().mockResolvedValue(identity)
 			},

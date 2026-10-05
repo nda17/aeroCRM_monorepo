@@ -6,8 +6,16 @@
       "SELECT"
     ],
     "_prisma_migrations": [],
-    "workspace_closure_fences": ["SELECT", "INSERT", "UPDATE"],
-    "crm_workspace_closures": ["SELECT", "INSERT", "UPDATE"],
+    "workspace_closure_fences": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_workspace_closures": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
     "crm_workspace_access": [
       "SELECT",
       "INSERT",
@@ -85,6 +93,25 @@
       "SELECT",
       "INSERT",
       "UPDATE"
+    ],
+    "crm_directory_entries": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_chat_conversations": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_chat_participants": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_chat_messages": [
+      "SELECT",
+      "INSERT"
     ]
   },
   "sequences": {
@@ -107,7 +134,9 @@
     "guard_workspace_business",
     "guard_workspace_intent",
     "enforce_workspace_closure_fence",
-    "enforce_workspace_closure_operation"
+    "enforce_workspace_closure_operation",
+    "provision_workspace_collaboration",
+    "signal_workspace_collaboration"
   ],
   "routineExecute": [
     "is_valid_custom_role_permissions(text[])",

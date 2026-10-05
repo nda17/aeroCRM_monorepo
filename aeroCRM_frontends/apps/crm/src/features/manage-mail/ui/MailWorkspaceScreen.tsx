@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { listMailboxMessages } from '@/entities/mail/api/mail.api'
@@ -9,6 +10,7 @@ import type {
 	MailMessageDetail
 } from '@/entities/mail/model/mail.contract'
 import { useDirtyFormGuard } from '@/shared/lib/dirty-form'
+import { isUuidV4 } from '@/shared/lib/contract'
 import {
 	Button,
 	Drawer,
@@ -22,27 +24,57 @@ import { MailMessageReader } from './MailMessageReader'
 import styles from './Mail.module.scss'
 
 export const MailWorkspaceScreen = () => {
-	const mail = useMailAvailability()
 	return (
-		<MailWorkspace key={JSON.stringify(mail.context.key)} mail={mail} />
+		<Suspense
+			fallback={<ScreenState variant="loading" title="Загружаем почту…" />}
+		>
+			<MailWorkspaceSession />
+		</Suspense>
+	)
+}
+
+const MailWorkspaceSession = () => {
+	const mail = useMailAvailability()
+	const params = useSearchParams() ?? new URLSearchParams()
+	const matching =
+		params.get('workspaceId') === mail.context.workspace.workspaceId
+	const mailboxId =
+		matching && isUuidV4(params.get('mailboxId'))
+			? params.get('mailboxId')
+			: null
+	const messageId =
+		matching && isUuidV4(params.get('messageId'))
+			? params.get('messageId')
+			: null
+	return (
+		<MailWorkspace
+			key={`${JSON.stringify(mail.context.key)}:${mailboxId ?? ''}:${messageId ?? ''}`}
+			mail={mail}
+			initialMailboxId={mailboxId}
+			initialMessageId={messageId}
+		/>
 	)
 }
 
 const MailWorkspace = ({
-	mail
+	mail,
+	initialMailboxId,
+	initialMessageId
 }: {
 	mail: ReturnType<typeof useMailAvailability>
+	initialMailboxId: string | null
+	initialMessageId: string | null
 }) => {
 	const { context } = mail
 	const client = useQueryClient()
 	const guard = useDirtyFormGuard()
 	const [chosenMailboxId, setChosenMailboxId] = useState<string | null>(
-		null
+		initialMailboxId
 	)
 	const [folder, setFolder] = useState<'INBOX' | 'SENT'>('INBOX')
 	const [cursor, setCursor] = useState<string | undefined>()
 	const [headId, setHeadId] = useState<string | null>(null)
-	const [selected, setSelected] = useState<string | null>(null)
+	const [selected, setSelected] = useState<string | null>(initialMessageId)
 	const [compose, setCompose] = useState<{
 		mailbox: MailMailbox
 		reply?: MailMessageDetail

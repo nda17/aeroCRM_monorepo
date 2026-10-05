@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useSessionStore } from '@/entities/session'
+import { useMailContext } from '@/features/manage-mail/model/use-mail-context'
 import {
 	useCrmWorkspaceAccess,
 	useCrmPermissions,
@@ -35,7 +36,24 @@ const roots = {
 		'crm-customer-detail',
 		'crm-company-picker'
 	],
-	support: ['support-chat', 'crm-support-notifications']
+	support: ['support-chat', 'crm-support-notifications'],
+	mail: [
+		'crm-mail-notifications',
+		'mail-workspace-messages',
+		'mail-message',
+		'mail-unmatched-message',
+		'mail-mailboxes',
+		'mail-contact-messages',
+		'mail-unmatched'
+	],
+	collaboration: [
+		'workspace-directory',
+		'workspace-chat-conversations',
+		'workspace-chat-messages',
+		'crm-chat-notifications',
+		'crm-employee-profile',
+		'crm-team'
+	]
 } as const
 type Owner = keyof typeof roots
 
@@ -81,6 +99,11 @@ export function liveInvalidator(
 		event: (event: LiveEvent) => {
 			if (stopped || !current()) return
 			if (event === 'access') {
+				if (owner === 'mail')
+					void client.invalidateQueries(
+						{ queryKey: ['mail-capabilities'] },
+						{ cancelRefetch: false }
+					)
 				void client.invalidateQueries(
 					{ queryKey: ['crm-permissions'] },
 					{ cancelRefetch: false }
@@ -149,6 +172,7 @@ export function SupportLiveUpdates() {
 
 export function WorkspaceLiveUpdates() {
 	const workspace = useCrmWorkspaceAccess()
+	const mail = useMailContext()
 	const session = useSessionStore(state => state.session)
 	const revision = useSessionStore(state => state.sessionRevision)
 	const permissions = useCrmPermissions(
@@ -186,6 +210,21 @@ export function WorkspaceLiveUpdates() {
 			? path('sales')
 			: null,
 		binding
+	)
+	useLiveOwner(
+		'collaboration',
+		access ? path('access') : null,
+		binding + ':' + workspace.membership.membershipId
+	)
+	useLiveOwner(
+		'mail',
+		mail.capabilities.isSuccess &&
+			mail.capabilities.data.enabled &&
+			mail.capabilities.data.mailPermissions.includes('mail:read')
+			? '/crm/customers/mail/events?workspaceId=' +
+					encodeURIComponent(workspace.workspaceId)
+			: null,
+		binding + ':' + workspace.membership.membershipId
 	)
 	return null
 }

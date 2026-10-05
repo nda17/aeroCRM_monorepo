@@ -90,7 +90,7 @@ jobs:
             infra/scripts/backend-release-state.mjs infra/scripts/backend-image-cleanup-reviewed.json "$dest:$stage/scripts/"
           ssh -i ~/.ssh/cleanup_key -p "${BACK_PORT:-22}" -o StrictHostKeyChecking=yes -o BatchMode=yes "$dest" \
             "chmod 600 '$stage/scripts/'* && cd /opt/aerocrm && INFRA_SHA='$INFRA_SHA' /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node '$stage/scripts/backend-image-cleanup.mjs' '$INFRA_SHA' '$INVENTORY_HASH'" > backend-image-cleanup-report.json
-          node -e "const r=require('./backend-image-cleanup-report.json'); if(r.mode!=='REVIEWED_CLEANUP'||r.inventoryHash!==process.env.INVENTORY_HASH||r.infraSha!==process.env.INFRA_SHA||r.removedImageIds.length!==105||r.inventory.candidates.length!==0)process.exit(1);console.log('Reviewed images removed:',r.removedImageIds.length);console.log('Available filesystem bytes:',JSON.stringify(r.diskUsage))"
+          node -e "const r=require('./backend-image-cleanup-report.json'); if(r.mode!=='REVIEWED_CLEANUP'||r.inventoryHash!==process.env.INVENTORY_HASH||r.infraSha!==process.env.INFRA_SHA||r.removedImageIds.length!==require('./infra/scripts/backend-image-cleanup-reviewed.json').candidates.length||r.inventory.candidates.length!==0)process.exit(1);console.log('Reviewed images removed:',r.removedImageIds.length);console.log('Available filesystem bytes:',JSON.stringify(r.diskUsage))"
       - uses: actions/upload-artifact@v4
         with:
           name: backend-image-cleanup-report

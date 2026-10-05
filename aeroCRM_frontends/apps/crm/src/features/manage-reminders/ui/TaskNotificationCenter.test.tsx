@@ -31,9 +31,32 @@ import {
 	TaskNotificationPanel
 } from './TaskNotificationCenter'
 import type { DrawerProps } from '@/shared/ui/drawer/Drawer'
+import {
+	useCollaboration,
+	useCollaborationCommand
+} from '@/features/workspace-collaboration/model/use-collaboration'
+import { listChatNotifications } from '@/entities/workspace-collaboration'
 vi.mock('@/entities/crm-task-notifications', () => ({
 	listTaskNotifications: vi.fn(),
 	setTaskNotificationRead: vi.fn()
+}))
+vi.mock(
+	'@/features/workspace-collaboration/model/use-collaboration',
+	() => ({
+		useCollaboration: vi.fn(),
+		useCollaborationCommand: vi.fn()
+	})
+)
+vi.mock('@/entities/workspace-collaboration', async importOriginal => ({
+	...(await importOriginal<object>()),
+	listChatNotifications: vi.fn().mockResolvedValue({
+		page: 1,
+		pageSize: 10,
+		total: 0,
+		unreadCount: 0,
+		items: []
+	}),
+	readChatConversation: vi.fn()
 }))
 vi.mock('../model/use-reminder-session', () => ({
 	useReminderSession: vi.fn()
@@ -105,6 +128,16 @@ beforeEach(() => {
 		unreadCount: 0,
 		items: []
 	})
+	vi.mocked(listChatNotifications).mockResolvedValue({
+		schemaVersion: 1,
+		workspaceId,
+		subject: 'owner',
+		page: 1,
+		pageSize: 10,
+		total: 0,
+		unreadCount: 0,
+		items: []
+	})
 	client = new QueryClient({
 		defaultOptions: { queries: { retry: false } }
 	})
@@ -160,6 +193,20 @@ beforeEach(() => {
 	}
 	vi.mocked(useReminderSession).mockImplementation(() => context)
 	vi.mocked(useMailContext).mockImplementation(() => mailContext as never)
+	vi.mocked(useCollaboration).mockReturnValue({
+		ready: true,
+		binding: { workspaceId, subject: 'owner' },
+		session: context.session,
+		workspace: {
+			workspaceId,
+			membership: { membershipId: 'membership-1' }
+		},
+		current: () => true
+	} as never)
+	vi.mocked(useCollaborationCommand).mockReturnValue({
+		locked: false,
+		execute: vi.fn()
+	} as never)
 	vi.mocked(listTaskNotifications).mockResolvedValue(data)
 	vi.mocked(setTaskNotificationRead).mockResolvedValue({
 		schemaVersion: 1,
@@ -365,14 +412,112 @@ describe('new event notice', () => {
 	})
 })
 describe('task notification center', () => {
-	it('shows incoming mail separately, links to its contact, and does not auto-mark it read', async () => {
+	it('counts chat alerts persistently and includes chat with mail and tasks in the default all feed', async () => {
+		const chatMessageId = '77777777-7777-4777-8777-777777777777'
+		const conversationId = '88888888-8888-4888-8888-888888888888'
+		vi.mocked(listChatNotifications).mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId,
+			subject: 'owner',
+			page: 1,
+			pageSize: 10,
+			total: 1,
+			unreadCount: 1,
+			items: [
+				{
+					id: chatMessageId,
+					messageId: chatMessageId,
+					conversationId,
+					sequence: 4,
+					title: 'Алексей Сотрудник',
+					text: 'Проверьте договор',
+					senderName: 'Алексей Сотрудник',
+					createdAt: '2026-09-08T12:03:00.000Z',
+					readAt: null
+				}
+			]
+		})
+		vi.mocked(listCrmNotifications).mockImplementation(async source =>
+			source === 'mail'
+				? {
+						page: 1,
+						pageSize: 10,
+						total: 1,
+						unreadCount: 1,
+						items: [
+							{
+								id: '99999999-9999-4999-8999-999999999999',
+								title: 'Новое письмо',
+								createdAt: '2026-09-08T12:02:00.000Z',
+								readAt: null,
+								targetId: id,
+								contactId: id,
+								mailboxId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+							}
+						]
+					}
+				: { page: 1, pageSize: 10, total: 0, unreadCount: 0, items: [] }
+		)
+		vi.mocked(listTaskNotifications).mockResolvedValue({
+			...data,
+			items: [
+				{
+					...data.items[0],
+					title: 'Моё назначение',
+					createdAt: '2026-09-08T12:01:00.000Z'
+				}
+			]
+		})
+		render(center())
+		expect(
+			await screen.findByRole('button', {
+				name: 'Уведомления, непрочитанных: 3'
+			})
+		).toBeTruthy()
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Уведомления, непрочитанных: 3' })
+		)
+		expect(
+			await screen.findByText('Всего непрочитанных во всех разделах: 3')
+		).toBeTruthy()
+		expect(
+			screen
+				.getByRole('link', {
+					name: 'Алексей Сотрудник: Проверьте договор'
+				})
+				.getAttribute('href')
+		).toBe(
+			`/messages?workspaceId=${workspaceId}&conversationId=${conversationId}`
+		)
+		expect(screen.getByRole('link', { name: 'Новое письмо' })).toBeTruthy()
+		expect(
+			screen.getByRole('link', { name: 'Моё назначение' })
+		).toBeTruthy()
+		expect(listChatNotifications).toHaveBeenCalledWith(
+			'token',
+			expect.objectContaining({
+				workspaceId,
+				subject: 'owner',
+				page: 1,
+				pageSize: 10,
+				unreadOnly: false
+			})
+		)
+		fireEvent.click(screen.getByRole('button', { name: 'Закрыть панель' }))
+		expect(
+			screen.getByRole('button', { name: 'Уведомления, непрочитанных: 3' })
+		).toBeTruthy()
+	})
+
+	it('shows incoming mail separately, links to its mailbox message, and does not auto-mark it read', async () => {
 		const mailItem = {
 			id: '33333333-3333-4333-8333-333333333333',
 			title: 'Вопрос по заказу',
 			createdAt: '2026-09-08T12:00:00.000Z',
 			readAt: null,
 			targetId: '44444444-4444-4444-8444-444444444444',
-			contactId: '55555555-5555-4555-8555-555555555555'
+			contactId: '55555555-5555-4555-8555-555555555555',
+			mailboxId: '66666666-6666-4666-8666-666666666666'
 		}
 		vi.mocked(listCrmNotifications).mockImplementation(async source =>
 			source === 'mail'
@@ -396,7 +541,7 @@ describe('task notification center', () => {
 			name: 'Вопрос по заказу'
 		})
 		expect(link.getAttribute('href')).toBe(
-			`/contacts?workspaceId=${workspaceId}&contactId=${mailItem.contactId}&mailMessageId=${mailItem.targetId}`
+			`/mail?workspaceId=${workspaceId}&mailboxId=${mailItem.mailboxId}&messageId=${mailItem.targetId}`
 		)
 		expect(readCrmNotification).not.toHaveBeenCalled()
 		expect(listCrmNotifications).toHaveBeenCalledWith(

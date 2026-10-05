@@ -15,6 +15,7 @@ import type {
 	UpdateEmployeeProfileDto
 } from './team.dto';
 import { normalizeEmployeeName } from './team-profile.dto';
+import { collaborationSignal } from '../directory/directory.util';
 import { auditTeam, command, type TeamAuthority } from './team.util';
 
 const profileDto = (profile: CrmEmployeeProfile) => ({
@@ -99,6 +100,22 @@ export class CrmEmployeeProfileService {
 								...names
 							}
 						});
+				await tx.crmDirectoryEntry.upsert({
+					where: {
+						workspaceId_subject: {
+							workspaceId: actor.workspaceId,
+							subject: dto.subject
+						}
+					},
+					create: {
+						workspaceId: actor.workspaceId,
+						subject: dto.subject,
+						sourceKey: `subject:${dto.subject}`,
+						...names
+					},
+					update: { ...names, version: { increment: 1 } }
+				});
+				await collaborationSignal(tx, actor.workspaceId);
 				// Do not retain additional copies of names in the audit record.
 				await auditTeam(
 					tx,

@@ -8,6 +8,7 @@ export const appIconNames = [
 	'vk',
 	'inbox',
 	'mail',
+	'chat',
 	'bell',
 	'deals',
 	'tasks',
@@ -44,6 +45,12 @@ export interface AppIconProps extends Omit<
 }
 
 const iconRegistry: Record<AppIconName, ReactNode> = {
+	chat: (
+		<g>
+			<path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 3V6a2 2 0 0 1 2-2Z" />
+			<path d="M7 9h10M7 13h6" />
+		</g>
+	),
 	mail: (
 		<g>
 			<rect x="3" y="5" width="18" height="14" rx="2" />

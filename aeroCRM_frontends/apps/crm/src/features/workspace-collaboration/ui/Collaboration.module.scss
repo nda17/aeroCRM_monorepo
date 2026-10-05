@@ -1,0 +1,116 @@
+.stack {
+	@apply flex min-w-0 flex-col gap-5;
+}
+.toolbar {
+	@apply flex flex-wrap items-end gap-3;
+}
+.search {
+	@apply min-w-0 flex-1;
+}
+.cards {
+	@apply grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3;
+}
+.card {
+	@apply flex min-w-0 flex-col gap-4 rounded-2xl border border-crm-border bg-crm-surface p-5;
+}
+.identity {
+	@apply flex min-w-0 items-center gap-3;
+}
+.avatar {
+	@apply flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-lg font-semibold text-primary;
+}
+.name {
+	@apply min-w-0 break-words text-base font-semibold text-crm-text;
+}
+.muted {
+	@apply text-sm text-crm-muted;
+}
+.status {
+	@apply inline-flex w-fit rounded-lg bg-crm-surface-muted px-2 py-1 text-xs text-crm-muted;
+}
+.contacts {
+	@apply grid min-w-0 gap-2 text-sm;
+	dt {
+		@apply text-crm-muted;
+	}
+	dd {
+		@apply break-words text-crm-text [overflow-wrap:anywhere];
+	}
+	a {
+		@apply text-primary underline-offset-4 hover:underline;
+	}
+}
+.actions {
+	@apply mt-auto flex flex-wrap items-center gap-2;
+}
+.fields {
+	@apply grid gap-4 sm:grid-cols-2;
+}
+.chatLayout {
+	@apply grid min-w-0 gap-4 lg:grid-cols-[minmax(220px,300px)_minmax(0,1fr)];
+}
+.sidebar {
+	@apply flex min-w-0 flex-col gap-3 rounded-2xl border border-crm-border bg-crm-surface p-3;
+}
+.conversations {
+	@apply flex max-h-[60vh] flex-col gap-1 overflow-y-auto;
+}
+.conversation {
+	@apply flex w-full min-w-0 flex-col gap-1 rounded-xl p-3 text-left transition-colors hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+}
+.selected {
+	@apply bg-primary/10;
+}
+.row {
+	@apply flex min-w-0 items-center justify-between gap-2;
+}
+.preview {
+	@apply truncate text-sm text-crm-muted;
+}
+.badge {
+	@apply min-w-5 shrink-0 rounded-full bg-primary px-1.5 text-center text-xs font-semibold leading-5 text-white;
+}
+.thread {
+	@apply flex min-h-[420px] min-w-0 flex-col rounded-2xl border border-crm-border bg-crm-surface;
+}
+.threadHeader {
+	@apply flex items-center justify-between gap-3 border-b border-crm-border p-4;
+}
+.messages {
+	@apply flex min-h-[200px] flex-1 flex-col gap-3 overflow-y-auto p-4;
+	max-height: 55vh;
+}
+.message {
+	@apply flex max-w-[90%] flex-col gap-1 self-start rounded-2xl bg-crm-surface-muted px-4 py-3;
+}
+.own {
+	@apply self-end bg-primary/10;
+}
+.messageText {
+	@apply whitespace-pre-wrap break-words text-sm text-crm-text [overflow-wrap:anywhere];
+	a {
+		@apply text-primary underline;
+	}
+}
+.meta {
+	@apply flex flex-wrap items-center gap-2 text-xs text-crm-muted;
+}
+.composer {
+	@apply flex flex-col gap-3 border-t border-crm-border p-4;
+}
+.empty {
+	@apply flex flex-1 items-center justify-center p-8 text-center text-crm-muted;
+}
+@media (max-width: 1023px) {
+	.hiddenMobile {
+		display: none;
+	}
+	.messages {
+		max-height: 48vh;
+	}
+}
+@media (min-width: 1024px) {
+	.back {
+		display: none;
+	}
+}
