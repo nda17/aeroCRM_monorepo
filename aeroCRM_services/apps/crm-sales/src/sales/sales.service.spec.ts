@@ -26,6 +26,18 @@ const access: SalesAccess = {
 	permissions: ['sales:read', 'sales:write', 'sales:analytics']
 };
 const nextTask = { title: 'Позвонить', dueAt: '2026-10-01T09:00:00.000Z' };
+const transition = (
+	service: SalesService,
+	currentAccess: SalesAccess,
+	currentDealId: string,
+	dto: Parameters<SalesService['transition']>[2]
+) => service.transition(currentAccess, currentDealId, dto, 'Bearer test-token');
+const complete = (
+	service: SalesService,
+	currentAccess: SalesAccess,
+	currentTaskId: string,
+	dto: Parameters<SalesService['complete']>[2]
+) => service.complete(currentAccess, currentTaskId, dto, 'Bearer test-token');
 const create = {
 	schemaVersion: 1 as const,
 	commandId,
@@ -61,6 +73,27 @@ const deal = {
 };
 
 function harness() {
+	const assignee = (subject: string) => ({
+		subject,
+		membershipId: '88888888-8888-4888-8888-888888888888',
+		role: 'OWNER' as const,
+		dataScope: 'ALL' as const,
+		teamIds: []
+	});
+	const assignees = {
+		resolve: jest.fn(async (_authorization, _access, subject: string) =>
+			assignee(subject)
+		),
+		authorize: jest.fn(async (_authorization, _access, target) =>
+			assignee(target.subject)
+		)
+	};
+	const contexts = {
+		search: jest.fn().mockResolvedValue([]),
+		preview: jest.fn().mockResolvedValue([]),
+		roster: jest.fn().mockResolvedValue({ subjects: [], hasMore: false })
+	};
+	const authority = { authorize: jest.fn().mockResolvedValue(access) };
 	const transaction = {
 		$executeRaw: jest.fn().mockResolvedValue(1),
 		$queryRaw: jest.fn().mockResolvedValue([]),
@@ -108,7 +141,15 @@ function harness() {
 		transaction,
 		prisma,
 		contacts,
-		service: new SalesService(prisma as never, contacts as never)
+		assignees,
+		contexts,
+		service: new SalesService(
+			prisma as never,
+			contacts as never,
+			assignees as never,
+			contexts as never,
+			authority as never
+		)
 	};
 }
 
@@ -131,17 +172,14 @@ describe('SalesService security and workflow', () => {
 		{ ...access, role: 'ANALYST' as const },
 		{ ...access, state: 'READ_ONLY' as const },
 		{ ...access, permissions: [] }
-	])(
-		'denies writes before any transaction or contact lookup',
-		async denied => {
-			const { service, prisma, contacts } = harness();
-			await expect(
-				service.create(denied, create, 'Bearer token')
-			).rejects.toBeInstanceOf(ForbiddenException);
-			expect(prisma.$transaction).not.toHaveBeenCalled();
-			expect(contacts.requireContact).not.toHaveBeenCalled();
-		}
-	);
+	])('denies writes before any transaction or contact lookup', async denied => {
+		const { service, prisma, contacts } = harness();
+		await expect(
+			service.create(denied, create, 'Bearer token')
+		).rejects.toBeInstanceOf(ForbiddenException);
+		expect(prisma.$transaction).not.toHaveBeenCalled();
+		expect(contacts.requireContact).not.toHaveBeenCalled();
+	});
 
 	it('does not let ANALYST retrieve contact-name-bearing deal details', async () => {
 		const { service, transaction } = harness();
@@ -170,11 +208,7 @@ describe('SalesService security and workflow', () => {
 			)
 		).rejects.toBeInstanceOf(ForbiddenException);
 		await expect(
-			service.create(
-				access,
-				{ ...create, teamId: stageId },
-				'Bearer token'
-			)
+			service.create(access, { ...create, teamId: stageId }, 'Bearer token')
 		).rejects.toBeInstanceOf(ForbiddenException);
 		expect(transaction.deal.create).not.toHaveBeenCalled();
 	});
@@ -214,9 +248,7 @@ describe('SalesService security and workflow', () => {
 				actorSubject: 'owner-1'
 			})
 		});
-		expect(transaction.salesCommandReceipt.create).toHaveBeenCalledTimes(
-			1
-		);
+		expect(transaction.salesCommandReceipt.create).toHaveBeenCalledTimes(1);
 	});
 
 	it('rejects foreign pipeline/stage lookup before contact call', async () => {
@@ -234,7 +266,7 @@ describe('SalesService security and workflow', () => {
 	it('requires the next action for an OPEN transition and rejects one for a closed stage', async () => {
 		const { service, transaction } = harness();
 		await expect(
-			service.transition(access, dealId, {
+			transition(service, access, dealId, {
 				schemaVersion: 1,
 				commandId,
 				workspaceId,
@@ -250,7 +282,7 @@ describe('SalesService security and workflow', () => {
 			state: 'WON'
 		});
 		await expect(
-			service.transition(access, dealId, {
+			transition(service, access, dealId, {
 				schemaVersion: 1,
 				commandId,
 				workspaceId,
@@ -267,7 +299,7 @@ describe('SalesService security and workflow', () => {
 		const { service, transaction } = harness();
 		transaction.deal.updateMany.mockResolvedValueOnce({ count: 0 });
 		await expect(
-			service.transition(access, dealId, {
+			transition(service, access, dealId, {
 				schemaVersion: 1,
 				commandId,
 				workspaceId,
@@ -286,17 +318,13 @@ describe('SalesService security and workflow', () => {
 		await service.create(access, create, 'Bearer token');
 		const receipt =
 			transaction.salesCommandReceipt.create.mock.calls[0][0].data;
-		transaction.salesCommandReceipt.findUnique.mockResolvedValueOnce(
-			receipt
-		);
+		transaction.salesCommandReceipt.findUnique.mockResolvedValueOnce(receipt);
 		transaction.deal.findFirst.mockResolvedValueOnce(null);
 		await expect(
 			service.create(access, create, 'Bearer token')
 		).rejects.toBeInstanceOf(NotFoundException);
 		expect(contacts.requireContact).toHaveBeenCalledTimes(1);
-		expect(transaction.salesCommandReceipt.create).toHaveBeenCalledTimes(
-			1
-		);
+		expect(transaction.salesCommandReceipt.create).toHaveBeenCalledTimes(1);
 	});
 
 	it('binds replay to actor and payload even with the same command ID', async () => {
@@ -324,7 +352,7 @@ describe('SalesService security and workflow', () => {
 	it('checks the task version and active pointer before completing an action', async () => {
 		const { service, transaction } = harness();
 		await expect(
-			service.complete(access, taskId, {
+			complete(service, access, taskId, {
 				schemaVersion: 1,
 				commandId,
 				workspaceId,
@@ -347,7 +375,7 @@ describe('SalesService security and workflow', () => {
 				version: 1,
 				status
 			});
-			await service.complete(access, taskId, {
+			await complete(service, access, taskId, {
 				schemaVersion: 1,
 				commandId,
 				workspaceId,
@@ -383,7 +411,7 @@ describe('SalesService security and workflow', () => {
 				status
 			});
 			await expect(
-				service.complete(access, taskId, {
+				complete(service, access, taskId, {
 					schemaVersion: 1,
 					commandId,
 					workspaceId,
@@ -406,7 +434,7 @@ describe('SalesService security and workflow', () => {
 			status: 'OPEN'
 		} as never);
 		await expect(
-			service.complete(access, taskId, {
+			complete(service, access, taskId, {
 				schemaVersion: 1,
 				commandId,
 				workspaceId,
@@ -430,7 +458,7 @@ describe('SalesService security and workflow', () => {
 				pipelineId,
 				state
 			});
-			await service.transition(access, dealId, {
+			await transition(service, access, dealId, {
 				schemaVersion: 1,
 				commandId,
 				workspaceId,
@@ -439,9 +467,7 @@ describe('SalesService security and workflow', () => {
 				outcome: 'Переход',
 				...(state === 'OPEN' ? { nextTask } : {})
 			});
-			expect(
-				transaction.salesTask.updateMany.mock.calls[0][0].where
-			).toEqual({
+			expect(transaction.salesTask.updateMany.mock.calls[0][0].where).toEqual({
 				workspaceId,
 				dealId,
 				...(state === 'OPEN' ? { id: taskId } : {}),
@@ -456,7 +482,7 @@ describe('SalesService security and workflow', () => {
 			...deal,
 			nextTaskId: null
 		} as never);
-		await service.transition(access, dealId, {
+		await transition(service, access, dealId, {
 			schemaVersion: 1,
 			commandId,
 			workspaceId,

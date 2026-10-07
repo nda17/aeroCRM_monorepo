@@ -39,6 +39,9 @@ export const getSalesAnalyticsOverview = async (
 			params: {
 				workspaceId,
 				details: 'true',
+				...(query.assigneeBasis
+					? { assigneeBasis: query.assigneeBasis }
+					: {}),
 				...(query.pipelineId ? { pipelineId: query.pipelineId } : {}),
 				...(query.createdFrom
 					? { createdFrom: query.createdFrom, createdTo: query.createdTo! }

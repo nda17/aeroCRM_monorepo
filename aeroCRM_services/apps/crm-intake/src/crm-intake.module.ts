@@ -1,3 +1,6 @@
+import { MailIntakeController } from './mail-intake/mail-intake.controller';
+import { MailIntakeService } from './mail-intake/mail-intake.service';
+import { MailSourceClient } from './mail-intake/mail-source.client';
 import { APP_FILTER } from '@nestjs/core';
 import {
 	WorkspaceClosureController,
@@ -71,6 +74,7 @@ const slaPublisher = sla && role === 'sla-publisher';
 		...(api
 			? [
 					IntakeController,
+					MailIntakeController,
 					InboxNotificationsController,
 					LiveChangesController,
 					IntakeExportController,
@@ -101,6 +105,8 @@ const slaPublisher = sla && role === 'sla-publisher';
 		...(api
 			? [
 					IntakeService,
+					MailIntakeService,
+					MailSourceClient,
 					InboxNotificationsService,
 					LiveChangesService,
 					IntakeExportService,

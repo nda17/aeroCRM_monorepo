@@ -23,10 +23,14 @@ const fixture = vi.hoisted(() => ({
 	searchParams: new URLSearchParams(),
 	companyName: null as string | null,
 	mailEnabled: true,
+	notificationSnapshot: null as Record<string, unknown> | null,
 	access: {
 		state: 'ACTIVE' as 'ACTIVE' | 'GRACE' | 'READ_ONLY',
 		isReadOnly: false,
-		membership: { role: 'OWNER' as 'OWNER' | 'MEMBER' },
+		membership: {
+			role: 'OWNER' as 'OWNER' | 'MEMBER',
+			membershipId: '22222222-2222-4222-8222-222222222222'
+		},
 		entitlement: {
 			graceUntil: '2026-09-12T12:00:00.000Z' as string | null
 		}
@@ -40,7 +44,20 @@ vi.mock('next/navigation', () => ({
 	useSearchParams: () => fixture.searchParams
 }))
 vi.mock('@/features/manage-reminders', () => ({
-	TaskNotificationCenter: () => <button>Уведомления</button>
+	TaskNotificationCenter: ({
+		onSnapshot
+	}: {
+		onSnapshot?: (snapshot: never) => void
+	}) => (
+		<button
+			onClick={() => {
+				if (fixture.notificationSnapshot)
+					onSnapshot?.(fixture.notificationSnapshot as never)
+			}}
+		>
+			Уведомления
+		</button>
+	)
 }))
 vi.mock('@/features/manage-mail/model/use-mail-availability', () => ({
 	useMailAvailability: () => ({
@@ -139,6 +156,7 @@ beforeEach(() => {
 	fixture.searchParams = new URLSearchParams()
 	fixture.companyName = null
 	fixture.mailEnabled = true
+	fixture.notificationSnapshot = null
 	fixture.access.state = 'ACTIVE'
 	fixture.access.isReadOnly = false
 	fixture.access.membership.role = 'OWNER'
@@ -221,7 +239,7 @@ describe('CRM navigation descriptions', () => {
 		).toBe('/mail')
 	})
 
-	it('describes all seven sections on keyboard focus without changing names, links or current state', () => {
+	it('describes every section on keyboard focus and preserves links and active state', () => {
 		mount()
 		for (const item of CRM_NAVIGATION) {
 			const link = within(mainNavigation()).getByRole('link', {
@@ -229,17 +247,72 @@ describe('CRM navigation descriptions', () => {
 			})
 			fireEvent.focus(link)
 			const tooltip = screen.getByRole('tooltip')
-			expect(tooltip.textContent).toBe(item.description)
-			expect(link.getAttribute('aria-describedby')).toBe(tooltip.id)
+			expect(tooltip.textContent).toContain(item.description)
+			expect(link.getAttribute('aria-describedby')?.split(' ')).toContain(
+				tooltip.id
+			)
 			expect(link.getAttribute('href')).toBe(item.href)
 			expect(link.hasAttribute('title')).toBe(false)
 			expect(tooltip.parentElement).toBe(document.body)
 			expect(mainNavigation().contains(tooltip)).toBe(false)
 			fireEvent.blur(link)
 			expect(screen.queryByRole('tooltip')).toBeNull()
-			expect(link.hasAttribute('aria-describedby')).toBe(false)
+			expect(
+				link.getAttribute('aria-describedby')?.split(' ') ?? []
+			).not.toContain(tooltip.id)
 		}
 		expect(toast).not.toHaveBeenCalled()
+	})
+	it('shows one permission-scoped unread snapshot for all four sidebar entries and keeps unknown counts distinct from zero', () => {
+		fixture.notificationSnapshot = {
+			workspaceId: fixture.workspaceId,
+			subject: fixture.userId,
+			membershipId: fixture.access.membership.membershipId,
+			sessionRevision: 1,
+			scope: JSON.stringify([
+				'OWNER',
+				'ALL',
+				[],
+				[
+					'customers:read',
+					'customers:write',
+					'intake:read',
+					'intake:write',
+					'sales:analytics',
+					'sales:read',
+					'sales:write'
+				]
+			]),
+			counts: {
+				'/tasks': 4,
+				'/inbox': null,
+				'/mail': 0,
+				'/messages': 101
+			}
+		}
+		mount()
+		fireEvent.click(screen.getByRole('button', { name: 'Уведомления' }))
+		const nav = within(mainNavigation())
+		const badge = (label: string) =>
+			nav
+				.getByRole('link', { name: label })
+				.querySelector('span[aria-hidden="true"]')
+		expect(badge('Задачи')?.textContent).toBe('4')
+		expect(badge('Входящие')?.textContent).toBe('…')
+		expect(badge('Почта')).toBeNull()
+		expect(badge('Сообщения')?.textContent).toBe('99+')
+		fixture.notificationSnapshot = {
+			...(fixture.notificationSnapshot as object),
+			workspaceId: '33333333-3333-4333-8333-333333333333',
+			counts: {
+				'/tasks': 0,
+				'/inbox': 0,
+				'/mail': 0,
+				'/messages': 0
+			}
+		}
+		fireEvent.click(screen.getByRole('button', { name: 'Уведомления' }))
+		expect(badge('Задачи')?.textContent).toBe('…')
 	})
 	it('delays mouse hover, remains hoverable across the gap, and closes after leaving the bubble', () => {
 		vi.useFakeTimers()
@@ -437,8 +510,13 @@ describe('aeroCRM application shell', () => {
 	it('uses one canonical Tasks route consistently in desktop and mobile navigation', () => {
 		fixture.pathname = '/tasks'
 		mount()
-		expect(CRM_NAVIGATION.filter(item => item.label === 'Задачи')).toHaveLength(1)
-		expect(CRM_NAVIGATION[0]).toMatchObject({ label: 'Задачи', href: '/tasks' })
+		expect(
+			CRM_NAVIGATION.filter(item => item.label === 'Задачи')
+		).toHaveLength(1)
+		expect(CRM_NAVIGATION[0]).toMatchObject({
+			label: 'Задачи',
+			href: '/tasks'
+		})
 		const desktopLink = within(mainNavigation()).getByRole('link', {
 			name: 'Задачи'
 		})
@@ -447,9 +525,7 @@ describe('aeroCRM application shell', () => {
 		const context = document.querySelector(
 			'[aria-label="Текущий раздел"]'
 		)!
-		expect(
-			within(context as HTMLElement).getByText('Задачи')
-		).toBeTruthy()
+		expect(within(context as HTMLElement).getByText('Задачи')).toBeTruthy()
 		fireEvent.click(
 			screen.getByRole('button', { name: 'Открыть навигацию CRM' })
 		)

@@ -58,6 +58,9 @@
 .board {
 	@apply grid min-w-0 grid-cols-1 items-start gap-4 xl:grid-cols-2 2xl:grid-cols-4;
 }
+.compactBoard {
+	@apply 2xl:grid-cols-2;
+}
 .column {
 	@apply flex min-w-0 flex-col gap-4 rounded-panel border border-crm-border bg-crm-surface-muted p-3 transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none sm:p-4;
 }
@@ -139,4 +142,49 @@
 }
 .quickActions {
 	@apply flex flex-wrap gap-2;
+}
+
+.scopeFilter {
+	@apply rounded-xl bg-primary p-3;
+
+	label,
+	button,
+	select,
+	select + span {
+		@apply text-white;
+	}
+
+	select {
+		@apply border-white/40 bg-primary hover:border-white focus:border-white focus:ring-white/30;
+	}
+
+	option {
+		@apply bg-crm-surface text-crm-text;
+	}
+}
+.peopleFilters {
+	@apply col-span-full min-w-0;
+}
+.historySwitch {
+	@apply mb-4 flex flex-wrap gap-2;
+}
+.draftNotice {
+	@apply mt-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-medium text-crm-text;
+}
+.appliedFilters {
+	@apply mb-2 mt-4 text-sm font-semibold text-crm-text;
+}
+
+.overdueBadge {
+	@apply inline-flex min-h-9 items-center gap-2 rounded-lg border border-crm-danger/40 bg-crm-danger/10 px-3 py-1.5 text-sm font-bold text-crm-danger;
+
+	svg {
+		@apply shrink-0;
+	}
+}
+.overdueCard {
+	@apply border-l-4 border-l-crm-danger;
+}
+.overdueRow > td:first-child {
+	@apply border-l-4 border-l-crm-danger;
 }

@@ -46,7 +46,7 @@ export const CreateDealDrawer = ({
 		pipeline?.stages.find(stage => stage.state === 'OPEN')?.id || ''
 	)
 	const [title, setTitle] = useState('')
-	const [amount, setAmount] = useState('0')
+	const [amount, setAmount] = useState('')
 	const [taskTitle, setTaskTitle] = useState('Связаться с клиентом')
 	const [due, setDue] = useState('')
 	const [search, setSearch] = useState('')
@@ -168,6 +168,7 @@ export const CreateDealDrawer = ({
 	return (
 		<>
 			<Drawer
+				className={styles.formDrawer}
 				dirtyFormIds={[draftGuard.id]}
 				isOpen={!creatingContact}
 				onClose={() => {
@@ -188,11 +189,14 @@ export const CreateDealDrawer = ({
 			>
 				<form
 					id="create-sales-deal"
-					className={styles.form}
+					className={`${styles.form} ${styles.createForm}`}
 					onSubmit={submit}
 				>
 					<SalesCommandState command={command} onReview={review} />
-					<fieldset className={styles.fields} disabled={command.locked}>
+					<fieldset
+						className={`${styles.fields} ${styles.primaryFields}`}
+						disabled={command.locked}
+					>
 						<TextField
 							label="Название сделки"
 							required
@@ -231,10 +235,14 @@ export const CreateDealDrawer = ({
 							inputMode="decimal"
 							required
 							value={amount}
+							placeholder="0,00"
 							onChange={event => setAmount(event.target.value)}
 						/>
 					</fieldset>
-					<section className={styles.section} aria-label="Выбор контакта">
+					<section
+						className={`${styles.section} ${styles.contactSection}`}
+						aria-label="Выбор контакта"
+					>
 						<h3>Контакт</h3>
 						{!canReadContacts ? (
 							<ScreenState

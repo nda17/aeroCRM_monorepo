@@ -30,7 +30,7 @@ describe('planner timezone select', () => {
 		expect(select).toHaveProperty('value', 'Asia/Vladivostok')
 		expect(select).toHaveProperty('disabled', false)
 		expect(
-			within(select).getByRole('option', { name: 'Владивосток' })
+			within(select).getByRole('option', { name: /^Владивосток/ })
 		).toHaveProperty('selected', true)
 		expect(select.parentElement?.querySelectorAll('svg')).toHaveLength(1)
 		expect(onChange).not.toHaveBeenCalled()
@@ -51,10 +51,9 @@ describe('planner timezone select', () => {
 				'value',
 				value
 			)
-			expect(screen.getByRole('option', { name: value })).toHaveProperty(
-				'disabled',
-				false
-			)
+			expect(
+				screen.getByRole('option', { name: new RegExp(`^${value}`) })
+			).toHaveProperty('disabled', false)
 			expect(onChange).not.toHaveBeenCalled()
 		}
 	)
@@ -71,6 +70,24 @@ describe('planner timezone select', () => {
 		fireEvent.change(select, { target: { value: 'not/in-list' } })
 		expect(onChange).not.toHaveBeenCalled()
 		expect(screen.getByRole('alert').textContent).toContain('IANA')
+	})
+	it('keeps the saved zone selected when a city or UTC offset search has no matches', () => {
+		const onChange = vi.fn()
+		render(
+			<WorkdayTimeZoneSelect
+				value="Asia/Vladivostok"
+				onChange={onChange}
+			/>
+		)
+		const select = screen.getByLabelText('Часовой пояс')
+		fireEvent.change(screen.getByLabelText('Найти: часовой пояс'), {
+			target: { value: 'no such city or offset' }
+		})
+		expect(screen.getByRole('status').textContent).toContain(
+			'Ничего не найдено'
+		)
+		expect(select).toHaveProperty('value', 'Asia/Vladivostok')
+		expect(onChange).not.toHaveBeenCalled()
 	})
 	it('hydrates the deterministic server choices before adding the full client catalog', async () => {
 		const supported = vi
@@ -98,7 +115,7 @@ describe('planner timezone select', () => {
 			await waitFor(() =>
 				expect(
 					within(container).getByRole('option', {
-						name: 'Antarctica/Casey'
+						name: /^Antarctica\/Casey/
 					})
 				).toBeTruthy()
 			)

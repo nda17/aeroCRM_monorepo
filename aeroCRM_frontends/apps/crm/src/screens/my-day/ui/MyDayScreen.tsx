@@ -7,7 +7,7 @@ import { usePlannerSettings } from '@/entities/crm-planner/model/use-planner-set
 import type { PlannerColumn } from '@/entities/crm-planner/model/planner.types'
 import { PlannerSettingsDrawer } from '@/features/manage-planner/ui/PlannerSettingsDrawer'
 
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -39,12 +39,17 @@ import {
 } from '@/shared/ui'
 import {
 	initialWorkdayFilters,
+	workdayLayoutStorageKey,
+	readStoredWorkdayLayout,
+	writeStoredWorkdayLayout,
 	type WorkdayView
 } from '../model/workday-view'
 import { WorkdayCollection } from './WorkdayCollection'
 import { WorkdayFilters } from './WorkdayFilters'
 import { WorkdayInboxSummary } from './WorkdayInboxSummary'
 import styles from './MyDayScreen.module.scss'
+
+const subscribeHydration = () => () => {}
 
 const MyDayContent = ({
 	initialTaskId
@@ -61,7 +66,32 @@ const MyDayContent = ({
 	const draftGuard = useDirtyFormGuard()
 	const client = useQueryClient()
 	const [filters, setFilters] = useState<Filters>(initialWorkdayFilters)
-	const [view, setView] = useState<WorkdayView>('list')
+	const hydrated = useSyncExternalStore(
+		subscribeHydration,
+		() => true,
+		() => false
+	)
+	const storageKey =
+		context.session?.userId && context.workspace.workspaceId
+			? workdayLayoutStorageKey(
+					context.workspace.workspaceId,
+					context.session.userId
+				)
+			: null
+	const [layout, setLayout] = useState<{
+		key: string | null
+		view: WorkdayView
+	}>({ key: null, view: 'list' })
+	if (hydrated && storageKey && layout.key !== storageKey)
+		setLayout({
+			key: storageKey,
+			view: readStoredWorkdayLayout(storageKey)
+		})
+	const view = layout.view
+	const setView = (next: WorkdayView) => {
+		setLayout({ key: storageKey, view: next })
+		if (storageKey) writeStoredWorkdayLayout(storageKey, next)
+	}
 	const [selected, setSelected] = useState<string | null>(initialTaskId)
 	const [taskMode, setTaskMode] = useState<'details' | 'reschedule'>(
 		'details'
@@ -97,9 +127,7 @@ const MyDayContent = ({
 		scope: filters.scope,
 		...(filters.from ? { from: filters.from } : {}),
 		...(filters.to ? { to: filters.to } : {}),
-		...(view === 'list' && filters.status
-			? { status: filters.status }
-			: {}),
+		...(filters.status ? { status: filters.status } : {}),
 		...(filters.search ? { search: filters.search } : {}),
 		...(filters.teamId ? { teamId: filters.teamId } : {}),
 		...(filters.assigneeSubject
@@ -226,7 +254,7 @@ const MyDayContent = ({
 						description={
 							<HelpHint
 								label="Задачи"
-								description="По умолчанию показаны незавершённые задачи по сроку. Задача по сделке здесь и в её карточке — одна запись. Завершённые и отменённые задачи доступны через фильтр статуса."
+								description="По умолчанию показаны незавершённые задачи по сроку. Задача по сделке здесь и в её карточке — одна запись. Завершённые и отменённые задачи доступны во вкладке «История»."
 							>
 								Что сделать по клиентам и другим делам.
 							</HelpHint>
@@ -378,7 +406,7 @@ const MyDayContent = ({
 						}}
 					/>
 					<WorkdayFilters
-						key={JSON.stringify(filters)}
+						key={JSON.stringify([filters, view])}
 						value={filters}
 						view={view}
 						allowedScopes={context.scopes}
@@ -393,20 +421,31 @@ const MyDayContent = ({
 						}}
 						onChange={next => {
 							if (!command.canClose()) return false
-							setSelected(null)
-							setFilters(next)
-							return true
+							draftGuard.confirmDiscard(() => {
+								setSelected(null)
+								setFilters(next)
+							})
 						}}
 						onViewChange={next => {
 							if (!command.canClose()) return false
-							setSelected(null)
-							setView(next)
-							setFilters(value => ({
-								...value,
-								status: next === 'list' ? 'ACTIVE' : undefined,
-								page: 1
-							}))
-							return true
+							draftGuard.confirmDiscard(() => {
+								setSelected(null)
+								setView(next)
+								setFilters(value => ({
+									...value,
+									status:
+										next === 'board' &&
+										value.status &&
+										value.status !== 'ACTIVE' &&
+										value.status !== 'TERMINAL'
+											? value.status === 'OPEN' ||
+												value.status === 'IN_PROGRESS'
+												? 'ACTIVE'
+												: 'TERMINAL'
+											: value.status,
+									page: 1
+								}))
+							})
 						}}
 					/>
 					{overview.data ? (
@@ -474,7 +513,7 @@ const MyDayContent = ({
 										period: 'OVERDUE',
 										from: undefined,
 										to: undefined,
-										status: view === 'list' ? 'ACTIVE' : undefined,
+										status: 'ACTIVE',
 										page: 1
 									}))
 									toast('Показаны просроченные задачи')

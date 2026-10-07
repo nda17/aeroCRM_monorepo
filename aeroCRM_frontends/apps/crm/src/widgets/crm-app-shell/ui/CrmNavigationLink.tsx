@@ -1,6 +1,7 @@
 'use client'
 
 import clsx from 'clsx'
+import { useId } from 'react'
 import Link from 'next/link'
 
 import { AppIcon, useTooltip } from '@/shared/ui'
@@ -12,16 +13,26 @@ export const CrmNavigationLink = ({
 	isActive,
 	enabled,
 	disabledReason,
+	unreadCount,
 	onNavigate
 }: {
 	item: CrmNavigationItem
 	isActive: boolean
 	enabled: boolean
 	disabledReason?: string
+	unreadCount?: number | null
 	onNavigate?: () => void
 }) => {
+	const badgeId = useId()
+	const showBadge =
+		unreadCount === null || (unreadCount !== undefined && unreadCount > 0)
+	const countDescription =
+		unreadCount === null
+			? 'Количество непрочитанных уведомлений пока неизвестно.'
+			: `Непрочитанных уведомлений: ${unreadCount}.`
 	const { triggerProps, tooltip, close } = useTooltip<HTMLElement>(
-		disabledReason ?? item.description,
+		disabledReason ??
+			`${item.description}${showBadge ? ` ${countDescription}` : ''}`,
 		enabled
 	)
 	if (disabledReason)
@@ -56,6 +67,14 @@ export const CrmNavigationLink = ({
 					isActive && styles.navigationLinkActive
 				)}
 				aria-current={isActive ? 'page' : undefined}
+				aria-describedby={
+					[
+						triggerProps['aria-describedby'],
+						showBadge ? badgeId : undefined
+					]
+						.filter(Boolean)
+						.join(' ') || undefined
+				}
 				onClick={event => {
 					close()
 					if (
@@ -74,7 +93,27 @@ export const CrmNavigationLink = ({
 					<AppIcon name={item.icon} size={20} />
 				</span>
 				<span>{item.label}</span>
+				{showBadge ? (
+					<span
+						className={clsx(
+							styles.navigationBadge,
+							unreadCount === null && styles.navigationBadgeUnknown
+						)}
+						aria-hidden="true"
+					>
+						{unreadCount === null
+							? '…'
+							: unreadCount! > 99
+								? '99+'
+								: unreadCount}
+					</span>
+				) : null}
 			</Link>
+			{showBadge ? (
+				<span id={badgeId} className="sr-only">
+					{countDescription}
+				</span>
+			) : null}
 			{tooltip}
 		</>
 	)

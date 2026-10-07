@@ -15,11 +15,13 @@ import {
 import {
 	AssigneeSelect,
 	useAssigneeOptions,
+	useAssigneeLabels,
 	assigneeDisplayName,
 	type AssigneeBinding
 } from '@/entities/crm-team'
 import { AuthenticatedApiError } from '@/shared/api/authenticated-http-client'
-import type { SalesDeal } from '@/entities/sales'
+import { useQuery } from '@tanstack/react-query'
+import { getSalesDeal, type SalesDeal } from '@/entities/sales'
 import { Button, Drawer, ScreenState, TextField } from '@/shared/ui'
 import { useWorkdayCommand } from '../model/use-workday-command'
 import {
@@ -201,11 +203,51 @@ const TaskEditor = ({
 			...(baseline.teamId ? { teamId: baseline.teamId } : {})
 		}
 	)
+	const labels = useAssigneeLabels(workdayDirectoryContext(read.context), [
+		{
+			subject: baseline.assignedToSubject,
+			membershipId: baseline.assignedToMembershipId
+		}
+	])
+	const displayedEmployee = labels.lookup({
+		subject: baseline.assignedToSubject,
+		membershipId: baseline.assignedToMembershipId
+	})?.employee
+	const linkedDeal = useQuery({
+		queryKey: [
+			'sales',
+			'workday-deal',
+			...read.context.key,
+			baseline.dealId
+		],
+		enabled:
+			!!baseline.dealId &&
+			read.context.canRead &&
+			!read.query.isError &&
+			!read.query.isFetching,
+		queryFn: () =>
+			getSalesDeal(
+				read.context.session!.accessToken,
+				baseline.workspaceId,
+				baseline.dealId!
+			),
+		retry: false,
+		gcTime: 0
+	})
 	const resolved = options.resolveBinding(selected)
 	const changedAssignee =
 		!!assignee &&
 		(assignee.subject !== baseline.assignedToSubject ||
 			assignee.membershipId !== baseline.assignedToMembershipId)
+	const displayAssignee = displayedEmployee
+		? displayedEmployee.displayName ||
+			displayedEmployee.verifiedEmail ||
+			'Сотрудник'
+		: labels.loading
+			? 'Загрузка имени…'
+			: labels.error
+				? 'Имя временно недоступно'
+				: 'Сотрудник недоступен'
 	const timeline = useWorkdayTimeline(initial.id, historyPage)
 	const close = () => {
 		if (command.canClose()) {
@@ -318,14 +360,39 @@ const TaskEditor = ({
 										event.preventDefault()
 								}}
 							>
-								Открыть сделку
+								{!linkedDeal.isError &&
+								!linkedDeal.isFetching &&
+								read.context.canRead &&
+								!read.query.isError
+									? (linkedDeal.data?.title ?? 'Открыть сделку')
+									: 'Открыть сделку'}
 							</Link>
+							{!linkedDeal.isError &&
+							!linkedDeal.isFetching &&
+							read.context.canRead &&
+							!read.query.isError &&
+							linkedDeal.data ? (
+								<p className={styles.note}>
+									Клиент: {linkedDeal.data.contactName}
+								</p>
+							) : linkedDeal.isError ? (
+								<p className={styles.note}>
+									Связанная сделка временно недоступна.{' '}
+									<Button
+										variant="ghost"
+										onClick={() => void linkedDeal.refetch()}
+									>
+										Повторить
+									</Button>
+								</p>
+							) : null}
 						</section>
 					) : null}
 					<section
 						className={styles.section}
 						aria-label="Параметры задачи"
 					>
+						<p className={styles.note}>Ответственный: {displayAssignee}</p>
 						{mode === 'reschedule' ? (
 							<strong>{title}</strong>
 						) : (

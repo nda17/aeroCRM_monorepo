@@ -9,6 +9,7 @@ import {
 } from '@/widgets/crm-app-shell/model/crm-navigation'
 import {
 	canReadCrmRoute,
+	crmPermissionScope,
 	crmDefaultRoute,
 	useCrmPermissions,
 	type CrmPermissions,
@@ -20,7 +21,11 @@ import { billingHref } from '@/entities/crm-billing'
 import { useWorkspaceBranding } from '@/entities/crm-workspace-branding'
 import { getRuntimeConfig } from '@/shared/config/runtime'
 import { ThemeSwitcher } from '@/shared/ui/theme-switcher/ThemeSwitcher'
-import { TaskNotificationCenter } from '@/features/manage-reminders'
+import {
+	TaskNotificationCenter,
+	type NavigationNotificationSnapshot,
+	type NavigationUnreadCounts
+} from '@/features/manage-reminders'
 import { useMailAvailability } from '@/features/manage-mail/model/use-mail-availability'
 import { CrmNavigationLink } from './CrmNavigationLink'
 import {
@@ -39,11 +44,19 @@ import { useQuery } from '@tanstack/react-query'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { type PropsWithChildren, useEffect, useId, useState } from 'react'
 
+const unknownNavigationCounts: NavigationUnreadCounts = {
+	'/tasks': null,
+	'/inbox': null,
+	'/mail': null,
+	'/messages': null
+}
+
 interface CrmNavigationProps {
 	ariaLabel: string
 	enabled?: boolean
 	onNavigate?: () => void
 	authority?: CrmPermissions
+	counts: NavigationUnreadCounts
 }
 
 const isNavigationItemActive = (
@@ -55,7 +68,8 @@ const CrmNavigation = ({
 	ariaLabel,
 	enabled = true,
 	onNavigate,
-	authority
+	authority,
+	counts
 }: CrmNavigationProps) => {
 	const pathname = usePathname()
 	const mail = useMailAvailability()
@@ -74,6 +88,9 @@ const CrmNavigation = ({
 								item={item}
 								isActive={isActive}
 								enabled={enabled}
+								unreadCount={
+									counts[item.href as keyof NavigationUnreadCounts]
+								}
 								disabledReason={
 									item.href === '/mail' && !mail.enabled
 										? mail.reason
@@ -90,9 +107,11 @@ const CrmNavigation = ({
 }
 
 const CrmMobileNavigation = ({
-	authority
+	authority,
+	counts
 }: {
 	authority?: CrmPermissions
+	counts: NavigationUnreadCounts
 }) => {
 	const [isOpen, setIsOpen] = useState(false)
 
@@ -117,6 +136,7 @@ const CrmMobileNavigation = ({
 				<div className={styles.mobileNavigation}>
 					<CrmNavigation
 						authority={authority}
+						counts={counts}
 						key={String(isOpen)}
 						enabled={isOpen}
 						ariaLabel="Мобильная навигация CRM"
@@ -151,9 +171,22 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 	const authority =
 		permissions.isSuccess &&
 		!permissions.isError &&
-		permissions.data.subject === session?.userId
+		permissions.data.subject === session?.userId &&
+		permissions.data.workspaceId === access.workspaceId
 			? permissions.data
 			: undefined
+	const [notificationSnapshot, setNotificationSnapshot] =
+		useState<NavigationNotificationSnapshot | null>(null)
+	const notificationCounts =
+		authority &&
+		!permissions.isFetching &&
+		notificationSnapshot?.workspaceId === access.workspaceId &&
+		notificationSnapshot.subject === session?.userId &&
+		notificationSnapshot.sessionRevision === sessionRevision &&
+		notificationSnapshot.membershipId === access.membership.membershipId &&
+		notificationSnapshot.scope === crmPermissionScope(authority)
+			? notificationSnapshot.counts
+			: unknownNavigationCounts
 	const home = authority ? crmDefaultRoute(authority) : '/inbox'
 	const renewHref =
 		authority?.role === 'OWNER' ? billingHref(access.workspaceId) : null
@@ -281,6 +314,7 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 							enabled={!isSidebarCollapsed}
 							authority={authority}
 							ariaLabel="Основная навигация CRM"
+							counts={notificationCounts}
 						/>
 					</div>
 					<p className={styles.sidebarCaption}>
@@ -291,7 +325,11 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 
 			<div className={styles.workspace}>
 				<header className={styles.topbar}>
-					<CrmMobileNavigation key={pathname} authority={authority} />
+					<CrmMobileNavigation
+						key={pathname}
+						authority={authority}
+						counts={notificationCounts}
+					/>
 					<button
 						{...sidebarHint.triggerProps}
 						type="button"
@@ -350,7 +388,7 @@ const CrmAppShell = ({ children }: PropsWithChildren) => {
 						</span>
 					</div>
 					<ThemeSwitcher />
-					<TaskNotificationCenter />
+					<TaskNotificationCenter onSnapshot={setNotificationSnapshot} />
 					<a className={styles.siteLink} href={mainAppOrigin}>
 						На сайт aeroCRM
 					</a>

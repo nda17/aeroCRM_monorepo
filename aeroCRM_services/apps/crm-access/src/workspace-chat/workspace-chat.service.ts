@@ -1,4 +1,9 @@
 import {
+	ChatAttachmentsService,
+	attachedDto
+} from './chat-attachments.service';
+import type { SendMessageV2Dto } from './chat-messages-v2.dto';
+import {
 	BadRequestException,
 	ForbiddenException,
 	Injectable,
@@ -12,11 +17,7 @@ import type {
 } from '@prisma/crm-access-client';
 import { CrmAuthorizationService } from '../authorization/crm-authorization.service';
 import { CrmAccessPrismaService } from '../prisma/crm-access-prisma.service';
-import {
-	command,
-	semanticHash,
-	type TeamAuthority
-} from '../team/team.util';
+import { command, semanticHash, type TeamAuthority } from '../team/team.util';
 import { directoryName } from '../directory/directory.service';
 import { collaborationSignal } from '../directory/directory.util';
 import type {
@@ -47,19 +48,15 @@ const messageDto = (row: CrmChatMessage) => ({
 export class WorkspaceChatService {
 	constructor(
 		private readonly prisma: CrmAccessPrismaService,
-		private readonly auth: CrmAuthorizationService
+		private readonly auth: CrmAuthorizationService,
+		private readonly attachments: ChatAttachmentsService
 	) {}
 	private async actor(
 		token: string | undefined,
 		workspaceId: string,
 		tx?: Prisma.TransactionClient
 	): Promise<Actor> {
-		const actor = await this.auth.authorize(
-			token,
-			workspaceId,
-			undefined,
-			tx
-		);
+		const actor = await this.auth.authorize(token, workspaceId, undefined, tx);
 		const binding = await this.auth.assignmentSubject(
 			workspaceId,
 			actor.subject
@@ -77,8 +74,7 @@ export class WorkspaceChatService {
 		const participant = conversation.participants.find(
 			row => row.subject !== actor.subject
 		);
-		if (!participant)
-			throw new NotFoundException('Conversation was not found');
+		if (!participant) throw new NotFoundException('Conversation was not found');
 		let active = false;
 		try {
 			const current = await this.auth.assignmentSubject(
@@ -92,10 +88,7 @@ export class WorkspaceChatService {
 		return {
 			subject: participant.subject,
 			membershipId: participant.membershipId,
-			displayName: await this.person(
-				actor.workspaceId,
-				participant.subject
-			),
+			displayName: await this.person(actor.workspaceId, participant.subject),
 			active
 		};
 	}
@@ -210,11 +203,9 @@ export class WorkspaceChatService {
 			const people = await this.prisma.crmDirectoryEntry.findMany({
 				where: {
 					workspaceId: actor.workspaceId,
-					OR: ['firstName', 'lastName', 'middleName', 'email'].map(
-						field => ({
-							[field]: { contains: query.q, mode: 'insensitive' }
-						})
-					)
+					OR: ['firstName', 'lastName', 'middleName', 'email'].map(field => ({
+						[field]: { contains: query.q, mode: 'insensitive' }
+					}))
 				},
 				select: { subject: true }
 			});
@@ -396,18 +387,74 @@ export class WorkspaceChatService {
 			nextBeforeSequence: hasMore ? (slice[0]?.sequence ?? null) : null
 		};
 	}
+	async messagesV2(
+		token: string | undefined,
+		id: string,
+		query: MessageQueryDto
+	) {
+		const result = await this.messages(token, id, query);
+		const rows = await this.prisma.crmChatAttachment.findMany({
+			where: {
+				workspaceId: query.workspaceId,
+				conversationId: id,
+				messageId: { in: result.items.map(item => item.id) },
+				state: 'ATTACHED'
+			}
+		});
+		await this.attachments.conversation(
+			await this.attachments.actor(token, query.workspaceId),
+			id
+		);
+		return {
+			...result,
+			schemaVersion: 2,
+			items: result.items.map(item => ({
+				...item,
+				attachments: rows
+					.filter(row => row.messageId === item.id)
+					.map(attachedDto)
+			}))
+		};
+	}
+
+	async sendLookup(
+		token: string | undefined,
+		id: string,
+		workspaceId: string,
+		commandId: string
+	) {
+		const actor = await this.actor(token, workspaceId);
+		await this.current(this.prisma, actor, id);
+		const receipt = await this.prisma.crmTeamCommandReceipt.findUnique({
+			where: { commandId }
+		});
+		if (!receipt)
+			return { schemaVersion: 1, workspaceId, status: 'ABSENT', result: null };
+		const result = receipt.result as unknown as {
+			schemaVersion: number;
+			workspaceId: string;
+			subject: string;
+			item: { conversationId: string; senderMembershipId: string };
+		};
+		if (
+			receipt.workspaceId !== workspaceId ||
+			receipt.actorSubject !== actor.subject ||
+			receipt.commandType !== 'chat.send-v2' ||
+			result.item?.conversationId !== id ||
+			result.item?.senderMembershipId !== actor.membershipId
+		)
+			throw new ForbiddenException();
+		return { schemaVersion: 1, workspaceId, status: 'COMMITTED', result };
+	}
+
 	private async participant(
 		tx: Prisma.TransactionClient,
 		actor: Actor,
 		row: Conversation
 	) {
 		if (row.kind === 'DIRECT')
-			return row.participants.find(
-				item => item.subject === actor.subject
-			)!;
-		const prior = row.participants.find(
-			item => item.subject === actor.subject
-		);
+			return row.participants.find(item => item.subject === actor.subject)!;
+		const prior = row.participants.find(item => item.subject === actor.subject);
 		return tx.crmChatParticipant.upsert({
 			where: {
 				conversationId_subject: {
@@ -431,18 +478,23 @@ export class WorkspaceChatService {
 						}
 		});
 	}
-	async send(token: string | undefined, id: string, dto: SendMessageDto) {
+	async send(
+		token: string | undefined,
+		id: string,
+		dto: SendMessageDto | SendMessageV2Dto
+	) {
 		const actor = await this.actor(token, dto.workspaceId);
 		if (actor.state === 'READ_ONLY')
 			throw new ForbiddenException('Chat is read-only');
-		const text = dto.text.trim();
+		const attachmentIds = dto.schemaVersion === 2 ? dto.attachmentIds : [];
+		const text = dto.text?.trim() || (attachmentIds.length ? 'Вложения' : '');
 		if (!text || text.length > 10000)
 			throw new BadRequestException('Invalid message text');
 		return command(
 			this.prisma,
 			actor,
 			dto.commandId,
-			'chat.send',
+			dto.schemaVersion === 2 ? 'chat.send-v2' : 'chat.send',
 			{ ...dto, id, text, actorMembershipId: actor.membershipId },
 			async tx => {
 				const row = await this.current(tx, actor, id);
@@ -484,19 +536,28 @@ export class WorkspaceChatService {
 						sequence: updated.lastSequence,
 						senderSubject: actor.subject,
 						senderMembershipId: actor.membershipId,
-						senderName: await this.person(
-							actor.workspaceId,
-							actor.subject
-						),
+						senderName: await this.person(actor.workspaceId, actor.subject),
 						text
 					}
 				});
+				const attachments = attachmentIds.length
+					? await this.attachments.bind(
+							tx,
+							actor,
+							id,
+							attachmentIds,
+							message.id
+						)
+					: [];
 				await collaborationSignal(tx, actor.workspaceId);
 				return {
-					schemaVersion: 1,
+					schemaVersion: dto.schemaVersion,
 					workspaceId: actor.workspaceId,
 					subject: actor.subject,
-					item: messageDto(message)
+					item:
+						dto.schemaVersion === 2
+							? { ...messageDto(message), attachments }
+							: messageDto(message)
 				};
 			},
 			async tx => {
@@ -506,6 +567,8 @@ export class WorkspaceChatService {
 					fresh.state === 'READ_ONLY'
 				)
 					throw new ForbiddenException();
+				if (dto.schemaVersion === 2)
+					await this.attachments.conversation(fresh, id, tx, true);
 			}
 		);
 	}
@@ -520,9 +583,7 @@ export class WorkspaceChatService {
 			async tx => {
 				const row = await this.current(tx, actor, id);
 				if (dto.throughSequence > row.lastSequence)
-					throw new BadRequestException(
-						'Read sequence exceeds conversation'
-					);
+					throw new BadRequestException('Read sequence exceeds conversation');
 				const prior = await this.participant(tx, actor, row);
 				const through = Math.max(
 					prior.readThroughSequence,
@@ -562,10 +623,7 @@ export class WorkspaceChatService {
 			}
 		);
 	}
-	async notifications(
-		token: string | undefined,
-		query: NotificationQueryDto
-	) {
+	async notifications(token: string | undefined, query: NotificationQueryDto) {
 		const actor = await this.actor(token, query.workspaceId);
 		const conversations = await this.visible(actor);
 		const info = new Map(

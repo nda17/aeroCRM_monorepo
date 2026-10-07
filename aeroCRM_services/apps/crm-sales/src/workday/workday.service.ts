@@ -203,7 +203,9 @@ export class WorkdayService {
 						query.status &&
 						(query.status === 'ACTIVE'
 							? !isActive(column.status)
-							: query.status !== column.status)
+							: query.status === 'TERMINAL'
+								? isActive(column.status)
+								: query.status !== column.status)
 					)
 						throw new BadRequestException(
 							'Task status differs from planner column'
@@ -213,9 +215,17 @@ export class WorkdayService {
 							period,
 							...(query.status === 'ACTIVE'
 								? [{ status: { in: [...active] } }]
-								: query.status
-									? [{ status: query.status }]
-									: []),
+								: query.status === 'TERMINAL'
+									? [
+											{
+												status: {
+													in: ['COMPLETED' as const, 'CANCELLED' as const]
+												}
+											}
+										]
+									: query.status
+										? [{ status: query.status }]
+										: []),
 							...(column ? [plannerColumnWhere(column)] : [])
 						]
 					};

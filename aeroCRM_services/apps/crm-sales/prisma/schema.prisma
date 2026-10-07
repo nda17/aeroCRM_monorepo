@@ -646,6 +646,7 @@ model DealTimeline {
   @@index([workspaceId, dealId, createdAt])
   @@map("deal_timeline")
   @@schema("crm_sales")
+  details Json?
 }
 
 model SalesCommandReceipt {

@@ -77,7 +77,7 @@ export const CRM_NAVIGATION = [
 	{
 		href: '/directory',
 		icon: 'user',
-		label: 'Справочник',
+		label: 'Сотрудники',
 		description: 'Рабочие контакты сотрудников вашего пространства.'
 	},
 	{

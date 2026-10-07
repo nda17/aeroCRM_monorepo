@@ -6,14 +6,19 @@ import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import {
 	ensureDirectConversation,
-	listChatMessages,
+	listChatMessagesV2,
 	listConversations,
 	listDirectory,
 	readChatConversation,
-	sendChatMessage,
+	sendChatMessageV2,
+	lookupChatSendV2,
+	downloadChatAttachment,
 	type ChatConversation
 } from '@/entities/workspace-collaboration'
-import { invalidContractError } from '@/shared/api/authenticated-http-client'
+import {
+	AuthenticatedApiError,
+	invalidContractError
+} from '@/shared/api/authenticated-http-client'
 import { isUuidV4 } from '@/shared/lib/contract'
 import { useDirtyFormGuard, useDirtyValue } from '@/shared/lib/dirty-form'
 import {
@@ -29,8 +34,44 @@ import {
 	useCollaborationCommand,
 	type CollaborationContext
 } from '../model/use-collaboration'
+import { useChatAttachments } from '../model/use-chat-attachments'
 import { CommandNotice } from './CommandNotice'
 import styles from './Collaboration.module.scss'
+
+const chatReadError = (error: unknown, thread = false) => {
+	if (error instanceof AuthenticatedApiError) {
+		if (error.kind === 'forbidden')
+			return {
+				variant: 'permission' as const,
+				title: thread
+					? 'Нет доступа к этому диалогу'
+					: 'Нет доступа к диалогам',
+				description:
+					'Сервер отклонил доступ. Проверьте выбранное пространство и свои права.'
+			}
+		if (error.kind === 'unauthorized')
+			return {
+				variant: 'error' as const,
+				title: 'Не удалось подтвердить сессию',
+				description:
+					'Повторите проверку доступа. Если ошибка сохраняется, войдите снова.'
+			}
+		if (error.kind === 'notFound')
+			return {
+				variant: 'error' as const,
+				title: 'Диалог не найден или недоступен',
+				description:
+					'Обновите список диалогов и выберите доступную переписку.'
+			}
+	}
+	return {
+		variant: 'error' as const,
+		title: thread
+			? 'Не удалось загрузить переписку'
+			: 'Не удалось загрузить диалоги',
+		description: 'Возникла временная ошибка загрузки. Повторите попытку.'
+	}
+}
 
 export function MessagesScreen() {
 	return (
@@ -132,16 +173,23 @@ function MessagesContent({
 							Найти
 						</Button>
 					</form>
-					{context.permissions.isError || conversations.isError ? (
+					{(context.permissions.isFetching && !context.ready) ||
+					(conversations.isFetching && !conversations.data) ? (
+						<p role="status" className={styles.muted}>
+							Проверяем доступ и загружаем диалоги…
+						</p>
+					) : context.permissions.isError || conversations.isError ? (
 						<ScreenState
-							variant="error"
+							{...chatReadError(
+								context.permissions.error ?? conversations.error
+							)}
 							compact
-							title="Диалоги недоступны"
 							action={
 								<Button
-									onClick={() => {
-										void context.permissions.refetch()
-										void conversations.refetch()
+									onClick={async () => {
+										const access = await context.permissions.refetch()
+										if (!access.isError && context.current())
+											await conversations.refetch()
 									}}
 								>
 									Повторить
@@ -436,17 +484,26 @@ function ChatThread({
 	const scroll = useRef<HTMLOListElement>(null)
 	const lastMarked = useRef(0)
 	const initialScroll = useRef(false)
-	const dirty = useDirtyValue(text, 'Неотправленное сообщение')
+	const attachments = useChatAttachments(context, id)
+	const fileInput = useRef<HTMLInputElement>(null)
+	const [downloadError, setDownloadError] = useState('')
+	const dirty = useDirtyValue(
+		JSON.stringify({ text, files: attachments.files.map(row => row.key) }),
+		'Неотправленное сообщение и вложения'
+	)
 	const messages = useQuery({
 		queryKey: ['workspace-chat-messages', ...context.key, id, before],
 		enabled: context.ready,
 		queryFn: async () => {
-			const result = await listChatMessages(context.session!.accessToken, {
-				...context.binding,
-				conversationId: id,
-				beforeSequence: before,
-				limit: 50
-			})
+			const result = await listChatMessagesV2(
+				context.session!.accessToken,
+				{
+					...context.binding,
+					conversationId: id,
+					beforeSequence: before,
+					limit: 50
+				}
+			)
 			if (!context.current()) throw invalidContractError()
 			return result
 		},
@@ -460,10 +517,13 @@ function ChatThread({
 	const send = useCollaborationCommand(
 		context,
 		`chat:send:${id}`,
-		sendChatMessage,
+		async (token, command: Parameters<typeof sendChatMessageV2>[1]) =>
+			(await lookupChatSendV2(token, command)) ??
+			(await sendChatMessageV2(token, command)),
 		() => {
 			setText('')
-			dirty.resetBaseline('')
+			attachments.reset()
+			dirty.resetBaseline(JSON.stringify({ text: '', files: [] }))
 			initialScroll.current = false
 			setBefore(undefined)
 			requestAnimationFrame(() =>
@@ -554,7 +614,8 @@ function ChatThread({
 		context.canWrite &&
 		conversation?.canSend &&
 		!send.locked &&
-		!!text.trim()
+		(!!text.trim() || attachments.files.length > 0) &&
+		attachments.ready
 	return (
 		<section className={styles.thread} aria-label="Переписка">
 			<div className={styles.threadHeader}>
@@ -570,23 +631,30 @@ function ChatThread({
 					size="sm"
 					variant="ghost"
 					disabled={messages.isFetching}
-					onClick={() => {
+					onClick={async () => {
 						if (!read.uncertain && !read.running) {
 							read.reset()
 							lastMarked.current = 0
 						}
-						void context.permissions.refetch()
-						void messages.refetch()
+						const access = await context.permissions.refetch()
+						if (!access.isError && context.current())
+							await messages.refetch()
 					}}
 				>
 					Обновить
 				</Button>
 			</div>
-			{messages.isError || context.permissions.isError ? (
+			{(context.permissions.isFetching && !context.ready) ||
+			(messages.isFetching && !data) ? (
+				<p className={styles.empty} role="status">
+					Проверяем доступ и загружаем сообщения…
+				</p>
+			) : messages.isError || context.permissions.isError ? (
 				<ScreenState
-					variant="error"
-					title="Переписка недоступна"
-					description="Доступ мог измениться. Обновите диалог."
+					{...chatReadError(
+						context.permissions.error ?? messages.error,
+						true
+					)}
 				/>
 			) : !data ? (
 				<p className={styles.empty} role="status">
@@ -643,6 +711,32 @@ function ChatThread({
 										<p className={styles.messageText}>
 											<MessageText text={message.text} />
 										</p>
+
+										{message.attachments.map(file => (
+											<Button
+												key={file.id}
+												type="button"
+												variant="secondary"
+												size="sm"
+												onClick={() => {
+													setDownloadError('')
+													void downloadChatAttachment(
+														context.session!.accessToken,
+														context.binding.workspaceId,
+														file.id,
+														file.fileName
+													).catch(() => {
+														if (context.current())
+															setDownloadError(
+																'Не удалось скачать файл. Обновите доступ и повторите.'
+															)
+													})
+												}}
+											>
+												{file.fileName} ({Math.ceil(file.byteSize / 1024)}{' '}
+												КБ)
+											</Button>
+										))}
 										<div className={styles.meta}>
 											<time dateTime={message.createdAt}>
 												{new Date(message.createdAt).toLocaleString(
@@ -681,6 +775,12 @@ function ChatThread({
 			)}
 			<form
 				className={styles.composer}
+				onDragOver={event => event.preventDefault()}
+				onDrop={event => {
+					event.preventDefault()
+					if (!send.locked && conversation?.canSend)
+						attachments.add(Array.from(event.dataTransfer.files))
+				}}
 				onSubmit={event => {
 					event.preventDefault()
 					if (canSend)
@@ -688,7 +788,8 @@ function ChatThread({
 							...context.binding,
 							conversationId: id,
 							commandId: crypto.randomUUID(),
-							text: text.trim()
+							text: text.trim(),
+							attachmentIds: attachments.attachmentIds
 						}))
 				}}
 			>
@@ -715,6 +816,79 @@ function ChatThread({
 						}
 					}}
 				/>
+
+				<input
+					ref={fileInput}
+					type="file"
+					multiple
+					hidden
+					accept=".png,.jpg,.jpeg,.webp,.pdf,.txt,.csv,.docx,.xlsx"
+					onChange={event => {
+						attachments.add(Array.from(event.target.files ?? []))
+						event.target.value = ''
+					}}
+				/>
+				<Button
+					type="button"
+					variant="secondary"
+					disabled={
+						!attachments.enabled ||
+						!context.canWrite ||
+						!conversation?.canSend ||
+						send.locked
+					}
+					onClick={() => fileInput.current?.click()}
+				>
+					Прикрепить файлы
+				</Button>
+				<span className={styles.muted}>
+					До 5 МБ на файл, 10 файлов и 20 МБ на сообщение. Можно перетащить
+					файлы сюда.
+				</span>
+				{attachments.error ? (
+					<p role="alert">{attachments.error}</p>
+				) : null}
+				{attachments.files.map(row => (
+					<div key={row.key} className={styles.stack}>
+						<span>
+							{row.file.name} —{' '}
+							{row.attachment?.state === 'READY'
+								? 'Готово'
+								: `${row.progress}%`}
+						</span>
+						{row.running ? (
+							<progress
+								max={100}
+								value={row.progress}
+								aria-label={`Загрузка ${row.file.name}`}
+							/>
+						) : null}
+						{row.error ? <p role="alert">{row.error}</p> : null}
+						<div className={styles.row}>
+							{row.error ? (
+								<Button
+									type="button"
+									variant="secondary"
+									disabled={
+										!context.canWrite || send.locked || row.running
+									}
+									onClick={() => void attachments.upload(row)}
+								>
+									Проверить / повторить
+								</Button>
+							) : null}
+							<Button
+								type="button"
+								variant="ghost"
+								disabled={!context.canWrite || send.locked}
+								onClick={() => void attachments.remove(row)}
+							>
+								{row.running ? 'Отменить' : 'Удалить'}
+							</Button>
+						</div>
+					</div>
+				))}
+				{downloadError ? <p role="alert">{downloadError}</p> : null}
 				<CommandNotice command={send} />
 				<CommandNotice command={read} />
 				<div className={styles.row}>

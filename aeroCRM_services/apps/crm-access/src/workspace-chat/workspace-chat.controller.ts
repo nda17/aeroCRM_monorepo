@@ -1,4 +1,8 @@
 import {
+	ChatMessagesV2QueryDto,
+	SendMessageV2Dto
+} from './chat-messages-v2.dto';
+import {
 	BadRequestException,
 	Body,
 	Controller,
@@ -69,6 +73,38 @@ export class WorkspaceChatController {
 		key(commandKey, dto.commandId);
 		return this.chat.send(token, id, dto);
 	}
+	@Get('conversations/:id/messages-v2/commands/:commandId')
+	@Header('Cache-Control', 'no-store')
+	sendLookup(
+		@Headers('authorization') token: string | undefined,
+		@Param('id', uuid) id: string,
+		@Param('commandId', uuid) commandId: string,
+		@Query() dto: ChatMessagesV2QueryDto
+	) {
+		return this.chat.sendLookup(token, id, dto.workspaceId, commandId);
+	}
+	@Get('conversations/:id/messages-v2')
+	@Header('Cache-Control', 'no-store')
+	messagesV2(
+		@Headers('authorization') token: string | undefined,
+		@Param('id', uuid) id: string,
+		@Query() dto: ChatMessagesV2QueryDto
+	) {
+		return this.chat.messagesV2(token, id, dto);
+	}
+	@Post('conversations/:id/messages-v2')
+	@HttpCode(200)
+	@Header('Cache-Control', 'no-store')
+	sendV2(
+		@Headers('authorization') token: string | undefined,
+		@Headers('idempotency-key') commandKey: string | undefined,
+		@Param('id', uuid) id: string,
+		@Body() dto: SendMessageV2Dto
+	) {
+		key(commandKey, dto.commandId);
+		return this.chat.send(token, id, dto);
+	}
+
 	@Put('conversations/:id/read')
 	@HttpCode(200)
 	@Header('Cache-Control', 'no-store')

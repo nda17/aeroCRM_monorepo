@@ -36,6 +36,7 @@ import type { IntakeAccess } from '../model/use-intake-access'
 import { useIntakeCommand } from '../model/use-intake-command'
 import { useInboxAcceptance } from '../model/use-inbox-acceptance'
 import { InboxAcceptancePanel } from './InboxAcceptancePanel'
+import { MailIntakeSourceControl } from './MailIntakeSourceControl'
 import styles from './IntakeForms.module.scss'
 
 interface Props {
@@ -325,6 +326,9 @@ export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 			description="Данные сохраняются в выбранном рабочем пространстве aeroCRM."
 		>
 			<div className={styles.form}>
+				{entry?.origin === 'MANUAL' && id ? (
+					<MailIntakeSourceControl access={access} entryId={id} />
+				) : null}
 				{command.locked ? (
 					<div
 						className={styles.notice}

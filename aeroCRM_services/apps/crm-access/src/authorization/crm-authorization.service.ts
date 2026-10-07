@@ -216,13 +216,22 @@ export class CrmAuthorizationService {
 			identity.subject !== subject ||
 			identity.membership?.membershipId !== membershipId
 		)
-			throw new ForbiddenException('Mail membership is no longer active');
+			throw new ForbiddenException({
+				schemaVersion: 1,
+				code: 'crm_mail_authority_revoked',
+				workspaceId,
+				subject,
+				membershipId,
+				reason: 'MEMBERSHIP_REVOKED'
+			});
 		const customer = await this.resolve(
 			workspaceId,
 			subject,
 			identity.membership,
 			correlationId,
-			caller
+			caller,
+			undefined,
+			{ workspaceId, subject, membershipId }
 		);
 		const authority = this.mailAuthority(customer, membershipId);
 		if (
@@ -230,7 +239,18 @@ export class CrmAuthorizationService {
 				purpose === 'MAIL_SEND' ? 'mail:send' : 'mail:read'
 			)
 		)
-			throw new ForbiddenException('Mail delegation is no longer active');
+			throw new ForbiddenException(
+				purpose === 'MAIL_SYNC'
+					? {
+							schemaVersion: 1,
+							code: 'crm_mail_authority_revoked',
+							workspaceId,
+							subject,
+							membershipId,
+							reason: 'MAIL_READ_REVOKED'
+						}
+					: 'Mail delegation is no longer active'
+			);
 		return authority;
 	}
 
@@ -263,7 +283,12 @@ export class CrmAuthorizationService {
 		membership: CrmWorkspaceMembership | null | undefined,
 		correlationId: string,
 		caller?: CrmCaller,
-		database: Prisma.TransactionClient = this.prisma
+		database: Prisma.TransactionClient = this.prisma,
+		mailBinding?: {
+			workspaceId: string;
+			subject: string;
+			membershipId: string;
+		}
 	) {
 		if (!membership)
 			throw new ForbiddenException('Workspace membership is required');
@@ -309,7 +334,16 @@ export class CrmAuthorizationService {
 				member.disabledAt ||
 				member.membershipId !== membership.membershipId)
 		) {
-			throw new ForbiddenException('An active CRM role is required');
+			throw new ForbiddenException(
+				mailBinding
+					? {
+							schemaVersion: 1,
+							code: 'crm_mail_authority_revoked',
+							...mailBinding,
+							reason: 'ROLE_REVOKED'
+						}
+					: 'An active CRM role is required'
+			);
 		}
 		const role: CrmRole = membership.role === 'OWNER' ? 'OWNER' : member!.role;
 		const customRole = member?.customRole;
@@ -319,7 +353,16 @@ export class CrmAuthorizationService {
 				customRole.archivedAt ||
 				member!.customRoleId !== customRole.id)
 		)
-			throw new ForbiddenException('An active CRM role is required');
+			throw new ForbiddenException(
+				mailBinding
+					? {
+							schemaVersion: 1,
+							code: 'crm_mail_authority_revoked',
+							...mailBinding,
+							reason: 'ROLE_REVOKED'
+						}
+					: 'An active CRM role is required'
+			);
 		// teamIds also bounds assignment in every domain service. Administrative
 		// roles must use current, service-owned teams from this workspace, not an
 		// absent OWNER member row or arbitrary team IDs supplied by the client.

@@ -139,9 +139,12 @@ export function validateSavedParameters(scope: SavedViewScope, value: unknown) {
 					'IN_PROGRESS',
 					'COMPLETED',
 					'CANCELLED',
-					'ACTIVE'
+					'ACTIVE',
+					'TERMINAL'
 				])) ||
-			(p.layout === 'board' && p.status !== undefined) ||
+			(p.layout === 'board' &&
+				p.status !== undefined &&
+				!['ACTIVE', 'TERMINAL'].includes(String(p.status))) ||
 			(p.search !== undefined &&
 				(typeof p.search !== 'string' || p.search.length > 200)) ||
 			(p.teamId !== undefined &&

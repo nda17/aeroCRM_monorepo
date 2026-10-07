@@ -38,6 +38,8 @@ const { PrismaClient } = await import("@prisma/crm-customers-client");
 const { MailConfig } = await import("../../dist/src/mail/mail.config.js");
 const { MailService } = await import("../../dist/src/mail/mail.service.js");
 const { MailWorker } = await import("../../dist/src/mail/mail.worker.js");
+const { MailAuthorityRevokedException } = await import("../../dist/src/mail/mail-authorization.client.js");
+const { ForbiddenException } = await import("@nestjs/common");
 const runtime = new PrismaClient({ datasources: { db: { url: runtimeUrl } } });
 const migrator = new PrismaClient({
   datasources: { db: { url: migrationUrl } },
@@ -1068,6 +1070,200 @@ try {
       delete process.env.CRM_CUSTOMERS_PROCESS_ROLE;
     else process.env.CRM_CUSTOMERS_PROCESS_ROLE = previousProcessRole;
   }
+
+  // Durable pause/retry/revocation use the real worker and restricted runtime SQL.
+  const pauseConnectionId = randomUUID();
+  const pauseMailboxId = randomUUID();
+  await runtime.mailConnection.create({
+    data: {
+      id: pauseConnectionId,
+      workspaceId,
+      delegatedSubject: subject,
+      delegatedMembershipId: membershipId,
+      provider: "IMAP_SMTP",
+      transport: {},
+      authMode: "PASSWORD",
+      credentialPrincipal: "pause@example.org",
+      keyId: "fixture-key",
+      encryptedSecret: "encrypted-fixture-preserved",
+      state: "ACTIVE",
+    },
+  });
+  await runtime.mailMailbox.create({
+    data: {
+      id: pauseMailboxId,
+      workspaceId,
+      connectionId: pauseConnectionId,
+      kind: "PERSONAL",
+      ownerSubject: subject,
+      ownerMembershipId: membershipId,
+      canonicalAddress: `pause-${workspaceId}@example.org`,
+      displayName: "Pause fixture",
+      imapLogin: "pause@example.org",
+      smtpLogin: "pause@example.org",
+      sendMode: "AS",
+      enabled: true,
+    },
+  });
+  const pauseFolderId = randomUUID();
+  await runtime.mailFolder.create({ data: {
+    id: pauseFolderId, workspaceId, mailboxId: pauseMailboxId, exactPath: "INBOX", kind: "INBOX", selected: true,
+    uidValidity: 7n, liveLastUid: 42n, backfillLastUid: 13n,
+    cutoff: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+  } });
+  let pauseAuthority = {
+    ...commandAuthority,
+    customer: { ...commandAuthority.customer, state: "READ_ONLY" },
+  };
+  let authorityError = null;
+  let imapOpened = 0;
+  const pauseMail = new MailService(
+    runtime,
+    {
+      workflow: async () => {
+        if (authorityError) throw authorityError;
+        return pauseAuthority;
+      },
+    },
+    new MailConfig(),
+    {
+      imap: async () => {
+        imapOpened++;
+        throw new Error("UNEXPECTED_IMAP");
+      },
+    },
+    {},
+  );
+  const pauseWorker = new MailWorker(pauseMail);
+  const leasedJob = async (generation = 1) =>
+    runtime.mailJob.create({
+      data: {
+        id: randomUUID(),
+        workspaceId,
+        mailboxId: pauseMailboxId,
+        generation,
+        kind: "LIVE_SYNC",
+        targetId: pauseFolderId,
+        workKey: `pause-fixture:${randomUUID()}`,
+        state: "RUNNING",
+        leaseOwner: pauseWorker.owner,
+        leaseVersion: 1,
+        leaseUntil: new Date(Date.now() + 120000),
+        attempts: 1,
+      },
+    });
+  const firstPause = await leasedJob();
+  await pauseWorker.run(firstPause);
+  let pausedMailbox = await runtime.mailMailbox.findUniqueOrThrow({
+    where: { id: pauseMailboxId },
+  });
+  let pausedConnection = await runtime.mailConnection.findUniqueOrThrow({
+    where: { id: pauseConnectionId },
+  });
+  assert.equal(imapOpened, 0);
+  assert.equal(pausedMailbox.enabled, true);
+  assert.equal(pausedMailbox.generation, 1);
+  assert.equal(pausedMailbox.disconnectedAt, null);
+  assert.equal(pausedMailbox.safeErrorCode, "MAIL_WORKSPACE_READ_ONLY");
+  assert.equal(pausedConnection.state, "ACTIVE");
+  const pausedFolder = await runtime.mailFolder.findUniqueOrThrow({ where: { id: pauseFolderId } });
+  assert.equal(pausedFolder.uidValidity, 7n);
+  assert.equal(pausedFolder.liveLastUid, 42n);
+  assert.equal(pausedFolder.backfillLastUid, 13n);
+  assert.equal(pausedFolder.generation, 1);
+
+  assert.equal(pausedConnection.encryptedSecret, "encrypted-fixture-preserved");
+  const pausedJob = await runtime.mailJob.findUniqueOrThrow({
+    where: { id: firstPause.id },
+  });
+  assert.equal(pausedJob.state, "QUEUED");
+  assert.equal(pausedJob.attempts, 0);
+  assert.equal(pausedJob.leaseOwner, null);
+  assert.ok(pausedJob.dueAt.getTime() >= Date.now() + 50000);
+  await pauseWorker.run(await leasedJob());
+  assert.equal(
+    await runtime.mailAudit.count({
+      where: { mailboxId: pauseMailboxId, action: "SYNC_PAUSED" },
+    }),
+    1,
+  );
+  authorityError = new ForbiddenException(
+    "Untyped service credential rejection",
+  );
+  const ambiguousJob = await leasedJob();
+  await pauseWorker.run(ambiguousJob);
+  assert.equal(
+    (
+      await runtime.mailJob.findUniqueOrThrow({
+        where: { id: ambiguousJob.id },
+      })
+    ).state,
+    "QUEUED",
+  );
+  assert.equal(
+    (
+      await runtime.mailConnection.findUniqueOrThrow({
+        where: { id: pauseConnectionId },
+      })
+    ).encryptedSecret,
+    "encrypted-fixture-preserved",
+  );
+  assert.equal(
+    (
+      await runtime.mailMailbox.findUniqueOrThrow({
+        where: { id: pauseMailboxId },
+      })
+    ).safeErrorCode,
+    "MAIL_WORKSPACE_READ_ONLY",
+  );
+  authorityError = null;
+  pauseAuthority = commandAuthority;
+  await pauseWorker.fresh(await leasedJob(), "MAIL_SYNC");
+  assert.equal(
+    await runtime.mailAudit.count({
+      where: { mailboxId: pauseMailboxId, action: "SYNC_RESUMED" },
+    }),
+    1,
+  );
+  assert.equal(
+    (
+      await runtime.mailMailbox.findUniqueOrThrow({
+        where: { id: pauseMailboxId },
+      })
+    ).safeErrorCode,
+    null,
+  );
+  const staleJob = await leasedJob();
+  await runtime.mailMailbox.update({
+    where: { id: pauseMailboxId },
+    data: { generation: { increment: 1 } },
+  });
+  await pauseWorker.revoke(staleJob);
+  assert.equal(
+    (
+      await runtime.mailConnection.findUniqueOrThrow({
+        where: { id: pauseConnectionId },
+      })
+    ).encryptedSecret,
+    "encrypted-fixture-preserved",
+  );
+  authorityError = new MailAuthorityRevokedException("MEMBERSHIP_REVOKED");
+  await pauseWorker.run(await leasedJob(2));
+  pausedMailbox = await runtime.mailMailbox.findUniqueOrThrow({
+    where: { id: pauseMailboxId },
+  });
+  pausedConnection = await runtime.mailConnection.findUniqueOrThrow({
+    where: { id: pauseConnectionId },
+  });
+  assert.equal(pausedMailbox.enabled, false);
+  assert.equal(pausedConnection.encryptedSecret, null);
+  assert.equal(pausedConnection.state, "REAUTH_REQUIRED");
+  assert.equal(
+    await runtime.mailAudit.count({
+      where: { mailboxId: pauseMailboxId, action: "AUTHORITY_REVOKED" },
+    }),
+    1,
+  );
 
   const otherContactId = randomUUID();
   await runtime.contact.create({

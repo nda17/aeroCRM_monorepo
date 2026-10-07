@@ -2,7 +2,6 @@
 
 import {
 	useLayoutEffect,
-	useMemo,
 	useRef,
 	useState,
 	useSyncExternalStore
@@ -16,12 +15,7 @@ import {
 } from '@/entities/customer'
 import { getCrmPermissions } from '@/entities/crm-access'
 import { useSessionStore } from '@/entities/session'
-import {
-	browserWorkdayTimeZones,
-	workdayTimeZoneGroups,
-	isIanaTimeZone
-} from '@/shared/lib/time-zones'
-import { Button, SelectField, TextField } from '@/shared/ui'
+import { Button, TimeZoneSelect, TextField } from '@/shared/ui'
 import { contactCallState, openContactDialer } from '../model/contact-call'
 import styles from './CustomerEditor.module.scss'
 
@@ -68,15 +62,6 @@ export const ContactCallPanel = ({
 		subscribe,
 		clockSnapshot,
 		serverSnapshot
-	)
-	const hydrated = now !== 0
-	const zones = useMemo(
-		() => (hydrated ? browserWorkdayTimeZones() : null),
-		[hydrated]
-	)
-	const groups = useMemo(
-		() => workdayTimeZoneGroups(value.timeZone ?? '', zones),
-		[value.timeZone, zones]
 	)
 	const saved = record ? preferencesOf(record) : null
 	const state =
@@ -169,33 +154,14 @@ export const ContactCallPanel = ({
 			className={styles.callPanel}
 			aria-label="Время для связи с клиентом"
 		>
-			<SelectField
+			<TimeZoneSelect
 				label="Часовой пояс клиента"
 				value={value.timeZone ?? ''}
+				allowEmpty
 				disabled={!editable}
-				onChange={event => {
-					if (
-						event.target.value === '' ||
-						isIanaTimeZone(event.target.value)
-					)
-						onChange('timeZone', event.target.value)
-				}}
-			>
-				<option value="">Не указан</option>
-				{groups.map(group => (
-					<optgroup key={group.label} label={group.label}>
-						{group.options.map(option => (
-							<option
-								key={option.value}
-								value={option.value}
-								disabled={option.disabled}
-							>
-								{option.label}
-							</option>
-						))}
-					</optgroup>
-				))}
-			</SelectField>
+				onChange={next => onChange('timeZone', next)}
+				hint="Показывает местное время клиента. Смещение UTC указано на сегодня."
+			/>
 			<div className={styles.callHours}>
 				<TextField
 					label="Удобно звонить с"

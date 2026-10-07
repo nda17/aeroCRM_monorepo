@@ -17,11 +17,13 @@ import {
 } from '@/entities/crm-access'
 import {
 	archiveDirectoryEntry,
-	listChatMessages,
+	listChatMessagesV2,
 	listConversations,
 	listDirectory,
+	chatAttachmentCapabilities,
+	lookupChatSendV2,
 	readChatConversation,
-	sendChatMessage
+	sendChatMessageV2
 } from '@/entities/workspace-collaboration'
 import { DirectoryScreen } from './DirectoryScreen'
 import { MessagesScreen } from './MessagesScreen'
@@ -36,11 +38,13 @@ vi.mock('@/entities/crm-access', async importOriginal => ({
 vi.mock('@/entities/workspace-collaboration', async importOriginal => ({
 	...(await importOriginal<object>()),
 	archiveDirectoryEntry: vi.fn(),
-	listChatMessages: vi.fn(),
+	listChatMessagesV2: vi.fn(),
 	listConversations: vi.fn(),
 	listDirectory: vi.fn(),
+	chatAttachmentCapabilities: vi.fn(),
+	lookupChatSendV2: vi.fn(),
 	readChatConversation: vi.fn(),
-	sendChatMessage: vi.fn()
+	sendChatMessageV2: vi.fn()
 }))
 vi.mock('@/shared/ui', async importOriginal => ({
 	...(await importOriginal<object>()),
@@ -228,14 +232,16 @@ beforeEach(() => {
 		unreadCount: 0,
 		items: [conversation]
 	} as never)
-	vi.mocked(listChatMessages).mockResolvedValue({
-		schemaVersion: 1,
+	vi.mocked(listChatMessagesV2).mockResolvedValue({
+		schemaVersion: 2,
 		workspaceId,
 		subject: session.userId,
 		conversation,
-		items: [message],
+		items: [{ ...message, attachments: [] }],
 		nextBeforeSequence: null
 	} as never)
+	vi.mocked(chatAttachmentCapabilities).mockResolvedValue(true)
+	vi.mocked(lookupChatSendV2).mockResolvedValue(null)
 	vi.mocked(readChatConversation).mockResolvedValue({
 		schemaVersion: 1,
 		workspaceId,
@@ -270,7 +276,7 @@ afterEach(() => {
 
 describe('workspace collaboration regression behavior', () => {
 	it('retains the exact chat command and text when the first send outcome is unknown', async () => {
-		vi.mocked(sendChatMessage)
+		vi.mocked(sendChatMessageV2)
 			.mockRejectedValueOnce(new Error('connection lost after dispatch'))
 			.mockResolvedValueOnce({
 				schemaVersion: 1,
@@ -290,13 +296,13 @@ describe('workspace collaboration regression behavior', () => {
 		})
 		fireEvent.click(screen.getByRole('button', { name: 'Отправить' }))
 		await screen.findByRole('button', { name: 'Проверить результат' })
-		const firstCommand = vi.mocked(sendChatMessage).mock.calls[0]?.[1]
+		const firstCommand = vi.mocked(sendChatMessageV2).mock.calls[0]?.[1]
 		expect(firstCommand).toMatchObject({ text: 'Повторить тот же текст' })
 		fireEvent.click(
 			screen.getByRole('button', { name: 'Проверить результат' })
 		)
-		await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2))
-		expect(vi.mocked(sendChatMessage).mock.calls[1]?.[1]).toEqual(
+		await waitFor(() => expect(sendChatMessageV2).toHaveBeenCalledTimes(2))
+		expect(vi.mocked(sendChatMessageV2).mock.calls[1]?.[1]).toEqual(
 			firstCommand
 		)
 	})
@@ -405,6 +411,6 @@ describe('workspace collaboration regression behavior', () => {
 				}) as HTMLButtonElement
 			).disabled
 		).toBe(true)
-		expect(sendChatMessage).not.toHaveBeenCalled()
+		expect(sendChatMessageV2).not.toHaveBeenCalled()
 	})
 })

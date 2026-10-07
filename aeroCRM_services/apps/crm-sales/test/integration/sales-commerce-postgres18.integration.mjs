@@ -98,7 +98,12 @@ const sales = new SalesService(prisma, {
     assert.equal(requestedWorkspace, workspaceId);
     return { id, name: "Integration contact" };
   },
-});
+}, {
+  resolve: async (_authorization, actor, subject) => ({
+    subject, membershipId: randomUUID(), role: actor.role,
+    dataScope: actor.dataScope, teamIds: actor.teamIds,
+  }),
+}, { search: async () => [], preview: async () => [] });
 
 try {
   const [role] = await prisma.$queryRaw`

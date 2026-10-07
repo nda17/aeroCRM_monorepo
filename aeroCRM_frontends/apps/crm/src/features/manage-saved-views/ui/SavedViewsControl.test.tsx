@@ -115,8 +115,9 @@ describe('saved views control', () => {
 		expect(onOpen).toHaveBeenCalledWith(parameters)
 		expect(screen.queryByText('Удалить представление')).toBeNull()
 		expect(screen.queryByText('Переименовать «Мои сделки»')).toBeNull()
-		const save = screen.getByRole('button', { name: 'Сохранить вид' })
-		expect(save.hasAttribute('disabled')).toBe(true)
+		expect(
+			screen.queryByRole('button', { name: 'Сохранить вид' })
+		).toBeNull()
 	})
 
 	it('clears the legacy source only after the import command reports success', async () => {

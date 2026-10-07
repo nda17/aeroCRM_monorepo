@@ -102,6 +102,10 @@
       "SELECT",
       "INSERT",
       "UPDATE"
+    ],
+    "mail_intake_sources": [
+      "SELECT",
+      "INSERT"
     ]
   },
   "sequences": {},
@@ -117,7 +121,10 @@
     "guard_workspace_business_write",
     "guard_workspace_inbox_entry",
     "guard_acceptance_admission",
-    "guard_acceptance_outbox"
+    "guard_acceptance_outbox",
+    "mail_intake_source_immutable"
   ],
-  "routineExecute": ["assert_workspace_open(uuid)"]
+  "routineExecute": [
+    "assert_workspace_open(uuid)"
+  ]
 }

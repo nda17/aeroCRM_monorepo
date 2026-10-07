@@ -127,14 +127,17 @@ export const MailSettings = () => {
 												? 'Отключён'
 												: mailbox.state === 'REAUTH_REQUIRED'
 													? 'Нужно переподключить'
-													: mailbox.syncStatus === 'ERROR'
-														? 'Ошибка синхронизации'
-														: mailbox.syncStatus === 'SYNCING' ||
-															  mailbox.syncStatus === 'BACKFILL'
-															? 'Загружается история'
-															: mailbox.syncStatus === 'NOT_CONFIGURED'
-																? 'Выберите папки для импорта'
-																: 'Подключён'}
+													: mailbox.safeErrorCode ===
+														  'MAIL_WORKSPACE_READ_ONLY'
+														? 'Получение приостановлено: пространство доступно только для чтения'
+														: mailbox.syncStatus === 'ERROR'
+															? 'Ошибка синхронизации'
+															: mailbox.syncStatus === 'SYNCING' ||
+																  mailbox.syncStatus === 'BACKFILL'
+																? 'Загружается история'
+																: mailbox.syncStatus === 'NOT_CONFIGURED'
+																	? 'Выберите папки для импорта'
+																	: 'Подключён'}
 											{mailbox.lastSyncAt ? (
 												<div className={styles.muted}>
 													Обновлён:{' '}

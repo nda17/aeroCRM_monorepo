@@ -110,3 +110,43 @@
 		@apply mt-1 h-4 w-4 shrink-0 accent-primary;
 	}
 }
+
+.formDrawer {
+	container-type: inline-size;
+	container-name: sales-create;
+}
+.createForm {
+	@apply mx-auto grid w-full max-w-6xl grid-cols-1 items-start;
+
+	> * {
+		@apply min-w-0 col-span-full;
+	}
+
+	.formGrid {
+		@apply grid-cols-1;
+	}
+}
+@container sales-create (min-width: 600px) {
+	.createForm .formGrid {
+		@apply grid-cols-2;
+	}
+}
+@container sales-create (min-width: 900px) {
+	.createForm {
+		@apply grid-cols-2 gap-6;
+
+		> .primaryFields,
+		> .contactSection {
+			grid-column: auto;
+		}
+
+		.formGrid {
+			@apply grid-cols-1;
+		}
+	}
+}
+@container sales-create (min-width: 1200px) {
+	.createForm .formGrid {
+		@apply grid-cols-2;
+	}
+}

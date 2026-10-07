@@ -56,6 +56,7 @@ export const listSalesDeals = async (
 				...(pipelineId ? { pipelineId } : {}),
 				...(status ? { status } : {}),
 				...(withoutNextAction ? { withoutNextAction: 'true' } : {}),
+				...(filters.archive ? { archive: filters.archive } : {}),
 				...(filters.stageId ? { stageId: filters.stageId } : {}),
 				...(filters.assignedToSubject
 					? { assignedToSubject: filters.assignedToSubject }
@@ -94,7 +95,12 @@ export const listSalesDeals = async (
 					(filters.overdue && deal.status !== 'OPEN'))
 			)
 				return null
-			return deal?.archivedAt === null ? deal : null
+			return deal &&
+				(filters.archive === 'ARCHIVED'
+					? deal.archivedAt !== null
+					: deal.archivedAt === null)
+				? deal
+				: null
 		}
 	)
 	if (!result) throw invalidContractError()
@@ -226,6 +232,12 @@ export type SalesMutation =
 			comment: string
 			nextTask?: SalesNextTask
 	  }
+	| {
+			kind: 'assign'
+			id: string
+			expectedVersion: number
+			assignee: { subject: string; membershipId: string }
+	  }
 	| { kind: 'archive'; id: string; expectedVersion: number }
 export interface SalesCommand {
 	workspaceId: string
@@ -285,12 +297,16 @@ export const mutateSales = async (
 			result.version !== mutation.expectedVersion + 1) ||
 		(kind === 'archive' &&
 			result.version !== mutation.expectedVersion + 1) ||
+		(kind === 'assign' &&
+			(result.version !== mutation.expectedVersion + 1 ||
+				result.assignedToSubject !== mutation.assignee.subject)) ||
 		(kind === 'complete' && result.nextTask?.id === mutation.id) ||
 		('nextTask' in mutation && mutation.nextTask
 			? result.nextTask?.title !== mutation.nextTask.title.trim() ||
 				result.nextTask?.dueAt !== mutation.nextTask.dueAt
 			: kind !== 'archive' &&
 				kind !== 'interaction' &&
+				kind !== 'assign' &&
 				result.nextTask !== null)
 	)
 		throw invalidContractError()

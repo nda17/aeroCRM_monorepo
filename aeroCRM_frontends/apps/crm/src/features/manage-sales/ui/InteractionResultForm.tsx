@@ -84,6 +84,7 @@ export const InteractionResultForm = ({
 					maxLength={4000}
 					rows={3}
 					placeholder="О чём договорились с клиентом"
+					hint="Комментарий увидят сотрудники, у которых есть доступ к этой сделке."
 				/>
 				{deal.status === 'OPEN' ? (
 					<label className={styles.nextTaskToggle}>

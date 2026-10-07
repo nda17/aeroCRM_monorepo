@@ -103,7 +103,7 @@ export const WorkdayFilters = ({
 			pageSize: 20,
 			...selectedPeople,
 			...(search.trim() ? { search: search.trim() } : {}),
-			...(status && view === 'list' ? { status } : {})
+			...(status ? { status } : {})
 		}
 		if (!validWorkdayFilters(next)) {
 			toast.error('Проверьте даты и параметры выбранного периода')
@@ -115,6 +115,18 @@ export const WorkdayFilters = ({
 		const next = { ...value, ...patch, page: 1 } as Filters
 		if (validWorkdayFilters(next)) onChange(next)
 	}
+	const hasDraftChanges =
+		period !== value.period ||
+		scope !== value.scope ||
+		timeZone !== value.timeZone ||
+		search.trim() !== (value.search ?? '') ||
+		status !== (value.status ?? '') ||
+		((period === 'DAY' || period === 'RANGE') &&
+			from !== (value.from ?? '')) ||
+		(period === 'RANGE' && to !== (value.to ?? '')) ||
+		(scope !== 'MINE' &&
+			(people.teamId !== value.teamId ||
+				people.assigneeSubject !== value.assigneeSubject))
 	const chips: { label: string; patch: Partial<Filters> }[] = [
 		...(value.period !== 'ALL'
 			? [
@@ -143,13 +155,15 @@ export const WorkdayFilters = ({
 		...(value.search
 			? [{ label: `Поиск: ${value.search}`, patch: { search: undefined } }]
 			: []),
-		...(value.status && view === 'list'
+		...(value.status
 			? [
 					{
 						label:
 							value.status === 'ACTIVE'
-								? 'Незавершённые'
-								: WORKDAY_STATUS_LABELS[value.status],
+								? 'Текущие'
+								: value.status === 'TERMINAL'
+									? 'История'
+									: WORKDAY_STATUS_LABELS[value.status],
 						patch: { status: undefined }
 					}
 				]
@@ -189,7 +203,7 @@ export const WorkdayFilters = ({
 										to: undefined,
 										page: 1,
 										...(nextPeriod === 'OVERDUE'
-											? { status: view === 'list' ? 'ACTIVE' : undefined }
+											? { status: 'ACTIVE' }
 											: {})
 									}
 									onChange(next)
@@ -217,6 +231,36 @@ export const WorkdayFilters = ({
 					))}
 				</div>
 			</div>
+			<div
+				className={styles.historySwitch}
+				role="group"
+				aria-label="Текущие задачи и история"
+			>
+				{(
+					[
+						['ACTIVE', 'Текущие'],
+						['TERMINAL', 'История'],
+						[undefined, 'Все задачи']
+					] as const
+				).map(([nextStatus, label]) => (
+					<Button
+						key={label}
+						size="sm"
+						variant={value.status === nextStatus ? 'primary' : 'secondary'}
+						aria-pressed={value.status === nextStatus}
+						onClick={() =>
+							clearFilter({
+								status: nextStatus,
+								...(nextStatus === 'TERMINAL' && value.period === 'OVERDUE'
+									? { period: 'ALL', from: undefined, to: undefined }
+									: {})
+							})
+						}
+					>
+						{label}
+					</Button>
+				))}
+			</div>
 			<form className={styles.filterGrid} onSubmit={submit}>
 				<TextField
 					label="Поиск по задаче"
@@ -239,6 +283,7 @@ export const WorkdayFilters = ({
 				</SelectField>
 				<SelectField
 					label="Чьи задачи"
+					containerClassName={styles.scopeFilter}
 					labelHelp={
 						<HelpHint
 							label="Область задач"
@@ -273,6 +318,17 @@ export const WorkdayFilters = ({
 						onChange={e => setTo(e.target.value)}
 					/>
 				) : null}
+				<div className={styles.peopleFilters}>
+					{peopleContext ? (
+						<WorkdayPeopleFilters
+							ref={peopleRef}
+							context={peopleContext}
+							scope={scope}
+							value={people}
+							onChange={setPeople}
+						/>
+					) : null}
+				</div>
 				<details className={styles.advanced}>
 					<summary>Дополнительные фильтры</summary>
 					<div className={styles.advancedGrid}>
@@ -289,7 +345,10 @@ export const WorkdayFilters = ({
 								}
 							>
 								<option value="">Все статусы</option>
-								<option value="ACTIVE">Незавершённые</option>
+								<option value="ACTIVE">Текущие</option>
+								<option value="TERMINAL">
+									История: готовые и отменённые
+								</option>
 								{Object.entries(WORKDAY_STATUS_LABELS).map(
 									([key, label]) => (
 										<option key={key} value={key}>
@@ -299,25 +358,24 @@ export const WorkdayFilters = ({
 								)}
 							</SelectField>
 						) : null}
-						{peopleContext ? (
-							<WorkdayPeopleFilters
-								ref={peopleRef}
-								context={peopleContext}
-								scope={scope}
-								value={people}
-								onChange={setPeople}
-							/>
-						) : null}
 					</div>
 				</details>
 				<Button
 					type="submit"
-					variant="secondary"
+					variant="primary"
 					disabled={!validDates || !isWorkdayTimeZone(timeZone)}
 				>
 					Применить
 				</Button>
 			</form>
+			{hasDraftChanges ? (
+				<p className={styles.draftNotice} role="status">
+					Фильтры изменены. Нажмите «Применить», чтобы обновить задачи.
+				</p>
+			) : null}
+			<p className={styles.appliedFilters}>
+				Применено: {scopes[value.scope]} · {periods[value.period]}.
+			</p>
 			{chips.length ? (
 				<div
 					className={styles.filterChips}
@@ -355,8 +413,12 @@ export const WorkdayFilters = ({
 			) : null}
 			{view === 'board' ? (
 				<p className={styles.hint}>
-					На доске показаны все статусы, включая отменённые задачи. Каждая
-					колонка имеет свои страницы.
+					{value.status === 'ACTIVE'
+						? 'Текущие задачи: к выполнению и в работе.'
+						: value.status === 'TERMINAL'
+							? 'История: готовые и отменённые задачи.'
+							: 'Показаны все статусы задач.'}{' '}
+					Каждая колонка имеет свои страницы.
 				</p>
 			) : null}
 		</section>

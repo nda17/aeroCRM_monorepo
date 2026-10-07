@@ -161,7 +161,7 @@ export const SavedViewsControl = ({
 			aria-label="Сохранённые представления"
 		>
 			<div className={styles.heading}>
-				<span className={styles.title}>Мои представления</span>
+				<span className={styles.title}>Мои фильтры</span>
 				<Button
 					size="sm"
 					variant="secondary"
@@ -175,9 +175,13 @@ export const SavedViewsControl = ({
 								: 'Сначала подтвердите результат текущей команды.'
 					}
 				>
-					Сохранить вид
+					Сохранить фильтры
 				</Button>
 			</div>
+			<p className={styles.message}>
+				Сохраняются применённые фильтры и вид «Список» или «Доска». Они
+				доступны только вам в этом пространстве на любом устройстве.
+			</p>
 			{views.query.isError ? (
 				<div className={styles.message} role="alert">
 					Не удалось загрузить представления.{' '}
@@ -212,7 +216,7 @@ export const SavedViewsControl = ({
 				</div>
 			) : (
 				<p className={styles.message}>
-					Сохраните фильтры, чтобы открывать их на любом устройстве.
+					Выберите условия, примените их и нажмите «Сохранить фильтры».
 				</p>
 			)}
 			{selectedView && views.canManage ? (

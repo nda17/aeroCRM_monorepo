@@ -1,4 +1,9 @@
-import { MailController, MailUploadScopeGuard } from "./mail/mail.controller";
+import { CustomersSalesContextController } from "./customers/sales-context.controller";
+import {
+  MailController,
+  MailUploadScopeGuard,
+  MailIntakeSourceController,
+} from "./mail/mail.controller";
 import { MailService } from "./mail/mail.service";
 import { MailAuthorizationClient } from "./mail/mail-authorization.client";
 import { MailConfig, mailRole } from "./mail/mail.config";
@@ -44,9 +49,11 @@ import {
     mailRole() === "api"
       ? [
           MailController,
+          MailIntakeSourceController,
           LiveChangesController,
           CrmCustomersHealthController,
           CustomersController,
+          CustomersSalesContextController,
           CompaniesV2Controller,
           ContactsV2Controller,
           CompanyLookupController,

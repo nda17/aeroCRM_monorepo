@@ -11,8 +11,14 @@ import {
 	type SalesTask
 } from '@prisma/crm-sales-client';
 import { createHash, randomUUID } from 'node:crypto';
+import {
+	SalesAssigneeClient,
+	type SalesAssignee
+} from '../workday/sales-assignee.client';
+import type { SalesAssignmentDto } from './sales-assignment.dto';
 import { CrmSalesPrismaService } from '../prisma/crm-sales-prisma.service';
-import { UUID, type SalesAccess } from './sales-access';
+import { UUID, SalesAccessClient, type SalesAccess } from './sales-access';
+import { SalesContextClient } from './sales-context.client';
 import { SalesContactClient } from './sales-contact.client';
 import type {
 	CompleteTaskDto,
@@ -175,7 +181,10 @@ function canonical(value: unknown): string {
 export class SalesService {
 	constructor(
 		private readonly prisma: CrmSalesPrismaService,
-		private readonly contacts: SalesContactClient
+		private readonly contacts: SalesContactClient,
+		private readonly assignees: SalesAssigneeClient,
+		private readonly contexts: SalesContextClient,
+		private readonly authority: SalesAccessClient
 	) {}
 
 	async pipelines(access: SalesAccess) {
@@ -204,9 +213,20 @@ export class SalesService {
 		};
 	}
 
-	async deals(access: SalesAccess, query: DealListQuery) {
+	async deals(
+		access: SalesAccess,
+		query: DealListQuery,
+		authorization: string
+	) {
 		this.permission(access, 'sales:read');
 		const period = salesCreatedPeriod(query);
+		const companyContactIds = query.search
+			? await this.contexts.search(
+					authorization,
+					access,
+					query.search.trim()
+				)
+			: [];
 		const asOf = query.overdueBefore
 			? canonicalInstant(query.overdueBefore)
 			: new Date();
@@ -214,7 +234,7 @@ export class SalesService {
 			AND: [
 				salesScope(access),
 				{
-					archivedAt: null,
+					archivedAt: query.archive === 'ARCHIVED' ? { not: null } : null,
 					pipelineId: query.pipelineId,
 					stageId: query.stageId,
 					status: query.status,
@@ -225,6 +245,9 @@ export class SalesService {
 					...(query.search
 						? {
 								OR: [
+									...(companyContactIds.length
+										? [{ contactId: { in: companyContactIds } }]
+										: []),
 									{
 										title: {
 											contains: query.search.trim(),
@@ -279,15 +302,44 @@ export class SalesService {
 			page: query.page,
 			pageSize: query.pageSize,
 			total,
-			items: rows.map(dealDto)
+			items: rows.map(dealDto),
+			...(query.context === 'company'
+				? {
+						companyContext: await this.contexts.preview(
+							authorization,
+							access,
+							rows.map(row => row.contactId)
+						)
+					}
+				: {})
 		};
 	}
 
-	async detail(access: SalesAccess, id: string) {
+	async detail(
+		access: SalesAccess,
+		id: string,
+		query: { archive?: 'ACTIVE' | 'ARCHIVED'; context?: 'company' } = {},
+		authorization = ''
+	) {
 		this.permission(access, 'sales:read');
+		const deal = await this.visible(
+			this.prisma,
+			access,
+			id,
+			query.archive ?? 'ACTIVE'
+		);
 		return {
 			schemaVersion: 1 as const,
-			deal: dealDto(await this.visible(this.prisma, access, id))
+			deal: dealDto(deal),
+			...(query.context === 'company'
+				? {
+						companyContext: await this.contexts.preview(
+							authorization,
+							access,
+							[deal.contactId]
+						)
+					}
+				: {})
 		};
 	}
 
@@ -324,7 +376,7 @@ export class SalesService {
 		dealId: string,
 		query: SalesListQuery
 	) {
-		return this.timelinePage(access, dealId, query, false);
+		return this.timelinePage(access, dealId, query, 1);
 	}
 
 	async timelineV2(
@@ -332,24 +384,100 @@ export class SalesService {
 		dealId: string,
 		query: SalesListQuery
 	) {
-		return this.timelinePage(access, dealId, query, true);
+		return this.timelinePage(access, dealId, query, 2);
+	}
+
+	async timelineV3(
+		access: SalesAccess,
+		dealId: string,
+		query: SalesListQuery
+	) {
+		return this.timelinePage(access, dealId, query, 3);
+	}
+
+	async dealTasks(
+		access: SalesAccess,
+		dealId: string,
+		query: SalesListQuery
+	) {
+		this.permission(access, 'sales:read');
+		await this.visible(
+			this.prisma,
+			access,
+			dealId,
+			query.archive ?? 'ACTIVE'
+		);
+		const where: Prisma.SalesTaskWhereInput = {
+			workspaceId: access.workspaceId,
+			dealId,
+			deal: {
+				AND: [
+					salesScope(access),
+					{
+						archivedAt: query.archive === 'ARCHIVED' ? { not: null } : null
+					}
+				]
+			}
+		};
+		const [total, rows] = await this.prisma.$transaction([
+			this.prisma.salesTask.count({ where }),
+			this.prisma.salesTask.findMany({
+				where,
+				skip: (query.page - 1) * query.pageSize,
+				take: query.pageSize,
+				orderBy: [{ dueAt: 'asc' }, { id: 'asc' }]
+			})
+		]);
+		return {
+			schemaVersion: 1 as const,
+			page: query.page,
+			pageSize: query.pageSize,
+			total,
+			items: rows.map(taskDto)
+		};
 	}
 
 	private async timelinePage(
 		access: SalesAccess,
 		dealId: string,
 		query: SalesListQuery,
-		includeInteractions: boolean
+		version: 1 | 2 | 3
 	) {
 		this.permission(access, 'sales:read');
-		await this.visible(this.prisma, access, dealId);
+		await this.visible(
+			this.prisma,
+			access,
+			dealId,
+			version === 3 ? (query.archive ?? 'ACTIVE') : 'ACTIVE'
+		);
 		const where = {
 			workspaceId: access.workspaceId,
 			dealId,
-			kind: includeInteractions
-				? undefined
-				: { in: ['CREATED', 'TRANSITIONED', 'TASK_COMPLETED', 'ARCHIVED'] },
-			deal: { AND: [salesScope(access), { archivedAt: null }] }
+			kind:
+				version === 3
+					? undefined
+					: {
+							in: [
+								'CREATED',
+								'TRANSITIONED',
+								'TASK_COMPLETED',
+								'ARCHIVED',
+								...(version === 2
+									? ['CALL_REACHED', 'CALL_NO_ANSWER', 'MEETING_HELD']
+									: [])
+							]
+						},
+			deal: {
+				AND: [
+					salesScope(access),
+					{
+						archivedAt:
+							version === 3 && query.archive === 'ARCHIVED'
+								? { not: null }
+								: null
+					}
+				]
+			}
 		};
 		const [total, rows] = await this.prisma.$transaction([
 			this.prisma.dealTimeline.count({ where }),
@@ -361,7 +489,7 @@ export class SalesService {
 			})
 		]);
 		return {
-			schemaVersion: includeInteractions ? (2 as const) : (1 as const),
+			schemaVersion: version,
 			page: query.page,
 			pageSize: query.pageSize,
 			total,
@@ -373,12 +501,17 @@ export class SalesService {
 				outcome: row.outcome,
 				fromStageId: row.fromStageId,
 				toStageId: row.toStageId,
+				...(version === 3 ? { details: row.details } : {}),
 				createdAt: row.createdAt.toISOString()
 			}))
 		};
 	}
 
-	async analytics(access: SalesAccess, query?: SalesAnalyticsQuery) {
+	async analytics(
+		access: SalesAccess,
+		query?: SalesAnalyticsQuery,
+		authorization = ''
+	) {
 		this.permission(access, 'sales:analytics');
 		const pipelineId = query?.pipelineId;
 		if (pipelineId !== undefined && !UUID.test(pipelineId))
@@ -424,6 +557,10 @@ export class SalesService {
 		const canReadDeals =
 			access.role !== 'ANALYST' &&
 			access.permissions.includes('sales:read');
+		const roster =
+			canReadDeals && query.assigneeBasis === 'TEAM'
+				? await this.contexts.roster(authorization, access, assigneePage)
+				: null;
 		return this.prisma.$transaction(
 			async transaction => {
 				const [
@@ -451,15 +588,21 @@ export class SalesService {
 							AND: [base, attentionWhere('withoutNextAction', asOf)]
 						}
 					}),
-					canReadDeals
-						? transaction.deal.groupBy({
-								by: ['assignedToSubject'],
-								where: base,
-								orderBy: { assignedToSubject: 'asc' },
-								skip: (assigneePage - 1) * pageSize,
-								take: pageSize + 1
-							})
-						: Promise.resolve([])
+					roster
+						? Promise.resolve(
+								roster.subjects.map(assignedToSubject => ({
+									assignedToSubject
+								}))
+							)
+						: canReadDeals
+							? transaction.deal.groupBy({
+									by: ['assignedToSubject'],
+									where: base,
+									orderBy: { assignedToSubject: 'asc' },
+									skip: (assigneePage - 1) * pageSize,
+									take: pageSize + 1
+								})
+							: Promise.resolve([])
 				]);
 				const subjects = employees
 					.slice(0, pageSize)
@@ -507,7 +650,9 @@ export class SalesService {
 							? {
 									page: assigneePage,
 									pageSize,
-									hasMore: employees.length > pageSize,
+									hasMore: roster
+										? roster.hasMore
+										: employees.length > pageSize,
 									items: subjects.map(assignedToSubject => ({
 										assignedToSubject,
 										items: analyticsItems(
@@ -590,7 +735,13 @@ export class SalesService {
 					access,
 					id,
 					taskId,
-					dto.nextTask
+					dto.nextTask,
+					await this.assignees.resolve(
+						authorization,
+						access,
+						access.subject,
+						dto.teamId
+					)
 				);
 				await this.event(
 					transaction,
@@ -609,7 +760,8 @@ export class SalesService {
 	async transition(
 		access: SalesAccess,
 		id: string,
-		dto: TransitionDealDto
+		dto: TransitionDealDto,
+		authorization: string
 	) {
 		this.permission(access, 'sales:write');
 		if (dto.nextTask) this.nextTask(dto.nextTask);
@@ -640,7 +792,11 @@ export class SalesService {
 					access,
 					deal,
 					dto.expectedVersion,
-					{ stageId: stage.id, status: stage.state, nextTaskId: taskId }
+					{
+						stageId: stage.id,
+						status: stage.state,
+						nextTaskId: taskId
+					}
 				);
 				// An OPEN transition replaces only the selected next action. Other
 				// workday tasks remain untouched; terminal transitions close all.
@@ -655,10 +811,16 @@ export class SalesService {
 				if (taskId && dto.nextTask)
 					await this.createTask(
 						transaction,
-						{ ...access, subject: deal.assignedToSubject },
+						access,
 						id,
 						taskId,
-						dto.nextTask
+						dto.nextTask,
+						await this.assignees.resolve(
+							authorization,
+							access,
+							deal.assignedToSubject,
+							deal.teamId ?? undefined
+						)
 					);
 				await this.event(
 					transaction,
@@ -677,7 +839,8 @@ export class SalesService {
 	async interactionResult(
 		access: SalesAccess,
 		id: string,
-		dto: InteractionResultDto
+		dto: InteractionResultDto,
+		authorization: string
 	) {
 		this.permission(access, 'sales:write');
 		if (dto.nextTask) this.nextTask(dto.nextTask);
@@ -703,10 +866,16 @@ export class SalesService {
 				if (nextTaskId && dto.nextTask)
 					await this.createTask(
 						transaction,
-						{ ...access, subject: deal.assignedToSubject },
+						access,
 						id,
 						nextTaskId,
-						dto.nextTask
+						dto.nextTask,
+						await this.assignees.resolve(
+							authorization,
+							access,
+							deal.assignedToSubject,
+							deal.teamId ?? undefined
+						)
 					);
 				await this.event(
 					transaction,
@@ -725,7 +894,8 @@ export class SalesService {
 	async complete(
 		access: SalesAccess,
 		taskId: string,
-		dto: CompleteTaskDto
+		dto: CompleteTaskDto,
+		authorization: string
 	) {
 		this.permission(access, 'sales:write');
 		this.nextTask(dto.nextTask);
@@ -766,10 +936,16 @@ export class SalesService {
 				);
 				await this.createTask(
 					transaction,
-					{ ...access, subject: deal.assignedToSubject },
+					access,
 					deal.id,
 					nextTaskId,
-					dto.nextTask
+					dto.nextTask,
+					await this.assignees.resolve(
+						authorization,
+						access,
+						deal.assignedToSubject,
+						deal.teamId ?? undefined
+					)
 				);
 				await this.event(
 					transaction,
@@ -781,6 +957,199 @@ export class SalesService {
 					deal.stageId
 				);
 				return deal.id;
+			}
+		);
+	}
+
+	async assign(
+		access: SalesAccess,
+		id: string,
+		dto: SalesAssignmentDto,
+		authorization: string
+	) {
+		this.permission(access, 'sales:write');
+		let target: SalesAssignee | null = null;
+		let readerBindings: Array<{
+			subject: string;
+			membershipId: string | null;
+		}> = [];
+		let readers: Array<SalesAssignee | null> = [];
+		let initial: DealWithNextAction | null = null;
+		let expectedTasks: Array<{
+			id: string;
+			version: number;
+			assignedToSubject: string;
+			assignedToMembershipId: string | null;
+		}> = [];
+		const readTasks = (
+			client: Pick<Prisma.TransactionClient, 'salesTask'>
+		) =>
+			client.salesTask.findMany({
+				where: {
+					workspaceId: access.workspaceId,
+					dealId: id,
+					status: { in: [...activeTaskStatuses] }
+				},
+				select: {
+					id: true,
+					version: true,
+					assignedToSubject: true,
+					assignedToMembershipId: true
+				},
+				orderBy: { id: 'asc' }
+			});
+		const prepare = async () => {
+			// A durable receipt is immutable. Recovery only needs the actor/result
+			// ACL under the command lock; target eligibility belongs to new effects.
+			if (
+				await this.prisma.salesCommandReceipt.findUnique({
+					where: { commandId: dto.commandId }
+				})
+			)
+				return;
+			initial = await this.visible(this.prisma, access, id);
+			expectedTasks = await readTasks(this.prisma);
+			readerBindings = [
+				...new Map(
+					expectedTasks
+						.filter(
+							task => task.assignedToSubject !== initial!.assignedToSubject
+						)
+						.map(task => {
+							const binding = {
+								subject: task.assignedToSubject,
+								membershipId: task.assignedToMembershipId
+							};
+							return [JSON.stringify(binding), binding] as const;
+						})
+				).values()
+			];
+			if (readerBindings.length > 100)
+				this.conflict('crm_sales_assignment_reader_limit');
+			// Dedupe outside the critical section. Null is strictly unresolved;
+			// preflight never writes a replacement membership to historical tasks.
+			readers = await this.assignees.readers(
+				authorization,
+				access,
+				readerBindings
+			);
+			if (readers.some(reader => reader === null))
+				this.conflict('crm_sales_assignment_task_access_conflict');
+		};
+		return this.command(
+			access,
+			dto,
+			'ASSIGN_DEAL',
+			id,
+			async (transaction, current) => {
+				if (!initial) this.conflict();
+				const deal = await this.visible(transaction, current, id);
+				if (
+					deal.version !== initial.version ||
+					deal.teamId !== initial.teamId ||
+					deal.assignedToSubject !== initial.assignedToSubject ||
+					JSON.stringify(await readTasks(transaction)) !==
+						JSON.stringify(expectedTasks)
+				)
+					this.conflict();
+				if (!target) this.conflict();
+				if (
+					current.dataScope === 'TEAM' &&
+					target.subject !== current.subject &&
+					(!deal.teamId || !current.teamIds.includes(deal.teamId))
+				)
+					throw new ForbiddenException('Передача лишит доступа к сделке');
+				for (const reader of readers) {
+					if (
+						!reader ||
+						(reader.subject !== target.subject &&
+							reader.dataScope !== 'ALL' &&
+							!(
+								reader.dataScope === 'TEAM' &&
+								deal.teamId &&
+								reader.teamIds.includes(deal.teamId)
+							))
+					)
+						this.conflict('crm_sales_assignment_task_access_conflict');
+				}
+				await this.updateDeal(
+					transaction,
+					current,
+					deal,
+					dto.expectedVersion,
+					{
+						assignedToSubject: target.subject
+					}
+				);
+				const moved = await transaction.salesTask.updateMany({
+					where: {
+						workspaceId: access.workspaceId,
+						dealId: id,
+						status: { in: [...activeTaskStatuses] },
+						assignedToSubject: deal.assignedToSubject
+					},
+					data: {
+						assignedToSubject: target.subject,
+						assignedToMembershipId: target.membershipId,
+						version: { increment: 1 }
+					}
+				});
+				await transaction.dealTimeline.create({
+					data: {
+						workspaceId: access.workspaceId,
+						dealId: id,
+						kind: 'ASSIGNEE_CHANGED',
+						actorSubject: access.subject,
+						outcome: 'Изменён ответственный',
+						fromStageId: deal.stageId,
+						toStageId: deal.stageId,
+						details: {
+							beforeSubject: deal.assignedToSubject,
+							afterSubject: target.subject,
+							afterMembershipId: target.membershipId,
+							transferredTaskCount: moved.count
+						}
+					}
+				});
+				return id;
+			},
+			{
+				prepare,
+				authorize: async replay => {
+					const deadline = AbortSignal.timeout(5000);
+					if (replay)
+						return this.authority.authorize(
+							authorization,
+							access.workspaceId,
+							deadline
+						);
+					if (!initial) this.conflict();
+					// All remote dependencies share one wall-clock budget, after the
+					// SQL lock and on every retry. No per-task HTTP runs in the tx.
+					const [current, assignee, freshReaders] = await Promise.all([
+						this.authority.authorize(
+							authorization,
+							access.workspaceId,
+							deadline
+						),
+						this.assignees.authorize(
+							authorization,
+							access,
+							dto.assignee,
+							initial.teamId ?? undefined,
+							deadline
+						),
+						this.assignees.readers(
+							authorization,
+							access,
+							readerBindings,
+							deadline
+						)
+					]);
+					target = assignee;
+					readers = freshReaders;
+					return current;
+				}
 			}
 		);
 	}
@@ -803,7 +1172,10 @@ export class SalesService {
 					access,
 					deal,
 					dto.expectedVersion,
-					{ archivedAt: new Date(), nextTaskId: null }
+					{
+						archivedAt: new Date(),
+						nextTaskId: null
+					}
 				);
 				await this.closeTasks(transaction, access, id, 'CANCELLED');
 				await this.event(
@@ -825,7 +1197,14 @@ export class SalesService {
 		dto: SalesCommandDto,
 		type: string,
 		targetId: string | null,
-		action: (transaction: Prisma.TransactionClient) => Promise<string>
+		action: (
+			transaction: Prisma.TransactionClient,
+			current: SalesAccess
+		) => Promise<string>,
+		hooks?: {
+			prepare: () => Promise<void>;
+			authorize: (replay: boolean) => Promise<SalesAccess>;
+		}
 	) {
 		if (dto.workspaceId !== access.workspaceId)
 			throw new ForbiddenException();
@@ -833,15 +1212,29 @@ export class SalesService {
 			.update(canonical({ dto, type, targetId, subject: access.subject }))
 			.digest('hex');
 		for (let attempt = 1; attempt <= 3; attempt += 1) {
+			let priorObserved = false;
 			try {
+				await hooks?.prepare();
 				return await this.prisma.$transaction(
 					async transaction => {
 						await transaction.$executeRaw(
 							Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${`crm-sales-command:${dto.commandId}`}, 0))`
 						);
 						const prior = await transaction.salesCommandReceipt.findUnique(
-							{ where: { commandId: dto.commandId } }
+							{
+								where: { commandId: dto.commandId }
+							}
 						);
+						priorObserved = !!prior;
+						const current = hooks
+							? await hooks.authorize(!!prior)
+							: access;
+						if (
+							current.workspaceId !== access.workspaceId ||
+							current.subject !== access.subject
+						)
+							throw new ForbiddenException();
+						this.permission(current, 'sales:write');
 						if (prior) {
 							if (
 								prior.workspaceId !== access.workspaceId ||
@@ -850,15 +1243,15 @@ export class SalesService {
 								prior.commandType !== type
 							)
 								this.conflict('crm_sales_command_conflict');
-							await this.visible(transaction, access, prior.dealId, true);
+							await this.visible(transaction, current, prior.dealId, true);
 							return prior.result;
 						}
 						await transaction.$executeRaw`SELECT crm_sales.assert_workspace_open(${access.workspaceId}::uuid)`;
-						const dealId = await action(transaction);
+						const dealId = await action(transaction, current);
 						const result = {
 							schemaVersion: 1 as const,
 							deal: dealDto(
-								await this.visible(transaction, access, dealId, true)
+								await this.visible(transaction, current, dealId, true)
 							)
 						};
 						await transaction.salesCommandReceipt.create({
@@ -889,18 +1282,37 @@ export class SalesService {
 					}
 				);
 			} catch (error) {
+				// SERIALIZABLE can retain the snapshot from before a blocked
+				// advisory lock. If another attempt committed meanwhile, reopen
+				// the whole transaction for recovery, after releasing its pool
+				// connection. Never read through a second connection under lock.
+				if (
+					hooks &&
+					!priorObserved &&
+					attempt < 3 &&
+					(await this.prisma.salesCommandReceipt.findUnique({
+						where: { commandId: dto.commandId }
+					}))
+				)
+					continue;
 				if (String(error).includes('crm_workspace_closed'))
 					throw new ForbiddenException({
-						code: 'crm_workspace_closed', message: 'Workspace is closed'
+						code: 'crm_workspace_closed',
+						message: 'Workspace is closed'
 					});
 				if (
 					attempt === 3 ||
 					!error ||
 					typeof error !== 'object' ||
 					!('code' in error) ||
-					!(error.code === 'P2034' ||
-						(error.code === 'P2010' && 'meta' in error &&
-							['40001', '40P01'].includes(String((error.meta as { code?: unknown })?.code))))
+					!(
+						error.code === 'P2034' ||
+						(error.code === 'P2010' &&
+							'meta' in error &&
+							['40001', '40P01'].includes(
+								String((error.meta as { code?: unknown })?.code)
+							))
+					)
 				)
 					throw error;
 			}
@@ -912,13 +1324,20 @@ export class SalesService {
 		client: Pick<Prisma.TransactionClient, 'deal'>,
 		access: SalesAccess,
 		id: string,
-		includeArchived = false
+		includeArchived: boolean | 'ACTIVE' | 'ARCHIVED' = false
 	): Promise<DealWithNextAction> {
 		const deal = await client.deal.findFirst({
 			where: {
 				AND: [
 					salesScope(access),
-					{ id, ...(includeArchived ? {} : { archivedAt: null }) }
+					{
+						id,
+						...(includeArchived === 'ARCHIVED'
+							? { archivedAt: { not: null } }
+							: includeArchived === true
+								? {}
+								: { archivedAt: null })
+					}
 				]
 			},
 			include: includeNextAction
@@ -961,7 +1380,8 @@ export class SalesService {
 		access: SalesAccess,
 		dealId: string,
 		id: string,
-		next: NextTaskDto
+		next: NextTaskDto,
+		assignee: SalesAssignee
 	) {
 		await transaction.salesTask.create({
 			data: {
@@ -970,7 +1390,8 @@ export class SalesService {
 				dealId,
 				title: next.title.trim(),
 				dueAt: new Date(next.dueAt),
-				assignedToSubject: access.subject
+				assignedToSubject: assignee.subject,
+				assignedToMembershipId: assignee.membershipId
 			}
 		});
 	}

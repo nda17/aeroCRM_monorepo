@@ -134,3 +134,66 @@ export const workdayTimeZoneGroups = (
 	}
 	return groups
 }
+
+export const searchWorkdayTimeZones = (
+	groups: readonly WorkdayTimeZoneGroup[],
+	query: string,
+	selected: string,
+	at?: Date
+): { groups: WorkdayTimeZoneGroup[]; matches: number } => {
+	const normalize = (text: string) =>
+		text
+			.toLocaleLowerCase('ru-RU')
+			.replaceAll('ё', 'е')
+			.replaceAll('gmt', 'utc')
+	const needle = normalize(query.trim())
+	let matches = 0
+	let selectedOption: WorkdayTimeZoneOption | undefined
+	const filtered = groups.flatMap(group => {
+		const options = group.options.flatMap(option => {
+			let offset = ''
+			if (at && !option.disabled) {
+				try {
+					offset =
+						new Intl.DateTimeFormat('en', {
+							timeZone: option.value,
+							timeZoneName: 'shortOffset'
+						})
+							.formatToParts(at)
+							.find(part => part.type === 'timeZoneName')
+							?.value.replace(/^GMT$/, 'UTC+0')
+							.replace('GMT', 'UTC') ?? ''
+				} catch {
+					// Keep a saved zone visible even in an older Intl implementation.
+				}
+			}
+			const labeled = {
+				...option,
+				label: offset ? `${option.label} · ${offset}` : option.label
+			}
+			if (option.value === selected) selectedOption = labeled
+			if (
+				needle &&
+				!normalize(`${option.label} ${option.value} ${offset}`).includes(
+					needle
+				)
+			)
+				return []
+			matches += 1
+			return [labeled]
+		})
+		return options.length ? [{ label: group.label, options }] : []
+	})
+	// Searching only narrows the choices. It must never clear or change the saved zone.
+	if (
+		selectedOption &&
+		!filtered.some(group =>
+			group.options.some(option => option.value === selected)
+		)
+	)
+		filtered.unshift({
+			label: 'Текущий часовой пояс',
+			options: [selectedOption]
+		})
+	return { groups: filtered, matches }
+}

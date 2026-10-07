@@ -35,6 +35,13 @@ const query: SalesAnalyticsQuery = {
 	assigneePage: 1
 };
 function harness() {
+	const contexts = {
+		search: jest.fn().mockResolvedValue([]),
+		preview: jest.fn().mockResolvedValue([]),
+		roster: jest.fn().mockResolvedValue({ subjects: [], hasMore: false })
+	};
+	const assignees = { resolve: jest.fn(), authorize: jest.fn() };
+	const authority = { authorize: jest.fn().mockResolvedValue(access) };
 	const groupBy = jest.fn(
 		async (args: { by: string[]; skip?: number; where?: unknown }) => {
 			if (args.by.length === 1 && args.by[0] === 'status') return [group];
@@ -54,7 +61,13 @@ function harness() {
 	return {
 		prisma,
 		transaction,
-		service: new SalesService(prisma as never, {} as never)
+		service: new SalesService(
+			prisma as never,
+			{} as never,
+			assignees as never,
+			contexts as never,
+			authority as never
+		)
 	};
 }
 
@@ -96,10 +109,9 @@ describe('Sales analytics cohorts and workload', () => {
 					}
 				}
 			});
-			expect(prisma.$transaction).toHaveBeenCalledWith(
-				expect.any(Function),
-				{ isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }
-			);
+			expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+				isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead
+			});
 			const calls = [
 				...transaction.deal.groupBy.mock.calls,
 				...transaction.deal.count.mock.calls

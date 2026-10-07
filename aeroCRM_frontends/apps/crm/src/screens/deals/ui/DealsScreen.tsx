@@ -170,6 +170,7 @@ const DealsWorkspaceScreen = ({
 	const emptyPage =
 		!!deals.data && deals.data.total > 0 && deals.data.items.length === 0
 	const hasFilters = Boolean(
+		filters.archive === 'ARCHIVED' ||
 		search ||
 		pipelineId ||
 		status ||
@@ -181,6 +182,7 @@ const DealsWorkspaceScreen = ({
 		filters.createdTo
 	)
 	const canCreate =
+		filters.archive !== 'ARCHIVED' &&
 		context.canWrite &&
 		context.permissions.data?.permissions.includes('customers:read') &&
 		!pipelines.isError &&
@@ -518,6 +520,32 @@ const DealsWorkspaceScreen = ({
 							</Button>
 						</div>
 					</div>
+					<div
+						className={styles.actions}
+						role="group"
+						aria-label="Активные и архивные сделки"
+					>
+						<Button
+							variant={
+								filters.archive !== 'ARCHIVED' ? 'primary' : 'secondary'
+							}
+							aria-pressed={filters.archive !== 'ARCHIVED'}
+							onClick={() => updateFilters({ archive: undefined })}
+						>
+							Текущие сделки
+						</Button>
+						<Button
+							variant={
+								filters.archive === 'ARCHIVED' ? 'primary' : 'secondary'
+							}
+							aria-pressed={filters.archive === 'ARCHIVED'}
+							onClick={() =>
+								updateFilters({ archive: 'ARCHIVED', layout: 'list' })
+							}
+						>
+							Архив
+						</Button>
+					</div>
 					<form className={styles.filters} onSubmit={submitSearch}>
 						<TextField
 							label="Поиск по сделке или клиенту"
@@ -788,6 +816,7 @@ const DealsWorkspaceScreen = ({
 			) : null}
 			{selected ? (
 				<DealDetailsDrawer
+					archive={filters.archive ?? 'ACTIVE'}
 					key={`${context.key.join(':')}:${selected}`}
 					id={selected}
 					pipelines={pipelines.isError ? [] : pipelines.data || []}

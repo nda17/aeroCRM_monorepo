@@ -3,11 +3,14 @@
 import { AuthenticatedApiError } from '@/shared/api/authenticated-http-client'
 import { useDirtyForm, useDirtyFormGuard } from '@/shared/lib/dirty-form'
 
+import { AssigneeSelect, useAssigneeOptions } from '@/entities/crm-team'
+import { useSessionStore } from '@/entities/session'
 import { getCustomer } from '@/entities/customer'
 import Link from 'next/link'
 import {
-	getSalesDeal,
-	listSalesTimelineV2,
+	getSalesDealContext,
+	listSalesTimelineV3,
+	listArchivedDealTasks,
 	type SalesDeal,
 	type SalesPipeline
 } from '@/entities/sales'
@@ -54,7 +57,8 @@ const historyLabels = {
 	ARCHIVED: 'Сделка архивирована',
 	CALL_REACHED: 'Дозвонился',
 	CALL_NO_ANSWER: 'Не ответил',
-	MEETING_HELD: 'Встреча состоялась'
+	MEETING_HELD: 'Встреча состоялась',
+	ASSIGNEE_CHANGED: 'Ответственный изменён'
 } as const
 
 const DealEditor = ({
@@ -238,8 +242,10 @@ export const DealDetailsDrawer = ({
 	id,
 	pipelines,
 	onClose,
-	onSaved
+	onSaved,
+	archive = 'ACTIVE'
 }: {
+	archive?: 'ACTIVE' | 'ARCHIVED'
 	id: string
 	pipelines: SalesPipeline[]
 	onClose: () => void
@@ -248,6 +254,11 @@ export const DealDetailsDrawer = ({
 	const context = useSalesSession()
 	const queryClient = useQueryClient()
 	const [page, setPage] = useState(1)
+	const [taskPage, setTaskPage] = useState(1)
+	const [recipient, setRecipient] = useState<{
+		subject: string
+		membershipId: string
+	} | null>(null)
 	const [openedAt] = useState(() => Date.now())
 	const [editorRevision, setEditorRevision] = useState(0)
 	const [commerceBusy, setCommerceBusy] = useState(false)
@@ -259,34 +270,56 @@ export const DealDetailsDrawer = ({
 	const tabsId = useId()
 	const tabs = [
 		{ id: 'overview', label: 'Обзор' },
-		{ id: 'commerce', label: 'КП и оплаты' },
+		...(archive === 'ACTIVE'
+			? [{ id: 'commerce' as const, label: 'КП и оплаты' }]
+			: []),
 		{ id: 'history', label: 'История' }
 	] as const
 	const detail = useQuery({
-		queryKey: ['sales', 'deal', ...context.key, id],
+		queryKey: ['sales', 'deal-context', ...context.key, id, archive],
 		enabled: context.canRead && !!context.session,
 		queryFn: () =>
-			getSalesDeal(
+			getSalesDealContext(
 				context.session!.accessToken,
 				context.workspace.workspaceId,
-				id
+				id,
+				archive
 			),
 		retry: false,
 		gcTime: 0
 	})
 	const history = useQuery({
-		queryKey: ['sales', 'timeline-v2', ...context.key, id, page],
+		queryKey: ['sales', 'timeline-v3', ...context.key, id, archive, page],
 		enabled:
 			context.canRead &&
 			!!context.session &&
 			!!detail.data &&
 			!detail.isError,
 		queryFn: () =>
-			listSalesTimelineV2(
+			listSalesTimelineV3(
 				context.session!.accessToken,
 				context.workspace.workspaceId,
 				id,
-				page
+				page,
+				archive
+			),
+		retry: false,
+		gcTime: 0
+	})
+	const archivedTasks = useQuery({
+		queryKey: ['sales', 'archived-tasks', ...context.key, id, taskPage],
+		enabled:
+			archive === 'ARCHIVED' &&
+			context.canRead &&
+			!!context.session &&
+			!!detail.data &&
+			!detail.isError,
+		queryFn: () =>
+			listArchivedDealTasks(
+				context.session!.accessToken,
+				context.workspace.workspaceId,
+				id,
+				taskPage
 			),
 		retry: false,
 		gcTime: 0
@@ -297,11 +330,48 @@ export const DealDetailsDrawer = ({
 		detail.error.kind === 'temporary'
 	const showDetail =
 		!detail.isError || (transientDetailError && !!detail.data)
-	const deal = showDetail ? detail.data : undefined
+	const deal = showDetail ? detail.data?.deal : undefined
+	const directory = useAssigneeOptions(
+		{
+			workspaceId: context.workspace.workspaceId,
+			subject: context.session?.userId,
+			accessToken: context.session?.accessToken,
+			sessionRevision: context.sessionRevision,
+			canRead: context.canRead && context.canWrite && archive === 'ACTIVE',
+			authority: context.permissions.data,
+			isCurrent: () => {
+				const current = useSessionStore.getState()
+				return (
+					context.canRead &&
+					context.canWrite &&
+					!context.permissions.isFetching &&
+					!context.permissions.isError &&
+					current.session?.accessToken === context.session?.accessToken &&
+					current.sessionRevision === context.sessionRevision
+				)
+			}
+		},
+		{
+			...(deal?.teamId ? { teamId: deal.teamId } : {}),
+			selectedSubject: recipient?.subject
+		}
+	)
+	useDirtyForm({ dirty: !!recipient, label: 'Передача сделки' })
 	const pipeline = pipelines.find(item => item.id === deal?.pipelineId)
 	const assigneeLabel = useSalesAssignees(
 		context,
-		deal && !detail.isError ? [deal.assignedToSubject] : []
+		deal && !detail.isError
+			? [
+					deal.assignedToSubject,
+					...(history.isError
+						? []
+						: (history.data?.items.flatMap(item =>
+								item.details
+									? [item.details.beforeSubject, item.details.afterSubject]
+									: []
+							) ?? []))
+				]
+			: []
 	)
 	const canReadContact =
 		context.canRead &&
@@ -384,13 +454,14 @@ export const DealDetailsDrawer = ({
 	const command = useSalesCommand(
 		context.workspace.workspaceId,
 		context.session?.accessToken || '',
-		context.canWrite,
+		context.canWrite && archive === 'ACTIVE',
 		result => {
 			queryClient.setQueryData(
-				['sales', 'deal', ...context.key, id],
-				result
+				['sales', 'deal-context', ...context.key, id, archive],
+				{ deal: result, company: detail.data?.company ?? null }
 			)
 			setEditorRevision(value => value + 1)
+			setRecipient(null)
 			onSaved()
 			if (result.archivedAt) onClose()
 			else {
@@ -420,7 +491,11 @@ export const DealDetailsDrawer = ({
 				context.canRead && showDetail ? pipeline?.name : undefined
 			}
 			footer={
-				tab === 'overview' && context.canRead && showDetail && deal ? (
+				tab === 'overview' &&
+				archive === 'ACTIVE' &&
+				context.canRead &&
+				showDetail &&
+				deal ? (
 					<Button
 						type="submit"
 						form="deal-interaction-form"
@@ -482,6 +557,11 @@ export const DealDetailsDrawer = ({
 							}
 						/>
 					) : null}
+					{archive === 'ARCHIVED' ? (
+						<p className={styles.muted}>
+							Архивная сделка. Доступны просмотр и история.
+						</p>
+					) : null}
 					<section className={styles.summary} aria-label="Клиент и сделка">
 						<div className={styles.summaryHeading}>
 							{canReadContact ? (
@@ -539,6 +619,19 @@ export const DealDetailsDrawer = ({
 								Контактные данные временно недоступны.
 							</p>
 						) : null}
+						{detail.data?.company && !detail.isError ? (
+							<p>
+								<Link
+									className={styles.contactLink}
+									href={`/contacts?companyId=${encodeURIComponent(detail.data.company.id)}`}
+								>
+									{detail.data.company.name}
+								</Link>
+								{detail.data.company.inn
+									? ` · ИНН ${detail.data.company.inn}`
+									: ''}
+							</p>
+						) : null}
 						<dl className={styles.details}>
 							<div>
 								<dt>Сумма сделки</dt>
@@ -552,6 +645,111 @@ export const DealDetailsDrawer = ({
 							</div>
 						</dl>
 					</section>
+					{archive === 'ARCHIVED' ? (
+						<section className={styles.section}>
+							<h3>Задачи архивной сделки</h3>
+							{archivedTasks.isError ? (
+								<ScreenState
+									variant="error"
+									compact
+									action={
+										<Button onClick={() => void archivedTasks.refetch()}>
+											Повторить
+										</Button>
+									}
+								/>
+							) : archivedTasks.isPending ? (
+								<ScreenState variant="loading" compact />
+							) : (
+								<>
+									<ul>
+										{archivedTasks.data?.items.map(task => (
+											<li key={task.id}>
+												{task.title} · {salesDate(task.dueAt)} ·{' '}
+												{task.status === 'COMPLETED'
+													? 'Завершена'
+													: task.status === 'CANCELLED'
+														? 'Отменена'
+														: 'В работе'}
+											</li>
+										))}
+									</ul>
+									<div className={styles.actions}>
+										<Button
+											variant="ghost"
+											disabled={taskPage === 1 || archivedTasks.isFetching}
+											onClick={() => setTaskPage(value => value - 1)}
+										>
+											Назад
+										</Button>
+										<span>Страница {taskPage}</span>
+										<Button
+											variant="ghost"
+											disabled={
+												taskPage * 10 >=
+													(archivedTasks.data?.total ?? 0) ||
+												archivedTasks.isFetching
+											}
+											onClick={() => setTaskPage(value => value + 1)}
+										>
+											Далее
+										</Button>
+									</div>
+								</>
+							)}
+						</section>
+					) : null}
+					{archive === 'ACTIVE' && context.canWrite ? (
+						<section className={styles.section}>
+							<h3>Передать сделку</h3>
+							<p className={styles.muted}>
+								Активные задачи прежнего ответственного перейдут выбранному
+								сотруднику. Остальные назначения сохранятся, если
+								сотрудникам останется доступ к сделке.
+							</p>
+							<AssigneeSelect
+								options={directory}
+								value={recipient}
+								label="Новый ответственный"
+								disabled={
+									command.locked ||
+									stageDirty ||
+									interactionDirty ||
+									commerceBusy
+								}
+								onChange={employee =>
+									setRecipient({
+										subject: employee.subject,
+										membershipId: employee.membershipId
+									})
+								}
+							/>
+							<Button
+								disabled={
+									!recipient ||
+									!directory.resolveBinding(recipient) ||
+									command.locked ||
+									detail.isError ||
+									detail.isFetching ||
+									stageDirty ||
+									interactionDirty ||
+									commerceBusy
+								}
+								onClick={() => {
+									if (!recipient || !directory.resolveBinding(recipient))
+										return
+									void command.execute({
+										kind: 'assign',
+										id: deal.id,
+										expectedVersion: deal.version,
+										assignee: recipient
+									})
+								}}
+							>
+								Передать выбранному сотруднику
+							</Button>
+						</section>
+					) : null}
 					<section
 						className={styles.nextAction}
 						aria-label="Следующее действие по сделке"
@@ -649,23 +847,26 @@ export const DealDetailsDrawer = ({
 								во вкладке «Обзор», чтобы изменять КП и оплаты.
 							</p>
 						) : null}
-						<DealCommercePanel
-							context={{
-								...context,
-								canWrite:
-									context.canWrite &&
-									!stageDirty &&
-									!interactionDirty &&
-									!command.locked
-							}}
-							dealId={deal.id}
-							customerDetailsSuggestion={quoteCustomerDetails}
-							onBusyChange={setCommerceBusy}
-							onSaved={() => {
-								onSaved()
-								void detail.refetch()
-							}}
-						/>
+						{archive === 'ACTIVE' ? (
+							<DealCommercePanel
+								context={{
+									...context,
+									canWrite:
+										context.canWrite &&
+										archive === 'ACTIVE' &&
+										!stageDirty &&
+										!interactionDirty &&
+										!command.locked
+								}}
+								dealId={deal.id}
+								customerDetailsSuggestion={quoteCustomerDetails}
+								onBusyChange={setCommerceBusy}
+								onSaved={() => {
+									onSaved()
+									void detail.refetch()
+								}}
+							/>
+						) : null}
 					</div>
 					<div
 						role="tabpanel"
@@ -688,6 +889,7 @@ export const DealDetailsDrawer = ({
 							onDirtyChange={setInteractionDirty}
 							enabled={
 								context.canWrite &&
+								archive === 'ACTIVE' &&
 								!detail.isFetching &&
 								!detail.isError &&
 								!commerceBusy &&
@@ -702,6 +904,7 @@ export const DealDetailsDrawer = ({
 								pipeline={pipeline}
 								enabled={
 									context.canWrite &&
+									archive === 'ACTIVE' &&
 									!detail.isFetching &&
 									!detail.isError &&
 									!commerceBusy &&
@@ -744,6 +947,14 @@ export const DealDetailsDrawer = ({
 											<li key={item.id}>
 												<strong>{historyLabels[item.kind]}</strong>
 												{item.outcome ? <p>{item.outcome}</p> : null}
+												{item.details ? (
+													<p>
+														{assigneeLabel(item.details.beforeSubject)} →{' '}
+														{assigneeLabel(item.details.afterSubject)}.
+														Перенесено активных задач:{' '}
+														{item.details.transferredTaskCount}
+													</p>
+												) : null}
 												<time dateTime={item.createdAt}>
 													{salesDate(item.createdAt)}
 												</time>

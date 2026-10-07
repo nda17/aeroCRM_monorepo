@@ -1,4 +1,5 @@
 import {
+	ConflictException,
 	ForbiddenException,
 	NotFoundException,
 	ServiceUnavailableException,
@@ -62,6 +63,13 @@ const call = () =>
 		{ subject: target.subject, membershipId },
 		teamId
 	);
+const readerBindings = [
+	{ subject: 'manager', membershipId },
+	{
+		subject: 'former-member',
+		membershipId: '44444444-4444-4444-8444-444444444444'
+	}
+];
 describe('Sales assignment authority client', () => {
 	it('binds actor, target and workspace without cached grants', async () => {
 		await expect(call()).resolves.toEqual(target);
@@ -83,6 +91,68 @@ describe('Sales assignment authority client', () => {
 		});
 		expect(options.headers.Authorization).toBe('Bearer test');
 		expect(options.headers['x-aerocrm-service']).toBe('crm-sales');
+	});
+	it('resolves bounded task-reader bindings in exact input order and retains null for revoked readers', async () => {
+		fetchMock.mockResolvedValue(
+			Response.json({
+				schemaVersion: 1,
+				workspaceId,
+				subject: access.subject,
+				items: [
+					{
+						binding: readerBindings[0],
+						reader: { ...target }
+					},
+					{ binding: readerBindings[1], reader: null }
+				]
+			})
+		);
+		await expect(
+			new SalesAssigneeClient().readers('Bearer test', access, readerBindings)
+		).resolves.toEqual([target, null]);
+		const [url, options] = fetchMock.mock.calls[0];
+		expect(url).toContain('/resolve-sales-task-readers');
+		expect(JSON.parse(options.body)).toEqual({
+			schemaVersion: 1,
+			workspaceId,
+			bindings: readerBindings
+		});
+	});
+	it('rejects duplicate and over-limit task-reader batches before transport', async () => {
+		const client = new SalesAssigneeClient();
+		await expect(
+			client.readers('Bearer test', access, [
+				readerBindings[0],
+				readerBindings[0]
+			])
+		).rejects.toBeInstanceOf(ConflictException);
+		await expect(
+			client.readers(
+				'Bearer test',
+				access,
+				Array.from({ length: 101 }, (_, index) => ({
+					subject: `member-${index}`,
+					membershipId
+				}))
+			)
+		).rejects.toBeInstanceOf(ConflictException);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+	it('rejects reordered or misbound task-reader batch results rather than applying another member access', async () => {
+		fetchMock.mockResolvedValue(
+			Response.json({
+				schemaVersion: 1,
+				workspaceId,
+				subject: access.subject,
+				items: [
+					{ binding: readerBindings[1], reader: null },
+					{ binding: readerBindings[0], reader: target }
+				]
+			})
+		);
+		await expect(
+			new SalesAssigneeClient().readers('Bearer test', access, readerBindings)
+		).rejects.toBeInstanceOf(ServiceUnavailableException);
 	});
 	it('accepts a CUSTOM target with its exact scoped team binding', async () => {
 		const customTarget = {
@@ -119,9 +189,7 @@ describe('Sales assignment authority client', () => {
 		{ ...reply(), assignee: { ...target, dataScope: 'GLOBAL' } }
 	])('rejects malformed authority %j', async response => {
 		fetchMock.mockResolvedValue(Response.json(response));
-		await expect(call()).rejects.toBeInstanceOf(
-			ServiceUnavailableException
-		);
+		await expect(call()).rejects.toBeInstanceOf(ServiceUnavailableException);
 	});
 	it('bounds bodies and sanitizes transport errors', async () => {
 		fetchMock.mockResolvedValue(
@@ -129,20 +197,14 @@ describe('Sales assignment authority client', () => {
 				headers: { 'content-type': 'application/json' }
 			})
 		);
-		await expect(call()).rejects.toBeInstanceOf(
-			ServiceUnavailableException
-		);
+		await expect(call()).rejects.toBeInstanceOf(ServiceUnavailableException);
 		fetchMock.mockRejectedValue(new Error('private upstream detail'));
-		await expect(call()).rejects.toThrow(
-			'Не удалось проверить ответственного'
-		);
+		await expect(call()).rejects.toThrow('Не удалось проверить ответственного');
 	});
 	it('refuses credentials in origins and malformed user bearer before transport', async () => {
 		process.env.CRM_ACCESS_INTERNAL_BASE_URL =
 			'https://user:pass@example.invalid';
-		await expect(call()).rejects.toBeInstanceOf(
-			ServiceUnavailableException
-		);
+		await expect(call()).rejects.toBeInstanceOf(ServiceUnavailableException);
 		await expect(
 			new SalesAssigneeClient().authorize('', access, target)
 		).rejects.toBeInstanceOf(UnauthorizedException);

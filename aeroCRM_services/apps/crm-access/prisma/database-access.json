@@ -112,6 +112,11 @@
     "crm_chat_messages": [
       "SELECT",
       "INSERT"
+    ],
+    "crm_chat_attachments": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
     ]
   },
   "sequences": {
@@ -136,7 +141,8 @@
     "enforce_workspace_closure_fence",
     "enforce_workspace_closure_operation",
     "provision_workspace_collaboration",
-    "signal_workspace_collaboration"
+    "signal_workspace_collaboration",
+    "guard_chat_attachment"
   ],
   "routineExecute": [
     "is_valid_custom_role_permissions(text[])",

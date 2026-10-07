@@ -22,7 +22,10 @@ import {
 } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { MailService, MailAddress, addressList } from './mail.service';
-import { MailAuthority } from './mail-authorization.client';
+import {
+	MailAuthority,
+	MailAuthorityRevokedException
+} from './mail-authorization.client';
 import { mailRole, digest, MAIL_LIMITS } from './mail.config';
 import {
 	boundedBytes,
@@ -280,21 +283,19 @@ export class MailWorker implements OnModuleInit, OnModuleDestroy {
 		const c = await this.mail.prisma.mailConnection.findUniqueOrThrow({
 			where: { id: m.connectionId }
 		});
-		let a: MailAuthority;
-		try {
-			a = await this.mail.authorization.workflow(
-				job.workspaceId,
-				c.delegatedSubject,
-				c.delegatedMembershipId,
-				'MAIL_SYNC'
-			);
-		} catch (error) {
-			if (error instanceof ForbiddenException)
-				throw new Error('MAIL_DELEGATION_REVOKED');
-			throw error;
-		}
+		const a = await this.mail.authorization.workflow(
+			job.workspaceId,
+			c.delegatedSubject,
+			c.delegatedMembershipId,
+			'MAIL_SYNC'
+		);
+		if (!a.mailPermissions.includes('mail:read'))
+			throw new MailAuthorityRevokedException('MAIL_READ_REVOKED');
 		await this.mail.mailbox(a, m.id, 'read');
-		if (a.customer.state === 'READ_ONLY') throw new ForbiddenException();
+		if (a.customer.state === 'READ_ONLY')
+			throw new Error('MAIL_WORKSPACE_READ_ONLY');
+		if (m.safeErrorCode === 'MAIL_WORKSPACE_READ_ONLY')
+			await this.transitionPause(job, false, c.delegatedSubject);
 		if (
 			purpose === 'MAIL_SEND' &&
 			(!this.mail.config.sendEnabled || !this.mail.config.attachmentsAvailable)
@@ -338,7 +339,11 @@ export class MailWorker implements OnModuleInit, OnModuleDestroy {
 			},
 			data: {
 				state: 'QUEUED',
-				attempts: error ? undefined : 0,
+				attempts: error
+					? job.kind === 'LIVE_SYNC'
+						? Math.min(job.attempts, 5)
+						: undefined
+					: 0,
 				dueAt: new Date(Date.now() + delay),
 				safeErrorCode: error,
 				leaseOwner: null,
@@ -368,7 +373,7 @@ export class MailWorker implements OnModuleInit, OnModuleDestroy {
 			else await this.sync(job);
 		} catch (error) {
 			const safe =
-				error instanceof ForbiddenException
+				error instanceof MailAuthorityRevokedException
 					? 'MAIL_AUTHORITY_REVOKED'
 					: error instanceof Error && /^MAIL_[A-Z_]+$/.test(error.message)
 						? error.message
@@ -386,12 +391,28 @@ export class MailWorker implements OnModuleInit, OnModuleDestroy {
 					await this.finish(job, 'CANCELLED', safe);
 					return;
 				}
-				if (safe === 'MAIL_DELEGATION_REVOKED') await this.revoke(job);
+				if (error instanceof MailAuthorityRevokedException) {
+					await this.revoke(job, error.reason);
+					return;
+				}
+				if (safe === 'MAIL_WORKSPACE_READ_ONLY' && job.kind !== 'SEND') {
+					await this.transitionPause(job, true);
+					return;
+				}
 				try {
-					await this.mail.prisma.mailMailbox.update({
-						where: { id: job.mailboxId },
-						data: { safeErrorCode: safe }
-					});
+					if (safe !== 'MAIL_WORKSPACE_READ_ONLY')
+						await this.mail.prisma.mailMailbox.updateMany({
+							where: {
+								id: job.mailboxId,
+								workspaceId: job.workspaceId,
+								generation: job.generation,
+								OR: [
+									{ safeErrorCode: null },
+									{ safeErrorCode: { not: 'MAIL_WORKSPACE_READ_ONLY' } }
+								]
+							},
+							data: { safeErrorCode: safe }
+						});
 				} catch {
 					/* closure prevents new diagnostics writes */
 				}
@@ -426,10 +447,7 @@ export class MailWorker implements OnModuleInit, OnModuleDestroy {
 							}
 						});
 					await this.finish(job, 'FAILED', safe);
-				} else if (error instanceof ForbiddenException) {
-					await this.revoke(job);
-					await this.finish(job, 'CANCELLED', safe);
-				} else if (job.attempts < 5) {
+				} else if (job.kind === 'LIVE_SYNC' || job.attempts < 5) {
 					await this.reschedule(
 						job,
 						Math.min(300000, 30000 * 2 ** (job.attempts - 1)),
@@ -443,12 +461,96 @@ export class MailWorker implements OnModuleInit, OnModuleDestroy {
 			clearInterval(heartbeat);
 		}
 	}
-	private async revoke(job: MailJob) {
+	private async transitionPause(
+		job: MailJob,
+		paused: boolean,
+		subject?: string
+	) {
 		await this.mail.prisma.$transaction(async (tx) => {
-			const m = await tx.mailMailbox.findUnique({
-				where: { id: job.mailboxId }
+			await this.assertLease(job, tx);
+			await tx.$queryRaw`SELECT id FROM crm_customers.mail_mailboxes WHERE workspace_id=${job.workspaceId}::uuid AND id=${job.mailboxId}::uuid FOR UPDATE`;
+			const m = await tx.mailMailbox.findFirst({
+				where: {
+					id: job.mailboxId,
+					workspaceId: job.workspaceId,
+					generation: job.generation,
+					enabled: true
+				}
+			});
+			if (!m) throw new Error('MAIL_GENERATION_CHANGED');
+			const changed = paused
+				? m.safeErrorCode !== 'MAIL_WORKSPACE_READ_ONLY'
+				: m.safeErrorCode === 'MAIL_WORKSPACE_READ_ONLY';
+			if (changed) {
+				const c = await tx.mailConnection.findUniqueOrThrow({
+					where: { id: m.connectionId }
+				});
+				await tx.mailMailbox.update({
+					where: { id: m.id },
+					data: { safeErrorCode: paused ? 'MAIL_WORKSPACE_READ_ONLY' : null }
+				});
+				await tx.mailAudit.create({
+					data: {
+						workspaceId: job.workspaceId,
+						mailboxId: m.id,
+						actorSubject: subject || c.delegatedSubject,
+						action: paused ? 'SYNC_PAUSED' : 'SYNC_RESUMED',
+						entityId: m.id,
+						metadata: {
+							reason: 'MAIL_WORKSPACE_READ_ONLY',
+							generation: job.generation
+						}
+					}
+				});
+			}
+			if (paused)
+				await tx.mailJob.update({
+					where: { id: job.id },
+					data: {
+						state: 'QUEUED',
+						attempts: 0,
+						dueAt: new Date(Date.now() + 60000),
+						safeErrorCode: 'MAIL_WORKSPACE_READ_ONLY',
+						leaseOwner: null,
+						leaseUntil: null
+					}
+				});
+		});
+	}
+	private async revoke(job: MailJob, reason = 'MAIL_AUTHORITY_REVOKED') {
+		await this.mail.prisma.$transaction(async (tx) => {
+			await this.assertLease(job, tx);
+			await tx.$queryRaw`SELECT id FROM crm_customers.mail_mailboxes WHERE workspace_id=${job.workspaceId}::uuid AND id=${job.mailboxId}::uuid FOR UPDATE`;
+			const m = await tx.mailMailbox.findFirst({
+				where: {
+					id: job.mailboxId,
+					workspaceId: job.workspaceId,
+					generation: job.generation,
+					enabled: true
+				}
 			});
 			if (!m) return;
+			const c = await tx.mailConnection.findFirst({
+				where: {
+					id: m.connectionId,
+					workspaceId: job.workspaceId,
+					state: 'ACTIVE'
+				}
+			});
+			if (!c) return;
+			await tx.mailAudit.create({
+				data: {
+					workspaceId: job.workspaceId,
+					mailboxId: m.id,
+					actorSubject: c.delegatedSubject,
+					action: 'AUTHORITY_REVOKED',
+					entityId: m.id,
+					metadata: {
+						reason,
+						generation: job.generation
+					}
+				}
+			});
 			await tx.mailConnection.update({
 				where: { id: m.connectionId },
 				data: {

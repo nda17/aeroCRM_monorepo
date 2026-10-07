@@ -5,6 +5,8 @@ import {
 	NotFoundException,
 	ServiceUnavailableException
 } from '@nestjs/common';
+import type { ResolveSalesAssigneeDto } from './sales-assignee-binding.dto';
+import type { CrmAuthorizeWorkflowDto } from '../authorization/crm-authorization.controller';
 import type { Prisma } from '@prisma/crm-access-client';
 import { CrmAuthorizationService } from '../authorization/crm-authorization.service';
 import {
@@ -207,13 +209,20 @@ export class CrmAssigneeService {
 		);
 		this.permission(actor, false, query.teamId);
 		if (
+			query.purpose === 'SALES_ANALYTICS' &&
+			!actor.permissions.includes('sales:analytics')
+		)
+			throw new ForbiddenException();
+		if (
 			query.purpose &&
+			query.purpose !== 'SALES_ANALYTICS' &&
 			!['OWNER', 'CRM_ADMIN'].includes(actor.role)
 		)
 			throw new ForbiddenException(
 				'CRM recipient directory requires administrative access'
 			);
 		const targetPermission =
+			query.purpose === 'SALES_ANALYTICS' ||
 			query.purpose === 'TASK_RECIPIENT'
 				? 'sales:read'
 				: query.purpose === 'SLA_RECIPIENT'
@@ -266,7 +275,13 @@ export class CrmAssigneeService {
 		);
 		this.permission(fresh, false, query.teamId);
 		if (
+			query.purpose === 'SALES_ANALYTICS' &&
+			!fresh.permissions.includes('sales:analytics')
+		)
+			throw new ForbiddenException();
+		if (
 			query.purpose &&
+			query.purpose !== 'SALES_ANALYTICS' &&
 			!['OWNER', 'CRM_ADMIN'].includes(fresh.role)
 		)
 			throw new ForbiddenException(
@@ -375,6 +390,190 @@ export class CrmAssigneeService {
 			},
 			{ isolationLevel: 'RepeatableRead' }
 		);
+	}
+
+	async taskReaders(token: string | undefined, dto: AssigneeLabelsDto) {
+		if (
+			dto.bindings.length > 100 ||
+			new Set(dto.bindings.map(item => JSON.stringify(item))).size !==
+				dto.bindings.length
+		)
+			throw new ConflictException('crm_sales_assignment_reader_limit');
+		const actor = await this.auth.authorize(
+			token,
+			dto.workspaceId,
+			'crm-sales'
+		);
+		this.permission(actor, true);
+		const scope = this.candidateScope(actor, undefined, 'sales:read');
+		const query = {
+			where: {
+				AND: [
+					scope,
+					{ subject: { in: dto.bindings.map(item => item.subject) } }
+				]
+			},
+			select: candidateSelect,
+			orderBy: { id: 'asc' as const },
+			take: 101
+		};
+		const candidates =
+			await this.prisma.crmWorkspaceMember.findMany(query);
+		const deadline = Date.now() + 4000;
+		let cursor = 0;
+		const items: Array<{
+			binding: AssigneeLabelsDto['bindings'][number];
+			reader: null | {
+				subject: string;
+				membershipId: string;
+				role: string;
+				dataScope: string;
+				teamIds: string[];
+			};
+		}> = new Array(dto.bindings.length);
+		await Promise.all(
+			Array.from(
+				{ length: Math.min(8, dto.bindings.length) },
+				async () => {
+					for (;;) {
+						if (Date.now() > deadline)
+							throw new ServiceUnavailableException(
+								'CRM reader authority timed out'
+							);
+						const index = cursor++;
+						if (index >= dto.bindings.length) return;
+						const binding = dto.bindings[index];
+						// Historical null cannot become a fresh binding through this endpoint.
+						if (binding.membershipId === null) {
+							items[index] = { binding, reader: null };
+							continue;
+						}
+						let target: Awaited<
+							ReturnType<CrmAuthorizationService['assignmentSubject']>
+						>;
+						try {
+							target = await this.auth.assignmentSubject(
+								dto.workspaceId,
+								binding.subject
+							);
+						} catch (error) {
+							if (error instanceof ForbiddenException) {
+								items[index] = { binding, reader: null };
+								continue;
+							}
+							throw error;
+						}
+						const candidate = candidates.find(
+							item =>
+								item.subject === target.subject &&
+								item.membershipId === target.membershipId &&
+								item.role === target.role
+						);
+						const permitted =
+							target.subject === binding.subject &&
+							target.membershipId === binding.membershipId &&
+							target.workspaceId === dto.workspaceId &&
+							target.role !== 'ANALYST' &&
+							target.permissions.includes('sales:read') &&
+							(target.role === 'OWNER'
+								? actor.dataScope === 'ALL'
+								: !!candidate);
+						items[index] = {
+							binding,
+							reader: permitted
+								? {
+										subject: target.subject,
+										membershipId: target.membershipId,
+										role: target.role,
+										dataScope: target.dataScope,
+										teamIds: target.teamIds
+									}
+								: null
+						};
+					}
+				}
+			)
+		);
+		const fresh = await this.auth.authorize(
+			token,
+			dto.workspaceId,
+			'crm-sales'
+		);
+		this.permission(fresh, true);
+		if (
+			fingerprint(fresh) !== fingerprint(actor) ||
+			JSON.stringify(
+				await this.prisma.crmWorkspaceMember.findMany(query)
+			) !== JSON.stringify(candidates)
+		)
+			throw new ConflictException('CRM reader authority changed');
+		return {
+			schemaVersion: 1 as const,
+			workspaceId: actor.workspaceId,
+			subject: actor.subject,
+			items
+		};
+	}
+
+	async resolve(token: string | undefined, dto: ResolveSalesAssigneeDto) {
+		const target = await this.auth.assignmentSubject(
+			dto.workspaceId,
+			dto.subject
+		);
+		return this.authorize(token, {
+			...dto,
+			purpose: 'SALES_ASSIGNMENT',
+			membershipId: target.membershipId
+		});
+	}
+
+	async authorizeIntake(dto: CrmAuthorizeWorkflowDto) {
+		const access = await this.auth.authorizeWorkflow(
+			dto.workspaceId,
+			dto.subject,
+			dto.purpose,
+			'crm-sales'
+		);
+		const target = await this.auth.assignmentSubject(
+			dto.workspaceId,
+			dto.subject
+		);
+		const fresh = await this.auth.authorizeWorkflow(
+			dto.workspaceId,
+			dto.subject,
+			dto.purpose,
+			'crm-sales'
+		);
+		const current = await this.auth.assignmentSubject(
+			dto.workspaceId,
+			dto.subject
+		);
+		if (
+			access.subject !== dto.subject ||
+			target.subject !== dto.subject ||
+			fresh.subject !== dto.subject ||
+			current.subject !== dto.subject ||
+			target.membershipId !== current.membershipId ||
+			fingerprint(access) !== fingerprint(fresh) ||
+			fingerprint(target) !== fingerprint(current) ||
+			current.state === 'READ_ONLY' ||
+			current.role === 'ANALYST' ||
+			!current.permissions.includes('sales:write')
+		)
+			throw new ForbiddenException(
+				'CRM intake assignment authority changed'
+			);
+		return {
+			schemaVersion: 1 as const,
+			access: fresh,
+			assignee: {
+				subject: current.subject,
+				membershipId: current.membershipId,
+				role: current.role,
+				dataScope: current.dataScope,
+				teamIds: current.teamIds
+			}
+		};
 	}
 
 	async authorize(token: string | undefined, dto: AuthorizeAssigneeDto) {
@@ -493,8 +692,10 @@ export class CrmAssigneeService {
 	private candidateScope(
 		actor: AssigneeActor,
 		teamId?: string,
-		customPermission: 'sales:read' | 'sales:write' | 'intake:read' =
-			'sales:write'
+		customPermission:
+			| 'sales:read'
+			| 'sales:write'
+			| 'intake:read' = 'sales:write'
 	): Prisma.CrmWorkspaceMemberWhereInput {
 		return {
 			workspaceId: actor.workspaceId,

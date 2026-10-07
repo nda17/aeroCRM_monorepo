@@ -144,7 +144,7 @@ const AnalyticsScreen = () => {
 				return await getSalesAnalyticsOverview(
 					session.accessToken,
 					context.workspace.workspaceId,
-					query
+					{ ...query, assigneeBasis: 'TEAM' }
 				)
 			} catch (error) {
 				const current = useSessionStore.getState()
@@ -515,7 +515,7 @@ const AnalyticsScreen = () => {
 						>
 							<div className={styles.sectionHeading}>
 								<h2 id="sales-team-title">
-									Результаты и загрузка сотрудников
+									Результаты и загрузка текущих сотрудников
 								</h2>
 								<p>
 									Созданные и успешные — за период создания. Работа,
@@ -530,7 +530,7 @@ const AnalyticsScreen = () => {
 							)}
 							{data.overview.assignees.items.length === 0 ? (
 								<p className={styles.emptyNote}>
-									Нет сотрудников со сделками на этой странице.
+									Нет доступных текущих сотрудников на этой странице.
 								</p>
 							) : (
 								data.overview.assignees.items.map(row => {

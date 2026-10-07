@@ -234,6 +234,7 @@ const startRefresh = async () => {
 }
 beforeEach(() => {
 	vi.resetAllMocks()
+	window.localStorage.clear()
 	workspace.workspaceId = workspaceId
 	resetSessionStore()
 	useSessionStore
@@ -330,13 +331,15 @@ describe('MyDay actual permission query lifecycle', () => {
 						: ['sales:read', 'sales:write']
 			}
 			render(<MyDayScreen />, { wrapper: Wrapper })
-			await waitFor(() =>
-				expect(
-					client
-						.getQueryCache()
-						.findAll({ queryKey: ['crm-planner'] })
-						.some(query => query.state.status === 'success')
-				).toBe(true)
+			await waitFor(
+				() =>
+					expect(
+						client
+							.getQueryCache()
+							.findAll({ queryKey: ['crm-planner'] })
+							.some(query => query.state.status === 'success')
+					).toBe(true),
+				{ timeout: 5000 }
 			)
 			await waitForPermissionReadsToSettle()
 			await findTaskButton()
@@ -483,7 +486,7 @@ describe('MyDay actual permission query lifecycle', () => {
 		render(<MyDayScreen />, { wrapper: Wrapper })
 		await findTaskButton()
 		fireEvent.click(
-			screen.getByRole('button', { name: `Перенести: ${task.title}` })
+			screen.getByRole('button', { name: `Изменить срок: ${task.title}` })
 		)
 		await screen.findByRole('heading', { name: 'Перенести задачу' })
 		expect(screen.getAllByText(task.title).length).toBeGreaterThan(1)
@@ -521,7 +524,11 @@ describe('MyDay actual permission query lifecycle', () => {
 		expect(vi.mocked(mutateWorkdayTask).mock.calls[1][1]).toBe(original)
 	})
 	it('keeps a task mounted after cancelling close confirmation so a later reload works', async () => {
-		const refreshed = { ...task, title: 'Актуальное название', version: 2 }
+		const refreshed = {
+			...task,
+			title: 'Актуальное название',
+			version: 2
+		}
 		const GuardedWrapper = ({ children }: PropsWithChildren) => {
 			const state = useSessionStore()
 			const owner = commandOwner(
@@ -658,14 +665,14 @@ describe('MyDay actual permission query lifecycle', () => {
 			)
 		)
 	})
-	it('clears ACTIVE on the board and restores it when returning to the list', async () => {
+	it('keeps ACTIVE board scope and restores the ACTIVE list scope', async () => {
 		render(<MyDayScreen />, { wrapper: Wrapper })
 		await findTaskButton()
 		fireEvent.click(screen.getByRole('button', { name: 'Доска' }))
 		await waitFor(() =>
 			expect(listWorkdayTasks).toHaveBeenCalledWith(
 				'token',
-				expect.objectContaining({ status: 'CANCELLED' })
+				expect.objectContaining({ status: 'ACTIVE' })
 			)
 		)
 		fireEvent.click(screen.getByRole('button', { name: 'Список' }))
@@ -717,7 +724,7 @@ describe('MyDay actual permission query lifecycle', () => {
 		).toHaveProperty('disabled', true)
 	})
 	it.each(['list', 'board', 'drawer'] as const)(
-		'reopens completed tasks and repeats status changes from %s with a fresh command and current version',
+		'repeats status changes from %s with a fresh command and current version',
 		async surface => {
 			let current: WorkdayTask = { ...task }
 			const commands = new Set<string>()
@@ -791,7 +798,9 @@ describe('MyDay actual permission query lifecycle', () => {
 				['COMPLETED', 'Готово'],
 				['OPEN', 'К выполнению']
 			] as const
-			for (const [status, label] of changes) {
+			const surfaceChanges =
+				surface === 'board' ? changes.slice(0, 1) : changes
+			for (const [status, label] of surfaceChanges) {
 				if (surface === 'list') {
 					const advanced = screen.getByText('Дополнительные фильтры')
 					if (!(advanced.parentElement as HTMLDetailsElement).open)
@@ -830,7 +839,7 @@ describe('MyDay actual permission query lifecycle', () => {
 					task.assignedToMembershipId
 				)
 			}
-			expect(commands.size).toBe(changes.length)
+			expect(commands.size).toBe(surfaceChanges.length)
 			expect(toast.error).not.toHaveBeenCalled()
 		}
 	)

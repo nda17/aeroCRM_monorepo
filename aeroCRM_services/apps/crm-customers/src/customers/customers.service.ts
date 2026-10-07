@@ -120,6 +120,89 @@ export function customerView(
 export class CustomersService {
 	constructor(private readonly prisma: CrmCustomersPrismaService) {}
 
+	async salesSearch(context: CustomersAuthorization, search: string) {
+		const result = {
+			schemaVersion: 1 as const,
+			workspaceId: context.workspaceId,
+			subject: context.subject,
+			contactIds: [] as string[]
+		};
+		if (!context.permissions.includes('customers:read')) return result;
+		const contacts = await this.prisma.contact.findMany({
+			where: {
+				AND: [
+					customerScope(context),
+					{
+						company: {
+							is: {
+								AND: [
+									customerScope(context) as Prisma.CompanyWhereInput,
+									{
+										OR: [
+											{ name: { contains: search, mode: 'insensitive' } },
+											{ legalName: { contains: search, mode: 'insensitive' } },
+											{ inn: { contains: search } }
+										]
+									}
+								]
+							}
+						}
+					}
+				]
+			},
+			select: { id: true },
+			take: 10001,
+			orderBy: { id: 'asc' }
+		});
+		if (contacts.length > 10000)
+			throw new BadRequestException({
+				code: 'crm_customers_search_refine_required'
+			});
+		return { ...result, contactIds: contacts.map((row) => row.id) };
+	}
+
+	async salesPreview(context: CustomersAuthorization, contactIds: string[]) {
+		const contacts = context.permissions.includes('customers:read')
+			? await this.prisma.contact.findMany({
+					where: { AND: [customerScope(context), { id: { in: contactIds } }] },
+					select: { id: true, companyId: true }
+				})
+			: [];
+		const companies = contacts.length
+			? await this.prisma.company.findMany({
+					where: {
+						AND: [
+							customerScope(context) as Prisma.CompanyWhereInput,
+							{
+								id: {
+									in: contacts.flatMap((row) =>
+										row.companyId ? [row.companyId] : []
+									)
+								}
+							}
+						]
+					},
+					select: { id: true, name: true, inn: true }
+				})
+			: [];
+		const byId = new Map(companies.map((row) => [row.id, row]));
+		const byContact = new Map(
+			contacts.map((row) => [
+				row.id,
+				row.companyId ? byId.get(row.companyId) || null : null
+			])
+		);
+		return {
+			schemaVersion: 1 as const,
+			workspaceId: context.workspaceId,
+			subject: context.subject,
+			items: contactIds.map((contactId) => ({
+				contactId,
+				company: byContact.get(contactId) || null
+			}))
+		};
+	}
+
 	async list(
 		kind: CustomerKind,
 		context: CustomersAuthorization,

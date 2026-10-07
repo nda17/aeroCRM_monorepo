@@ -155,6 +155,7 @@ model SlaOutbox {
 }
 
 model InboxEntry {
+  mailSource MailIntakeSource?
   notification InboxNotification?
   id               String          @id @default(uuid()) @db.Uuid
   workspaceId      String          @map("workspace_id") @db.Uuid
@@ -404,5 +405,24 @@ model InboxNotificationRead {
 
   @@id([notificationId, recipientSubject])
   @@map("inbox_notification_reads")
+  @@schema("crm_intake")
+}
+
+model MailIntakeSource {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  entryId String @unique @map("entry_id") @db.Uuid
+  messageId String @map("message_id") @db.Uuid
+  mailboxId String @map("mailbox_id") @db.Uuid
+  actorMembershipId String @map("actor_membership_id") @db.Uuid
+  actorSubject String @map("actor_subject") @db.VarChar(256)
+  commandId String @unique @map("command_id") @db.Uuid
+  sourceHash String @map("source_hash") @db.Char(64)
+  createdAt DateTime @default(now()) @map("created_at")
+  entry InboxEntry @relation(fields: [workspaceId, entryId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([workspaceId, entryId])
+  @@unique([workspaceId, messageId])
+  @@map("mail_intake_sources")
   @@schema("crm_intake")
 }

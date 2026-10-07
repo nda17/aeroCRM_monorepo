@@ -11,8 +11,11 @@ import {
 } from '@/shared/lib/pending-command'
 import {
 	getSalesDeal,
+	getSalesDealContext,
 	listSalesTimeline,
 	listSalesTimelineV2,
+	listSalesTimelineV3,
+	listArchivedDealTasks,
 	mutateSales,
 	type SalesDeal,
 	type SalesPipeline
@@ -71,8 +74,11 @@ vi.mock('@/entities/crm-planner/model/use-planner-settings', () => ({
 }))
 vi.mock('@/entities/sales', () => ({
 	getSalesDeal: vi.fn(),
+	getSalesDealContext: vi.fn(),
 	listSalesTimeline: vi.fn(),
 	listSalesTimelineV2: vi.fn(),
+	listSalesTimelineV3: vi.fn(),
+	listArchivedDealTasks: vi.fn(),
 	mutateSales: vi.fn()
 }))
 vi.mock('./DealCommercePanel', () => ({
@@ -221,6 +227,7 @@ beforeEach(() => {
 	})
 	vi.mocked(getCustomer).mockResolvedValue(contact)
 	vi.mocked(getSalesDeal).mockResolvedValue(deal)
+	vi.mocked(getSalesDealContext).mockResolvedValue({ deal, company: null })
 	vi.mocked(listSalesTimeline).mockResolvedValue({
 		schemaVersion: 1,
 		page: 1,
@@ -230,6 +237,20 @@ beforeEach(() => {
 	})
 	vi.mocked(listSalesTimelineV2).mockResolvedValue({
 		schemaVersion: 2,
+		page: 1,
+		pageSize: 10,
+		total: 0,
+		items: []
+	})
+	vi.mocked(listSalesTimelineV3).mockResolvedValue({
+		schemaVersion: 3,
+		page: 1,
+		pageSize: 10,
+		total: 0,
+		items: []
+	})
+	vi.mocked(listArchivedDealTasks).mockResolvedValue({
+		schemaVersion: 1,
 		page: 1,
 		pageSize: 10,
 		total: 0,
@@ -442,7 +463,10 @@ describe('Sales workflow forms', () => {
 		)
 	})
 	it('does not label an open deal without a next action as closed', async () => {
-		vi.mocked(getSalesDeal).mockResolvedValue({ ...deal, nextTask: null })
+		vi.mocked(getSalesDealContext).mockResolvedValue({
+			deal: { ...deal, nextTask: null },
+			company: null
+		})
 		mount(
 			<DealDetailsDrawer
 				id={deal.id}
@@ -527,7 +551,13 @@ describe('Sales workflow forms', () => {
 		)
 	})
 	it('adopts a confirmed refreshed deal version only while the interaction form is clean', async () => {
-		const queryKey = ['sales', 'deal', ...context.key, deal.id]
+		const queryKey = [
+			'sales',
+			'deal-context',
+			...context.key,
+			deal.id,
+			'ACTIVE'
+		]
 		const renderDrawer = () =>
 			mount(
 				<DealDetailsDrawer
@@ -537,7 +567,7 @@ describe('Sales workflow forms', () => {
 					onSaved={vi.fn()}
 				/>
 			)
-		const refreshed = { ...deal, version: 4 }
+		const refreshed = { deal: { ...deal, version: 4 }, company: null }
 		renderDrawer()
 		await screen.findByRole('combobox', {
 			name: 'Итог звонка или встречи'
@@ -547,7 +577,9 @@ describe('Sales workflow forms', () => {
 		)
 		act(() => client.setQueryData(queryKey, refreshed))
 		await waitFor(() =>
-			expect(client.getQueryData(queryKey)).toMatchObject({ version: 4 })
+			expect(client.getQueryData(queryKey)).toMatchObject({
+				deal: { version: 4 }
+			})
 		)
 		fireEvent.change(
 			screen.getByRole('combobox', { name: 'Итог звонка или встречи' }),
@@ -589,7 +621,9 @@ describe('Sales workflow forms', () => {
 		)
 		act(() => client.setQueryData(queryKey, refreshed))
 		await waitFor(() =>
-			expect(client.getQueryData(queryKey)).toMatchObject({ version: 4 })
+			expect(client.getQueryData(queryKey)).toMatchObject({
+				deal: { version: 4 }
+			})
 		)
 		fireEvent.change(
 			screen.getByRole('combobox', { name: 'Итог звонка или встречи' }),

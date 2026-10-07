@@ -5,7 +5,7 @@ export const WORKDAY_STATUSES = [
 	'CANCELLED'
 ] as const
 export type WorkdayStatus = (typeof WORKDAY_STATUSES)[number]
-export type WorkdayFilterStatus = WorkdayStatus | 'ACTIVE'
+export type WorkdayFilterStatus = WorkdayStatus | 'ACTIVE' | 'TERMINAL'
 export const WORKDAY_PERIODS = [
 	'TODAY',
 	'TOMORROW',

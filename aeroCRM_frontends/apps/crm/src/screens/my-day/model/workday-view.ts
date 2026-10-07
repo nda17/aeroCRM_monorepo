@@ -68,3 +68,27 @@ export const groupWorkdayTasks = (
 	}
 	return groups.filter(group => group.items.length > 0)
 }
+
+export const workdayLayoutStorageKey = (
+	workspaceId: string,
+	subject: string
+) => `crm:task-layout:v1:${workspaceId}:${subject}`
+
+export const readStoredWorkdayLayout = (key: string): WorkdayView => {
+	try {
+		return window.localStorage.getItem(key) === 'board' ? 'board' : 'list'
+	} catch {
+		return 'list'
+	}
+}
+
+export const writeStoredWorkdayLayout = (
+	key: string,
+	view: WorkdayView
+) => {
+	try {
+		window.localStorage.setItem(key, view)
+	} catch {
+		// The current layout stays usable when browser storage is unavailable.
+	}
+}

@@ -366,7 +366,9 @@ describe('Workday task detail and commands', () => {
 		})
 		await loadTask()
 		expect(
-			screen.getByRole('link', { name: 'Открыть сделку' }).getAttribute('href')
+			screen
+				.getByRole('link', { name: 'Открыть сделку' })
+				.getAttribute('href')
 		).toBe(`/deals?dealId=${deal.id}&workspaceId=${workspaceId}`)
 	})
 
@@ -403,7 +405,11 @@ describe('Workday task detail and commands', () => {
 		)
 		expect(currentTask.assignedToSubject).toBe(colleague.subject)
 		expect(currentTask.assignedToMembershipId).toBe(colleague.membershipId)
-		expect(getSalesDeal).not.toHaveBeenCalled()
+		expect(getSalesDeal).toHaveBeenCalledWith(
+			'token',
+			workspaceId,
+			deal.id
+		)
 		expect(onCreateNextTask).not.toHaveBeenCalled()
 		fireEvent.click(next)
 		await waitFor(() =>

@@ -23,6 +23,7 @@ import {
 } from '../model/use-mail-context'
 import { MailCommandNotice } from './MailCommandNotice'
 import { MailRichText } from './MailRichText'
+import { MailIntakeCopyControl } from './MailIntakeCopyControl'
 import styles from './Mail.module.scss'
 
 export const MailMessageReader = ({
@@ -179,6 +180,9 @@ export const MailMessageReader = ({
 						</li>
 					))}
 				</ul>
+			) : null}
+			{item.direction === 'INBOUND' && item.sourceKind === 'IMAP' ? (
+				<MailIntakeCopyControl messageId={item.id} />
 			) : null}
 			{onReply &&
 			(!replyMailboxIds || replyMailboxIds.includes(item.mailboxId)) ? (

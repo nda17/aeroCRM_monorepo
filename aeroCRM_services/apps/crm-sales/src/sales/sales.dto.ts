@@ -18,6 +18,8 @@ import {
 
 export class WorkspaceQuery {
 	@IsUUID('4') workspaceId!: string;
+	@IsOptional() @IsIn(['ACTIVE', 'ARCHIVED']) archive?: 'ACTIVE' | 'ARCHIVED';
+	@IsOptional() @IsIn(['company']) context?: 'company';
 }
 export class SalesPeriodQuery extends WorkspaceQuery {
 	@ValidateIf((_object, value) => value !== undefined)
@@ -31,6 +33,7 @@ export class SalesPeriodQuery extends WorkspaceQuery {
 }
 export class SalesAnalyticsQuery extends SalesPeriodQuery {
 	@IsOptional() @IsUUID('4') pipelineId?: string;
+	@IsOptional() @IsIn(['TEAM']) assigneeBasis?: 'TEAM';
 	@ValidateIf((_object, value) => value !== undefined)
 	@IsIn(['true'])
 	details?: 'true';

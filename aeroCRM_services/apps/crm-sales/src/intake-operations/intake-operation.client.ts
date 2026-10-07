@@ -11,6 +11,7 @@ import {
 	UUID,
 	type SalesAccess
 } from '../sales/sales-access';
+import type { SalesAssignee } from '../workday/sales-assignee.client';
 import type { IntakeOperationBinding } from './intake-operation.dto';
 
 export function intakeOperationToken(
@@ -120,6 +121,57 @@ export class IntakeOperationClient {
 		)
 			throw new ForbiddenException();
 		return access;
+	}
+
+	async authorizeCreate(
+		binding: IntakeOperationBinding
+	): Promise<{ access: SalesAccess; assignee: SalesAssignee }> {
+		const value = await this.post(
+			serviceOrigin(process.env.CRM_ACCESS_INTERNAL_BASE_URL),
+			'/internal/v1/crm-access/authorize-sales-intake',
+			salesAccessToken(),
+			{
+				schemaVersion: 1,
+				workspaceId: binding.workspaceId,
+				subject: binding.actorSubject,
+				purpose: 'INTAKE_ACCEPT'
+			}
+		);
+		try {
+			if (
+				!exact(value, ['schemaVersion', 'access', 'assignee']) ||
+				value.schemaVersion !== 1
+			)
+				throw new Error();
+			const access = parseSalesAccess(value.access, binding.workspaceId);
+			const assignee = value.assignee;
+			if (
+				access.subject !== binding.actorSubject ||
+				!['ACTIVE', 'GRACE'].includes(access.state) ||
+				access.role === 'ANALYST' ||
+				!access.permissions.includes('sales:write') ||
+				!exact(assignee, [
+					'subject',
+					'membershipId',
+					'role',
+					'dataScope',
+					'teamIds'
+				]) ||
+				assignee.subject !== access.subject ||
+				typeof assignee.membershipId !== 'string' ||
+				!UUID.test(assignee.membershipId) ||
+				assignee.role !== access.role ||
+				assignee.dataScope !== access.dataScope ||
+				!Array.isArray(assignee.teamIds) ||
+				JSON.stringify(assignee.teamIds) !== JSON.stringify(access.teamIds)
+			)
+				throw new Error();
+			return { access, assignee: assignee as unknown as SalesAssignee };
+		} catch {
+			throw new ServiceUnavailableException(
+				'CRM intake assignment is unavailable'
+			);
+		}
 	}
 
 	async verifyContact(

@@ -33,7 +33,7 @@ export class CrmInternalGuard implements CanActivate {
 		);
 	}
 	canActivate(context: ExecutionContext): boolean {
-		const request = context.switchToHttp().getRequest<Request>();
+		const request = context.switchToHttp().getRequest<Request & { crmInternalCaller?: CrmCaller }>();
 		const address = request.socket.remoteAddress?.replace(/^::ffff:/, '');
 		const loopback =
 			address === '::1' ||
@@ -53,6 +53,7 @@ export class CrmInternalGuard implements CanActivate {
 		) {
 			throw new ForbiddenException('Invalid internal credentials');
 		}
+		request.crmInternalCaller = caller;
 		return true;
 	}
 }

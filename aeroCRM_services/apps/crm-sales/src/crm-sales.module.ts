@@ -21,6 +21,7 @@ import { PipelineTemplateCatalogService } from './templates/pipeline-template-ca
 import { SalesController } from './sales/sales.controller';
 import { SalesService } from './sales/sales.service';
 import { SalesAccessClient, SalesAccessGuard } from './sales/sales-access';
+import { SalesContextClient } from './sales/sales-context.client';
 import { SalesContactClient } from './sales/sales-contact.client';
 import { IntakeOperationClient } from './intake-operations/intake-operation.client';
 import { IntakeOperationGuard } from './intake-operations/intake-operation.guard';
@@ -99,6 +100,7 @@ import { PlannerService } from './planner/planner.service';
 		SalesAccessClient,
 		SalesAccessGuard,
 		SalesContactClient,
+		SalesContextClient,
 		IntakeOperationClient,
 		IntakeOperationGuard,
 		IntakeOperationService,

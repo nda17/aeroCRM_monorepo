@@ -1222,6 +1222,54 @@ export class MailService {
 			createdAt: s.createdAt.toISOString()
 		};
 	}
+	async intakeSource(
+		token: string | undefined,
+		workspaceId: string,
+		messageId: string
+	) {
+		const a = await this.authority(token, workspaceId);
+		const m = await this.readableMessage(a, messageId);
+		if (m.direction !== 'INBOUND') throw new NotFoundException();
+		const fresh = await this.authority(token, workspaceId);
+		if (canonicalMailJson(fresh) !== canonicalMailJson(a))
+			throw new ForbiddenException({ code: 'crm_mail_authority_changed' });
+		await this.readableMessage(fresh, messageId);
+		const original = m.plainText || '';
+		let text = original.slice(0, 5000);
+		if (/[\uD800-\uDBFF]$/.test(text)) text = text.slice(0, -1);
+		const source = {
+			id: m.id,
+			mailboxId: m.mailboxId,
+			direction: 'INBOUND' as const,
+			subject: m.subject,
+			from: addressList(m.from),
+			receivedAt: m.receivedAt.toISOString(),
+			sentAt: m.sentAt?.toISOString() || null,
+			plainText: m.plainText,
+			bodyStatus: m.bodyStatus
+		};
+		return {
+			schemaVersion: 1 as const,
+			workspaceId,
+			subject: a.customer.subject,
+			membershipId: a.membershipId,
+			message: {
+				id: m.id,
+				mailboxId: m.mailboxId,
+				sourceHash: digest(Buffer.from(canonicalMailJson(source))),
+				direction: source.direction,
+				subject: source.subject,
+				from: source.from,
+				receivedAt: source.receivedAt,
+				sentAt: source.sentAt,
+				text,
+				bodyStatus: m.bodyStatus,
+				textLength: original.length,
+				textTruncated: text.length < original.length
+			}
+		};
+	}
+
 	async readableMessage(
 		a: MailAuthority,
 		id: string,

@@ -56,7 +56,7 @@ describe('MyDay filters', () => {
 			to: undefined
 		})
 	})
-	it('quick overdue on the board clears the list-only ACTIVE filter', () => {
+	it('quick overdue on the board keeps the current-task filter', () => {
 		const onChange = vi.fn()
 		render(
 			<WorkdayFilters
@@ -71,7 +71,7 @@ describe('MyDay filters', () => {
 		expect(onChange).toHaveBeenCalledWith({
 			...initialWorkdayFilters(),
 			period: 'OVERDUE',
-			status: undefined,
+			status: 'ACTIVE',
 			from: undefined,
 			to: undefined
 		})

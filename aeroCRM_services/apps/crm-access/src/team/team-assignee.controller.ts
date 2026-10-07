@@ -10,6 +10,8 @@ import {
 	Query,
 	UseGuards
 } from '@nestjs/common';
+import { ResolveSalesAssigneeDto } from './sales-assignee-binding.dto';
+import { CrmAuthorizeWorkflowDto } from '../authorization/crm-authorization.controller';
 import { CrmInternalGuard } from '../authorization/crm-internal.guard';
 import {
 	AssigneeLabelsDto,
@@ -44,6 +46,38 @@ export class CrmAssigneeController {
 @UseGuards(CrmInternalGuard)
 export class CrmAssigneeAuthorizationController {
 	constructor(private readonly assignees: CrmAssigneeService) {}
+	@Post('resolve-sales-task-readers')
+	@HttpCode(200)
+	@Header('Cache-Control', 'no-store')
+	readers(
+		@Headers('x-aerocrm-service') caller: string,
+		@Headers('authorization') token: string | undefined,
+		@Body() dto: AssigneeLabelsDto
+	) {
+		if (caller !== 'crm-sales') throw new ForbiddenException();
+		return this.assignees.taskReaders(token, dto);
+	}
+	@Post('resolve-sales-assignee')
+	@HttpCode(200)
+	@Header('Cache-Control', 'no-store')
+	resolve(
+		@Headers('x-aerocrm-service') caller: string,
+		@Headers('authorization') token: string | undefined,
+		@Body() dto: ResolveSalesAssigneeDto
+	) {
+		if (caller !== 'crm-sales') throw new ForbiddenException();
+		return this.assignees.resolve(token, dto);
+	}
+	@Post('authorize-sales-intake')
+	@HttpCode(200)
+	@Header('Cache-Control', 'no-store')
+	authorizeIntake(
+		@Headers('x-aerocrm-service') caller: string,
+		@Body() dto: CrmAuthorizeWorkflowDto
+	) {
+		if (caller !== 'crm-sales') throw new ForbiddenException();
+		return this.assignees.authorizeIntake(dto);
+	}
 	@Post('authorize-assignee')
 	@HttpCode(200)
 	@Header('Cache-Control', 'no-store')

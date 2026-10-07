@@ -49,18 +49,79 @@ const prisma = new PrismaClient({
 });
 const catalog = new PipelineTemplateCatalogService();
 const installer = new PipelineTemplateInstallationService(prisma, catalog);
-let allowContact = true;
-const service = new SalesService(prisma, {
-	requireContact: async (_authorization, workspaceId, id) => {
-		if (!allowContact) {
-			const error = new Error('contact not visible');
-			error.status = 404;
-			throw error;
-		}
-		assert.equal(workspaceId, access.workspaceId);
-		return { id, name: 'Integration contact' };
+const bindingMemberships = new Map();
+let assignmentTargetEnabled = true;
+let assignmentActor = null;
+let readerBatchCalls = 0;
+let readerBindingCalls = 0;
+const assigneeClient = {
+	resolve: async (_authorization, actor, subject) => ({
+		subject,
+		membershipId:
+			bindingMemberships.get(subject) ??
+			(() => {
+				const id = randomUUID();
+				bindingMemberships.set(subject, id);
+				return id;
+			})(),
+		role: actor.role,
+		dataScope: actor.dataScope,
+		teamIds: actor.teamIds
+	}),
+	authorize: async (_authorization, actor, target) => {
+		if (
+			!assignmentTargetEnabled ||
+			(bindingMemberships.has(target.subject) &&
+				bindingMemberships.get(target.subject) !== target.membershipId)
+		)
+			throw Object.assign(new Error('target revoked'), { status: 403 });
+		return {
+			...target,
+			role: actor.role,
+			dataScope: actor.dataScope,
+			teamIds: actor.teamIds
+		};
 	}
-});
+};
+
+assigneeClient.readers = async (_authorization, actor, bindings) => {
+	readerBatchCalls += 1;
+	return Promise.all(
+		bindings.map(async binding => {
+			if (binding.membershipId === null) return null;
+			readerBindingCalls += 1;
+			const reader = await assigneeClient.resolve(
+				_authorization,
+				actor,
+				binding.subject
+			);
+			return reader.membershipId === binding.membershipId ? reader : null;
+		})
+	);
+};
+const contexts = {
+	search: async () => [],
+	preview: async () => [],
+	roster: async () => ({ subjects: [], hasMore: false })
+};
+let allowContact = true;
+const service = new SalesService(
+	prisma,
+	{
+		requireContact: async (_authorization, workspaceId, id) => {
+			if (!allowContact) {
+				const error = new Error('contact not visible');
+				error.status = 404;
+				throw error;
+			}
+			assert.equal(workspaceId, access.workspaceId);
+			return { id, name: 'Integration contact' };
+		}
+	},
+	assigneeClient,
+	contexts,
+	{ authorize: async () => assignmentActor ?? access }
+);
 const access = {
 	schemaVersion: 1,
 	workspaceId: randomUUID(),
@@ -160,7 +221,7 @@ try {
 						new Proxy(transaction, {
 							get(target, property) {
 								if (property === 'salesTask')
-					return { ...target.salesTask, create: async () => ({}) };
+									return { ...target.salesTask, create: async () => ({}) };
 								const value = Reflect.get(target, property);
 								return typeof value === 'function'
 									? value.bind(target)
@@ -173,12 +234,17 @@ try {
 	};
 	const unsavedCommandId = randomUUID();
 	await assert.rejects(
-		new SalesService(missingTaskPrisma, {
-			requireContact: async () => ({
-				id: contactId,
-				name: 'Injected contact'
-			})
-		}).create(
+		new SalesService(
+			missingTaskPrisma,
+			{
+				requireContact: async () => ({
+					id: contactId,
+					name: 'Injected contact'
+				})
+			},
+			assigneeClient,
+			contexts
+		).create(
 			access,
 			{ ...command, commandId: unsavedCommandId },
 			'Bearer test'
@@ -1032,8 +1098,8 @@ try {
 		});
 		assert.equal(
 			originalTask.assignedToMembershipId,
-			null,
-			'Do not invent legacy Identity binding'
+			bindingMemberships.get(access.subject),
+			'New Sales task stores the verified Identity binding'
 		);
 		const linked = await workday.create(
 			access,
@@ -2134,7 +2200,9 @@ try {
 		'Recording a result without a replacement preserves the current task row'
 	);
 	assert.equal(
-		await prisma.salesTask.count({ where: { dealId: interactionDeal.id } }),
+		await prisma.salesTask.count({
+			where: { dealId: interactionDeal.id }
+		}),
 		interactionTaskCount,
 		'Recording a result without a replacement creates no task'
 	);
@@ -2147,11 +2215,15 @@ try {
 		recordedNoAnswer,
 		'Replaying the same interaction command returns its durable receipt'
 	);
-	const legacyTimeline = await service.timeline(access, interactionDeal.id, {
-		workspaceId: access.workspaceId,
-		page: 1,
-		pageSize: 1
-	});
+	const legacyTimeline = await service.timeline(
+		access,
+		interactionDeal.id,
+		{
+			workspaceId: access.workspaceId,
+			page: 1,
+			pageSize: 1
+		}
+	);
 	assert.equal(legacyTimeline.schemaVersion, 1);
 	assert.equal(legacyTimeline.total, 1);
 	assert.equal(legacyTimeline.items[0].kind, 'CREATED');
@@ -2182,9 +2254,18 @@ try {
 		interactionDeal.id,
 		withNextTaskCommand
 	);
-	assert.equal(recordedCall.deal.version, recordedNoAnswer.deal.version + 1);
-	assert.equal(recordedCall.deal.nextTask.title, 'Подготовить предложение');
-	assert.notEqual(recordedCall.deal.nextTask.id, interactionDeal.nextTask.id);
+	assert.equal(
+		recordedCall.deal.version,
+		recordedNoAnswer.deal.version + 1
+	);
+	assert.equal(
+		recordedCall.deal.nextTask.title,
+		'Подготовить предложение'
+	);
+	assert.notEqual(
+		recordedCall.deal.nextTask.id,
+		interactionDeal.nextTask.id
+	);
 	assert.deepEqual(
 		await prisma.salesTask.findUniqueOrThrow({
 			where: { id: interactionDeal.nextTask.id }
@@ -2242,6 +2323,528 @@ try {
 	);
 	console.log(
 		'PASS CRM Sales interactions PostgreSQL 18: preserved current task without replacement, command replay, v1 timeline filtering before page totals, v2 event visibility, additive follow-up, OPEN-only follow-up, and READ_ONLY access'
+	);
+
+	// Meeting 3: fresh writer binding, assignment receipt, old readers, archived ACL,
+	// company search before pagination, current-roster zero rows and TERMINAL history.
+	const meetingCreated = await service.create(
+		access,
+		{ ...command, commandId: randomUUID(), title: 'Meeting 3 transfer' },
+		'Bearer integration'
+	);
+	const meetingId = meetingCreated.deal.id;
+	const meetingTaskId = meetingCreated.deal.nextTask.id;
+	const bound = await prisma.salesTask.findUniqueOrThrow({
+		where: { id: meetingTaskId }
+	});
+	assert.equal(
+		bound.assignedToMembershipId,
+		bindingMemberships.get(access.subject)
+	);
+	assert.equal(
+		await prisma.taskNotification.count({
+			where: {
+				taskId: meetingTaskId,
+				recipientMembershipId: bound.assignedToMembershipId
+			}
+		}),
+		2
+	);
+	const differentSubject = 'meeting-parallel-admin';
+	const differentMembership = randomUUID();
+	bindingMemberships.set(differentSubject, differentMembership);
+	const parallel = await prisma.salesTask.create({
+		data: {
+			workspaceId: access.workspaceId,
+			dealId: meetingId,
+			title: 'Independent parallel task',
+			dueAt: new Date(Date.now() + 86400000),
+			assignedToSubject: differentSubject,
+			assignedToMembershipId: differentMembership
+		}
+	});
+	const terminal = await prisma.salesTask.create({
+		data: {
+			workspaceId: access.workspaceId,
+			dealId: meetingId,
+			title: 'Historic task',
+			dueAt: new Date(),
+			status: 'COMPLETED',
+			completedAt: new Date(),
+			assignedToSubject: access.subject
+		}
+	});
+	const assignDto = {
+		schemaVersion: 1,
+		workspaceId: access.workspaceId,
+		commandId: randomUUID(),
+		expectedVersion: meetingCreated.deal.version,
+		assignee: { subject: 'meeting-recipient', membershipId: randomUUID() }
+	};
+	bindingMemberships.set(
+		assignDto.assignee.subject,
+		assignDto.assignee.membershipId
+	);
+	const normalResolve = assigneeClient.resolve;
+	assigneeClient.resolve = async (...args) => {
+		const employee = await normalResolve(...args);
+		return employee.subject === differentSubject
+			? { ...employee, dataScope: 'OWN' }
+			: employee;
+	};
+	await assert.rejects(
+		service.assign(access, meetingId, assignDto, 'Bearer integration'),
+		error => error.status === 409
+	);
+	assert.equal(
+		(await prisma.deal.findUniqueOrThrow({ where: { id: meetingId } }))
+			.version,
+		meetingCreated.deal.version
+	);
+	assert.deepEqual(
+		await prisma.salesTask.findUniqueOrThrow({
+			where: { id: parallel.id }
+		}),
+		parallel
+	);
+	assigneeClient.resolve = normalResolve;
+	const moved = await service.assign(
+		access,
+		meetingId,
+		assignDto,
+		'Bearer integration'
+	);
+	assert.equal(moved.deal.assignedToSubject, assignDto.assignee.subject);
+	assert.equal(
+		(
+			await prisma.salesTask.findUniqueOrThrow({
+				where: { id: meetingTaskId }
+			})
+		).assignedToMembershipId,
+		assignDto.assignee.membershipId
+	);
+	assert.deepEqual(
+		await prisma.salesTask.findUniqueOrThrow({
+			where: { id: parallel.id }
+		}),
+		parallel
+	);
+	assert.deepEqual(
+		await prisma.salesTask.findUniqueOrThrow({
+			where: { id: terminal.id }
+		}),
+		terminal
+	);
+	assert.deepEqual(
+		await service.assign(
+			access,
+			meetingId,
+			assignDto,
+			'Bearer integration'
+		),
+		moved
+	);
+	assert.equal(
+		await prisma.dealTimeline.count({
+			where: { dealId: meetingId, kind: 'ASSIGNEE_CHANGED' }
+		}),
+		1
+	);
+	await assert.rejects(
+		service.assign(
+			access,
+			meetingId,
+			{ ...assignDto, commandId: randomUUID() },
+			'Bearer integration'
+		),
+		error => error.status === 409
+	);
+	const page = { workspaceId: access.workspaceId, page: 1, pageSize: 100 };
+	assert.equal(
+		(await service.timeline(access, meetingId, page)).items.some(
+			item => item.kind === 'ASSIGNEE_CHANGED'
+		),
+		false
+	);
+	assert.equal(
+		(await service.timelineV2(access, meetingId, page)).items.some(
+			item => item.kind === 'ASSIGNEE_CHANGED'
+		),
+		false
+	);
+	const transferEvent = (
+		await service.timelineV3(access, meetingId, page)
+	).items.find(item => item.kind === 'ASSIGNEE_CHANGED');
+	assert.deepEqual(transferEvent.details, {
+		beforeSubject: access.subject,
+		afterSubject: assignDto.assignee.subject,
+		afterMembershipId: assignDto.assignee.membershipId,
+		transferredTaskCount: 1
+	});
+	const followUp = await service.interactionResult(
+		access,
+		meetingId,
+		{
+			schemaVersion: 1,
+			workspaceId: access.workspaceId,
+			commandId: randomUUID(),
+			expectedVersion: moved.deal.version,
+			result: 'CALL_REACHED',
+			comment: 'Follow-up after transfer',
+			nextTask
+		},
+		'Bearer integration'
+	);
+	const followTask = await prisma.salesTask.findUniqueOrThrow({
+		where: { id: followUp.deal.nextTask.id }
+	});
+	assert.equal(followTask.assignedToSubject, assignDto.assignee.subject);
+	assert.equal(
+		followTask.assignedToMembershipId,
+		assignDto.assignee.membershipId
+	);
+	await service.archive(access, meetingId, {
+		schemaVersion: 1,
+		workspaceId: access.workspaceId,
+		commandId: randomUUID(),
+		expectedVersion: followUp.deal.version
+	});
+	await assert.rejects(
+		service.detail(access, meetingId),
+		error => error.status === 404
+	);
+	assert.equal(
+		(await service.detail(access, meetingId, { archive: 'ARCHIVED' })).deal
+			.id,
+		meetingId
+	);
+	assert.equal(
+		(
+			await service.dealTasks(access, meetingId, {
+				...page,
+				archive: 'ARCHIVED'
+			})
+		).total,
+		4
+	);
+	assert.ok(
+		(
+			await service.timelineV3(access, meetingId, {
+				...page,
+				archive: 'ARCHIVED'
+			})
+		).items.some(item => item.kind === 'ARCHIVED')
+	);
+	await assert.rejects(
+		service.detail(
+			{ ...access, dataScope: 'OWN', subject: 'no-access' },
+			meetingId,
+			{ archive: 'ARCHIVED' }
+		),
+		error => error.status === 404
+	);
+	const manyDeal = await service.create(
+		access,
+		{
+			...command,
+			commandId: randomUUID(),
+			title: '100 same-reader tasks'
+		},
+		'Bearer integration'
+	);
+	const manyReaderMembership = randomUUID();
+	bindingMemberships.set('many-reader', manyReaderMembership);
+	await prisma.salesTask.createMany({
+		data: Array.from({ length: 100 }, (_, index) => ({
+			workspaceId: access.workspaceId,
+			dealId: manyDeal.deal.id,
+			title: `Preserved ${index}`,
+			dueAt: new Date(),
+			assignedToSubject: 'many-reader',
+			assignedToMembershipId: manyReaderMembership
+		}))
+	});
+	const batchesBefore = readerBatchCalls,
+		bindingsBefore = readerBindingCalls;
+	const manyAssignment = await service.assign(
+		access,
+		manyDeal.deal.id,
+		{
+			...assignDto,
+			commandId: randomUUID(),
+			expectedVersion: manyDeal.deal.version
+		},
+		'Bearer integration'
+	);
+	assert.equal(
+		readerBatchCalls - batchesBefore,
+		2,
+		'One unique batch before tx and one fresh batch under lock'
+	);
+	assert.equal(
+		readerBindingCalls - bindingsBefore,
+		2,
+		'100 same-assignee tasks produce two binding resolutions, not 100 HTTP calls'
+	);
+	assert.equal(
+		await prisma.salesTask.count({
+			where: {
+				dealId: manyDeal.deal.id,
+				assignedToSubject: 'many-reader',
+				assignedToMembershipId: manyReaderMembership
+			}
+		}),
+		100
+	);
+	assert.equal(
+		manyAssignment.deal.assignedToSubject,
+		assignDto.assignee.subject
+	);
+	const unresolvedDeal = await service.create(
+		access,
+		{
+			...command,
+			commandId: randomUUID(),
+			title: 'Legacy unresolved parallel assignment'
+		},
+		'Bearer integration'
+	);
+	const unresolvedTask = await prisma.salesTask.create({
+		data: {
+			workspaceId: access.workspaceId,
+			dealId: unresolvedDeal.deal.id,
+			title: 'Historical null binding',
+			dueAt: new Date(),
+			assignedToSubject: 'many-reader'
+		}
+	});
+	await assert.rejects(
+		service.assign(
+			access,
+			unresolvedDeal.deal.id,
+			{
+				...assignDto,
+				commandId: randomUUID(),
+				expectedVersion: unresolvedDeal.deal.version
+			},
+			'Bearer integration'
+		),
+		error => error.status === 409
+	);
+	assert.equal(
+		(
+			await prisma.salesTask.findUniqueOrThrow({
+				where: { id: unresolvedTask.id }
+			})
+		).assignedToMembershipId,
+		null
+	);
+	// Hold the exact SQL command lock, then revoke authority/membership while
+	// the assignment waits. A fresh after-lock RPC must prevent the effect.
+	const waitingDeal = await service.create(
+		access,
+		{
+			...command,
+			commandId: randomUUID(),
+			title: 'Waiting assignment authority'
+		},
+		'Bearer integration'
+	);
+	const waitingTarget = {
+		subject: 'waiting-recipient',
+		membershipId: randomUUID()
+	};
+	bindingMemberships.set(
+		waitingTarget.subject,
+		waitingTarget.membershipId
+	);
+	const whileCommandLocked = async (commandId, mutation, change) => {
+		let unlock;
+		const released = new Promise(resolve => {
+			unlock = resolve;
+		});
+		let acquired;
+		const ready = new Promise(resolve => {
+			acquired = resolve;
+		});
+		const holder = prisma.$transaction(
+			async tx => {
+				await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`crm-sales-command:${commandId}`}, 0))`;
+				acquired();
+				await released;
+			},
+			{ timeout: 10000 }
+		);
+		await ready;
+		const running = mutation();
+		try {
+			let blocked = false;
+			for (let probe = 0; probe < 100; probe += 1) {
+				const [row] =
+					await prisma.$queryRaw`SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND NOT granted) AS blocked`;
+				if (row.blocked) {
+					blocked = true;
+					break;
+				}
+				await new Promise(resolve => setTimeout(resolve, 10));
+			}
+			assert.equal(
+				blocked,
+				true,
+				'Assignment reached and waited for the SQL command lock'
+			);
+			change();
+			unlock();
+			await holder;
+			await assert.rejects(running, error => error.status === 403);
+		} finally {
+			unlock();
+			await holder;
+		}
+	};
+	for (const reason of ['actor', 'membership']) {
+		const waitingCommand = {
+			schemaVersion: 1,
+			workspaceId: access.workspaceId,
+			commandId: randomUUID(),
+			expectedVersion: waitingDeal.deal.version,
+			assignee: waitingTarget
+		};
+		await whileCommandLocked(
+			waitingCommand.commandId,
+			() =>
+				service.assign(
+					access,
+					waitingDeal.deal.id,
+					waitingCommand,
+					'Bearer integration'
+				),
+			() => {
+				if (reason === 'actor')
+					assignmentActor = { ...access, permissions: ['sales:read'] };
+				else bindingMemberships.set(waitingTarget.subject, randomUUID());
+			}
+		);
+		assert.equal(
+			await prisma.salesCommandReceipt.count({
+				where: { commandId: waitingCommand.commandId }
+			}),
+			0
+		);
+		assert.equal(
+			(
+				await prisma.deal.findUniqueOrThrow({
+					where: { id: waitingDeal.deal.id }
+				})
+			).version,
+			waitingDeal.deal.version
+		);
+		assignmentActor = null;
+		bindingMemberships.set(
+			waitingTarget.subject,
+			waitingTarget.membershipId
+		);
+	}
+	assignmentTargetEnabled = false;
+	assert.deepEqual(
+		await service.assign(
+			access,
+			meetingId,
+			assignDto,
+			'Bearer integration'
+		),
+		moved,
+		'Committed assignment replays after archive and target deactivation'
+	);
+	assignmentActor = {
+		...access,
+		dataScope: 'OWN',
+		subject: access.subject
+	};
+	await assert.rejects(
+		service.assign(access, meetingId, assignDto, 'Bearer integration'),
+		error => error.status === 404
+	);
+	assignmentActor = null;
+	assignmentTargetEnabled = true;
+	const terminalPage = await reopenedWorkday.list(access, {
+		...new WorkdayQuery(),
+		workspaceId: access.workspaceId,
+		status: 'TERMINAL'
+	});
+	assert.ok(
+		terminalPage.items.every(item =>
+			['COMPLETED', 'CANCELLED'].includes(item.status)
+		)
+	);
+	const searchCreated = await service.create(
+		access,
+		{ ...command, commandId: randomUUID(), title: 'Unrelated title' },
+		'Bearer integration'
+	);
+	const oldSearch = contexts.search;
+	const oldPreview = contexts.preview;
+	contexts.search = async () => [contactId];
+	contexts.preview = async (_bearer, _actor, ids) =>
+		ids.map(contactId => ({
+			contactId,
+			company: {
+				id: randomUUID(),
+				name: 'Scoped company',
+				inn: '1234567890'
+			}
+		}));
+	const companyPage = await service.deals(
+		access,
+		{ ...page, pageSize: 1, search: 'Scoped company', context: 'company' },
+		'Bearer integration'
+	);
+	assert.ok(companyPage.total > 1);
+	assert.equal(companyPage.items.length, 1);
+	assert.equal(companyPage.companyContext.length, 1);
+	assert.ok(
+		(await service.deals(access, page, 'Bearer integration'))
+			.companyContext === undefined
+	);
+	contexts.search = oldSearch;
+	contexts.preview = oldPreview;
+	contexts.roster = async () => ({
+		subjects: ['meeting-zero-employee'],
+		hasMore: false
+	});
+	const zeros = await service.analytics(
+		access,
+		{
+			workspaceId: access.workspaceId,
+			details: 'true',
+			assigneeBasis: 'TEAM',
+			assigneePage: 1
+		},
+		'Bearer integration'
+	);
+	assert.equal(zeros.overview.assignees.items.length, 1);
+	assert.ok(
+		zeros.overview.assignees.items[0].items.every(
+			row => row.count === 0 && row.amountMinor === 0
+		)
+	);
+	assert.equal(
+		(
+			await service.analytics(
+				{ ...access, role: 'ANALYST' },
+				{
+					workspaceId: access.workspaceId,
+					details: 'true',
+					assigneeBasis: 'TEAM',
+					assigneePage: 1
+				}
+			)
+		).overview.assignees,
+		null
+	);
+	assert.ok(searchCreated.deal.id);
+	console.log(
+		'PASS Meeting 3 Sales bindings/notification triggers/assignment replay and CAS/archive ACL/legacy readers/company server search/roster zeros/TERMINAL'
 	);
 	console.log(
 		'CRM Sales PostgreSQL 18 workflow, tenant scope, replay, CAS and next-action invariants passed'

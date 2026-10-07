@@ -67,6 +67,20 @@ const client = {
 		return { contactId, contactName: 'Проверочный контакт' };
 	}
 };
+const intakeMembershipId = randomUUID();
+client.authorizeCreate = async binding => {
+	const access = await client.authorize(binding);
+	return {
+		access,
+		assignee: {
+			subject: access.subject,
+			membershipId: intakeMembershipId,
+			role: access.role,
+			dataScope: access.dataScope,
+			teamIds: access.teamIds
+		}
+	};
+};
 const service = new IntakeOperationService(prisma, client);
 const conflict = error => error?.status === 409;
 const deniedSql = error => error?.meta?.code === '42501';

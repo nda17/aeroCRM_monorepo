@@ -57,6 +57,7 @@ export const validWorkdayFilters = (value: WorkdayFilters): boolean =>
 		isWorkdaySubject(value.assigneeSubject)) &&
 	(value.status === undefined ||
 		value.status === 'ACTIVE' ||
+		value.status === 'TERMINAL' ||
 		status(value.status)) &&
 	(value.search === undefined ||
 		(typeof value.search === 'string' && value.search.length <= 200)) &&
@@ -217,9 +218,11 @@ export const parseWorkdayTaskPage = (
 	const filteredTotal =
 		request.status === 'ACTIVE'
 			? counts.OPEN + counts.IN_PROGRESS
-			: request.status
-				? counts[request.status]
-				: total
+			: request.status === 'TERMINAL'
+				? counts.COMPLETED + counts.CANCELLED
+				: request.status
+					? counts[request.status]
+					: total
 	if (
 		!Number.isSafeInteger(total) ||
 		(request.columnId === undefined
@@ -242,7 +245,9 @@ export const parseWorkdayTaskPage = (
 				(request.status !== undefined &&
 					(request.status === 'ACTIVE'
 						? !active(task.status)
-						: task.status !== request.status)) ||
+						: request.status === 'TERMINAL'
+							? active(task.status)
+							: task.status !== request.status)) ||
 				(range !== null &&
 					!(task.dueAt >= range.from && task.dueAt < range.until)) ||
 				(request.period === 'OVERDUE' &&

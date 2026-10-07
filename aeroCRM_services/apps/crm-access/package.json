@@ -14,7 +14,7 @@
 		"lint": "eslint \"src/**/*.ts\" --max-warnings=0",
 		"test": "jest --runInBand",
 		"test:integration:team": "node test/integration/team-admission-postgres18.integration.mjs",
-		"test:integration:workspace-collaboration": "node test/integration/workspace-collaboration-postgres18.integration.mjs",
+		"test:integration:workspace-collaboration": "node test/integration/workspace-collaboration-postgres18.integration.mjs && node test/integration/chat-attachments-postgres18.integration.mjs",
 		"test:integration:billing": "node test/integration/billing-capacity-postgres18.integration.mjs",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"prisma:generate": "prisma generate --schema prisma/schema.prisma",
@@ -35,7 +35,11 @@
 		"pg": "8.23.0",
 		"prisma": "5.22.0",
 		"reflect-metadata": "^0.1.14",
-		"rxjs": "^7.8.1"
+		"rxjs": "^7.8.1",
+		"@aws-sdk/client-s3": "3.1136.0",
+		"fast-xml-parser": "5.11.1",
+		"sharp": "0.35.4",
+		"yauzl": "3.4.0"
 	},
 	"devDependencies": {
 		"@nestjs/testing": "11.1.18",
@@ -52,7 +56,9 @@
 		"jest": "^29.7.0",
 		"prettier": "3.8.1",
 		"ts-jest": "^29.2.5",
-		"typescript": "^5.7.3"
+		"typescript": "^5.7.3",
+		"@types/multer": "2.0.0",
+		"@types/yauzl": "2.10.3"
 	},
 	"pnpm": {
 		"overrides": {

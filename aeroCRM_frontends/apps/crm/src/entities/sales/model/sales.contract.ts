@@ -8,6 +8,7 @@ import {
 
 export type DealStatus = 'OPEN' | 'WON' | 'LOST'
 export interface SalesDealFilters {
+	archive?: 'ACTIVE' | 'ARCHIVED'
 	stageId?: string
 	assignedToSubject?: string
 	overdue?: boolean

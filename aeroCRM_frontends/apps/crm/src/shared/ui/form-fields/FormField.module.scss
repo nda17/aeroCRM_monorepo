@@ -59,3 +59,7 @@
 .labelRow {
 	@apply flex min-w-0 items-center gap-1.5;
 }
+
+.timeZoneFields {
+	@apply flex min-w-0 flex-col gap-3;
+}

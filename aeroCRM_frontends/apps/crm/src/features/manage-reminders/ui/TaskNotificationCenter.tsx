@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
 import {
 	CombinedNotificationCenter,
+	type NotificationSnapshotListener,
 	type NotificationTab
 } from './CombinedNotificationCenter'
 import Link from 'next/link'
@@ -22,7 +23,9 @@ import {
 } from '../model/use-reminder-session'
 import styles from './TaskNotificationCenter.module.scss'
 
-export const TaskNotificationCenter = () => {
+export const TaskNotificationCenter = ({
+	onSnapshot
+}: { onSnapshot?: NotificationSnapshotListener } = {}) => {
 	const context = useReminderSession()
 	return (
 		<TaskNotificationSession
@@ -31,13 +34,16 @@ export const TaskNotificationCenter = () => {
 				context.workspace.membership.membershipId
 			])}
 			context={context}
+			onSnapshot={onSnapshot}
 		/>
 	)
 }
 const TaskNotificationSession = ({
-	context
+	context,
+	onSnapshot
 }: {
 	context: ReminderContext
+	onSnapshot?: NotificationSnapshotListener
 }) => {
 	// Keep only drawer visibility while actor verification recovers. A new
 	// workspace/session/scope resets it; the panel still remounts per actor.
@@ -60,6 +66,7 @@ const TaskNotificationSession = ({
 					onTaskRead={mark}
 					tab={tab}
 					setTab={setTab}
+					onSnapshot={onSnapshot}
 				/>
 			)}
 		/>

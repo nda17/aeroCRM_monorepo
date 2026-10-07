@@ -240,6 +240,7 @@ describe('Analytics period controls and exact drilldown', () => {
 				'local-session',
 				workspaceId,
 				{
+					assigneeBasis: 'TEAM',
 					createdFrom: '2026-08-31T21:00:00.000Z',
 					createdTo: '2026-09-07T21:00:00.000Z',
 					assigneePage: 1
@@ -253,7 +254,7 @@ describe('Analytics period controls and exact drilldown', () => {
 			expect(getSalesAnalyticsOverview).toHaveBeenLastCalledWith(
 				'local-session',
 				workspaceId,
-				{ assigneePage: 1 }
+				{ assigneeBasis: 'TEAM', assigneePage: 1 }
 			)
 		)
 	})

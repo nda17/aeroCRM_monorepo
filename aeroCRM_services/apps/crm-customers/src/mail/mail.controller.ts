@@ -1,3 +1,5 @@
+import { ContactIntakeOperationGuard } from '../intake-operations/intake-operation.controller';
+import { MailIntakeSourceDto } from './mail-intake-source.dto';
 import {
 	BadRequestException,
 	Body,
@@ -397,5 +399,19 @@ export class MailController {
 			await this.mail.authority(token, query.workspaceId),
 			id
 		);
+	}
+}
+
+@Controller('internal/v1/crm-customers/mail')
+@UseGuards(ContactIntakeOperationGuard)
+export class MailIntakeSourceController {
+	constructor(private readonly mail: MailService) {}
+	@Post('intake-source')
+	@HttpCode(200)
+	async intakeSource(
+		@Headers('authorization') token: string | undefined,
+		@Body() dto: MailIntakeSourceDto
+	) {
+		return this.mail.intakeSource(token, dto.workspaceId, dto.messageId);
 	}
 }

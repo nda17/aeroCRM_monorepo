@@ -4,3 +4,5 @@ export * from './model/sales-analytics.contract'
 export * from './api/sales-analytics.api'
 export * from './api/sales-export.api'
 export * from './model/sales-export.contract'
+
+export * from './api/sales-workflows.api'

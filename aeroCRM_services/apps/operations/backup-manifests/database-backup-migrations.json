@@ -110,7 +110,7 @@
 			]
 		},
 		"crm-access": {
-			"manifestSha256": "e6373e28461ab7ad1a471314e6299cb9a580ddc171a8b46e83c9869beaf84342",
+			"manifestSha256": "8de82ee1ba8a316f33e5e36e7ef8ee3a1487185e521f1bfe5272092b97862b59",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -139,11 +139,15 @@
 				{
 					"name": "20261005020000_workspace_collaboration",
 					"checksum": "d3146d671018b306f321f259141eda26d9efed3676ded38c2f044cb35c112778"
+				},
+				{
+					"name": "20261007010000_chat_attachments",
+					"checksum": "20fd09e316cc877c0b2424be269f4fe7ca56e1b8996bc083bd631087d88eb019"
 				}
 			]
 		},
 		"crm-intake": {
-			"manifestSha256": "0feac0c1096990f6b62776926a77214569d9b4675ce55c87652ff9809285d1fb",
+			"manifestSha256": "29c93b5f9f703be5ca13bdfe646e68102b8cc2211a9986cbf88c8daf4f07836d",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -156,6 +160,10 @@
 				{
 					"name": "20260923030000_workspace_closure",
 					"checksum": "cb0b4178225089f3d226fe4da1517df8895c9438688ce2ec3ff2eb1b9a0383ae"
+				},
+				{
+					"name": "20261007020000_mail_intake_sources",
+					"checksum": "bf4266fd174d487298f5f1631c3ba5abf3f2c0e1a8d5371909c8f7d7dbf395a7"
 				}
 			]
 		},
@@ -197,7 +205,7 @@
 			]
 		},
 		"crm-sales": {
-			"manifestSha256": "bfce1d1d8a05618ae3393ef39aeb797414f211525c6e6c8f1729f583416e9207",
+			"manifestSha256": "25e93067ffc2b3bd2e4ee4ef5ccd4bcd7fe67a12ddc3bbd4e8972cc38e209824",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -222,6 +230,10 @@
 				{
 					"name": "20261005000000_interaction_results",
 					"checksum": "1d1c8a5544ed021ca18f74c240530f715d6e5086c9c889fb8977ff8a0037fd75"
+				},
+				{
+					"name": "20261007030000_meeting3_workflows",
+					"checksum": "cff0bc656ed9067d4301c9810f54ecdb14190469a78456e1234cb1c048b26062"
 				}
 			]
 		}

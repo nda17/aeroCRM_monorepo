@@ -48,7 +48,8 @@ export class IntakeOperationService {
 				dto.payload.nextTask.dueAt
 		)
 			throw new BadRequestException('Invalid workflow payload');
-		const access = await this.client.authorize(binding);
+		const { access, assignee } =
+			await this.client.authorizeCreate(binding);
 		if (dto.payload.teamId && !access.teamIds.includes(dto.payload.teamId))
 			throw new ForbiddenException('Unavailable team');
 		// Reads are allowed to recover old committed effects. Executing a command,
@@ -109,7 +110,8 @@ export class IntakeOperationService {
 						dealId,
 						title: payload.nextTask.title.trim(),
 						dueAt: new Date(payload.nextTask.dueAt),
-						assignedToSubject: binding.actorSubject
+						assignedToSubject: binding.actorSubject,
+						assignedToMembershipId: assignee.membershipId
 					}
 				});
 				await transaction.dealTimeline.create({

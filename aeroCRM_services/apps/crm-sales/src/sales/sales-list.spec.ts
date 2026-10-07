@@ -54,7 +54,23 @@ const base = {
 	status: undefined
 };
 
+const listDeals = (
+	service: SalesService,
+	currentAccess: SalesAccess,
+	currentQuery: DealListQuery
+) => service.deals(currentAccess, currentQuery, 'Bearer test-token');
+
 function harness() {
+	const contexts = {
+		search: jest.fn().mockResolvedValue([]),
+		preview: jest.fn().mockResolvedValue([]),
+		roster: jest.fn().mockResolvedValue({ subjects: [], hasMore: false })
+	};
+	const assignees = {
+		resolve: jest.fn(),
+		authorize: jest.fn()
+	};
+	const authority = { authorize: jest.fn().mockResolvedValue(access) };
 	const count = jest
 		.fn<Promise<number>, [Prisma.DealCountArgs]>()
 		.mockResolvedValue(21);
@@ -71,7 +87,14 @@ function harness() {
 		prisma,
 		count,
 		findMany,
-		service: new SalesService(prisma as never, {} as never)
+		contexts,
+		service: new SalesService(
+			prisma as never,
+			{} as never,
+			assignees as never,
+			contexts as never,
+			authority as never
+		)
 	};
 }
 
@@ -130,16 +153,16 @@ describe('additive deal list without-next-action filter', () => {
 	])(
 		'preserves strict query schema and pagination validation',
 		async fields => {
-			await expect(
-				parse({ workspaceId, ...fields })
-			).rejects.toBeInstanceOf(BadRequestException);
+			await expect(parse({ workspaceId, ...fields })).rejects.toBeInstanceOf(
+				BadRequestException
+			);
 		}
 	);
 	it.each([undefined, 'false'] as const)(
 		'preserves the exact existing where when flag is %s',
 		async withoutNextAction => {
 			const { service, count, findMany } = harness();
-			await service.deals(access, { ...query, withoutNextAction });
+			await listDeals(service, access, { ...query, withoutNextAction });
 			expect(count).toHaveBeenCalledWith({
 				where: { AND: [salesScope(access), base] }
 			});
@@ -153,7 +176,7 @@ describe('additive deal list without-next-action filter', () => {
 		async dataScope => {
 			const { service, count, findMany, prisma } = harness();
 			const scoped = { ...access, dataScope, teamIds: [teamId] };
-			const result = await service.deals(scoped, {
+			const result = await listDeals(service, scoped, {
 				...query,
 				withoutNextAction: 'true',
 				pipelineId,
@@ -215,7 +238,7 @@ describe('additive deal list without-next-action filter', () => {
 				status,
 				withoutNextAction: 'true'
 			});
-			expect(await service.deals(access, parsed)).toEqual({
+			expect(await listDeals(service, access, parsed)).toEqual({
 				schemaVersion: 1,
 				page: 1,
 				pageSize: 20,
@@ -229,7 +252,8 @@ describe('additive deal list without-next-action filter', () => {
 	);
 	it('permits the filter in READ_ONLY without requiring a write permission', async () => {
 		const { service, count } = harness();
-		await service.deals(
+		await listDeals(
+			service,
 			{ ...access, state: 'READ_ONLY' },
 			{ ...query, withoutNextAction: 'true' }
 		);
@@ -238,18 +262,15 @@ describe('additive deal list without-next-action filter', () => {
 	it.each([
 		{ ...access, role: 'ANALYST' as const },
 		{ ...access, permissions: [] }
-	])(
-		'denies unauthorized read before any database access',
-		async denied => {
-			const { service, count, findMany, prisma } = harness();
-			await expect(
-				service.deals(denied, { ...query, withoutNextAction: 'true' })
-			).rejects.toBeInstanceOf(ForbiddenException);
-			expect(count).not.toHaveBeenCalled();
-			expect(findMany).not.toHaveBeenCalled();
-			expect(prisma.$transaction).not.toHaveBeenCalled();
-		}
-	);
+	])('denies unauthorized read before any database access', async denied => {
+		const { service, count, findMany, prisma } = harness();
+		await expect(
+			listDeals(service, denied, { ...query, withoutNextAction: 'true' })
+		).rejects.toBeInstanceOf(ForbiddenException);
+		expect(count).not.toHaveBeenCalled();
+		expect(findMany).not.toHaveBeenCalled();
+		expect(prisma.$transaction).not.toHaveBeenCalled();
+	});
 });
 
 describe('deal report drill-down and ordering', () => {
@@ -259,7 +280,7 @@ describe('deal report drill-down and ordering', () => {
 			const { service, count, findMany } = harness();
 			const scoped = { ...access, dataScope, teamIds: [teamId] };
 			const cutoff = '2026-09-14T12:00:00.000Z';
-			await service.deals(scoped, {
+			await listDeals(service, scoped, {
 				...query,
 				assignedToSubject: 'other',
 				createdFrom: '2026-09-01T00:00:00.000Z',
@@ -298,7 +319,7 @@ describe('deal report drill-down and ordering', () => {
 	);
 	it('orders the next-action deadline in PostgreSQL with a stable tie-break before pagination', async () => {
 		const { service, findMany } = harness();
-		await service.deals(access, { ...query, sort: 'next_action_asc' });
+		await listDeals(service, access, { ...query, sort: 'next_action_asc' });
 		expect(findMany.mock.calls[0][0].orderBy).toEqual([
 			{ nextAction: { dueAt: 'asc' } },
 			{ id: 'asc' }
@@ -307,13 +328,13 @@ describe('deal report drill-down and ordering', () => {
 	it('rejects invalid drilldown cutoff and period rather than showing unfiltered deals', async () => {
 		const { service, count } = harness();
 		await expect(
-			service.deals(access, {
+			listDeals(service, access, {
 				...query,
 				overdueBefore: '2026-02-30T12:00:00.000Z'
 			})
 		).rejects.toBeInstanceOf(BadRequestException);
 		await expect(
-			service.deals(access, {
+			listDeals(service, access, {
 				...query,
 				createdFrom: '2026-09-01T00:00:00.000Z'
 			})

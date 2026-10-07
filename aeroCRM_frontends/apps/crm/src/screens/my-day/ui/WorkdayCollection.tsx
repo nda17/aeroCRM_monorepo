@@ -38,7 +38,7 @@ import {
 	DataTable,
 	ScreenState,
 	SelectField,
-	StatusBadge,
+	AppIcon,
 	type DataTableColumn
 } from '@/shared/ui'
 import {
@@ -52,7 +52,6 @@ import {
 import { WorkdayPagination } from './WorkdayPagination'
 import {
 	useWorkdayReducedMotion,
-	workdayKeyboardCoordinates,
 	createWorkdayKeyboardCoordinates
 } from '../model/workday-drag'
 import styles from './MyDayScreen.module.scss'
@@ -153,12 +152,12 @@ const TaskStatus = ({
 							size="sm"
 							variant="secondary"
 							disabled={!enabled || unresolved}
-							aria-label={`Перенести: ${task.title}`}
+							aria-label={`Изменить срок: ${task.title}`}
 							onClick={() => {
 								if (!unresolved) onReschedule(task)
 							}}
 						>
-							Перенести
+							Изменить срок
 						</Button>
 					) : null}
 				</div>
@@ -200,7 +199,10 @@ const TaskDue = ({
 	<div className={styles.copy}>
 		<time dateTime={task.dueAt}>{workdayDate(task.dueAt, timeZone)}</time>
 		{isWorkdayOverdue(task, asOf) ? (
-			<StatusBadge tone="danger">Просрочено</StatusBadge>
+			<span className={styles.overdueBadge}>
+				<AppIcon name="alert" size={18} />
+				<span>Просрочено</span>
+			</span>
 		) : null}
 	</div>
 )
@@ -377,6 +379,11 @@ const WorkdayList = ({
 									rows={group.items}
 									columns={columns}
 									getRowKey={task => task.id}
+									rowClassName={task =>
+										isWorkdayOverdue(task, data.asOf)
+											? styles.overdueRow
+											: undefined
+									}
 								/>
 							</section>
 						)
@@ -389,6 +396,11 @@ const WorkdayList = ({
 					rows={data.items}
 					columns={columns}
 					getRowKey={task => task.id}
+					rowClassName={task =>
+						isWorkdayOverdue(task, data.asOf)
+							? styles.overdueRow
+							: undefined
+					}
 				/>
 			)}
 			{data ? (
@@ -406,7 +418,7 @@ const WorkdayList = ({
 }
 
 const WorkdayBoard = (props: CollectionProps) => {
-	const columns: PlannerColumn[] =
+	const allColumns: PlannerColumn[] =
 		props.planner?.columns.filter(column => !column.archived) ??
 		WORKDAY_BOARD_STATUSES.map(status => ({
 			id: status,
@@ -415,10 +427,19 @@ const WorkdayBoard = (props: CollectionProps) => {
 			isDefault: true,
 			archived: false
 		}))
+	const columns = allColumns.filter(column => {
+		const active =
+			column.status === 'OPEN' || column.status === 'IN_PROGRESS'
+		return props.filters.status === 'ACTIVE'
+			? active
+			: props.filters.status === 'TERMINAL'
+				? !active
+				: !props.filters.status || props.filters.status === column.status
+	})
 	const [sourceColumnId, setSourceColumnId] = useState<string | null>(null)
 	const canWrite = props.canWrite && !props.settingsPending
 	const selectColumn = (task: WorkdayTask, id: string) => {
-		const column = columns.find(item => item.id === id)
+		const column = allColumns.find(item => item.id === id)
 		if (!column || !canWrite) return
 		if (props.onColumn) props.onColumn(task, column)
 		else props.onStatus(task, column.status)
@@ -430,11 +451,9 @@ const WorkdayBoard = (props: CollectionProps) => {
 	const sensors = useSensors(
 		useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
 		useSensor(KeyboardSensor, {
-			coordinateGetter: props.planner
-				? createWorkdayKeyboardCoordinates(
-						columns.map(column => column.id)
-					)
-				: workdayKeyboardCoordinates,
+			coordinateGetter: createWorkdayKeyboardCoordinates(
+				columns.map(column => column.id)
+			),
 			scrollBehavior: reducedMotion ? 'auto' : 'smooth'
 		})
 	)
@@ -520,14 +539,18 @@ const WorkdayBoard = (props: CollectionProps) => {
 				setDragged(null)
 			}}
 		>
-			<div className={styles.board} role="region" aria-label="Доска задач">
+			<div
+				className={`${styles.board} ${columns.length <= 2 ? styles.compactBoard : ''}`}
+				role="region"
+				aria-label="Доска задач"
+			>
 				{columns.map(column => (
 					<WorkdayColumn
 						key={column.id}
 						{...props}
 						canWrite={canWrite}
 						column={column}
-						columns={columns}
+						columns={allColumns}
 						onSelectColumn={selectColumn}
 						sourceColumnId={sourceColumnId}
 						dragged={dragged}
@@ -719,7 +742,7 @@ const WorkdayCard = ({
 	return (
 		<li
 			ref={setNodeRef}
-			className={`${styles.card} ${isDragging ? styles.cardDragging : ''}`}
+			className={`${styles.card} ${isWorkdayOverdue(task, asOf) ? styles.overdueCard : ''} ${isDragging ? styles.cardDragging : ''}`}
 		>
 			<div className={styles.cardTop}>
 				<button className={styles.taskTitle} onClick={() => onOpen(task)}>

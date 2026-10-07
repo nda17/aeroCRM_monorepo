@@ -14,7 +14,13 @@ export interface SalesAccess {
 	schemaVersion: 1;
 	workspaceId: string;
 	subject: string;
-	role: 'OWNER' | 'CRM_ADMIN' | 'TEAM_LEAD' | 'MANAGER' | 'ANALYST' | 'CUSTOM';
+	role:
+		| 'OWNER'
+		| 'CRM_ADMIN'
+		| 'TEAM_LEAD'
+		| 'MANAGER'
+		| 'ANALYST'
+		| 'CUSTOM';
 	state: 'ACTIVE' | 'GRACE' | 'READ_ONLY';
 	dataScope: 'ALL' | 'TEAM' | 'OWN';
 	teamIds: string[];
@@ -77,9 +83,14 @@ export function parseSalesAccess(
 		access.workspaceId !== workspaceId ||
 		typeof access.subject !== 'string' ||
 		!/^[^\s\x00-\x1f\x7f]{1,256}$/.test(access.subject) ||
-		!['OWNER', 'CRM_ADMIN', 'TEAM_LEAD', 'MANAGER', 'ANALYST', 'CUSTOM'].includes(
-			String(access.role)
-		) ||
+		![
+			'OWNER',
+			'CRM_ADMIN',
+			'TEAM_LEAD',
+			'MANAGER',
+			'ANALYST',
+			'CUSTOM'
+		].includes(String(access.role)) ||
 		!['ACTIVE', 'GRACE', 'READ_ONLY'].includes(String(access.state)) ||
 		!['ALL', 'TEAM', 'OWN'].includes(String(access.dataScope)) ||
 		!Array.isArray(access.teamIds) ||
@@ -118,7 +129,8 @@ export function salesAccessToken() {
 export class SalesAccessClient {
 	async authorize(
 		authorization: string,
-		workspaceId: string
+		workspaceId: string,
+		signal?: AbortSignal
 	): Promise<SalesAccess> {
 		const origin = serviceOrigin(process.env.CRM_ACCESS_INTERNAL_BASE_URL);
 		const token = salesAccessToken();
@@ -137,7 +149,7 @@ export class SalesAccessClient {
 					body: JSON.stringify({ schemaVersion: 1, workspaceId }),
 					redirect: 'error',
 					cache: 'no-store',
-					signal: AbortSignal.timeout(5000)
+					signal: signal ?? AbortSignal.timeout(5000)
 				}
 			);
 		} catch {

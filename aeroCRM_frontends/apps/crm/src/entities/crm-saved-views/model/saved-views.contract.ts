@@ -76,7 +76,10 @@ export const parseSavedViewParameters = (
 				page: 1,
 				pageSize: 20
 			} as WorkdayFilters) ||
-			(value.layout === 'board' && value.status !== undefined)
+			(value.layout === 'board' &&
+				value.status !== undefined &&
+				value.status !== 'ACTIVE' &&
+				value.status !== 'TERMINAL')
 		)
 			return null
 	} else if (scope === 'DEALS') {

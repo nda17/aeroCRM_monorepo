@@ -262,10 +262,11 @@ beforeEach(() => {
 						? undefined
 						: {
 								items:
-									!filters.status || filters.status === 'OPEN'
-										|| filters.status === 'ACTIVE'
-									? pageTasks
-									: [],
+									!filters.status ||
+									filters.status === 'OPEN' ||
+									filters.status === 'ACTIVE'
+										? pageTasks
+										: [],
 								total:
 									!filters.status ||
 									filters.status === 'OPEN' ||
@@ -317,14 +318,15 @@ describe('MyDay server-paged list and board', () => {
 		setup('list')
 
 		const regions = ['Просроченные', 'Сегодня', 'Предстоящие'].map(
-			label => screen.getByRole('heading', { name: label }).closest('section')!
+			label =>
+				screen.getByRole('heading', { name: label }).closest('section')!
 		)
-		expect(regions.map(region => region.getAttribute('aria-label'))).toEqual([
-			'Просроченные',
-			'Сегодня',
-			'Предстоящие'
-		])
-		expect(within(regions[0]).getByRole('button', { name: task.title })).toBeTruthy()
+		expect(
+			regions.map(region => region.getAttribute('aria-label'))
+		).toEqual(['Просроченные', 'Сегодня', 'Предстоящие'])
+		expect(
+			within(regions[0]).getByRole('button', { name: task.title })
+		).toBeTruthy()
 		expect(
 			within(regions[1]).getByRole('button', {
 				name: linkedToday.title
@@ -372,7 +374,7 @@ describe('MyDay server-paged list and board', () => {
 				[binding]
 			)
 			expect(useAssigneeLabels).toHaveBeenCalledTimes(
-				view === 'list' ? 1 : 4
+				view === 'list' ? 1 : 2
 			)
 			expect(screen.queryByText('employee')).toBeNull()
 			expect(screen.queryByText('Имя загружается…')).toBeNull()
@@ -444,13 +446,16 @@ describe('MyDay server-paged list and board', () => {
 		expect(oldTask.assignedToMembershipId).toBeNull()
 		expect(onStatus).not.toHaveBeenCalled()
 	})
-	it('loads independent server status pages and changes only the chosen column page', () => {
-		setup('board')
+	it('loads separate terminal history pages and changes only the chosen column page', () => {
+		setup('board', true, {
+			...initialWorkdayFilters(),
+			status: 'TERMINAL'
+		})
 		expect(
 			vi
 				.mocked(useWorkdayTasks)
 				.mock.calls.map(([filter]) => filter.status)
-		).toEqual(['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'])
+		).toEqual(['COMPLETED', 'CANCELLED'])
 		vi.mocked(useWorkdayTasks).mockClear()
 		fireEvent.click(
 			within(
@@ -544,9 +549,15 @@ describe('MyDay server-paged list and board', () => {
 		} as never)
 		setup('list', true, { ...initialWorkdayFilters(), page: 2 })
 
-		expect(screen.getByText('На этой странице задач больше нет')).toBeTruthy()
-		expect(screen.queryByText('Нет задач по выбранным условиям')).toBeNull()
-		fireEvent.click(screen.getByRole('button', { name: 'Вернуться к задачам' }))
+		expect(
+			screen.getByText('На этой странице задач больше нет')
+		).toBeTruthy()
+		expect(
+			screen.queryByText('Нет задач по выбранным условиям')
+		).toBeNull()
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Вернуться к задачам' })
+		)
 		expect(onPage).toHaveBeenCalledExactlyOnceWith(1)
 		expect(
 			screen.getByRole('navigation', { name: 'Страницы списка задач' })
@@ -653,26 +664,27 @@ describe('real dnd-kit PointerSensor with synthetic DOM pointer events', () => {
 		)
 		expect(onStatus).not.toHaveBeenCalled()
 	})
-	it('keyboard skips an unavailable intermediate column and drops into the next available column', async () => {
+	it('active board does not target terminal columns when its next active column is unavailable', async () => {
 		unavailable = 'IN_PROGRESS'
 		setup('board')
 		await keyboardStart()
 		fireEvent.keyDown(document, { code: 'ArrowRight', key: 'ArrowRight' })
 		await waitFor(() =>
 			expect(screen.getByRole('status').textContent).toContain(
-				'Колонка: Готово.'
+				'Колонка: К выполнению.'
 			)
 		)
 		fireEvent.keyDown(document, { code: 'Space', key: ' ' })
-		await waitFor(() =>
-			expect(onStatus).toHaveBeenCalledExactlyOnceWith(task, 'COMPLETED')
-		)
+		expect(onStatus).not.toHaveBeenCalled()
 	})
 })
 
 describe('DndContext application callback contract (not browser pointer simulation)', () => {
-	it('accepts the cancelled status from the board enum as a drop target', () => {
-		setup('board')
+	it('accepts a cancelled status drop from the terminal history board', () => {
+		setup('board', true, {
+			...initialWorkdayFilters(),
+			status: 'TERMINAL'
+		})
 		const cancelledStatus = WORKDAY_BOARD_STATUSES.find(
 			status => status === 'CANCELLED'
 		)

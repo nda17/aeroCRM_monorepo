@@ -4,7 +4,7 @@ import {
 	ExceptionFilter,
 	HttpException
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { Prisma } from '@prisma/crm-access-client';
 
 const closed = (value: unknown) =>
@@ -25,6 +25,23 @@ export class CrmAccessHttpExceptionFilter implements ExceptionFilter {
 		}
 		const status = exception.getStatus();
 		const raw = exception.getResponse();
+		const request = host.switchToHttp().getRequest<Request & { crmInternalCaller?: string }>();
+		if (status === 403 && request?.method === 'POST' && request.path === '/internal/v1/crm-access/authorize-mail-workflow' &&
+			request.crmInternalCaller === 'crm-customers' && request.body?.purpose === 'MAIL_SYNC' &&
+			raw && typeof raw === 'object' && !Array.isArray(raw)) {
+			const denied = raw as Record<string, unknown>;
+			const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+			if (Object.keys(denied).sort().join(',') === 'code,membershipId,reason,schemaVersion,subject,workspaceId' &&
+				denied.schemaVersion === 1 && denied.code === 'crm_mail_authority_revoked' &&
+				typeof denied.workspaceId === 'string' && uuid.test(denied.workspaceId) && denied.workspaceId === request.body.workspaceId &&
+				typeof denied.subject === 'string' && /^[^\s\x00-\x1f\x7f]{1,256}$/.test(denied.subject) && denied.subject === request.body.subject &&
+				typeof denied.membershipId === 'string' && uuid.test(denied.membershipId) && denied.membershipId === request.body.membershipId &&
+				typeof denied.reason === 'string' && ['MEMBERSHIP_REVOKED', 'ROLE_REVOKED', 'MAIL_READ_REVOKED'].includes(denied.reason)) {
+				response.status(status).json(denied);
+				return;
+			}
+		}
+
 		const payload =
 			typeof raw === 'object' && raw !== null
 				? (raw as {

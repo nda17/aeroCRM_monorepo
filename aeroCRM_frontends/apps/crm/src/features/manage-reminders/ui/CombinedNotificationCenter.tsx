@@ -38,6 +38,28 @@ import {
 import type { ReminderContext } from '../model/use-reminder-session'
 import styles from './TaskNotificationCenter.module.scss'
 
+export type NavigationUnreadCounts = Record<
+	'/tasks' | '/inbox' | '/mail' | '/messages',
+	number | null
+>
+export interface NavigationNotificationSnapshot {
+	workspaceId: string
+	subject: string
+	membershipId: string
+	sessionRevision: number
+	scope: string
+	counts: NavigationUnreadCounts
+}
+export type NotificationSnapshotListener = (
+	snapshot: NavigationNotificationSnapshot
+) => void
+const unknownNavigationCounts: NavigationUnreadCounts = {
+	'/tasks': null,
+	'/inbox': null,
+	'/mail': null,
+	'/messages': null
+}
+
 type Source = NotificationSource | 'chat'
 export type NotificationTab = 'all' | 'tasks' | Source
 const sourceLabels = {
@@ -125,7 +147,8 @@ export function CombinedNotificationCenter({
 	taskContent,
 	onTaskRead,
 	tab,
-	setTab
+	setTab,
+	onSnapshot
 }: {
 	context: ReminderContext
 	open: boolean
@@ -136,6 +159,7 @@ export function CombinedNotificationCenter({
 	onTaskRead: (item: TaskNotification) => Promise<void>
 	tab: NotificationTab
 	setTab: (tab: NotificationTab) => void
+	onSnapshot?: NotificationSnapshotListener
 }) {
 	const [page, setPage] = useState(1)
 	const [unread, setUnread] = useState(false)
@@ -406,6 +430,61 @@ export function CombinedNotificationCenter({
 		)
 		return () => clearTimeout(timer)
 	}, [notice])
+	// Publish the already observed counters. Navigation never owns another query
+	// or poller, and an old workspace/session/scope snapshot cannot be reused.
+	const workspaceId = context.workspace.workspaceId
+	const subject = session?.userId ?? ''
+	const membershipId = context.workspace.membership.membershipId
+	const sessionRevision = context.sessionRevision
+	const scope = context.scopeKey
+	const verified =
+		context.permissions.isSuccess &&
+		!context.permissions.isFetching &&
+		context.authority?.workspaceId === workspaceId &&
+		context.authority.subject === subject
+	const intakeCount = deniedIntake
+		? 0
+		: (latestIntake?.unreadCount ?? null)
+	const mailCount = mailContext.capabilities.isFetching
+		? null
+		: deniedMail
+			? 0
+			: (latestMail?.unreadCount ?? null)
+	const chatCount = latestChat?.unreadCount ?? null
+	useEffect(() => {
+		const binding = {
+			workspaceId,
+			subject,
+			membershipId,
+			sessionRevision,
+			scope
+		}
+		onSnapshot?.({
+			...binding,
+			counts: verified
+				? {
+						'/tasks': taskCount,
+						'/inbox': intakeCount,
+						'/mail': mailCount,
+						'/messages': chatCount
+					}
+				: unknownNavigationCounts
+		})
+		return () =>
+			onSnapshot?.({ ...binding, counts: unknownNavigationCounts })
+	}, [
+		onSnapshot,
+		workspaceId,
+		subject,
+		membershipId,
+		sessionRevision,
+		scope,
+		verified,
+		taskCount,
+		intakeCount,
+		mailCount,
+		chatCount
+	])
 	const counts = [
 		taskCount,
 		deniedIntake ? 0 : (latestIntake?.unreadCount ?? null),

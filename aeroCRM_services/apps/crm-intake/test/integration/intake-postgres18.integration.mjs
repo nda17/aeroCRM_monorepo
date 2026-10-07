@@ -105,6 +105,72 @@ try {
 		sqlState('42501')
 	);
 
+	// Mail copies use the production service and runtime role; immutable synthetic
+	// sources intentionally remain in this isolated disposable test database.
+	const { MailIntakeService } = await import('../../dist/src/mail-intake/mail-intake.service.js');
+	const { ForbiddenException, ServiceUnavailableException } = await import('@nestjs/common');
+	const mailWorkspaceId = randomUUID();
+	const mailContext = access(mailWorkspaceId);
+	const mailMessageId = randomUUID();
+	const mailMembershipId = randomUUID();
+	const mailHash = createHash('sha256').update('original immutable mail fixture').digest('hex');
+	let sourceError = null;
+	const mailCopies = new MailIntakeService(runtime, { authorize: async bearer => ({
+		...mailContext,
+		...(bearer === 'other' ? { subject: 'other', dataScope: 'OWN' } : {}),
+		...(bearer === 'readonly' ? { state: 'READ_ONLY' } : {})
+	}) }, { source: async (_bearer, workspaceId, messageId, subject) => {
+		if (sourceError) throw sourceError;
+		return { schemaVersion: 1, workspaceId, subject, membershipId: mailMembershipId,
+			message: { id: messageId, mailboxId: randomUUID(), sourceHash: mailHash, direction: 'INBOUND',
+				subject: 'Source preview title', from: [{ name: 'Source sender', email: 'sender@example.test' }],
+				receivedAt: new Date().toISOString(), sentAt: null, text: 'Preview text', bodyStatus: 'COMPLETE', textLength: 12, textTruncated: false } };
+	} });
+	const mailPreview = await mailCopies.preview('owner', mailWorkspaceId, mailMessageId);
+	assert.equal(mailPreview.draft.phone, null);
+	assert.equal(mailPreview.draft.name, 'Source sender');
+	const copyInput = { ...command(mailWorkspaceId), messageId: mailMessageId, sourceHash: mailHash,
+		title: 'Reviewed title', name: 'Reviewed sender', phone: null, email: 'sender@example.test',
+		message: 'Only reviewed copied text', teamId: null, copyConfirmed: true };
+	const [copied, copiedReplay] = await Promise.all([mailCopies.create('owner', copyInput), mailCopies.create('owner', copyInput)]);
+	assert.deepEqual(copiedReplay, copied);
+	assert.deepEqual(Object.keys(copied).sort(), ['entryId', 'schemaVersion', 'sourceKind', 'workspaceId']);
+	assert.equal(copied.sourceKind, 'MAIL');
+	const copyEntry = await runtime.inboxEntry.findUniqueOrThrow({ where: { id: copied.entryId } });
+	assert.equal(copyEntry.origin, 'MANUAL');
+	assert.equal(copyEntry.message, copyInput.message);
+	assert.equal(await runtime.mailIntakeSource.count({ where: { workspaceId: mailWorkspaceId } }), 1);
+	assert.equal(await runtime.intakeActivity.count({ where: { workspaceId: mailWorkspaceId } }), 1);
+	await assert.rejects(mailCopies.create('owner', { ...copyInput, title: 'Changed payload' }), http(409));
+	const secondKey = randomUUID();
+	assert.deepEqual(await mailCopies.create('owner', { ...copyInput, commandId: secondKey }), copied);
+	assert.equal(await runtime.intakeCommand.count({ where: { workspaceId: mailWorkspaceId } }), 2);
+	assert.equal(await runtime.intakeActivity.count({ where: { workspaceId: mailWorkspaceId } }), 1);
+	assert.deepEqual(await mailCopies.command('owner', mailWorkspaceId, secondKey), { schemaVersion: 1, workspaceId: mailWorkspaceId, status: 'COMMITTED', entryId: copied.entryId });
+	assert.equal((await mailCopies.command('owner', mailWorkspaceId, randomUUID())).status, 'ABSENT');
+	await assert.rejects(mailCopies.create('other', { ...copyInput, commandId: randomUUID() }), http(409));
+	assert.equal((await mailCopies.command('other', mailWorkspaceId, secondKey)).status, 'ABSENT');
+	await assert.rejects(mailCopies.create('readonly', { ...copyInput, commandId: randomUUID(), messageId: randomUUID() }), http(403));
+	assert.equal((await mailCopies.source('owner', mailWorkspaceId, copied.entryId)).source.messageId, mailMessageId);
+	sourceError = new ForbiddenException({ code: 'crm_intake_mail_source_denied' });
+	assert.deepEqual((await mailCopies.source('owner', mailWorkspaceId, copied.entryId)).source, { kind: 'MAIL', canOpen: false, messageId: null });
+	await assert.rejects(mailCopies.create('owner', copyInput), http(403));
+	sourceError = new ServiceUnavailableException({ code: 'crm_intake_mail_source_unavailable' });
+	await assert.rejects(mailCopies.source('owner', mailWorkspaceId, copied.entryId), http(503));
+	sourceError = null;
+	await assert.rejects(runtime.$executeRawUnsafe('UPDATE crm_intake.mail_intake_sources SET source_hash=source_hash WHERE false'), sqlState('42501'));
+	await assert.rejects(runtime.$executeRawUnsafe('DELETE FROM crm_intake.mail_intake_sources WHERE false'), sqlState('42501'));
+	await assert.rejects(migrator.$executeRaw`UPDATE crm_intake.mail_intake_sources SET source_hash=source_hash WHERE entry_id=${copied.entryId}::uuid`, sqlState('P0001'));
+	const nonMailKey = randomUUID();
+	const nonMailEntry = await service.createManual(mailContext, { ...command(mailWorkspaceId), commandId: nonMailKey, title: 'Manual control', name: 'Control' });
+	await assert.rejects(runtime.$executeRaw`INSERT INTO crm_intake.mail_intake_sources (id,workspace_id,entry_id,message_id,mailbox_id,actor_membership_id,actor_subject,command_id,source_hash) VALUES (${randomUUID()}::uuid,${randomUUID()}::uuid,${nonMailEntry.entry.id}::uuid,${randomUUID()}::uuid,${randomUUID()}::uuid,${mailMembershipId}::uuid,'owner',${randomUUID()}::uuid,${mailHash})`, sqlState('23503'));
+	await assert.rejects(mailCopies.command('owner', mailWorkspaceId, nonMailKey), http(409));
+	await runtime.workspaceClosureFence.update({ where: { workspaceId: mailWorkspaceId }, data: {
+		closureId: randomUUID(), generation: 1n, ownerSubject: 'owner', requestedAt: new Date(), fencedAt: new Date()
+	} });
+	await assert.rejects(mailCopies.create('owner', { ...copyInput, commandId: randomUUID(), messageId: randomUUID() }), http(403));
+	assert.equal(await runtime.mailIntakeSource.count({ where: { workspaceId: mailWorkspaceId } }), 1);
+
 	const create = command(context.workspaceId, {
 		title: 'Ручное обращение',
 		name: 'Анна',

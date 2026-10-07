@@ -18,8 +18,8 @@ import { TeamQueryDto } from './team.dto';
 
 export class AssigneeQueryDto extends TeamQueryDto {
 	@IsOptional()
-	@IsIn(['TASK_RECIPIENT', 'SLA_RECIPIENT'])
-	purpose?: 'TASK_RECIPIENT' | 'SLA_RECIPIENT';
+	@IsIn(['TASK_RECIPIENT', 'SLA_RECIPIENT', 'SALES_ANALYTICS'])
+	purpose?: 'TASK_RECIPIENT' | 'SLA_RECIPIENT' | 'SALES_ANALYTICS';
 	@IsOptional() @IsString() @MaxLength(200) search?: string;
 	@IsOptional()
 	@IsString()

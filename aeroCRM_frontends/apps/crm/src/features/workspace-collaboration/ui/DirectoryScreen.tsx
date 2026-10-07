@@ -101,7 +101,7 @@ function DirectoryContent({ context }: { context: CollaborationContext }) {
 	return (
 		<div className={styles.stack}>
 			<PageHeader
-				title="Справочник"
+				title="Сотрудники"
 				description="Рабочие контакты команды. Любой сотрудник может уточнить данные коллеги."
 			/>
 			<form
@@ -150,7 +150,7 @@ function DirectoryContent({ context }: { context: CollaborationContext }) {
 			{context.permissions.isError || directory.isError ? (
 				<ScreenState
 					variant="error"
-					title="Не удалось загрузить справочник"
+					title="Не удалось загрузить сотрудников"
 					description="Повторите проверку доступа и загрузку."
 					action={
 						<Button
@@ -483,7 +483,7 @@ function DirectoryEditor({
 							}
 						>
 							{entry.archivedAt
-								? 'Вернуть в справочник'
+								? 'Вернуть в список сотрудников'
 								: 'Убрать в архив'}
 						</Button>
 					) : null}

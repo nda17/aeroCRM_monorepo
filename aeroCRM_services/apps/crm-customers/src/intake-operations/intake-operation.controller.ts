@@ -37,9 +37,9 @@ export class ContactIntakeOperationGuard implements CanActivate {
 			!(peer === '::1' || peer.startsWith('127.')) ||
 			(caller !== 'crm-intake' &&
 				!(
-					caller === 'crm-sales' && ['read', 'verify'].includes(action)
+					caller === 'crm-sales' && ['read', 'verify', 'search', 'preview'].includes(action)
 				)) ||
-			(action === 'verify' && caller !== 'crm-sales')
+			(['verify', 'search', 'preview'].includes(action) && caller !== 'crm-sales')
 		)
 			throw new ForbiddenException('Internal caller is not allowed');
 		const name =

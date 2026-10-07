@@ -17,6 +17,7 @@ import {
 	type InboxAcceptance,
 	type InboxEntry
 } from '@/entities/intake'
+import { getMailIntakeSource } from '@/entities/intake/api/mail-intake.api'
 import { AuthenticatedApiError } from '@/shared/api/authenticated-http-client'
 import type { IntakeAccess } from '../model/use-intake-access'
 import { InboxEditor } from './InboxEditor'
@@ -39,6 +40,9 @@ vi.mock('@/entities/intake', async () => ({
 	mutateInbox: vi.fn(),
 	getInboxAcceptance: vi.fn(),
 	mutateInboxAcceptance: vi.fn()
+}))
+vi.mock('@/entities/intake/api/mail-intake.api', () => ({
+	getMailIntakeSource: vi.fn()
 }))
 vi.mock('@/entities/sales', () => ({ listSalesPipelines: vi.fn() }))
 vi.mock('@/entities/customer', () => ({ listCustomers: vi.fn() }))
@@ -126,6 +130,11 @@ beforeEach(() => {
 		defaultOptions: { queries: { retry: false } }
 	})
 	vi.mocked(getInboxEntry).mockResolvedValue(entry)
+	vi.mocked(getMailIntakeSource).mockResolvedValue({
+		kind: 'MAIL',
+		canOpen: false,
+		messageId: null
+	})
 	vi.mocked(listIntakeActivities).mockResolvedValue({
 		schemaVersion: 1,
 		page: 1,

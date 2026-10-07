@@ -28,6 +28,7 @@ import {
 	VersionedSalesCommand,
 	WorkspaceQuery
 } from './sales.dto';
+import { SalesAssignmentDto } from './sales-assignment.dto';
 import { SalesService } from './sales.service';
 
 @Controller('crm/sales')
@@ -47,17 +48,26 @@ export class SalesController {
 	@Get('deals')
 	@SalesPermission('sales:read')
 	deals(@Query() query: DealListQuery, @Req() request: SalesRequest) {
-		return this.service.deals(request.salesAccess, query);
+		return this.service.deals(
+			request.salesAccess,
+			query,
+			request.headers.authorization!
+		);
 	}
 
 	@Get('deals/:id')
 	@SalesPermission('sales:read')
 	detail(
 		@Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
-		@Query() _query: WorkspaceQuery,
+		@Query() query: WorkspaceQuery,
 		@Req() request: SalesRequest
 	) {
-		return this.service.detail(request.salesAccess, id);
+		return this.service.detail(
+			request.salesAccess,
+			id,
+			query,
+			request.headers.authorization!
+		);
 	}
 
 	@Get('deals/:id/timeline')
@@ -80,6 +90,26 @@ export class SalesController {
 		return this.service.timelineV2(request.salesAccess, id, query);
 	}
 
+	@Get('deals/:id/timeline-v3')
+	@SalesPermission('sales:read')
+	timelineV3(
+		@Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+		@Query() query: SalesListQuery,
+		@Req() request: SalesRequest
+	) {
+		return this.service.timelineV3(request.salesAccess, id, query);
+	}
+
+	@Get('deals/:id/tasks')
+	@SalesPermission('sales:read')
+	dealTasks(
+		@Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+		@Query() query: SalesListQuery,
+		@Req() request: SalesRequest
+	) {
+		return this.service.dealTasks(request.salesAccess, id, query);
+	}
+
 	@Get('tasks')
 	@SalesPermission('sales:read')
 	tasks(@Query() query: SalesListQuery, @Req() request: SalesRequest) {
@@ -92,7 +122,11 @@ export class SalesController {
 		@Query() query: SalesAnalyticsQuery,
 		@Req() request: SalesRequest
 	) {
-		return this.service.analytics(request.salesAccess, query);
+		return this.service.analytics(
+			request.salesAccess,
+			query,
+			request.headers.authorization!
+		);
 	}
 
 	@Post('deals')
@@ -121,7 +155,12 @@ export class SalesController {
 		@Headers('idempotency-key') key?: string
 	) {
 		this.commandKey(dto.commandId, key);
-		return this.service.transition(request.salesAccess, id, dto);
+		return this.service.transition(
+			request.salesAccess,
+			id,
+			dto,
+			request.headers.authorization!
+		);
 	}
 
 	@Post('deals/:id/interaction-results')
@@ -134,7 +173,12 @@ export class SalesController {
 		@Headers('idempotency-key') key?: string
 	) {
 		this.commandKey(dto.commandId, key);
-		return this.service.interactionResult(request.salesAccess, id, dto);
+		return this.service.interactionResult(
+			request.salesAccess,
+			id,
+			dto,
+			request.headers.authorization!
+		);
 	}
 
 	@Post('tasks/:id/complete')
@@ -147,7 +191,30 @@ export class SalesController {
 		@Headers('idempotency-key') key?: string
 	) {
 		this.commandKey(dto.commandId, key);
-		return this.service.complete(request.salesAccess, id, dto);
+		return this.service.complete(
+			request.salesAccess,
+			id,
+			dto,
+			request.headers.authorization!
+		);
+	}
+
+	@Post('deals/:id/assign')
+	@HttpCode(200)
+	@SalesPermission('sales:write')
+	assign(
+		@Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+		@Body() dto: SalesAssignmentDto,
+		@Req() request: SalesRequest,
+		@Headers('idempotency-key') key?: string
+	) {
+		this.commandKey(dto.commandId, key);
+		return this.service.assign(
+			request.salesAccess,
+			id,
+			dto,
+			request.headers.authorization!
+		);
 	}
 
 	@Post('deals/:id/archive')

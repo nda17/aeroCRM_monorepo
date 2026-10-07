@@ -34,7 +34,11 @@ async function bootstrap(): Promise<void> {
 	app.use('/api/v1/crm/customers/imports/resolve', json({ limit: '768kb' }));
 	app.use(
 		'/api/v1/crm/customers/imports',
-		(_request: unknown, response: import('express').Response, next: () => void) => {
+		(
+			_request: unknown,
+			response: import('express').Response,
+			next: () => void
+		) => {
 			response.setHeader('Cache-Control', 'private,no-store');
 			next();
 		}
@@ -62,6 +66,18 @@ async function bootstrap(): Promise<void> {
 
 	app.setGlobalPrefix('api/v1', {
 		exclude: [
+			{
+				path: 'internal/v1/crm-customers/mail/intake-source',
+				method: RequestMethod.POST
+			},
+			{
+				path: 'internal/v1/crm-customers/sales-context/search',
+				method: RequestMethod.POST
+			},
+			{
+				path: 'internal/v1/crm-customers/sales-context/preview',
+				method: RequestMethod.POST
+			},
 			{
 				path: 'internal/v1/workspace-closures/fence',
 				method: RequestMethod.POST

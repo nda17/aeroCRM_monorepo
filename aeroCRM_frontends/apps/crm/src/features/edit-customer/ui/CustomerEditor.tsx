@@ -486,6 +486,7 @@ const CustomerForm = ({
 	})
 	const editor = (
 		<Drawer
+			className={styles.drawer}
 			dirtyFormIds={[draftGuard.id]}
 			isOpen
 			onClose={close}
@@ -582,6 +583,7 @@ const CustomerForm = ({
 								<TextField
 									{...field}
 									label="Телефон"
+									containerClassName={styles.compactField}
 									type="tel"
 									inputMode="tel"
 									autoComplete="tel"
@@ -601,6 +603,7 @@ const CustomerForm = ({
 						/>
 						<TextField
 							label="Email"
+							containerClassName={styles.compactField}
 							type="email"
 							maxLength={254}
 							readOnly={!editable}
@@ -915,6 +918,7 @@ const CustomerForm = ({
 						/>
 						<TextField
 							label="КПП"
+							containerClassName={styles.compactField}
 							inputMode="numeric"
 							maxLength={9}
 							readOnly={!editable}
@@ -928,6 +932,7 @@ const CustomerForm = ({
 						/>
 						<TextField
 							label="ОГРН / ОГРНИП"
+							containerClassName={styles.compactField}
 							inputMode="numeric"
 							maxLength={15}
 							readOnly={!editable}

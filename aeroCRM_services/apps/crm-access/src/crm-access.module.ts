@@ -1,3 +1,9 @@
+import {
+	ChatAttachmentsController,
+	ChatUploadScopeGuard
+} from './workspace-chat/chat-attachments.controller';
+import { ChatAttachmentsService } from './workspace-chat/chat-attachments.service';
+import { ChatObjects } from './workspace-chat/chat.objects';
 import { Module, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { CrmAccessController } from './access/crm-access.controller';
@@ -84,6 +90,7 @@ const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 					CrmAccessController,
 					DirectoryController,
 					WorkspaceChatController,
+					ChatAttachmentsController,
 					AccessLiveChangesController,
 					WorkspaceClosureController,
 					CrmPermissionsController,
@@ -108,6 +115,9 @@ const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 		CrmAuthorizationService,
 		DirectoryService,
 		WorkspaceChatService,
+		ChatAttachmentsService,
+		ChatObjects,
+		ChatUploadScopeGuard,
 		AccessLiveChangesService,
 		CrmInternalGuard,
 		IdentityAuthContextClient,

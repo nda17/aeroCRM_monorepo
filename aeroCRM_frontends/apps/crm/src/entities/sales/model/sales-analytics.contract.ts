@@ -64,6 +64,7 @@ export interface SalesAnalyticsPeriod {
 	createdTo: string
 }
 export interface SalesAnalyticsOverviewQuery {
+	assigneeBasis?: 'TEAM'
 	pipelineId?: string
 	createdFrom?: string
 	createdTo?: string
@@ -123,7 +124,8 @@ export const validAnalyticsOverviewQuery = (
 		(Number.isSafeInteger(query.assigneePage) &&
 			query.assigneePage >= 1 &&
 			query.assigneePage <= 1000000)) &&
-	(query.pipelineId === undefined || isUuidV4(query.pipelineId))
+	(query.pipelineId === undefined || isUuidV4(query.pipelineId)) &&
+	(query.assigneeBasis === undefined || query.assigneeBasis === 'TEAM')
 const validAttention = (value: unknown): value is SalesAttention =>
 	isRecord(value) &&
 	['open', 'overdue', 'withoutNextAction'].every(

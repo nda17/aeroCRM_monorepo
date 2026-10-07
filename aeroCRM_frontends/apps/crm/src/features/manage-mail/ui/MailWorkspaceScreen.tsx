@@ -248,6 +248,11 @@ const MailWorkspace = ({
 							История писем доступна. Чтобы получать новые письма и
 							отправлять ответы, переподключите ящик в «Настройки → Почта».
 						</p>
+					) : mailbox?.safeErrorCode === 'MAIL_WORKSPACE_READ_ONLY' ? (
+						<p role="status">
+							Получение приостановлено: пространство доступно только для
+							чтения.
+						</p>
 					) : mailbox?.syncStatus === 'ERROR' ? (
 						<p role="status">
 							Обновление ящика завершилось ошибкой. Сохранённая переписка
@@ -261,6 +266,7 @@ const MailWorkspace = ({
 						</p>
 					) : null}
 					{mailbox?.state === 'ACTIVE' &&
+					mailbox.safeErrorCode !== 'MAIL_WORKSPACE_READ_ONLY' &&
 					['IDLE', 'SYNCING', 'BACKFILL', 'CURRENT'].includes(
 						mailbox.syncStatus
 					) ? (

@@ -28,6 +28,7 @@ const fields = [
 	'status',
 	'withoutNextAction',
 	'layout',
+	'archive',
 	'stageId',
 	'assignedToSubject',
 	'overdue',
@@ -54,6 +55,9 @@ export const parseDealView = (input: unknown): DealView => {
 		withoutNextAction:
 			row.withoutNextAction === true || row.withoutNextAction === 'true',
 		layout: row.layout === 'board' ? 'board' : 'list',
+		...(row.archive === 'ARCHIVED'
+			? { archive: 'ARCHIVED' as const }
+			: {}),
 		sort: ([
 			'created_desc',
 			'updated_desc',
@@ -148,6 +152,7 @@ export const readStoredDealViews = (
 	}
 }
 export const requestDealFilters = (view: DealView): SalesDealFilters => ({
+	...(view.archive ? { archive: view.archive } : {}),
 	...(view.stageId ? { stageId: view.stageId } : {}),
 	...(view.assignedToSubject
 		? { assignedToSubject: view.assignedToSubject }

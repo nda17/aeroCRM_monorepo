@@ -1,7 +1,7 @@
 name: aeroCRM CI
 on:
   push:
-    branches: [dev_0.1.0/feature/standalone-crm, dev_0.2.0/feature/selective-backend-release, dev_0.3.0/feature/draft-protection-and-corporate-mail, dev_0.4.0/feature/crm-file-imports, dev_0.5.0/feature/planner-customization, dev_0.5.1/fix/mail-deliverability, dev_0.6.0/feature/crm-ux-unification, dev_0.6.1/fix/rabbitmq-cold-start, dev_0.7.0/feature/workspace-collaboration, prod_0.1.0]
+    branches: [dev_0.1.0/feature/standalone-crm, dev_0.2.0/feature/selective-backend-release, dev_0.3.0/feature/draft-protection-and-corporate-mail, dev_0.4.0/feature/crm-file-imports, dev_0.5.0/feature/planner-customization, dev_0.5.1/fix/mail-deliverability, dev_0.6.0/feature/crm-ux-unification, dev_0.6.1/fix/rabbitmq-cold-start, dev_0.7.0/feature/workspace-collaboration, dev_0.8.0/feature/meeting3-workflows, prod_0.1.0]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -599,6 +599,9 @@ jobs:
       - name: Build CRM Access runtime
         working-directory: aeroCRM_services/apps/crm-access
         run: pnpm install --frozen-lockfile && pnpm prisma:generate && pnpm build
+      - name: Verify CRM Access authority and chat attachment regressions
+        working-directory: aeroCRM_services/apps/crm-access
+        run: pnpm exec jest --runInBand --testPathPattern='crm-authorization-mail.http|chat.objects|chat-attachments.multipart|team-assignee'
       - name: Apply reviewed CRM Access migrations and runtime ACL
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}
@@ -1104,7 +1107,7 @@ jobs:
           node --test .github/scripts/*.test.mjs
           node aeroCRM_services/apps/operations/scripts/database-backup-migration-manifests.mjs --check
   backend-plan:
-    needs: [frontends, contract-migrations, billing-capacity-postgres18, crm-custom-roles-postgres18, crm-sales-commerce-postgres18, crm-intake-notifications-postgres18, workspace-closure-postgres18, workspace-closure-unit, corporate-mail-unit, backend-release-contracts]
+    needs: [frontends, contract-migrations, billing-capacity-postgres18, crm-custom-roles-postgres18, crm-access-team-postgres18, crm-sales-commerce-postgres18, crm-intake-notifications-postgres18, workspace-closure-postgres18, workspace-closure-unit, corporate-mail-unit, backend-release-contracts]
     if: github.ref == 'refs/heads/prod_0.1.0' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     outputs:
@@ -1199,7 +1202,7 @@ jobs:
           retention-days: 90
           if-no-files-found: error
   frontend-images:
-    needs: [frontends, contract-migrations, billing-capacity-postgres18, crm-custom-roles-postgres18, crm-sales-commerce-postgres18, crm-intake-notifications-postgres18, workspace-closure-postgres18, workspace-closure-unit, corporate-mail-unit, backend-release-contracts]
+    needs: [frontends, contract-migrations, billing-capacity-postgres18, crm-custom-roles-postgres18, crm-access-team-postgres18, crm-sales-commerce-postgres18, crm-intake-notifications-postgres18, workspace-closure-postgres18, workspace-closure-unit, corporate-mail-unit, backend-release-contracts]
     if: github.ref == 'refs/heads/prod_0.1.0' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:
