@@ -306,6 +306,7 @@ export class ChatAttachmentsService implements OnModuleInit, OnModuleDestroy {
 		});
 		if (leased.state !== 'UPLOADING')
 			return this.envelope(actor.workspaceId, leased);
+		this.objects.assertKey(leased.privateObjectKey, actor.workspaceId, id);
 		await this.objects.put(leased.privateObjectKey, file.buffer);
 		const ready = await serializable(this.prisma, async tx => {
 			await workspaceLock(tx, actor.workspaceId);
@@ -418,6 +419,11 @@ export class ChatAttachmentsService implements OnModuleInit, OnModuleDestroy {
 		});
 		if (!row) throw new NotFoundException();
 		await this.conversation(actor, row.conversationId);
+		this.objects.assertKey(
+			row.privateObjectKey,
+			workspaceId,
+			row.conversationId
+		);
 		const bytes = await this.objects.get(row.privateObjectKey, row.byteSize);
 		if (
 			bytes.length !== row.byteSize ||
@@ -508,6 +514,11 @@ export class ChatAttachmentsService implements OnModuleInit, OnModuleDestroy {
 				}
 				if (!row) continue;
 				try {
+					this.objects.assertKey(
+						row.privateObjectKey,
+						row.workspaceId,
+						row.conversationId
+					);
 					await this.objects.remove(row.privateObjectKey);
 					await this.prisma.crmChatAttachment.updateMany({
 						where: {
@@ -532,13 +543,21 @@ export class ChatAttachmentsService implements OnModuleInit, OnModuleDestroy {
 			for (const item of page.items) {
 				if (
 					item.createdAt.getTime() > Date.now() - 86400000 ||
-					!/^chat\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/.test(item.key)
+					!item.key.startsWith('messenger/')
 				)
 					continue;
 				const exists = await this.prisma.crmChatAttachment.findFirst({
 					where: { privateObjectKey: item.key, state: { not: 'DELETED' } }
 				});
-				if (!exists) await this.objects.remove(item.key);
+				if (!exists) {
+					const parts = item.key.split('/');
+					try {
+						this.objects.assertKey(item.key, parts[1] || '', parts[2] || '');
+					} catch {
+						continue;
+					}
+					await this.objects.remove(item.key);
+				}
 			}
 		} finally {
 			this.running = false;

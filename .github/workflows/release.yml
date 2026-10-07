@@ -210,6 +210,23 @@ on:
         description: SHA-256 of sorted private crm-access.env and crm-sales.env migration file hashes
         required: false
         type: string
+      runtime_storage_install:
+        description: Reviewed forward-only seven-object storage cutover before DDL and image switch
+        required: false
+        type: boolean
+        default: false
+      runtime_storage_before_hash:
+        description: Approved backend env aggregate before the 25-value runtime storage delta
+        required: false
+        type: string
+      runtime_storage_bundle_hash:
+        description: SHA-256 of canonical private CRM_RUNTIME_STORAGE_ENV_BUNDLE
+        required: false
+        type: string
+      runtime_storage_manifest_hash:
+        description: SHA-256 of private seven-object inventory and frozen database reference contract
+        required: false
+        type: string
       crm_chat_env_install:
         description: Optional independent Chat storage installation; disabled until a reviewed key is provisioned
         required: false
@@ -325,6 +342,10 @@ jobs:
           MAIL_ENV_INSTALL: ${{ inputs.crm_mail_env_install && 'true' || 'false' }}
           MAIL_ENV_BEFORE_HASH: ${{ inputs.crm_mail_env_before_hash }}
           MAIL_ENV_BUNDLE_HASH: ${{ inputs.crm_mail_env_bundle_hash }}
+          STORAGE_INSTALL: ${{ inputs.runtime_storage_install && 'true' || 'false' }}
+          STORAGE_BEFORE_HASH: ${{ inputs.runtime_storage_before_hash }}
+          STORAGE_BUNDLE_HASH: ${{ inputs.runtime_storage_bundle_hash }}
+          STORAGE_MANIFEST_HASH: ${{ inputs.runtime_storage_manifest_hash }}
           CHAT_ENV_INSTALL: ${{ inputs.crm_chat_env_install && 'true' || 'false' }}
           CHAT_ENV_BEFORE_HASH: ${{ inputs.crm_chat_env_before_hash }}
           CHAT_ENV_BUNDLE_HASH: ${{ inputs.crm_chat_env_bundle_hash }}
@@ -424,6 +445,12 @@ jobs:
               "$UX_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
           else
             [[ "$UX_MIGRATION" == false && -z "$UX_MIGRATION_HASH" ]]
+          fi
+          if [[ "$STORAGE_INSTALL" == true ]]; then
+            [[ "$TARGET" == backend && "$MEETING3_MIGRATION" == true && "$MAIL_ENV_INSTALL" == false && "$CHAT_ENV_INSTALL" == false &&
+              "$STORAGE_BEFORE_HASH" =~ ^[a-f0-9]{64}$ && "$STORAGE_BUNDLE_HASH" =~ ^[a-f0-9]{64}$ && "$STORAGE_MANIFEST_HASH" =~ ^[a-f0-9]{64}$ ]]
+          else
+            [[ "$STORAGE_INSTALL" == false && -z "$STORAGE_BEFORE_HASH" && -z "$STORAGE_BUNDLE_HASH" && -z "$STORAGE_MANIFEST_HASH" ]]
           fi
           if [[ "$CHAT_ENV_INSTALL" == true ]]; then
             [[ "$TARGET" == backend && "$MEETING3_MIGRATION" == true && "$MAIL_ENV_INSTALL" == false &&
@@ -562,6 +589,8 @@ jobs:
           node --check infra/scripts/workspace-collaboration-migration.mjs
           node --check infra/scripts/meeting3-migration.mjs
           node --check infra/scripts/backend-chat-env.mjs
+          node --check infra/scripts/backend-runtime-storage-env.mjs
+          node --check infra/scripts/runtime-storage-copy.cjs
           node --check infra/scripts/chat-storage-probe.cjs
           node --check infra/scripts/crm-sales-commerce-migration.mjs
           node --check infra/scripts/crm-intake-notifications-migration.mjs
@@ -574,12 +603,26 @@ jobs:
           node infra/scripts/crm-ux-unification-migration.mjs --policy-self-test
           node infra/scripts/workspace-collaboration-migration.mjs --policy-self-test
           node infra/scripts/meeting3-migration.mjs --policy-self-test
+          CRM_RUNTIME_STORAGE_INSTALL=true node infra/scripts/meeting3-migration.mjs --policy-self-test
           node infra/scripts/crm-intake-notifications-migration.mjs --policy-self-test
           node infra/scripts/workspace-closure-migration.mjs --policy-self-test
           node infra/scripts/workspace-closure-enable.mjs --policy-self-test
           node infra/scripts/backend-rollback-compatibility-guard.mjs --policy-self-test
           # This release gate covers the introduced state, transaction and real Compose regressions.
-          REQUIRE_DOCKER_COMPOSE_TEST=true node --test infra/scripts/backend-release*.test.mjs infra/scripts/backend-mail-env.test.mjs infra/scripts/backend-chat-env.test.mjs
+          REQUIRE_DOCKER_COMPOSE_TEST=true node --test infra/scripts/backend-release*.test.mjs infra/scripts/backend-mail-env.test.mjs infra/scripts/backend-chat-env.test.mjs infra/scripts/backend-runtime-storage-env.test.mjs infra/scripts/runtime-storage-copy.test.cjs infra/scripts/chat-storage-probe.test.cjs
+      - name: Stage reviewed private runtime storage cutover
+        if: inputs.runtime_storage_install
+        env:
+          CRM_RUNTIME_STORAGE_ENV_BUNDLE: ${{ secrets.CRM_RUNTIME_STORAGE_ENV_BUNDLE }}
+          CRM_RUNTIME_STORAGE_MANIFEST_BUNDLE: ${{ secrets.CRM_RUNTIME_STORAGE_MANIFEST_BUNDLE }}
+          STORAGE_BUNDLE_HASH: ${{ inputs.runtime_storage_bundle_hash }}
+          STORAGE_MANIFEST_HASH: ${{ inputs.runtime_storage_manifest_hash }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          node infra/scripts/backend-runtime-storage-env.mjs --stage "$RUNNER_TEMP/runtime-storage-env.json" "$STORAGE_BUNDLE_HASH"
+          node infra/scripts/runtime-storage-copy.cjs --stage "$RUNNER_TEMP/storage-manifest.json" "$STORAGE_MANIFEST_HASH"
       - name: Stage private Chat env delta
         if: inputs.crm_chat_env_install
         env:
@@ -653,6 +696,10 @@ jobs:
           MAIL_ENV_INSTALL: ${{ inputs.crm_mail_env_install && 'true' || 'false' }}
           MAIL_ENV_BEFORE_HASH: ${{ inputs.crm_mail_env_before_hash }}
           MAIL_ENV_BUNDLE_HASH: ${{ inputs.crm_mail_env_bundle_hash }}
+          STORAGE_INSTALL: ${{ inputs.runtime_storage_install && 'true' || 'false' }}
+          STORAGE_BEFORE_HASH: ${{ inputs.runtime_storage_before_hash }}
+          STORAGE_BUNDLE_HASH: ${{ inputs.runtime_storage_bundle_hash }}
+          STORAGE_MANIFEST_HASH: ${{ inputs.runtime_storage_manifest_hash }}
           CHAT_ENV_INSTALL: ${{ inputs.crm_chat_env_install && 'true' || 'false' }}
           CHAT_ENV_BEFORE_HASH: ${{ inputs.crm_chat_env_before_hash }}
           CHAT_ENV_BUNDLE_HASH: ${{ inputs.crm_chat_env_bundle_hash }}
@@ -714,6 +761,9 @@ jobs:
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "umask 077; mkdir -p /opt/aerocrm/releases/staging && mkdir '$stage'"
             scp -r -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/compose infra/scripts "$dest:$stage/"
             scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes manifest/backend-manifest.json "$dest:$stage/"
+            if [ "$STORAGE_INSTALL" = true ]; then
+              scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes "$RUNNER_TEMP/runtime-storage-env.json" "$RUNNER_TEMP/storage-manifest.json" "$dest:$stage/"
+            fi
             if [ "$CHAT_ENV_INSTALL" = true ]; then
               scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes "$RUNNER_TEMP/crm-access-chat-env.json" "$dest:$stage/crm-access-chat-env.json"
             fi
@@ -783,6 +833,9 @@ jobs:
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && REVIEWED_INFRA_DIR='$stage' '$node_bin' '$stage/scripts/crm-contract-cutover.mjs' '$SHA' '$STAGED_DIR' '$DEFINITIONS_FILE'$resume_arg"
           elif [ "$ROLE" = backend ]; then
             manifest_env="BACKEND_MANIFEST_PATH='$stage/backend-manifest.json' INFRA_SHA='$INFRA_SHA' CI_RUN_ID='$RUN_ID'"
+            if [ "$STORAGE_INSTALL" = true ]; then
+              manifest_env="$manifest_env CRM_RUNTIME_STORAGE_INSTALL='true' CRM_RUNTIME_STORAGE_BEFORE_HASH='$STORAGE_BEFORE_HASH' CRM_RUNTIME_STORAGE_BUNDLE_HASH='$STORAGE_BUNDLE_HASH' CRM_RUNTIME_STORAGE_MANIFEST_HASH='$STORAGE_MANIFEST_HASH'"
+            fi
             if [ "$MAIL_ENV_INSTALL" = true ]; then
               manifest_env="$manifest_env CRM_MAIL_ENV_INSTALL='true' CRM_MAIL_ENV_BEFORE_HASH='$MAIL_ENV_BEFORE_HASH' CRM_MAIL_ENV_BUNDLE_HASH='$MAIL_ENV_BUNDLE_HASH'"
             fi
@@ -809,3 +862,6 @@ jobs:
       - name: Remove runner private Chat bundle
         if: always() && inputs.crm_chat_env_install
         run: rm -f "$RUNNER_TEMP/crm-access-chat-env.json"
+      - name: Remove runner private runtime storage bundles
+        if: always() && inputs.runtime_storage_install
+        run: rm -f "$RUNNER_TEMP/runtime-storage-env.json" "$RUNNER_TEMP/storage-manifest.json"

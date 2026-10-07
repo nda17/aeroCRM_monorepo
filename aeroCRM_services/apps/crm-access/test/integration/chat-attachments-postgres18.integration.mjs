@@ -1,10 +1,12 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';
+import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { ChatAttachmentsFakeStorage } from './chat-attachments-fake-storage.mjs';
 const require = createRequire(import.meta.url);
 const { PrismaClient } = require('@prisma/crm-access-client');
+const { Client } = require('pg');
 const { ForbiddenException } = require('@nestjs/common');
 const {
 	ChatAttachmentsService
@@ -25,7 +27,21 @@ assert.equal(
 	process.env.CRM_ACCESS_TEST_RUNTIME_ROLE
 );
 assert.equal(url.searchParams.get('schema'), 'crm_access');
+const migrationDatabaseUrl = process.env.CRM_ACCESS_TEST_MIGRATION_DATABASE_URL;
+assert.ok(migrationDatabaseUrl, 'An isolated migration-role URL is required for PostgreSQL upgrade fixtures');
+const migrationUrl = new URL(migrationDatabaseUrl);
+assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(migrationUrl.hostname));
+assert.equal(migrationUrl.hostname, url.hostname);
+assert.equal(migrationUrl.port, url.port);
+assert.equal(migrationUrl.pathname, url.pathname);
+assert.equal(migrationUrl.searchParams.get('schema'), 'crm_access');
+assert.match(decodeURIComponent(migrationUrl.username), /_migration$/);
+assert.notEqual(decodeURIComponent(migrationUrl.username), process.env.CRM_ACCESS_TEST_RUNTIME_ROLE);
 const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+const legacyMigration = fs.readFileSync(new URL('../../prisma/migrations/20261007010000_chat_attachments/migration.sql', import.meta.url));
+const messengerMigration = fs.readFileSync(new URL('../../prisma/migrations/20261008010000_messenger_storage_prefix/migration.sql', import.meta.url), 'utf8');
+const legacyMigrationHash = createHash('sha256').update(legacyMigration).digest('hex');
+const messengerMigrationSql = messengerMigration.replaceAll('crm_access.', 'pg_temp.');
 const workspaceId = randomUUID();
 const owner = {
 	workspaceId,
@@ -140,6 +156,42 @@ try {
 		await prisma.$queryRaw`SELECT current_user AS name,current_setting('server_version_num')::int AS version,rolsuper,rolcreatedb,rolcreaterole,rolinherit,rolreplication,rolbypassrls,pg_get_userbyid(nspowner)<>current_user AS not_owner FROM pg_roles JOIN pg_namespace ON nspname='crm_access' WHERE rolname=current_user`;
 	assert.equal(rows[0].name, process.env.CRM_ACCESS_TEST_RUNTIME_ROLE);
 	assert.ok(rows[0].version >= 180000 && rows[0].version < 190000);
+	assert.equal(legacyMigrationHash, '20fd09e316cc877c0b2424be269f4fe7ca56e1b8996bc083bd631087d88eb019', 'the original Chat attachment migration is immutable');
+	// Run the additive upgrade against temporary tables on PostgreSQL, leaving the
+	// migrated application schema and its data untouched.
+	const migrationConnectionUrl = new URL(migrationDatabaseUrl);
+	migrationConnectionUrl.searchParams.delete('schema');
+	const migrationDb = new Client({ connectionString: migrationConnectionUrl.toString() });
+	await migrationDb.connect();
+	try {
+		await migrationDb.query(`CREATE TEMP TABLE crm_chat_attachments (
+			id uuid NOT NULL, workspace_id uuid NOT NULL, conversation_id uuid NOT NULL,
+			private_object_key varchar(200) NOT NULL,
+			CONSTRAINT crm_chat_attachments_private_object_key_check CHECK(private_object_key='chat/'||workspace_id::text||'/'||conversation_id::text||'/'||id::text),
+			state varchar(16) NOT NULL
+		)`);
+		await migrationDb.query('CREATE TEMP TABLE crm_team_command_receipts (command_type varchar(64) NOT NULL)');
+		for (const state of ['UPLOADING', 'READY', 'ATTACHED', 'DELETING', 'DELETED']) {
+			const id = randomUUID();
+			await migrationDb.query('INSERT INTO pg_temp.crm_chat_attachments (id,workspace_id,conversation_id,private_object_key,state) VALUES ($1,$2,$3,$4,$5)', [id, workspaceId, owner.membershipId, `chat/${workspaceId}/${owner.membershipId}/${id}`, state]);
+			await assert.rejects(migrationDb.query(messengerMigrationSql), /requires empty attachment history/);
+			await migrationDb.query('ROLLBACK');
+			await migrationDb.query('DELETE FROM pg_temp.crm_chat_attachments');
+		}
+		await migrationDb.query("INSERT INTO pg_temp.crm_team_command_receipts(command_type) VALUES ('chat.upload')");
+		await assert.rejects(migrationDb.query(messengerMigrationSql), /requires no chat.upload receipts/);
+		await migrationDb.query('ROLLBACK');
+		await migrationDb.query('DELETE FROM pg_temp.crm_team_command_receipts');
+		await migrationDb.query(messengerMigrationSql);
+		const check = await migrationDb.query("SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='pg_temp.crm_chat_attachments'::regclass AND conname='crm_chat_attachments_private_object_key_check'");
+		assert.match(check.rows[0].definition, /messenger/);
+		const rejectedId = randomUUID();
+		await assert.rejects(migrationDb.query('INSERT INTO pg_temp.crm_chat_attachments (id,workspace_id,conversation_id,private_object_key,state) VALUES ($1,$2,$3,$4,$5)', [rejectedId, workspaceId, owner.membershipId, `chat/${workspaceId}/${owner.membershipId}/${rejectedId}`, 'UPLOADING']));
+		const acceptedId = randomUUID();
+		await migrationDb.query('INSERT INTO pg_temp.crm_chat_attachments (id,workspace_id,conversation_id,private_object_key,state) VALUES ($1,$2,$3,$4,$5)', [acceptedId, workspaceId, owner.membershipId, `messenger/${workspaceId}/${owner.membershipId}/${acceptedId}`, 'UPLOADING']);
+	} finally {
+		await migrationDb.end();
+	}
 	for (const key of [
 		'rolsuper',
 		'rolcreatedb',
@@ -728,6 +780,13 @@ try {
 		'unknown malformed chat prefix never touched'
 	);
 	// Metadata cannot be rebound or point outside the chat private prefix.
+	const legacyPrefixId = randomUUID();
+	await assert.rejects(
+		seedPending({
+			id: legacyPrefixId,
+			privateObjectKey: `chat/${workspaceId}/${room}/${legacyPrefixId}`
+		})
+	);
 	await assert.rejects(
 		seedPending({ privateObjectKey: 'mail/foreign/secret' })
 	);

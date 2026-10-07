@@ -20,6 +20,20 @@ on:
       frontend_env_hash:
         description: Approved aggregate frontend env hash on VPS
         required: true
+      runtime_storage_install:
+        description: Reviewed forward-only seven-object storage cutover before DDL and image switch
+        required: false
+        type: boolean
+        default: false
+      runtime_storage_before_hash:
+        description: Approved backend env aggregate before the 25-value runtime storage delta
+        required: false
+      runtime_storage_bundle_hash:
+        description: SHA-256 of canonical private CRM_RUNTIME_STORAGE_ENV_BUNDLE
+        required: false
+      runtime_storage_manifest_hash:
+        description: SHA-256 of private seven-object inventory and frozen database reference contract
+        required: false
       chat_env_install:
         description: Install separately provisioned independent Chat storage key after bounded scope probe
         type: boolean
@@ -43,6 +57,10 @@ jobs:
       sha: ${{ inputs.sha }}
       infra_sha: ${{ inputs.infra_sha }}
       backend_env_hash: ${{ inputs.backend_env_hash }}
+      runtime_storage_install: ${{ inputs.runtime_storage_install }}
+      runtime_storage_before_hash: ${{ inputs.runtime_storage_before_hash }}
+      runtime_storage_bundle_hash: ${{ inputs.runtime_storage_bundle_hash }}
+      runtime_storage_manifest_hash: ${{ inputs.runtime_storage_manifest_hash }}
       crm_chat_env_install: ${{ inputs.chat_env_install }}
       crm_chat_env_before_hash: ${{ inputs.chat_env_before_hash }}
       crm_chat_env_bundle_hash: ${{ inputs.chat_env_bundle_hash }}

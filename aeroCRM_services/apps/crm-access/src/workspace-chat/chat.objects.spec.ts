@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import {
   boundedBytes,
+  ChatObjects,
   safeChatFilename,
   validateChatBytes,
   validateOoxml,
@@ -65,6 +66,25 @@ const docx = (extra: Array<[string, string]> = []) =>
   ]);
 
 describe("chat attachment validation", () => {
+  it("uses canonical messenger UUID keys and rejects foreign, legacy, or malformed scopes", () => {
+    const objects = new ChatObjects();
+    const workspaceId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const conversationId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+    const attachmentId = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+    const canonical = `messenger/${workspaceId}/${conversationId}/${attachmentId}`;
+
+    expect(objects.key(workspaceId.toUpperCase(), conversationId.toUpperCase(), attachmentId.toUpperCase())).toBe(canonical);
+    expect(() => objects.assertKey(canonical, workspaceId, conversationId)).not.toThrow();
+    for (const key of [
+      `chat/${workspaceId}/${conversationId}/${attachmentId}`,
+      `messenger/${workspaceId}/${conversationId}/../${attachmentId}`,
+      `messenger/${workspaceId.toUpperCase()}/${conversationId}/${attachmentId}`,
+      `messenger/${"dddddddd-dddd-dddd-dddd-dddddddddddd"}/${conversationId}/${attachmentId}`,
+    ]) {
+      expect(() => objects.assertKey(key, workspaceId, conversationId)).toThrow("CHAT_OBJECT_SCOPE");
+    }
+  });
+
   it("bounds streamed reads and sanitizes filename controls", async () => {
     async function* chunks() {
       yield Buffer.from("abc");

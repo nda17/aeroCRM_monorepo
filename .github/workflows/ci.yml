@@ -1,7 +1,7 @@
 name: aeroCRM CI
 on:
   push:
-    branches: [dev_0.1.0/feature/standalone-crm, dev_0.2.0/feature/selective-backend-release, dev_0.3.0/feature/draft-protection-and-corporate-mail, dev_0.4.0/feature/crm-file-imports, dev_0.5.0/feature/planner-customization, dev_0.5.1/fix/mail-deliverability, dev_0.6.0/feature/crm-ux-unification, dev_0.6.1/fix/rabbitmq-cold-start, dev_0.7.0/feature/workspace-collaboration, dev_0.8.0/feature/meeting3-workflows, prod_0.1.0]
+    branches: [dev_0.1.0/feature/standalone-crm, dev_0.2.0/feature/selective-backend-release, dev_0.3.0/feature/draft-protection-and-corporate-mail, dev_0.4.0/feature/crm-file-imports, dev_0.5.0/feature/planner-customization, dev_0.5.1/fix/mail-deliverability, dev_0.6.0/feature/crm-ux-unification, dev_0.6.1/fix/rabbitmq-cold-start, dev_0.7.0/feature/workspace-collaboration, dev_0.8.0/feature/meeting3-workflows, dev_0.8.1/fix/runtime-storage, prod_0.1.0]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -666,6 +666,7 @@ jobs:
         env:
           CRM_ACCESS_INTEGRATION_ALLOW_MUTATION: 'true'
           CRM_ACCESS_TEST_DATABASE_URL: postgresql://aerocrm_crm_access_runtime:local-runtime-only@127.0.0.1:5432/aerocrm_crm_access_test?schema=crm_access
+          CRM_ACCESS_TEST_MIGRATION_DATABASE_URL: postgresql://aerocrm_crm_access_migration:local-migration-only@127.0.0.1:5432/aerocrm_crm_access_test?schema=crm_access
           CRM_ACCESS_TEST_RUNTIME_ROLE: aerocrm_crm_access_runtime
         run: pnpm test:integration:workspace-collaboration
   crm-sales-commerce-postgres18:

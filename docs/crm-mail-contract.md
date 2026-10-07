@@ -607,6 +607,14 @@ Get/Put/Delete только `backup-services/mail/*`, ListBucket только с
 отклонены с 403. Контрольный объект вне `mail/` сохранился неизменным;
 оба тестовых объекта удалены, отсутствие подтверждено. Резервные копии не менялись.
 
+Актуальный storage contract 08.10.2026 для согласованной консолидации:
+Mail сохраняет ключи `mail/*` и все metadata/ACL/MIME semantics, но runtime tuple
+переносится в Standard PRIVATE bucket `content-files` с отдельным ограниченным
+Mail key. `backup-services` (Cold, PRIVATE) предназначен только для
+`database-backups/`. Перенос прежних mail objects требует полного inventory,
+проверки байтов/SHA, приватности и штатного GitHub CI/CD switch. Историческая
+проверка ключа в `backup-services` выше описывает прежнее размещение.
+
 Передача пакета с новым ограниченным S3-ключом в существующий GitHub secret
 отдельно разрешена владельцем. [Включение 36432470119](https://github.com/nda17/aeroCRM_monorepo/actions/runs/36432470119)
 успешно: тот же app SHA/infra, миграция повторно не запускалась, прежний

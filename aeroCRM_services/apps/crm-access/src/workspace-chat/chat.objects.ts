@@ -12,6 +12,10 @@ import sharp from 'sharp';
 import yauzl from 'yauzl';
 import { createHash } from 'node:crypto';
 const CHAT_LIMITS = { maxFileBytes: 5 * 1024 * 1024 };
+const UUID_KEY = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const CHAT_OBJECT_KEY = new RegExp(
+	`^messenger/(${UUID_KEY})/(${UUID_KEY})/(${UUID_KEY})$`
+);
 const digest = (bytes: Buffer) =>
 	createHash('sha256').update(bytes).digest('hex');
 
@@ -295,16 +299,25 @@ export class ChatObjects {
 			: null;
 	}
 	key(workspaceId: string, conversationId: string, id: string): string {
-		return `chat/${workspaceId.toLowerCase()}/${conversationId.toLowerCase()}/${id.toLowerCase()}`;
+		const key = `messenger/${workspaceId.toLowerCase()}/${conversationId.toLowerCase()}/${id.toLowerCase()}`;
+		this.assertKey(key, workspaceId, conversationId);
+		return key;
 	}
 	assertKey(key: string, workspaceId: string, conversationId: string): void {
+		const parts = CHAT_OBJECT_KEY.exec(key);
 		if (
-			!key.startsWith(`chat/${workspaceId}/${conversationId}/`) ||
-			key.includes('..')
+			!parts ||
+			parts[1] !== workspaceId.toLowerCase() ||
+			parts[2] !== conversationId.toLowerCase()
 		)
 			throw new Error('CHAT_OBJECT_SCOPE');
 	}
+	private assertCanonicalKey(key: string): void {
+		const parts = key.split('/');
+		this.assertKey(key, parts[1] || '', parts[2] || '');
+	}
 	async put(key: string, bytes: Buffer): Promise<void> {
+		this.assertCanonicalKey(key);
 		if (!this.client)
 			throw new ServiceUnavailableException({
 				code: 'crm_chat_objects_not_configured'
@@ -322,6 +335,7 @@ export class ChatObjects {
 		);
 	}
 	async get(key: string, max = CHAT_LIMITS.maxFileBytes): Promise<Buffer> {
+		this.assertCanonicalKey(key);
 		if (!this.client)
 			throw new ServiceUnavailableException({
 				code: 'crm_chat_objects_not_configured'
@@ -341,7 +355,7 @@ export class ChatObjects {
 		const result = await this.client.send(
 			new ListObjectsV2Command({
 				Bucket: this.bucket,
-				Prefix: 'chat/',
+				Prefix: 'messenger/',
 				MaxKeys: 100,
 				ContinuationToken: cursor
 			}),
@@ -349,13 +363,17 @@ export class ChatObjects {
 		);
 		return {
 			items: (result.Contents || [])
-				.filter(item => item.Key && item.LastModified)
+				.filter(
+					item =>
+						item.Key && CHAT_OBJECT_KEY.test(item.Key) && item.LastModified
+				)
 				.map(item => ({ key: item.Key!, createdAt: item.LastModified! })),
 			nextCursor: result.NextContinuationToken
 		};
 	}
 
 	async remove(key: string): Promise<void> {
+		this.assertCanonicalKey(key);
 		if (!this.client) throw new Error('CHAT_OBJECTS_NOT_CONFIGURED');
 		await this.client.send(
 			new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),

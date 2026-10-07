@@ -136,21 +136,36 @@ inbox_entries RESTRICT, immutable + workspace guard, runtime SELECT/INSERT.
 ## Вложения чата
 
 Access владеет metadata/ACL/commands, private S3 prefix
-`chat/{workspaceId}/{conversationId}/{attachmentId}` в существующем bucket.
+`messenger/{workspaceId}/{conversationId}/{attachmentId}` в bucket `content-files`
+(Standard, PRIVATE). UUID в ключе канонические, в нижнем регистре; scoped
+`assertKey` выполняется до Put/Get/Delete, orphan sweeper перечисляет только
+`messenger/` и удаляет только канонические ключи этого префикса.
 CRM_CHAT_ATTACHMENTS_ENABLED=true и отдельные CRM_CHAT_S3_ENDPOINT/REGION/BUCKET/
 ACCESS_KEY_ID/SECRET_ACCESS_KEY/FORCE_PATH_STYLE. Только reviewed CI env installer,
-с отдельным ключом только для `chat/`, без mail encryption keys и новых
-bucket/provider/billing. Почтовый ключ не совместим с `chat/`: read-only probe
-07.10.2026 подтвердил403. Ключи и политики Mail/backup не расширяются. Access-owned bounded
+с отдельным ключом только для `content-files/messenger/*`, без mail encryption keys.
+Ключи Mail, Support, Identity и backup не расширяются. Access-owned bounded
 S3 helper, не импорт MailObjects business service.
 
-Installer принимает canonical delta из ровно7 chat keys и меняет только
-`crm-access-api.env`; прочие строки и файлы сохраняются. Storage tuple совпадает
-с действующим Customers Mail S3, access key отличается. До DDL/config switch
+Storage installer переносит runtime tuple Mail/Support/Identity/Chat в
+`content-files` с отдельными ограниченными credentials каждого владельца;
+`backup-services` (Cold, PRIVATE) хранит только `database-backups/`.
+Префиксы runtime: `mail/`, `support/attachments/`, `identity/avatars/`, `messenger/`.
+Исторический публичный APK остаётся по exact versioned key; runtime объекты
+публичными не становятся. API `/chat` и имена `CRM_CHAT_*` сохраняются.
+До DDL/config switch
 под release lock кандидат Access exact-SHA image выполняет bounded synthetic
 probe Put/Get/hash/List/private/Delete и подтверждённые403 для чужих префиксов
 `mail/`, `database-backups/`, `support/attachments/`, `identity/avatars/`.
 Без отдельного ключа или успешного probe gate остаётся выключенным.
+
+Аддитивная миграция `20261008010000_messenger_storage_prefix` под ограниченными
+lock/statement timeout блокирует таблицы attachments/receipts, требует отсутствия
+всех attachment rows (включая DELETED) и `chat.upload` receipts, сверяет exact
+прежний CHECK и заменяет только его на `messenger/`. Прежняя применённая SQL и её
+checksum неизменны; новые Access history и Operations backup manifest обновляются.
+Перенос существующих runtime объектов проверяется отдельно по полному inventory,
+байтам/SHA и приватности. Сбой устраняется fix-forward; удаления старого
+`support-chat-files` выполняет владелец после подтверждения переноса.
 
 Лимиты:5MiB/file,10files и20MiB/message,50MiB и20pending/actorMembership,
 1GiB retained/workspace,24h pending TTL. PNG/JPEG/WebP/PDF/TXT/CSV/DOCX/XLSX;
