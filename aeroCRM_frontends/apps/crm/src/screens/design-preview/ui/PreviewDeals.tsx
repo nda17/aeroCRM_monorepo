@@ -6,10 +6,9 @@ import { AppIcon } from '@/shared/ui/app-icon'
 import { Drawer } from '@/shared/ui/drawer'
 import { PREVIEW_DEALS, PREVIEW_STAGES } from '../model/preview-data'
 import type { PreviewDeal } from '../model/preview-data'
+import { previewMoney as money } from './PreviewPrimitives'
 import styles from './DesignPreview.module.scss'
 
-const money = (value: number) =>
-	`${new Intl.NumberFormat('ru-RU').format(value)} ₽`
 const owners = [...new Set(PREVIEW_DEALS.map(deal => deal.owner))]
 type View = 'board' | 'list'
 type Scope = 'all' | 'mine' | 'overdue'
@@ -58,11 +57,13 @@ export default function PreviewDeals({
 	const [stage, setStage] = useState('')
 	const [creating, setCreating] = useState(false)
 	const [notes, setNotes] = useState<Record<string, string[]>>({})
-	const [note, setNote] = useState('')
-	const [notice, setNotice] = useState('')
+	const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({})
+	const [notices, setNotices] = useState<Record<string, string>>({})
 	const [createError, setCreateError] = useState('')
 	const searchRef = useRef<HTMLInputElement>(null)
 	const selected = deals.find(deal => deal.id === selectedDealId)
+	const note = selected ? (noteDrafts[selected.id] ?? '') : ''
+	const notice = selected ? (notices[selected.id] ?? '') : ''
 	const total = deals.reduce((sum, deal) => sum + deal.amount, 0)
 	const overdue = deals.filter(deal => deal.overdue).length
 	const mine = deals.filter(deal => deal.owner === owners[0]).length
@@ -92,16 +93,18 @@ export default function PreviewDeals({
 	}
 	const openDeal = (id: string) => {
 		onSelectDeal(id)
-		setNote('')
-		setNotice('')
 	}
 	const updateDeal = (patch: Partial<PreviewDeal>) => {
+		if (!selected) return
 		setDeals(items =>
 			items.map(deal =>
 				deal.id === selectedDealId ? { ...deal, ...patch } : deal
 			)
 		)
-		setNotice('Изменения сохранены в демоверсии')
+		setNotices(items => ({
+			...items,
+			[selected.id]: 'Изменения сохранены в демоверсии'
+		}))
 	}
 	const createDeal = (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault()
@@ -134,6 +137,7 @@ export default function PreviewDeals({
 			},
 			...items
 		])
+		event.currentTarget.reset()
 		setCreating(false)
 		reset()
 		openDeal(id)
@@ -145,8 +149,11 @@ export default function PreviewDeals({
 			...items,
 			[selected.id]: [note.trim(), ...(items[selected.id] ?? [])]
 		}))
-		setNote('')
-		setNotice('Заметка добавлена в демоверсии')
+		setNoteDrafts(items => ({ ...items, [selected.id]: '' }))
+		setNotices(items => ({
+			...items,
+			[selected.id]: 'Заметка добавлена в демоверсии'
+		}))
 	}
 	const dealCard = (deal: PreviewDeal) => (
 		<button
@@ -536,7 +543,7 @@ export default function PreviewDeals({
 										</span>
 									</div>
 									<h3>{selected.task}</h3>
-									<p>{selected.owner}</p>
+									<p>{selected.nextTaskOwner ?? selected.owner}</p>
 									{selected.due !== 'Выполнено' && (
 										<button
 											className={styles.secondaryButton}
@@ -589,7 +596,17 @@ export default function PreviewDeals({
 									<textarea
 										id="deal-note"
 										value={note}
-										onChange={event => setNote(event.target.value)}
+										onChange={event => {
+											const value = event.target.value
+											setNoteDrafts(items => ({
+												...items,
+												[selected.id]: value
+											}))
+											setNotices(items => ({
+												...items,
+												[selected.id]: ''
+											}))
+										}}
 										placeholder="Запишите важное о договорённостях…"
 										rows={3}
 										maxLength={4000}

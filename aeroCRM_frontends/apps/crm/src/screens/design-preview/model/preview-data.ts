@@ -3,12 +3,14 @@ export type PreviewDeal = {
 	title: string
 	company: string
 	contact: string
+	contactId?: string
 	initials: string
 	amount: number
 	stage: number
 	owner: string
 	ownerInitials: string
 	task: string
+	nextTaskOwner?: string
 	due: string
 	overdue: boolean
 	source: string

@@ -82,6 +82,9 @@ export default function PreviewCommunications({
 	const [messages, setMessages] = useState<Record<string, LocalMessage[]>>(
 		{}
 	)
+	const [originalTimes, setOriginalTimes] = useState<
+		Record<string, string>
+	>({})
 	const [drafts, setDrafts] = useState<Record<string, string>>({})
 	const [composing, setComposing] = useState(false)
 	const [newMail, setNewMail] = useState({
@@ -132,6 +135,12 @@ export default function PreviewCommunications({
 				)
 			)
 		}
+	}
+
+	const changeSearch = (value: string) => {
+		setSearch(value)
+		onSelect(null)
+		setNotice('')
 	}
 
 	const changeMailFolder = (folder: MailFolder) => {
@@ -206,6 +215,11 @@ export default function PreviewCommunications({
 		if (!selected) return
 		const body = (drafts[selected.id] ?? '').trim()
 		if (!body) return
+		setOriginalTimes(items =>
+			items[selected.id] === undefined
+				? { ...items, [selected.id]: selected.time }
+				: items
+		)
 		const entry = { id: `reply-${Date.now()}`, body, time: 'Сейчас' }
 		setMessages(items => ({
 			...items,
@@ -336,7 +350,7 @@ export default function PreviewCommunications({
 			<div className={styles.toolbar}>
 				<PreviewSearch
 					value={search}
-					onChange={setSearch}
+					onChange={changeSearch}
 					label={
 						channel === 'chat' ? 'Поиск диалогов' : 'Поиск по переписке'
 					}
@@ -345,7 +359,7 @@ export default function PreviewCommunications({
 				<span className={styles.conversationMeta}>
 					{unreadCount > 0
 						? `Непрочитано: ${unreadCount}`
-						: `${filtered.length} переписок`}
+						: `${channel === 'chat' ? 'Диалогов' : 'Переписок'}: ${filtered.length}`}
 				</span>
 			</div>
 			<div
@@ -363,7 +377,7 @@ export default function PreviewCommunications({
 									? 'Попробуйте другой запрос.'
 									: 'Здесь появятся сообщения демоверсии.'
 							}
-							reset={search ? () => setSearch('') : undefined}
+							reset={search ? () => changeSearch('') : undefined}
 						/>
 					) : (
 						filtered.map(thread => (
@@ -494,7 +508,7 @@ export default function PreviewCommunications({
 										? 'Вы'
 										: selected.name}
 									<time className={styles.messageDate}>
-										{selected.time}
+										{originalTimes[selected.id] ?? selected.time}
 									</time>
 								</div>
 								<p

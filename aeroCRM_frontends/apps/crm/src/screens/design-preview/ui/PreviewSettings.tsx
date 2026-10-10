@@ -102,12 +102,17 @@ const roles = [
 export default function PreviewSettings({
 	workspaceName,
 	onWorkspaceNameChange,
+	onCalendarPreferencesChange,
 	employees,
 	theme,
 	onThemeChange
 }: {
 	workspaceName: string
 	onWorkspaceNameChange: (name: string) => void
+	onCalendarPreferencesChange: (preferences: {
+		timeZone: string
+		weekStart: string
+	}) => void
 	employees: PreviewEmployee[]
 	theme: Theme
 	onThemeChange: (theme: Theme) => void
@@ -176,6 +181,10 @@ export default function PreviewSettings({
 		setGeneral(next)
 		setSavedGeneral(next)
 		onWorkspaceNameChange(name)
+		onCalendarPreferencesChange({
+			timeZone: next.timeZone,
+			weekStart: next.weekStart
+		})
 		setError('')
 		setNotice('Настройки пространства сохранены в предпросмотре.')
 	}

@@ -9,7 +9,6 @@ export interface PreviewTask {
 	status: 'todo' | 'doing' | 'done'
 	priority: 'high' | 'normal'
 	due: string
-	day: number
 	overdue?: boolean
 }
 
@@ -67,7 +66,6 @@ export const PREVIEW_TASKS: PreviewTask[] = PREVIEW_DEALS.map(
 		status: index % 2 === 0 ? 'todo' : 'doing',
 		priority: deal.overdue ? 'high' : 'normal',
 		due: deal.due,
-		day: index % 7,
 		overdue: deal.overdue
 	})
 )

@@ -15,7 +15,11 @@ import {
 	PREVIEW_EMPLOYEES,
 	PREVIEW_THREADS
 } from '../model/workspace-data'
-import type { PreviewTask, PreviewThread } from '../model/workspace-data'
+import type {
+	PreviewTask,
+	PreviewThread,
+	PreviewContact
+} from '../model/workspace-data'
 import PreviewDeals from './PreviewDeals'
 import PreviewAnalytics from './PreviewAnalytics'
 import PreviewSettings from './PreviewSettings'
@@ -49,7 +53,19 @@ export default function DesignPreview() {
 	}, [section])
 	const [theme, setTheme] = useState<'light' | 'dark'>('dark')
 	const [workspaceName, setWorkspaceName] = useState('Студия Север')
-	const [deals, setDeals] = useState(PREVIEW_DEALS)
+	const [deals, setDeals] = useState<PreviewDeal[]>(() =>
+		PREVIEW_DEALS.map(deal => ({
+			...deal,
+			contactId: PREVIEW_CONTACTS.find(
+				contact =>
+					contact.name === deal.contact && contact.company === deal.company
+			)?.id
+		}))
+	)
+	const [calendarPreferences, setCalendarPreferences] = useState({
+		timeZone: 'Europe/Moscow',
+		weekStart: 'monday'
+	})
 	const [tasks, setTasks] = useState(PREVIEW_TASKS)
 	const [contacts, setContacts] = useState(PREVIEW_CONTACTS)
 	const [products, setProducts] = useState(PREVIEW_PRODUCTS)
@@ -70,6 +86,7 @@ export default function DesignPreview() {
 	const navigate = (key: string) => {
 		setMobileNav(false)
 		setSelectedDealId(null)
+		if (window.location.hash === `#${key}`) return
 		window.history.pushState(null, '', `#${key}`)
 		window.dispatchEvent(new HashChangeEvent('hashchange'))
 	}
@@ -92,7 +109,6 @@ export default function DesignPreview() {
 					status: 'todo' as const,
 					priority: 'normal' as const,
 					due: deal.due,
-					day: 0,
 					overdue: deal.overdue
 				})),
 			...items.map(task => {
@@ -117,7 +133,8 @@ export default function DesignPreview() {
 					!previous ||
 					(task.status === previous.status &&
 						task.title === previous.title &&
-						task.due === previous.due)
+						task.due === previous.due &&
+						task.owner === previous.owner)
 				)
 					return deal
 				return {
@@ -125,10 +142,30 @@ export default function DesignPreview() {
 					task:
 						task.status === 'done' ? 'Следующий шаг выполнен' : task.title,
 					due: task.status === 'done' ? 'Выполнено' : task.due,
+					nextTaskOwner: task.owner,
 					overdue:
 						task.status !== 'done' &&
 						(task.overdue ?? task.due.includes('Вчера'))
 				}
+			})
+		)
+	}
+	const updateContacts = (action: SetStateAction<PreviewContact[]>) => {
+		const next = typeof action === 'function' ? action(contacts) : action
+		setContacts(next)
+		setDeals(items =>
+			items.map(deal => {
+				const contact = next.find(item => item.id === deal.contactId)
+				return contact
+					? { ...deal, company: contact.company, contact: contact.name }
+					: deal
+			})
+		)
+		setTasks(items =>
+			items.map(task => {
+				const deal = deals.find(item => item.id === task.dealId)
+				const contact = next.find(item => item.id === deal?.contactId)
+				return contact ? { ...task, company: contact.company } : task
 			})
 		)
 	}
@@ -249,7 +286,34 @@ export default function DesignPreview() {
 		</nav>
 	)
 	return (
-		<div className={styles.preview} data-preview-theme={theme}>
+		<div
+			className={styles.preview}
+			data-preview-theme={theme}
+			onKeyDownCapture={event => {
+				if (event.key !== 'Tab' || !(event.target instanceof HTMLElement))
+					return
+				const dialog = event.target.closest('dialog[open]')
+				if (!dialog) return
+				const controls = Array.from(
+					dialog.querySelectorAll<HTMLElement>(
+						'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+					)
+				).filter(
+					control =>
+						control.getClientRects().length > 0 &&
+						control.closest('dialog') === dialog
+				)
+				const first = controls[0]
+				const last = controls[controls.length - 1]
+				if (event.shiftKey && document.activeElement === first) {
+					event.preventDefault()
+					last?.focus()
+				} else if (!event.shiftKey && document.activeElement === last) {
+					event.preventDefault()
+					first?.focus()
+				}
+			}}
+		>
 			<a
 				href="#preview-main"
 				className={styles.skipLink}
@@ -343,6 +407,7 @@ export default function DesignPreview() {
 					</div>
 					<div hidden={section !== 'tasks'}>
 						<PreviewTasks
+							calendarPreferences={calendarPreferences}
 							active={section === 'tasks'}
 							tasks={tasks}
 							setTasks={updateTasks}
@@ -381,7 +446,7 @@ export default function DesignPreview() {
 						<PreviewContacts
 							active={section === 'contacts'}
 							contacts={contacts}
-							setContacts={setContacts}
+							setContacts={updateContacts}
 							deals={deals}
 							onOpenDeal={openDeal}
 						/>
@@ -408,6 +473,7 @@ export default function DesignPreview() {
 					<div hidden={section !== 'settings'}>
 						<main className={styles.content}>
 							<PreviewSettings
+								onCalendarPreferencesChange={setCalendarPreferences}
 								workspaceName={workspaceName}
 								onWorkspaceNameChange={setWorkspaceName}
 								employees={PREVIEW_EMPLOYEES}

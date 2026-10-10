@@ -38,13 +38,46 @@ const days = [
 	'Воскресенье'
 ]
 
+const taskDay = (due: string, timeZone: string) => {
+	const label = due.split(',')[0].trim().toLocaleLowerCase('ru')
+	const named = days.findIndex(
+		day => day.toLocaleLowerCase('ru') === label
+	)
+	if (named >= 0) return named
+	const today = days.findIndex(
+		day =>
+			day.toLocaleLowerCase('ru') ===
+			new Intl.DateTimeFormat('ru-RU', {
+				weekday: 'long',
+				timeZone
+			}).format(new Date())
+	)
+	if (label === 'сегодня') return today
+	if (label === 'завтра') return (today + 1) % 7
+	if (label === 'вчера') return (today + 6) % 7
+	const parts = label.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
+	if (parts) {
+		const [, date, month, year] = parts.map(Number)
+		const value = new Date(Date.UTC(year, month - 1, date))
+		if (
+			value.getUTCFullYear() === year &&
+			value.getUTCMonth() === month - 1 &&
+			value.getUTCDate() === date
+		)
+			return (value.getUTCDay() + 6) % 7
+	}
+	return null
+}
+
 export function PreviewTasks({
+	calendarPreferences,
 	active = true,
 	tasks,
 	setTasks,
 	employees,
 	onOpenDeal
 }: {
+	calendarPreferences: { timeZone: string; weekStart: string }
 	active?: boolean
 	tasks: PreviewTask[]
 	setTasks: Setter<PreviewTask>
@@ -107,8 +140,7 @@ export function PreviewTasks({
 			overdue:
 				editing && editing !== 'new' && editing.due === due
 					? (editing.overdue ?? due.includes('Вчера'))
-					: due.includes('Вчера'),
-			day: Number(data.get('day'))
+					: due.includes('Вчера')
 		}
 		setTasks(items =>
 			editing === 'new'
@@ -192,7 +224,7 @@ export function PreviewTasks({
 						<strong>
 							{tasks.filter(item => item.status !== 'done').length}
 						</strong>{' '}
-						задач в работе
+						в работе
 					</span>
 					<span>
 						<strong>
@@ -200,7 +232,7 @@ export function PreviewTasks({
 						</strong>{' '}
 						выполнено
 					</span>
-					<span>Неделя · демонстрационный календарь</span>
+					<span>Календарь · группировка по сроку</span>
 				</div>
 				<div className={styles.viewBar}>
 					<div className={styles.tabs}>
@@ -255,7 +287,7 @@ export function PreviewTasks({
 						</select>
 						<AppIcon name="chevronDown" size={13} />
 					</label>
-					<span className={styles.results}>{filtered.length} задач</span>
+					<span className={styles.results}>Задач: {filtered.length}</span>
 				</div>
 				{filtered.length === 0 ? (
 					<PreviewEmpty reset={reset} />
@@ -263,16 +295,31 @@ export function PreviewTasks({
 					<div className={styles.taskList}>{filtered.map(taskRow)}</div>
 				) : (
 					<div className={styles.calendarGrid}>
-						{days.map((day, index) => (
+						{(calendarPreferences.weekStart === 'sunday'
+							? [days[6], ...days.slice(0, 6)]
+							: days
+						).map(day => (
 							<section key={day} className={styles.calendarDay}>
 								<header>
 									<h2>{day}</h2>
 									<span>
-										{filtered.filter(task => task.day === index).length}
+										{
+											filtered.filter(
+												task =>
+													taskDay(
+														task.due,
+														calendarPreferences.timeZone
+													) === days.indexOf(day)
+											).length
+										}
 									</span>
 								</header>
 								{filtered
-									.filter(task => task.day === index)
+									.filter(
+										task =>
+											taskDay(task.due, calendarPreferences.timeZone) ===
+											days.indexOf(day)
+									)
 									.map(task => (
 										<button
 											key={task.id}
@@ -292,13 +339,35 @@ export function PreviewTasks({
 											</PreviewStatus>
 										</button>
 									))}
-								{filtered.every(task => task.day !== index) && (
-									<p className={styles.quietText}>Нет задач</p>
-								)}
+								{filtered.every(
+									task =>
+										taskDay(task.due, calendarPreferences.timeZone) !==
+										days.indexOf(day)
+								) && <p className={styles.quietText}>Нет задач</p>}
 							</section>
 						))}
 					</div>
 				)}
+				{view === 'calendar' &&
+					filtered.some(
+						task =>
+							taskDay(task.due, calendarPreferences.timeZone) === null
+					) && (
+						<section className={styles.unscheduledTasks}>
+							<h2>Без даты</h2>
+							<p className={styles.quietText}>
+								Задайте срок: сегодня, завтра, день недели или дату в
+								формате ДД.ММ.ГГГГ.
+							</p>
+							{filtered
+								.filter(
+									task =>
+										taskDay(task.due, calendarPreferences.timeZone) ===
+										null
+								)
+								.map(taskRow)}
+						</section>
+					)}
 				<p className={styles.notice} role="status">
 					{notice}
 				</p>
@@ -382,19 +451,7 @@ export function PreviewTasks({
 								}
 							/>
 						</label>
-						<label>
-							День в календаре
-							<select
-								name="day"
-								defaultValue={editing === 'new' ? 0 : editing.day}
-							>
-								{days.map((day, index) => (
-									<option key={day} value={index}>
-										{day}
-									</option>
-								))}
-							</select>
-						</label>
+
 						<div>
 							<button
 								type="button"
@@ -509,7 +566,7 @@ export function PreviewContacts({
 						placeholder="Имя, компания или email"
 					/>
 					<span className={styles.results}>
-						{filtered.length} контактов
+						Контактов: {filtered.length}
 					</span>
 				</div>
 				{!filtered.length ? (
@@ -662,7 +719,9 @@ export function PreviewContacts({
 								</span>
 								<h2>{contact.name}</h2>
 								<p>
-									{contact.role} · {contact.company}
+									{[contact.role, contact.company]
+										.filter(Boolean)
+										.join(' · ')}
 								</p>
 								<PreviewStatus>{contact.segment}</PreviewStatus>
 							</div>
@@ -685,7 +744,7 @@ export function PreviewContacts({
 							<section className={styles.detailInfo}>
 								<h3>Связанные сделки</h3>
 								{deals
-									.filter(deal => deal.company === contact.company)
+									.filter(deal => deal.contactId === contact.id)
 									.map(deal => (
 										<button
 											className={styles.relatedCard}
@@ -1019,7 +1078,7 @@ export function PreviewDirectory({
 						<AppIcon name="chevronDown" size={13} />
 					</label>
 					<span className={styles.results}>
-						{filtered.length} сотрудника
+						Сотрудников: {filtered.length}
 					</span>
 				</div>
 				{!filtered.length ? (

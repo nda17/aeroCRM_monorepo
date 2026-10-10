@@ -4,10 +4,10 @@ import { useMemo, useState } from 'react'
 import { AppIcon } from '@/shared/ui/app-icon'
 import { PREVIEW_DEALS, PREVIEW_STAGES } from '../model/preview-data'
 import type { PreviewDeal } from '../model/preview-data'
+import { previewMoney as money } from './PreviewPrimitives'
 import styles from './DesignPreview.module.scss'
 
 const number = new Intl.NumberFormat('ru-RU')
-const money = (value: number) => `${number.format(Math.round(value))} ₽`
 const sum = (deals: PreviewDeal[]) =>
 	deals.reduce((total, deal) => total + deal.amount, 0)
 
@@ -302,14 +302,20 @@ export default function PreviewAnalytics({
 											{row.name}
 										</button>
 									</td>
-									<td>{number.format(row.count)}</td>
-									<td className={styles.amountCell}>
+									<td data-label="Сделок">{number.format(row.count)}</td>
+									<td
+										className={styles.amountCell}
+										data-label="Сумма в работе"
+									>
 										{money(row.amount)}
 									</td>
-									<td>
+									<td data-label="Средняя сумма">
 										{row.count ? money(row.amount / row.count) : '—'}
 									</td>
-									<td className={row.overdue ? styles.attention : ''}>
+									<td
+										className={row.overdue ? styles.attention : ''}
+										data-label="Просрочен шаг"
+									>
 										{number.format(row.overdue)}
 									</td>
 								</tr>

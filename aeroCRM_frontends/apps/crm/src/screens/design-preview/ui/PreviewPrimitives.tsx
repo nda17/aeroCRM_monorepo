@@ -84,7 +84,10 @@ export function PreviewEmpty({
 }
 
 export const previewMoney = (value: number) =>
-	`${new Intl.NumberFormat('ru-RU').format(value)} ₽`
+	`${new Intl.NumberFormat('ru-RU', {
+		maximumFractionDigits: 2,
+		minimumFractionDigits: Number.isInteger(value) ? 0 : 2
+	}).format(value)} ₽`
 export const previewInitials = (name: string) =>
 	name
 		.split(' ')
