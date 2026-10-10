@@ -771,6 +771,7 @@
 	margin: 7px 0 22px;
 }
 .previewDrawer {
+	container: preview-panel / inline-size;
 	color-scheme: inherit;
 	color: var(--ink);
 	background: var(--surface);
@@ -780,10 +781,32 @@
 	backdrop-filter: blur(2px);
 }
 .detail {
-	max-width: 620px;
-	margin: 0 auto;
+	width: 100%;
+	min-width: 0;
 	padding: 6px 5px 15px;
 	font-size: 13px;
+}
+.detailColumns > * {
+	min-width: 0;
+}
+@container preview-panel (min-width: 960px) {
+	.detail {
+		padding: 12px clamp(8px, 2cqi, 40px) 24px;
+	}
+	.detailColumns {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		gap: clamp(32px, 4cqi, 64px);
+		align-items: start;
+	}
+	.detailColumns .activity {
+		padding-top: 0;
+		padding-left: clamp(24px, 3cqi, 48px);
+		border-left: 1px solid var(--line);
+	}
+	.detailColumns .detailInfo dl {
+		border-bottom: 0;
+	}
 }
 .detailEyebrow {
 	display: flex;

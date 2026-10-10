@@ -519,115 +519,121 @@ export default function PreviewDeals({
 								<span key={item} data-complete={index <= selected.stage} />
 							))}
 						</div>
-						<section className={styles.nextStep}>
+						<div className={styles.detailColumns}>
 							<div>
-								<span className={styles.sectionKicker}>СЛЕДУЮЩИЙ ШАГ</span>
-								<span
-									className={
-										selected.overdue ? styles.overdue : styles.taskDue
-									}
-								>
-									<AppIcon name="clock" size={13} />
-									{selected.due}
-								</span>
-							</div>
-							<h3>{selected.task}</h3>
-							<p>{selected.owner}</p>
-							{selected.due !== 'Выполнено' && (
-								<button
-									className={styles.secondaryButton}
-									onClick={() =>
-										updateDeal({
-											overdue: false,
-											due: 'Выполнено',
-											task: 'Следующий шаг выполнен'
-										})
-									}
-								>
-									<AppIcon name="check" size={16} />
-									Отметить выполненным
-								</button>
-							)}
-						</section>
-						<section className={styles.detailInfo}>
-							<h3>О сделке</h3>
-							<dl>
-								<div>
-									<dt>Компания</dt>
-									<dd>{selected.company}</dd>
-								</div>
-								<div>
-									<dt>Контакт</dt>
-									<dd>{selected.contact}</dd>
-								</div>
-								<div>
-									<dt>Ответственный</dt>
-									<dd>
-										<span className={styles.avatar}>
-											{selected.ownerInitials}
+								<section className={styles.nextStep}>
+									<div>
+										<span className={styles.sectionKicker}>
+											СЛЕДУЮЩИЙ ШАГ
 										</span>
-										{selected.owner}
-									</dd>
-								</div>
-								<div>
-									<dt>Источник</dt>
-									<dd>{selected.source}</dd>
-								</div>
-							</dl>
-						</section>
-						<section className={styles.activity}>
-							<h3>Заметки и история</h3>
-							<form onSubmit={addNote}>
-								<label className={styles.srOnly} htmlFor="deal-note">
-									Новая заметка
-								</label>
-								<textarea
-									id="deal-note"
-									value={note}
-									onChange={event => setNote(event.target.value)}
-									placeholder="Запишите важное о договорённостях…"
-									rows={3}
-									maxLength={4000}
-								/>
-								<div>
-									<small>Видно в этой демоверсии</small>
-									<button
-										className={styles.primaryButton}
-										disabled={!note.trim()}
-										type="submit"
-									>
-										Добавить заметку
-									</button>
-								</div>
-							</form>
-							<div className={styles.timeline}>
-								{(notes[selected.id] ?? []).map((text, index) => (
-									<article key={`${index}-${text}`}>
-										<span className={styles.avatar}>
-											{PREVIEW_DEALS[0].ownerInitials}
+										<span
+											className={
+												selected.overdue ? styles.overdue : styles.taskDue
+											}
+										>
+											<AppIcon name="clock" size={13} />
+											{selected.due}
+										</span>
+									</div>
+									<h3>{selected.task}</h3>
+									<p>{selected.owner}</p>
+									{selected.due !== 'Выполнено' && (
+										<button
+											className={styles.secondaryButton}
+											onClick={() =>
+												updateDeal({
+													overdue: false,
+													due: 'Выполнено',
+													task: 'Следующий шаг выполнен'
+												})
+											}
+										>
+											<AppIcon name="check" size={16} />
+											Отметить выполненным
+										</button>
+									)}
+								</section>
+								<section className={styles.detailInfo}>
+									<h3>О сделке</h3>
+									<dl>
+										<div>
+											<dt>Компания</dt>
+											<dd>{selected.company}</dd>
+										</div>
+										<div>
+											<dt>Контакт</dt>
+											<dd>{selected.contact}</dd>
+										</div>
+										<div>
+											<dt>Ответственный</dt>
+											<dd>
+												<span className={styles.avatar}>
+													{selected.ownerInitials}
+												</span>
+												{selected.owner}
+											</dd>
+										</div>
+										<div>
+											<dt>Источник</dt>
+											<dd>{selected.source}</dd>
+										</div>
+									</dl>
+								</section>
+							</div>
+							<section className={styles.activity}>
+								<h3>Заметки и история</h3>
+								<form onSubmit={addNote}>
+									<label className={styles.srOnly} htmlFor="deal-note">
+										Новая заметка
+									</label>
+									<textarea
+										id="deal-note"
+										value={note}
+										onChange={event => setNote(event.target.value)}
+										placeholder="Запишите важное о договорённостях…"
+										rows={3}
+										maxLength={4000}
+									/>
+									<div>
+										<small>Видно в этой демоверсии</small>
+										<button
+											className={styles.primaryButton}
+											disabled={!note.trim()}
+											type="submit"
+										>
+											Добавить заметку
+										</button>
+									</div>
+								</form>
+								<div className={styles.timeline}>
+									{(notes[selected.id] ?? []).map((text, index) => (
+										<article key={`${index}-${text}`}>
+											<span className={styles.avatar}>
+												{PREVIEW_DEALS[0].ownerInitials}
+											</span>
+											<div>
+												<strong>
+													{owners[0]}
+													<time>Сейчас</time>
+												</strong>
+												<p>{text}</p>
+											</div>
+										</article>
+									))}
+									<article>
+										<span className={styles.eventIcon}>
+											<AppIcon name="plus" size={14} />
 										</span>
 										<div>
 											<strong>
-												{owners[0]}
-												<time>Сейчас</time>
+												Сделка добавлена<time>Демонстрация</time>
 											</strong>
-											<p>{text}</p>
+											<p>Источник: {selected.source}</p>
 										</div>
 									</article>
-								))}
-								<article>
-									<span className={styles.eventIcon}>
-										<AppIcon name="plus" size={14} />
-									</span>
-									<div>
-										<strong>
-											Сделка добавлена<time>Демонстрация</time>
-										</strong>
-										<p>Источник: {selected.source}</p>
-									</div>
-								</article>
-							</div>
-						</section>
+								</div>
+							</section>
+						</div>
 						<p className={styles.notice} role="status">
 							{notice}
 						</p>
