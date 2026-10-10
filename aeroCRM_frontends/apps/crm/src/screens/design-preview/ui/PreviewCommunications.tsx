@@ -503,19 +503,28 @@ export default function PreviewCommunications({
 							</div>
 							<div className={styles.conversationBody}>
 								<h2>{selected.subject}</h2>
-								<div className={styles.replyMeta}>
-									{composedIds.includes(selected.id)
-										? 'Вы'
-										: selected.name}
-									<time className={styles.messageDate}>
-										{originalTimes[selected.id] ?? selected.time}
-									</time>
-								</div>
-								<p
-									className={`${styles.messageBubble} ${composedIds.includes(selected.id) ? styles.messageOwn : ''}`}
-								>
-									{selected.body}
-								</p>
+								{selected.body && (
+									<>
+										<div className={styles.replyMeta}>
+											{composedIds.includes(selected.id)
+												? 'Вы'
+												: selected.name}
+											<time className={styles.messageDate}>
+												{originalTimes[selected.id] ?? selected.time}
+											</time>
+										</div>
+										<p
+											className={`${styles.messageBubble} ${composedIds.includes(selected.id) ? styles.messageOwn : ''}`}
+										>
+											{selected.body}
+										</p>
+									</>
+								)}
+								{!selected.body && !messages[selected.id]?.length && (
+									<p className={styles.quietText}>
+										Начните диалог — напишите первое сообщение.
+									</p>
+								)}
 								{(messages[selected.id] ?? []).map(message => (
 									<div key={message.id} className={styles.messageOwn}>
 										<div className={styles.replyMeta}>

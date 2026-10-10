@@ -11,6 +11,7 @@ export type PreviewDeal = {
 	owner: string
 	ownerInitials: string
 	task: string
+	nextTaskId?: string
 	nextTaskOwner?: string
 	due: string
 	overdue: boolean

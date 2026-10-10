@@ -13,6 +13,8 @@ import type {
 } from '../model/workspace-data'
 import {
 	PreviewHeading,
+	PreviewForm,
+	PreviewDiscardButton,
 	PreviewSearch,
 	PreviewEmpty,
 	PreviewStatus,
@@ -20,6 +22,15 @@ import {
 	previewMoney,
 	previewMatches
 } from './PreviewPrimitives'
+import {
+	days,
+	calendarDayMs,
+	calendarFormat,
+	calendarToday,
+	taskTime,
+	taskDate,
+	taskOverdue
+} from '../model/preview-dates'
 import styles from './DesignPreview.module.scss'
 
 type Setter<T> = Dispatch<SetStateAction<T[]>>
@@ -28,73 +39,107 @@ const taskStatuses = {
 	doing: 'В работе',
 	done: 'Выполнено'
 }
-const days = [
-	'Понедельник',
-	'Вторник',
-	'Среда',
-	'Четверг',
-	'Пятница',
-	'Суббота',
-	'Воскресенье'
-]
-
-const calendarDayMs = 24 * 60 * 60 * 1000
-const calendarFormat = (
-	date: number,
-	options: Intl.DateTimeFormatOptions
-) =>
-	new Intl.DateTimeFormat('ru-RU', { ...options, timeZone: 'UTC' }).format(
-		date
+function TaskDeadlineFields({
+	date,
+	time,
+	today
+}: {
+	date: number | null
+	time: string
+	today: number
+}) {
+	const [scheduled, setScheduled] = useState(date !== null)
+	return (
+		<>
+			<label className={styles.settingsRow}>
+				<span>Без срока</span>
+				<input
+					name="unscheduled"
+					type="checkbox"
+					className={styles.toggle}
+					checked={!scheduled}
+					onChange={event => setScheduled(!event.target.checked)}
+				/>
+			</label>
+			<div className={styles.formColumns}>
+				<label>
+					Дата
+					<input
+						name="date"
+						type="date"
+						required={scheduled}
+						disabled={!scheduled}
+						min="0100-01-01"
+						max="9999-12-24"
+						defaultValue={new Date(date ?? today)
+							.toISOString()
+							.slice(0, 10)}
+					/>
+				</label>
+				<label>
+					Время
+					<input
+						name="time"
+						type="time"
+						required={scheduled}
+						disabled={!scheduled}
+						defaultValue={time}
+					/>
+				</label>
+			</div>
+		</>
 	)
+}
 
-// Calendar values represent civil dates, independent of the browser time zone.
-const calendarToday = (timeZone: string) => {
-	const parts = new Intl.DateTimeFormat('en-GB', {
-		year: 'numeric',
-		month: '2-digit',
-		day: '2-digit',
-		timeZone
-	}).formatToParts(new Date())
-	const part = (type: string) =>
-		Number(parts.find(item => item.type === type)?.value)
-	return Date.UTC(part('year'), part('month') - 1, part('day'))
-}
-const taskTime = (task: PreviewTask) => {
-	const time = task.due.match(/,\s*(\d{1,2}):(\d{2})$/)
-	return time ? Number(time[1]) * 60 + Number(time[2]) : Infinity
-}
-const taskDate = (task: PreviewTask, today: number) => {
-	const label = task.due.split(',')[0].trim().toLocaleLowerCase('ru')
-	if (label === 'сегодня') return today
-	if (label === 'завтра') return today + calendarDayMs
-	if (label === 'вчера') return today - calendarDayMs
-	const named = days.findIndex(
-		day => day.toLocaleLowerCase('ru') === label
+function TaskRelationFields({
+	deals,
+	task
+}: {
+	deals: PreviewDeal[]
+	task: PreviewTask | null
+}) {
+	const [dealId, setDealId] = useState(task?.dealId ?? '')
+	const [company, setCompany] = useState(task?.company ?? '')
+	return (
+		<>
+			<label>
+				Связанная сделка
+				<select
+					name="dealId"
+					value={dealId}
+					onChange={event => {
+						setDealId(event.target.value)
+						const deal = deals.find(item => item.id === event.target.value)
+						if (deal) setCompany(deal.company)
+					}}
+				>
+					<option value="">Без привязки к сделке</option>
+					{deals.map(deal => (
+						<option key={deal.id} value={deal.id}>
+							{deal.title} · {deal.company}
+						</option>
+					))}
+				</select>
+			</label>
+			<label>
+				Компания
+				<input
+					name="company"
+					maxLength={100}
+					value={company}
+					readOnly={Boolean(dealId)}
+					onChange={event => setCompany(event.target.value)}
+				/>
+			</label>
+		</>
 	)
-	if (named >= 0) {
-		const weekday = (new Date(today).getUTCDay() + 6) % 7
-		let offset = (named - weekday + 7) % 7
-		if (task.overdue && offset > 0) offset -= 7
-		return today + offset * calendarDayMs
-	}
-	const parts = label.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
-	if (parts) {
-		const [, date, month, year] = parts.map(Number)
-		const value = new Date(Date.UTC(year, month - 1, date))
-		if (
-			value.getUTCFullYear() === year &&
-			value.getUTCMonth() === month - 1 &&
-			value.getUTCDate() === date
-		)
-			return value.getTime()
-	}
-	return null
 }
 
 export function PreviewTasks({
 	calendarPreferences,
 	active = true,
 	tasks,
+	deals,
 	setTasks,
 	employees,
 	onOpenDeal
@@ -102,6 +147,7 @@ export function PreviewTasks({
 	calendarPreferences: { timeZone: string; weekStart: string }
 	active?: boolean
 	tasks: PreviewTask[]
+	deals: PreviewDeal[]
 	setTasks: Setter<PreviewTask>
 	employees: PreviewEmployee[]
 	onOpenDeal: (id: string) => void
@@ -110,10 +156,17 @@ export function PreviewTasks({
 	const [view, setView] = useState<'list' | 'calendar'>('list')
 	const [status, setStatus] = useState('active')
 	const [owner, setOwner] = useState('')
-	const [editing, setEditing] = useState<PreviewTask | 'new' | null>(null)
+	const [editingId, setEditing] = useState<string | null>(null)
+	const editing =
+		editingId === 'new'
+			? 'new'
+			: (tasks.find(task => task.id === editingId) ?? null)
 	const [notice, setNotice] = useState('')
+	if (!active && editing) setEditing(null)
 	const [weekOffset, setWeekOffset] = useState(0)
 	const today = calendarToday(calendarPreferences.timeZone)
+	const isOverdue = (task: PreviewTask) =>
+		taskOverdue(task, calendarPreferences.timeZone)
 	const firstWeekday = calendarPreferences.weekStart === 'sunday' ? 0 : 1
 	const currentWeekStart =
 		today -
@@ -137,8 +190,7 @@ export function PreviewTasks({
 				(status === 'active'
 					? task.status !== 'done'
 					: status === 'overdue'
-						? (task.overdue ?? task.due.includes('Вчера')) &&
-							task.status !== 'done'
+						? isOverdue(task)
 						: task.status === 'done'))
 	)
 	const datedTasks = filtered.map(task => ({
@@ -172,7 +224,12 @@ export function PreviewTasks({
 	const save = (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault()
 		const data = new FormData(event.currentTarget)
-		const due = String(data.get('due')).trim()
+		const dateValue = String(data.get('date') ?? '')
+		const timeValue = String(data.get('time'))
+		const [year, month, day] = dateValue.split('-')
+		const due = dateValue
+			? `${day}.${month}.${year}, ${timeValue}`
+			: 'Без срока'
 		const task: PreviewTask = {
 			id:
 				editing && editing !== 'new'
@@ -180,22 +237,25 @@ export function PreviewTasks({
 					: `task-${crypto.randomUUID()}`,
 			title: String(data.get('title')).trim(),
 			company: String(data.get('company')).trim(),
-			dealId: editing && editing !== 'new' ? editing.dealId : null,
+			dealId: String(data.get('dealId') ?? '') || null,
 			owner: String(data.get('owner')),
 			status: String(data.get('status')) as PreviewTask['status'],
 			priority: String(data.get('priority')) as PreviewTask['priority'],
 			due,
-			overdue:
-				editing && editing !== 'new' && editing.due === due
-					? (editing.overdue ?? due.includes('Вчера'))
-					: due.includes('Вчера')
+			overdue: false
 		}
+		task.overdue = isOverdue(task)
 		setTasks(items =>
 			editing === 'new'
 				? [task, ...items]
 				: items.map(item => (item.id === task.id ? task : item))
 		)
 		const savedDate = taskDate(task, today)
+		if (editing === 'new') {
+			setQuery('')
+			setOwner('')
+			setStatus(task.status === 'done' ? 'done' : 'active')
+		}
 		if (view === 'calendar' && savedDate !== null) {
 			setWeekOffset(
 				Math.floor((savedDate - currentWeekStart) / (7 * calendarDayMs))
@@ -221,7 +281,7 @@ export function PreviewTasks({
 			<div className={styles.taskBody}>
 				<button
 					className={styles.recordLink}
-					onClick={() => setEditing(task)}
+					onClick={() => setEditing(task.id)}
 				>
 					{task.title}
 				</button>
@@ -232,14 +292,7 @@ export function PreviewTasks({
 					)}
 				</span>
 			</div>
-			<span
-				className={
-					(task.overdue ?? task.due.includes('Вчера')) &&
-					task.status !== 'done'
-						? styles.overdue
-						: styles.taskDue
-				}
-			>
+			<span className={isOverdue(task) ? styles.overdue : styles.taskDue}>
 				<AppIcon name="clock" size={13} />
 				{task.due}
 			</span>
@@ -345,6 +398,11 @@ export function PreviewTasks({
 						</select>
 						<AppIcon name="chevronDown" size={13} />
 					</label>
+					{(query || owner || status !== 'active') && (
+						<button className={styles.textButton} onClick={reset}>
+							Сбросить фильтры
+						</button>
+					)}
 					<span className={styles.results}>
 						{view === 'calendar'
 							? `На неделе: ${weekTasks.length}`
@@ -368,6 +426,28 @@ export function PreviewTasks({
 								role="group"
 								aria-label="Выбор недели"
 							>
+								<label className={styles.selectWrap}>
+									К дате
+									<input
+										type="date"
+										aria-label="Перейти к дате"
+										min="0100-01-01"
+										max="9999-12-24"
+										value={new Date(weekStart).toISOString().slice(0, 10)}
+										onInput={event => {
+											const input = event.currentTarget
+											if (!input.validity.valid || !input.value) return
+											const date = Date.parse(`${input.value}T00:00:00Z`)
+											if (Number.isFinite(date))
+												setWeekOffset(
+													Math.floor(
+														(date - currentWeekStart) / (7 * calendarDayMs)
+													)
+												)
+										}}
+										onChange={() => {}}
+									/>
+								</label>
 								<button
 									className={styles.secondaryButton}
 									onClick={() => setWeekOffset(0)}
@@ -444,7 +524,7 @@ export function PreviewTasks({
 											<button
 												key={task.id}
 												className={styles.calendarTask}
-												onClick={() => setEditing(task)}
+												onClick={() => setEditing(task.id)}
 												data-done={task.status === 'done'}
 											>
 												<span className={styles.taskDue}>{task.due}</span>
@@ -470,8 +550,8 @@ export function PreviewTasks({
 							<section className={styles.unscheduledTasks}>
 								<h2>Без даты · {unscheduledTasks.length}</h2>
 								<p className={styles.quietText}>
-									Не привязаны к неделе. Укажите срок в формате ДД.ММ.ГГГГ,
-									ЧЧ:ММ.
+									Не привязаны к неделе. Откройте задачу и выберите дату и
+									время.
 								</p>
 								{unscheduledTasks.map(({ task }) => taskRow(task))}
 							</section>
@@ -488,8 +568,8 @@ export function PreviewTasks({
 				title={editing === 'new' ? 'Новая задача' : 'Задача'}
 				className={styles.previewDrawer}
 			>
-				{editing && (
-					<form className={styles.createForm} onSubmit={save}>
+				{active && editing && (
+					<PreviewForm className={styles.createForm} onSubmit={save}>
 						<label>
 							Что нужно сделать
 							<input
@@ -500,14 +580,10 @@ export function PreviewTasks({
 								defaultValue={editing === 'new' ? '' : editing.title}
 							/>
 						</label>
-						<label>
-							Компания
-							<input
-								name="company"
-								maxLength={100}
-								defaultValue={editing === 'new' ? '' : editing.company}
-							/>
-						</label>
+						<TaskRelationFields
+							deals={deals}
+							task={editing === 'new' ? null : editing}
+						/>
 						<label>
 							Ответственный
 							<select
@@ -550,35 +626,58 @@ export function PreviewTasks({
 								</select>
 							</label>
 						</div>
-						<label>
-							Срок
-							<input
-								name="due"
-								required
-								pattern=".*\S.*"
-								defaultValue={
-									editing === 'new'
-										? view === 'calendar' && weekOffset !== 0
-											? `${calendarFormat(weekStart, { day: '2-digit', month: '2-digit', year: 'numeric' })}, 16:00`
-											: 'Сегодня, 16:00'
-										: editing.due
-								}
-							/>
-						</label>
+						<TaskDeadlineFields
+							date={
+								editing === 'new'
+									? view === 'calendar' && weekOffset !== 0
+										? weekStart
+										: today
+									: taskDate(editing, today)
+							}
+							today={today}
+							time={
+								editing === 'new'
+									? '16:00'
+									: (editing.due.match(/(\d{2}:\d{2})$/)?.[1] ?? '16:00')
+							}
+						/>
+						<p>
+							Часовой пояс:{' '}
+							{
+								new Intl.DateTimeFormat('ru-RU', {
+									timeZone: calendarPreferences.timeZone,
+									timeZoneName: 'longOffset'
+								})
+									.formatToParts(new Date())
+									.find(part => part.type === 'timeZoneName')?.value
+							}
+						</p>
+						{editing !== 'new' && editing.dealId && (
+							<PreviewDiscardButton
+								className={styles.textButton}
+								onClick={() => {
+									const id = editing.dealId!
+									setEditing(null)
+									onOpenDeal(id)
+								}}
+							>
+								Открыть связанную сделку ↗
+							</PreviewDiscardButton>
+						)}
 
 						<div>
-							<button
+							<PreviewDiscardButton
 								type="button"
 								className={styles.secondaryButton}
 								onClick={() => setEditing(null)}
 							>
 								Отмена
-							</button>
+							</PreviewDiscardButton>
 							<button className={styles.primaryButton}>
 								Сохранить задачу
 							</button>
 						</div>
-					</form>
+					</PreviewForm>
 				)}
 			</Drawer>
 		</>
@@ -603,6 +702,8 @@ export function PreviewContacts({
 	const [selected, setSelected] = useState<string | null>(null)
 	const [editing, setEditing] = useState(false)
 	const [notice, setNotice] = useState('')
+	if (!active && editing) setEditing(false)
+	if (!active && selected) setSelected(null)
 	const contact = contacts.find(item => item.id === selected)
 	const filtered = contacts.filter(
 		item =>
@@ -756,8 +857,8 @@ export function PreviewContacts({
 				}
 				className={styles.previewDrawer}
 			>
-				{editing ? (
-					<form className={styles.createForm} onSubmit={save}>
+				{active && editing ? (
+					<PreviewForm className={styles.createForm} onSubmit={save}>
 						<label>
 							Имя и фамилия
 							<input
@@ -809,7 +910,7 @@ export function PreviewContacts({
 							</select>
 						</label>
 						<div>
-							<button
+							<PreviewDiscardButton
 								type="button"
 								className={styles.secondaryButton}
 								onClick={() => {
@@ -818,12 +919,12 @@ export function PreviewContacts({
 								}}
 							>
 								Отмена
-							</button>
+							</PreviewDiscardButton>
 							<button className={styles.primaryButton}>
 								Сохранить контакт
 							</button>
 						</div>
-					</form>
+					</PreviewForm>
 				) : (
 					contact && (
 						<div className={styles.detail}>
@@ -875,7 +976,7 @@ export function PreviewContacts({
 											<strong>{previewMoney(deal.amount)} ↗</strong>
 										</button>
 									))}
-								{deals.every(deal => deal.company !== contact.company) && (
+								{deals.every(deal => deal.contactId !== contact.id) && (
 									<p className={styles.quietText}>
 										У контакта пока нет связанных сделок.
 									</p>
@@ -916,6 +1017,7 @@ export function PreviewCatalog({
 		null
 	)
 	const [notice, setNotice] = useState('')
+	if (!active && editing) setEditing(null)
 	const filtered = products.filter(
 		item =>
 			previewMatches(query, item.title, item.category) &&
@@ -941,6 +1043,11 @@ export function PreviewCatalog({
 				? [record, ...items]
 				: items.map(item => (item.id === record.id ? record : item))
 		)
+		if (editing === 'new') {
+			setQuery('')
+			setCategory('')
+			setShowArchive(false)
+		}
 		setEditing(null)
 		setNotice('Позиция сохранена')
 	}
@@ -1082,8 +1189,8 @@ export function PreviewCatalog({
 				}
 				className={styles.previewDrawer}
 			>
-				{editing && (
-					<form className={styles.createForm} onSubmit={save}>
+				{active && editing && (
+					<PreviewForm className={styles.createForm} onSubmit={save}>
 						<label>
 							Наименование
 							<input
@@ -1100,7 +1207,7 @@ export function PreviewCatalog({
 								required
 								pattern=".*\S.*"
 								defaultValue={
-									editing === 'new' ? 'Услуги' : editing.category
+									editing === 'new' ? 'Услуга' : editing.category
 								}
 							/>
 						</label>
@@ -1126,18 +1233,18 @@ export function PreviewCatalog({
 							/>
 						</label>
 						<div>
-							<button
+							<PreviewDiscardButton
 								type="button"
 								className={styles.secondaryButton}
 								onClick={() => setEditing(null)}
 							>
 								Отмена
-							</button>
+							</PreviewDiscardButton>
 							<button className={styles.primaryButton}>
 								Сохранить позицию
 							</button>
 						</div>
-					</form>
+					</PreviewForm>
 				)}
 			</Drawer>
 		</>

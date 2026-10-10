@@ -6,7 +6,12 @@ import { AppIcon } from '@/shared/ui/app-icon'
 import { Drawer } from '@/shared/ui/drawer'
 import { PREVIEW_DEALS, PREVIEW_STAGES } from '../model/preview-data'
 import type { PreviewDeal } from '../model/preview-data'
-import { previewMoney as money } from './PreviewPrimitives'
+import type { PreviewContact } from '../model/workspace-data'
+import {
+	PreviewForm,
+	PreviewDiscardButton,
+	previewMoney as money
+} from './PreviewPrimitives'
 import styles from './DesignPreview.module.scss'
 
 const owners = [...new Set(PREVIEW_DEALS.map(deal => deal.owner))]
@@ -16,6 +21,8 @@ type Scope = 'all' | 'mine' | 'overdue'
 type PreviewDealsProps = {
 	active?: boolean
 	deals: PreviewDeal[]
+	contacts: PreviewContact[]
+	onCompleteTask: (taskId: string) => void
 	setDeals: Dispatch<SetStateAction<PreviewDeal[]>>
 	selectedDealId: string | null
 	onSelectDeal: (id: string | null) => void
@@ -43,9 +50,55 @@ const activeDealCount = (count: number) => {
 	return `${count} ${adjective} ${word}`
 }
 
+function DealContactFields({ contacts }: { contacts: PreviewContact[] }) {
+	const [contactId, setContactId] = useState('')
+	const [company, setCompany] = useState('')
+	return (
+		<>
+			<label>
+				Контакт
+				<select
+					name="contactId"
+					value={contactId}
+					onChange={event => {
+						setContactId(event.target.value)
+						const contact = contacts.find(
+							item => item.id === event.target.value
+						)
+						if (contact) setCompany(contact.company)
+					}}
+				>
+					<option value="">Без контакта</option>
+					{contacts.map(contact => (
+						<option key={contact.id} value={contact.id}>
+							{contact.name} · {contact.company}
+						</option>
+					))}
+				</select>
+			</label>
+			<label>
+				Компания
+				<input
+					name="company"
+					required
+					pattern=".*\S.*"
+					maxLength={100}
+					placeholder="Название компании"
+					value={company}
+					readOnly={Boolean(contactId)}
+					onChange={event => setCompany(event.target.value)}
+				/>
+			</label>
+			{contactId && <p>Компания указана из карточки контакта.</p>}
+		</>
+	)
+}
+
 export default function PreviewDeals({
 	active = true,
 	deals,
+	contacts,
+	onCompleteTask,
 	setDeals,
 	selectedDealId,
 	onSelectDeal
@@ -56,6 +109,7 @@ export default function PreviewDeals({
 	const [owner, setOwner] = useState('')
 	const [stage, setStage] = useState('')
 	const [creating, setCreating] = useState(false)
+	if (!active && creating) setCreating(false)
 	const [notes, setNotes] = useState<Record<string, string[]>>({})
 	const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({})
 	const [notices, setNotices] = useState<Record<string, string>>({})
@@ -118,6 +172,9 @@ export default function PreviewDeals({
 			return
 		}
 		setCreateError('')
+		const contact = contacts.find(
+			item => item.id === data.get('contactId')
+		)
 		const id = `DEMO-${Date.now()}`
 		setDeals(items => [
 			{
@@ -125,7 +182,8 @@ export default function PreviewDeals({
 				createdAt: new Date().toISOString(),
 				title,
 				company,
-				contact: 'Контакт не указан',
+				contact: contact?.name ?? 'Контакт не указан',
+				contactId: contact?.id,
 				initials: company.slice(0, 2).toUpperCase(),
 				amount: Number(data.get('amount')),
 				stage: Number(data.get('stage')),
@@ -545,16 +603,10 @@ export default function PreviewDeals({
 									</div>
 									<h3>{selected.task}</h3>
 									<p>{selected.nextTaskOwner ?? selected.owner}</p>
-									{selected.due !== 'Выполнено' && (
+									{selected.nextTaskId && (
 										<button
 											className={styles.secondaryButton}
-											onClick={() =>
-												updateDeal({
-													overdue: false,
-													due: 'Выполнено',
-													task: 'Следующий шаг выполнен'
-												})
-											}
+											onClick={() => onCompleteTask(selected.nextTaskId!)}
 										>
 											<AppIcon name="check" size={16} />
 											Отметить выполненным
@@ -668,71 +720,63 @@ export default function PreviewDeals({
 				description="Добавьте договорённость в рабочую воронку"
 				className={styles.previewDrawer}
 			>
-				<form className={styles.createForm} onSubmit={createDeal}>
-					<label>
-						Название сделки
-						<input
-							name="title"
-							onChange={() => setCreateError('')}
-							required
-							maxLength={150}
-							placeholder="Например, разработка интернет-магазина"
-						/>
-					</label>
-					<label>
-						Компания
-						<input
-							name="company"
-							onChange={() => setCreateError('')}
-							required
-							maxLength={100}
-							placeholder="Название компании"
-						/>
-					</label>
-					<label>
-						Сумма, ₽
-						<input
-							name="amount"
-							type="number"
-							min="0"
-							max="100000000000"
-							step="0.01"
-							required
-							placeholder="0"
-						/>
-					</label>
-					<label>
-						Этап
-						<select name="stage">
-							{PREVIEW_STAGES.map((item, index) => (
-								<option value={index} key={item}>
-									{item}
-								</option>
-							))}
-						</select>
-					</label>
-					{createError && (
-						<p className={styles.notice} role="alert">
-							{createError}
+				{active && creating && (
+					<PreviewForm className={styles.createForm} onSubmit={createDeal}>
+						<label>
+							Название сделки
+							<input
+								name="title"
+								onChange={() => setCreateError('')}
+								required
+								maxLength={150}
+								placeholder="Например, разработка интернет-магазина"
+							/>
+						</label>
+						<DealContactFields contacts={contacts} />
+						<label>
+							Сумма, ₽
+							<input
+								name="amount"
+								type="number"
+								min="0"
+								max="100000000000"
+								step="0.01"
+								required
+								placeholder="0"
+							/>
+						</label>
+						<label>
+							Этап
+							<select name="stage">
+								{PREVIEW_STAGES.map((item, index) => (
+									<option value={index} key={item}>
+										{item}
+									</option>
+								))}
+							</select>
+						</label>
+						{createError && (
+							<p className={styles.notice} role="alert">
+								{createError}
+							</p>
+						)}
+						<p>
+							Сделка появится только в демоверсии. Данные сохраняются до
+							перезагрузки страницы.
 						</p>
-					)}
-					<p>
-						Сделка появится только в демоверсии. Данные сохраняются до
-						перезагрузки страницы.
-					</p>
-					<div>
-						<button
-							type="button"
-							className={styles.secondaryButton}
-							onClick={() => setCreating(false)}
-						>
-							Отмена
-						</button>
-						<button type="submit" className={styles.primaryButton}>
-							Создать сделку
-						</button>
-					</div>
-				</form>
+						<div>
+							<PreviewDiscardButton
+								className={styles.secondaryButton}
+								onClick={() => setCreating(false)}
+							>
+								Отмена
+							</PreviewDiscardButton>
+							<button type="submit" className={styles.primaryButton}>
+								Создать сделку
+							</button>
+						</div>
+					</PreviewForm>
+				)}
 			</Drawer>
 		</>
 	)

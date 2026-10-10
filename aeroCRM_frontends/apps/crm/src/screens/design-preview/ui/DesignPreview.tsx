@@ -5,6 +5,7 @@ import type { SetStateAction } from 'react'
 import { AppIcon } from '@/shared/ui/app-icon'
 import { BrandLogo } from '@/shared/ui/brand-logo'
 import { Drawer } from '@/shared/ui/drawer'
+import { DirtyFormProvider } from '@/shared/lib/dirty-form'
 import { CRM_NAVIGATION } from '@/widgets/crm-app-shell/model/crm-navigation'
 import { PREVIEW_DEALS } from '../model/preview-data'
 import type { PreviewDeal } from '../model/preview-data'
@@ -30,6 +31,12 @@ import {
 	PreviewCatalog,
 	PreviewDirectory
 } from './PreviewOperations'
+import {
+	calendarToday,
+	taskDate,
+	taskTime,
+	taskOverdue
+} from '../model/preview-dates'
 import styles from './DesignPreview.module.scss'
 
 const sectionKeys = CRM_NAVIGATION.map(item => item.href.slice(1))
@@ -67,6 +74,38 @@ export default function DesignPreview() {
 		weekStart: 'monday'
 	})
 	const [tasks, setTasks] = useState(PREVIEW_TASKS)
+	const today = calendarToday(calendarPreferences.timeZone)
+	const taskDeadline = (task: PreviewTask) => {
+		const date = taskDate(task, today)
+		return date === null ? Infinity : date + taskTime(task) * 60_000
+	}
+	const displayDeals: PreviewDeal[] = deals.map(deal => {
+		const linkedTasks = tasks.filter(task => task.dealId === deal.id)
+		const nextTask = linkedTasks
+			.filter(task => task.status !== 'done')
+			.sort((left, right) => {
+				const leftDeadline = taskDeadline(left)
+				const rightDeadline = taskDeadline(right)
+				return leftDeadline === rightDeadline
+					? left.id.localeCompare(right.id)
+					: leftDeadline - rightDeadline
+			})[0]
+		return {
+			...deal,
+			task:
+				nextTask?.title ??
+				(linkedTasks.length
+					? 'Следующий шаг выполнен'
+					: 'Назначить следующий шаг'),
+			due:
+				nextTask?.due ?? (linkedTasks.length ? 'Выполнено' : 'Без срока'),
+			nextTaskId: nextTask?.id,
+			nextTaskOwner: nextTask?.owner,
+			overdue: nextTask
+				? taskOverdue(nextTask, calendarPreferences.timeZone)
+				: false
+		}
+	})
 	const [contacts, setContacts] = useState(PREVIEW_CONTACTS)
 	const [products, setProducts] = useState(PREVIEW_PRODUCTS)
 	const [threads, setThreads] = useState(PREVIEW_THREADS)
@@ -111,43 +150,17 @@ export default function DesignPreview() {
 					due: deal.due,
 					overdue: deal.overdue
 				})),
-			...items.map(task => {
-				const previous = deals.find(deal => deal.id === task.dealId)
-				const current = next.find(deal => deal.id === task.dealId)
-				return current?.due === 'Выполнено' &&
-					previous?.due !== 'Выполнено'
-					? { ...task, status: 'done' as const }
-					: task
-			})
+			...items
 		])
 	}
 	const updateTasks = (action: SetStateAction<PreviewTask[]>) => {
-		const next = typeof action === 'function' ? action(tasks) : action
-		setTasks(next)
-		setDeals(items =>
-			items.map(deal => {
-				const task = next.find(item => item.dealId === deal.id)
-				const previous = tasks.find(item => item.id === task?.id)
-				if (
-					!task ||
-					!previous ||
-					(task.status === previous.status &&
-						task.title === previous.title &&
-						task.due === previous.due &&
-						task.owner === previous.owner)
-				)
-					return deal
-				return {
-					...deal,
-					task:
-						task.status === 'done' ? 'Следующий шаг выполнен' : task.title,
-					due: task.status === 'done' ? 'Выполнено' : task.due,
-					nextTaskOwner: task.owner,
-					overdue:
-						task.status !== 'done' &&
-						(task.overdue ?? task.due.includes('Вчера'))
-				}
-			})
+		setTasks(action)
+	}
+	const completeTask = (taskId: string) => {
+		setTasks(items =>
+			items.map(task =>
+				task.id === taskId ? { ...task, status: 'done' as const } : task
+			)
 		)
 	}
 	const updateContacts = (action: SetStateAction<PreviewContact[]>) => {
@@ -209,6 +222,7 @@ export default function DesignPreview() {
 				: [
 						{
 							...thread,
+							preview: thread.body,
 							id,
 							channel: 'inbox',
 							status: 'new',
@@ -315,189 +329,196 @@ export default function DesignPreview() {
 				}
 			}}
 		>
-			<a
-				href="#preview-main"
-				className={styles.skipLink}
-				onClick={event => {
-					event.preventDefault()
-					document.getElementById('preview-main')?.focus()
-				}}
-			>
-				К содержимому
-			</a>
-			<aside className={styles.sidebar}>
-				<div className={styles.brand}>
-					<BrandLogo />
-				</div>
-				<div className={styles.workspace}>
-					<span className={styles.workspaceMark}>{workspaceName[0]}</span>
-					<span>
-						<strong>{workspaceName}</strong>
-						<small>Рабочее пространство</small>
-					</span>
-				</div>
-				<span className={styles.navCaption}>РАБОТА</span>
-				{navigation()}
-				<div className={styles.sidebarFoot}>
-					<span className={styles.previewDot} />
-					Дизайн-превью<span>Данные только на этом устройстве</span>
-				</div>
-				<button
-					className={styles.profile}
-					onClick={() => navigate('settings')}
+			<DirtyFormProvider owner="design-preview">
+				<a
+					href="#preview-main"
+					className={styles.skipLink}
+					onClick={event => {
+						event.preventDefault()
+						document.getElementById('preview-main')?.focus()
+					}}
 				>
-					<span className={styles.profileAvatar}>АС</span>
-					<span>
-						<strong>Анна Смирнова</strong>
-						<small>Настройки пространства</small>
-					</span>
-				</button>
-			</aside>
-			<div className={styles.main}>
-				<header className={styles.topbar}>
-					<button
-						className={styles.mobileMenu}
-						aria-label="Открыть меню"
-						aria-expanded={mobileNav}
-						onClick={() => setMobileNav(true)}
-					>
-						<AppIcon name="menu" size={21} />
-					</button>
-					<div className={styles.breadcrumb}>
-						{workspaceName}
-						<span>/</span>
-						<strong>{label}</strong>
+					К содержимому
+				</a>
+				<aside className={styles.sidebar}>
+					<div className={styles.brand}>
+						<BrandLogo />
 					</div>
-					<div className={styles.topbarActions}>
-						<span className={styles.localBadge}>
-							<span />
-							Локальный просмотр
+					<div className={styles.workspace}>
+						<span className={styles.workspaceMark}>
+							{workspaceName[0]}
 						</span>
+						<span>
+							<strong>{workspaceName}</strong>
+							<small>Рабочее пространство</small>
+						</span>
+					</div>
+					<span className={styles.navCaption}>РАБОТА</span>
+					{navigation()}
+					<div className={styles.sidebarFoot}>
+						<span className={styles.previewDot} />
+						Дизайн-превью<span>Данные только на этом устройстве</span>
+					</div>
+					<button
+						className={styles.profile}
+						onClick={() => navigate('settings')}
+					>
+						<span className={styles.profileAvatar}>АС</span>
+						<span>
+							<strong>Анна Смирнова</strong>
+							<small>Настройки пространства</small>
+						</span>
+					</button>
+				</aside>
+				<div className={styles.main}>
+					<header className={styles.topbar}>
 						<button
-							className={styles.themeButton}
-							aria-label={
-								theme === 'dark'
-									? 'Включить светлую тему'
-									: 'Включить тёмную тему'
-							}
-							title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
-							onClick={() =>
-								setTheme(value => (value === 'dark' ? 'light' : 'dark'))
-							}
+							className={styles.mobileMenu}
+							aria-label="Открыть меню"
+							aria-expanded={mobileNav}
+							onClick={() => setMobileNav(true)}
 						>
-							<AppIcon
-								name={theme === 'dark' ? 'sun' : 'moon'}
-								size={17}
-							/>
+							<AppIcon name="menu" size={21} />
 						</button>
-					</div>
-				</header>
-				<div
-					id="preview-main"
-					tabIndex={-1}
-					className={styles.screenMount}
-				>
-					<div hidden={section !== 'deals'}>
-						<PreviewDeals
-							active={section === 'deals'}
-							deals={deals}
-							setDeals={updateDeals}
-							selectedDealId={selectedDealId}
-							onSelectDeal={setSelectedDealId}
-						/>
-					</div>
-					<div hidden={section !== 'tasks'}>
-						<PreviewTasks
-							calendarPreferences={calendarPreferences}
-							active={section === 'tasks'}
-							tasks={tasks}
-							setTasks={updateTasks}
-							employees={PREVIEW_EMPLOYEES}
-							onOpenDeal={openDeal}
-						/>
-					</div>
-					{(['inbox', 'mail', 'chat'] as const).map(channel => (
-						<div
-							key={channel}
-							hidden={
-								section !== (channel === 'chat' ? 'messages' : channel)
-							}
-						>
-							<PreviewCommunications
-								active={
-									section === (channel === 'chat' ? 'messages' : channel)
+						<div className={styles.breadcrumb}>
+							{workspaceName}
+							<span>/</span>
+							<strong>{label}</strong>
+						</div>
+						<div className={styles.topbarActions}>
+							<span className={styles.localBadge}>
+								<span />
+								Локальный просмотр
+							</span>
+							<button
+								className={styles.themeButton}
+								aria-label={
+									theme === 'dark'
+										? 'Включить светлую тему'
+										: 'Включить тёмную тему'
 								}
-								channel={channel}
-								threads={threads}
-								setThreads={setThreads}
-								selectedId={selectedThreads[channel]}
-								onSelect={id =>
-									setSelectedThreads(items => ({
-										...items,
-										[channel]: id
-									}))
+								title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+								onClick={() =>
+									setTheme(value => (value === 'dark' ? 'light' : 'dark'))
 								}
-								onOpenDeal={openDeal}
-								onAccept={acceptThread}
-								onCopyToInbox={copyToInbox}
+							>
+								<AppIcon
+									name={theme === 'dark' ? 'sun' : 'moon'}
+									size={17}
+								/>
+							</button>
+						</div>
+					</header>
+					<div
+						id="preview-main"
+						tabIndex={-1}
+						className={styles.screenMount}
+					>
+						<div hidden={section !== 'deals'}>
+							<PreviewDeals
+								active={section === 'deals'}
+								deals={displayDeals}
+								contacts={contacts}
+								onCompleteTask={completeTask}
+								setDeals={updateDeals}
+								selectedDealId={selectedDealId}
+								onSelectDeal={setSelectedDealId}
 							/>
 						</div>
-					))}
-					<div hidden={section !== 'contacts'}>
-						<PreviewContacts
-							active={section === 'contacts'}
-							contacts={contacts}
-							setContacts={updateContacts}
-							deals={deals}
-							onOpenDeal={openDeal}
-						/>
-					</div>
-					<div hidden={section !== 'catalog'}>
-						<PreviewCatalog
-							active={section === 'catalog'}
-							products={products}
-							setProducts={setProducts}
-						/>
-					</div>
-					<div hidden={section !== 'analytics'}>
-						<main className={styles.content}>
-							<PreviewAnalytics
-								deals={deals}
-								timeZone={calendarPreferences.timeZone}
-							/>
-						</main>
-					</div>
-					<div hidden={section !== 'directory'}>
-						<PreviewDirectory
-							active={section === 'directory'}
-							employees={PREVIEW_EMPLOYEES}
-							onMessage={messageEmployee}
-						/>
-					</div>
-					<div hidden={section !== 'settings'}>
-						<main className={styles.content}>
-							<PreviewSettings
-								onCalendarPreferencesChange={setCalendarPreferences}
-								workspaceName={workspaceName}
-								onWorkspaceNameChange={setWorkspaceName}
+						<div hidden={section !== 'tasks'}>
+							<PreviewTasks
+								calendarPreferences={calendarPreferences}
+								active={section === 'tasks'}
+								tasks={tasks}
+								deals={displayDeals}
+								setTasks={updateTasks}
 								employees={PREVIEW_EMPLOYEES}
-								theme={theme}
-								onThemeChange={setTheme}
+								onOpenDeal={openDeal}
 							/>
-						</main>
+						</div>
+						{(['inbox', 'mail', 'chat'] as const).map(channel => (
+							<div
+								key={channel}
+								hidden={
+									section !== (channel === 'chat' ? 'messages' : channel)
+								}
+							>
+								<PreviewCommunications
+									active={
+										section === (channel === 'chat' ? 'messages' : channel)
+									}
+									channel={channel}
+									threads={threads}
+									setThreads={setThreads}
+									selectedId={selectedThreads[channel]}
+									onSelect={id =>
+										setSelectedThreads(items => ({
+											...items,
+											[channel]: id
+										}))
+									}
+									onOpenDeal={openDeal}
+									onAccept={acceptThread}
+									onCopyToInbox={copyToInbox}
+								/>
+							</div>
+						))}
+						<div hidden={section !== 'contacts'}>
+							<PreviewContacts
+								active={section === 'contacts'}
+								contacts={contacts}
+								setContacts={updateContacts}
+								deals={displayDeals}
+								onOpenDeal={openDeal}
+							/>
+						</div>
+						<div hidden={section !== 'catalog'}>
+							<PreviewCatalog
+								active={section === 'catalog'}
+								products={products}
+								setProducts={setProducts}
+							/>
+						</div>
+						<div hidden={section !== 'analytics'}>
+							<main className={styles.content}>
+								<PreviewAnalytics
+									deals={displayDeals}
+									timeZone={calendarPreferences.timeZone}
+								/>
+							</main>
+						</div>
+						<div hidden={section !== 'directory'}>
+							<PreviewDirectory
+								active={section === 'directory'}
+								employees={PREVIEW_EMPLOYEES}
+								onMessage={messageEmployee}
+							/>
+						</div>
+						<div hidden={section !== 'settings'}>
+							<main className={styles.content}>
+								<PreviewSettings
+									onCalendarPreferencesChange={setCalendarPreferences}
+									workspaceName={workspaceName}
+									onWorkspaceNameChange={setWorkspaceName}
+									employees={PREVIEW_EMPLOYEES}
+									theme={theme}
+									onThemeChange={setTheme}
+								/>
+							</main>
+						</div>
 					</div>
 				</div>
-			</div>
-			<Drawer
-				isOpen={mobileNav}
-				onClose={() => setMobileNav(false)}
-				title={workspaceName}
-				side="left"
-				size="sm"
-				className={styles.previewDrawer}
-			>
-				{navigation(true)}
-			</Drawer>
+				<Drawer
+					isOpen={mobileNav}
+					onClose={() => setMobileNav(false)}
+					title={workspaceName}
+					side="left"
+					size="sm"
+					className={styles.previewDrawer}
+				>
+					{navigation(true)}
+				</Drawer>
+			</DirtyFormProvider>
 		</div>
 	)
 }

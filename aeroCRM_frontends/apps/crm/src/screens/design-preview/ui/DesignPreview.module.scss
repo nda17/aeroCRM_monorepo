@@ -7,6 +7,9 @@
 	--crm-border-strong: 198 201 209;
 	--crm-text: 34 39 46;
 	--crm-muted: 110 116 126;
+	--color-surface: var(--surface);
+	--color-text: var(--ink);
+	--color-border: var(--line);
 	color-scheme: light;
 	display: grid;
 	grid-template-columns: 218px minmax(0, 1fr);
@@ -33,7 +36,13 @@
 	button:disabled {
 		cursor: default;
 	}
-	:where(button, input, select, textarea, [tabindex]):focus-visible {
+	:where(
+		button,
+		input,
+		select,
+		textarea,
+		[tabindex]:not([role='separator'])
+	):focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 3px;
 		box-shadow: none;
@@ -1552,7 +1561,27 @@
 }
 .calendarNavigation {
 	display: flex;
+	flex-wrap: wrap;
 	gap: 6px;
+	max-width: 100%;
+}
+.calendarNavigation > label {
+	white-space: nowrap;
+	min-height: 40px;
+}
+.calendarNavigation input {
+	min-width: 0;
+	border: 0;
+	background: transparent;
+	color: var(--ink);
+}
+@media (max-width: 480px) {
+	.calendarNavigation {
+		width: 100%;
+	}
+	.calendarNavigation > label {
+		flex-basis: 100%;
+	}
 }
 .calendarNavigation button {
 	min-width: 40px;
@@ -2647,7 +2676,10 @@
 	background: var(--surface);
 }
 .preview :where(select, input, textarea) {
-	color-scheme: inherit;
+	color-scheme: light;
+}
+.preview[data-preview-theme='dark'] :where(select, input, textarea) {
+	color-scheme: dark;
 }
 .preview select option {
 	background: var(--surface);

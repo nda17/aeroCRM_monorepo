@@ -1,6 +1,12 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
+import type {
+	ReactNode,
+	FormHTMLAttributes,
+	ButtonHTMLAttributes
+} from 'react'
+import { useDirtyForm, useDirtyFormGuard } from '@/shared/lib/dirty-form'
 import { AppIcon } from '@/shared/ui/app-icon'
 import styles from './DesignPreview.module.scss'
 
@@ -111,5 +117,55 @@ export function PreviewStatus({
 		<span className={styles.softBadge} data-tone={tone}>
 			{children}
 		</span>
+	)
+}
+
+// Uncontrolled preview editors use the same discard protection as CRM drawers.
+export function PreviewForm({
+	children,
+	...props
+}: FormHTMLAttributes<HTMLFormElement>) {
+	const ref = useRef<HTMLFormElement>(null)
+	const baseline = useRef('')
+	const [dirty, setDirty] = useState(false)
+	useDirtyForm({ dirty, label: 'Форма предпросмотра' })
+	const serialize = (form: HTMLFormElement) =>
+		JSON.stringify([...new FormData(form).entries()])
+	useLayoutEffect(() => {
+		if (ref.current) baseline.current = serialize(ref.current)
+	}, [])
+	return (
+		<form
+			{...props}
+			ref={ref}
+			onInput={event => {
+				setDirty(serialize(event.currentTarget) !== baseline.current)
+				props.onInput?.(event)
+			}}
+			onChange={event => {
+				setDirty(serialize(event.currentTarget) !== baseline.current)
+				props.onChange?.(event)
+			}}
+			onReset={event => {
+				setDirty(false)
+				props.onReset?.(event)
+			}}
+		>
+			{children}
+		</form>
+	)
+}
+
+export function PreviewDiscardButton({
+	onClick,
+	...props
+}: ButtonHTMLAttributes<HTMLButtonElement>) {
+	const guard = useDirtyFormGuard()
+	return (
+		<button
+			{...props}
+			type="button"
+			onClick={event => guard.confirmDiscard(() => onClick?.(event))}
+		/>
 	)
 }
