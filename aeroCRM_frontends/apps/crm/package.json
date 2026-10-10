@@ -9,6 +9,7 @@
 	"packageManager": "pnpm@9.15.9",
 	"scripts": {
 		"dev": "next dev --port 3001",
+		"dev:design-preview": "CRM_DESIGN_PREVIEW=1 NEXT_PUBLIC_MODE=development next dev --hostname 127.0.0.1 --port 3001",
 		"build": "next build --webpack",
 		"start": "next start",
 		"lint": "eslint . --max-warnings=0",
