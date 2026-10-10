@@ -171,7 +171,20 @@ export function PreviewTasks({
 	const currentWeekStart =
 		today -
 		((new Date(today).getUTCDay() - firstWeekday + 7) % 7) * calendarDayMs
-	const weekStart = currentWeekStart + weekOffset * 7 * calendarDayMs
+	const firstDate = Date.UTC(100, 0, 1)
+	const lastDate = Date.UTC(9999, 11, 24)
+	const firstWeekOffset = Math.floor(
+		(firstDate - currentWeekStart) / (7 * calendarDayMs)
+	)
+	const lastWeekOffset = Math.floor(
+		(lastDate - currentWeekStart) / (7 * calendarDayMs)
+	)
+	const visibleWeekOffset = Math.max(
+		firstWeekOffset,
+		Math.min(lastWeekOffset, weekOffset)
+	)
+	const weekStart =
+		currentWeekStart + visibleWeekOffset * 7 * calendarDayMs
 	const weekDates = Array.from(
 		{ length: 7 },
 		(_, index) => weekStart + index * calendarDayMs
@@ -433,7 +446,9 @@ export function PreviewTasks({
 										aria-label="Перейти к дате"
 										min="0100-01-01"
 										max="9999-12-24"
-										value={new Date(weekStart).toISOString().slice(0, 10)}
+										value={new Date(Math.max(firstDate, weekStart))
+											.toISOString()
+											.slice(0, 10)}
 										onInput={event => {
 											const input = event.currentTarget
 											if (!input.validity.valid || !input.value) return
@@ -458,7 +473,8 @@ export function PreviewTasks({
 									className={styles.secondaryButton}
 									aria-label="Предыдущая неделя"
 									title="Предыдущая неделя"
-									onClick={() => setWeekOffset(value => value - 1)}
+									disabled={visibleWeekOffset <= firstWeekOffset}
+									onClick={() => setWeekOffset(visibleWeekOffset - 1)}
 								>
 									<AppIcon
 										name="chevronDown"
@@ -470,7 +486,8 @@ export function PreviewTasks({
 									className={styles.secondaryButton}
 									aria-label="Следующая неделя"
 									title="Следующая неделя"
-									onClick={() => setWeekOffset(value => value + 1)}
+									disabled={visibleWeekOffset >= lastWeekOffset}
+									onClick={() => setWeekOffset(visibleWeekOffset + 1)}
 								>
 									<AppIcon
 										name="chevronDown"
@@ -630,7 +647,7 @@ export function PreviewTasks({
 							date={
 								editing === 'new'
 									? view === 'calendar' && weekOffset !== 0
-										? weekStart
+										? Math.max(firstDate, weekStart)
 										: today
 									: taskDate(editing, today)
 							}
