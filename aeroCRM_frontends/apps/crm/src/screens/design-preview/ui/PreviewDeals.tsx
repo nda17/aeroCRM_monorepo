@@ -122,6 +122,7 @@ export default function PreviewDeals({
 		setDeals(items => [
 			{
 				id,
+				createdAt: new Date().toISOString(),
 				title,
 				company,
 				contact: 'Контакт не указан',

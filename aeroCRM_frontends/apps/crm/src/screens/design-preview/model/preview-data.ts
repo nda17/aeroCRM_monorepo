@@ -1,5 +1,6 @@
 export type PreviewDeal = {
 	id: string
+	createdAt: string
 	title: string
 	company: string
 	contact: string
@@ -24,9 +25,13 @@ export const PREVIEW_STAGES = [
 	'Оплата'
 ]
 
+const daysAgo = (days: number) =>
+	new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+
 export const PREVIEW_DEALS: PreviewDeal[] = [
 	{
 		id: 'deal-001',
+		createdAt: daysAgo(0),
 		title: 'Внедрение CRM для отдела продаж',
 		company: 'Северный меридиан',
 		contact: 'Ирина Ветрова',
@@ -42,6 +47,7 @@ export const PREVIEW_DEALS: PreviewDeal[] = [
 	},
 	{
 		id: 'deal-002',
+		createdAt: daysAgo(1),
 		title: 'Интеграция с системой учёта',
 		company: 'ТехноПарк Волга',
 		contact: 'Марк Лавров',
@@ -57,6 +63,7 @@ export const PREVIEW_DEALS: PreviewDeal[] = [
 	},
 	{
 		id: 'deal-003',
+		createdAt: daysAgo(3),
 		title: 'Автоматизация клиентской поддержки',
 		company: 'Листва и Ко',
 		contact: 'Полина Соколова',
@@ -72,6 +79,7 @@ export const PREVIEW_DEALS: PreviewDeal[] = [
 	},
 	{
 		id: 'deal-004',
+		createdAt: daysAgo(5),
 		title: 'Лицензии CRM на 40 сотрудников',
 		company: 'Горизонт Снабжение',
 		contact: 'Денис Руденко',
@@ -87,6 +95,7 @@ export const PREVIEW_DEALS: PreviewDeal[] = [
 	},
 	{
 		id: 'deal-005',
+		createdAt: daysAgo(8),
 		title: 'Настройка воронки и аналитики',
 		company: 'Атлас Проект',
 		contact: 'Кира Белова',
@@ -102,6 +111,7 @@ export const PREVIEW_DEALS: PreviewDeal[] = [
 	},
 	{
 		id: 'deal-006',
+		createdAt: daysAgo(14),
 		title: 'Перенос базы клиентов',
 		company: 'Мастерская Берег',
 		contact: 'Роман Яшин',
@@ -117,6 +127,7 @@ export const PREVIEW_DEALS: PreviewDeal[] = [
 	},
 	{
 		id: 'deal-007',
+		createdAt: daysAgo(20),
 		title: 'CRM и телефония для филиалов',
 		company: 'Ритм Логистика',
 		contact: 'Алина Зарина',
@@ -132,6 +143,7 @@ export const PREVIEW_DEALS: PreviewDeal[] = [
 	},
 	{
 		id: 'deal-008',
+		createdAt: daysAgo(35),
 		title: 'Корпоративный портал продаж',
 		company: 'Клён Девелопмент',
 		contact: 'Тимур Сафин',
@@ -147,6 +159,7 @@ export const PREVIEW_DEALS: PreviewDeal[] = [
 	},
 	{
 		id: 'deal-009',
+		createdAt: daysAgo(50),
 		title: 'Настройка процессов закупки',
 		company: 'Контур Поставка',
 		contact: 'Вера Мельникова',
@@ -162,6 +175,7 @@ export const PREVIEW_DEALS: PreviewDeal[] = [
 	},
 	{
 		id: 'deal-010',
+		createdAt: daysAgo(70),
 		title: 'Единое рабочее пространство CRM',
 		company: 'Ясный маршрут',
 		contact: 'Олег Баженов',
@@ -177,6 +191,7 @@ export const PREVIEW_DEALS: PreviewDeal[] = [
 	},
 	{
 		id: 'deal-011',
+		createdAt: daysAgo(100),
 		title: 'Годовая подписка и сопровождение',
 		company: 'Лаборатория Сфера',
 		contact: 'Элина Туманова',
@@ -192,6 +207,7 @@ export const PREVIEW_DEALS: PreviewDeal[] = [
 	},
 	{
 		id: 'deal-012',
+		createdAt: daysAgo(130),
 		title: 'Расширение лицензий для команды',
 		company: 'Добрый склад',
 		contact: 'Степан Жаров',

@@ -176,6 +176,7 @@ export default function DesignPreview() {
 			updateDeals(items => [
 				{
 					id: dealId!,
+					createdAt: new Date().toISOString(),
 					title: thread.subject,
 					company: thread.company,
 					contact: thread.name,
@@ -460,7 +461,10 @@ export default function DesignPreview() {
 					</div>
 					<div hidden={section !== 'analytics'}>
 						<main className={styles.content}>
-							<PreviewAnalytics deals={deals} />
+							<PreviewAnalytics
+								deals={deals}
+								timeZone={calendarPreferences.timeZone}
+							/>
 						</main>
 					</div>
 					<div hidden={section !== 'directory'}>
