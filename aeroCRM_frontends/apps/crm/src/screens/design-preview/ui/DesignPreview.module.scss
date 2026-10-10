@@ -1666,6 +1666,10 @@
 .calendarTask:hover {
 	background: var(--hover);
 }
+.preview .calendarTask:focus-visible {
+	border-color: var(--accent);
+	outline-offset: -2px;
+}
 .calendarTask strong {
 	font-size: 12px;
 	line-height: 1.5;
