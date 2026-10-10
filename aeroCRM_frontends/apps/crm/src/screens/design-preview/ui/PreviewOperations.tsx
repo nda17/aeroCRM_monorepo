@@ -38,23 +38,45 @@ const days = [
 	'Воскресенье'
 ]
 
-const taskDay = (due: string, timeZone: string) => {
-	const label = due.split(',')[0].trim().toLocaleLowerCase('ru')
+const calendarDayMs = 24 * 60 * 60 * 1000
+const calendarFormat = (
+	date: number,
+	options: Intl.DateTimeFormatOptions
+) =>
+	new Intl.DateTimeFormat('ru-RU', { ...options, timeZone: 'UTC' }).format(
+		date
+	)
+
+// Calendar values represent civil dates, independent of the browser time zone.
+const calendarToday = (timeZone: string) => {
+	const parts = new Intl.DateTimeFormat('en-GB', {
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+		timeZone
+	}).formatToParts(new Date())
+	const part = (type: string) =>
+		Number(parts.find(item => item.type === type)?.value)
+	return Date.UTC(part('year'), part('month') - 1, part('day'))
+}
+const taskTime = (task: PreviewTask) => {
+	const time = task.due.match(/,\s*(\d{1,2}):(\d{2})$/)
+	return time ? Number(time[1]) * 60 + Number(time[2]) : Infinity
+}
+const taskDate = (task: PreviewTask, today: number) => {
+	const label = task.due.split(',')[0].trim().toLocaleLowerCase('ru')
+	if (label === 'сегодня') return today
+	if (label === 'завтра') return today + calendarDayMs
+	if (label === 'вчера') return today - calendarDayMs
 	const named = days.findIndex(
 		day => day.toLocaleLowerCase('ru') === label
 	)
-	if (named >= 0) return named
-	const today = days.findIndex(
-		day =>
-			day.toLocaleLowerCase('ru') ===
-			new Intl.DateTimeFormat('ru-RU', {
-				weekday: 'long',
-				timeZone
-			}).format(new Date())
-	)
-	if (label === 'сегодня') return today
-	if (label === 'завтра') return (today + 1) % 7
-	if (label === 'вчера') return (today + 6) % 7
+	if (named >= 0) {
+		const weekday = (new Date(today).getUTCDay() + 6) % 7
+		let offset = (named - weekday + 7) % 7
+		if (task.overdue && offset > 0) offset -= 7
+		return today + offset * calendarDayMs
+	}
 	const parts = label.match(/^(\d{2})\.(\d{2})\.(\d{4})$/)
 	if (parts) {
 		const [, date, month, year] = parts.map(Number)
@@ -64,7 +86,7 @@ const taskDay = (due: string, timeZone: string) => {
 			value.getUTCMonth() === month - 1 &&
 			value.getUTCDate() === date
 		)
-			return (value.getUTCDay() + 6) % 7
+			return value.getTime()
 	}
 	return null
 }
@@ -90,6 +112,23 @@ export function PreviewTasks({
 	const [owner, setOwner] = useState('')
 	const [editing, setEditing] = useState<PreviewTask | 'new' | null>(null)
 	const [notice, setNotice] = useState('')
+	const [weekOffset, setWeekOffset] = useState(0)
+	const today = calendarToday(calendarPreferences.timeZone)
+	const firstWeekday = calendarPreferences.weekStart === 'sunday' ? 0 : 1
+	const currentWeekStart =
+		today -
+		((new Date(today).getUTCDay() - firstWeekday + 7) % 7) * calendarDayMs
+	const weekStart = currentWeekStart + weekOffset * 7 * calendarDayMs
+	const weekDates = Array.from(
+		{ length: 7 },
+		(_, index) => weekStart + index * calendarDayMs
+	)
+	const weekLabel = new Intl.DateTimeFormat('ru-RU', {
+		day: 'numeric',
+		month: 'long',
+		year: 'numeric',
+		timeZone: 'UTC'
+	}).formatRange(weekStart, weekDates[6])
 	const filtered = tasks.filter(
 		task =>
 			previewMatches(query, task.title, task.company) &&
@@ -102,6 +141,15 @@ export function PreviewTasks({
 							task.status !== 'done'
 						: task.status === 'done'))
 	)
+	const datedTasks = filtered.map(task => ({
+		task,
+		date: taskDate(task, today)
+	}))
+	const weekTasks = datedTasks.filter(
+		({ date }) =>
+			date !== null && date >= weekStart && date <= weekDates[6]
+	)
+	const unscheduledTasks = datedTasks.filter(({ date }) => date === null)
 	const reset = () => {
 		setQuery('')
 		setOwner('')
@@ -147,6 +195,12 @@ export function PreviewTasks({
 				? [task, ...items]
 				: items.map(item => (item.id === task.id ? task : item))
 		)
+		const savedDate = taskDate(task, today)
+		if (view === 'calendar' && savedDate !== null) {
+			setWeekOffset(
+				Math.floor((savedDate - currentWeekStart) / (7 * calendarDayMs))
+			)
+		}
 		setEditing(null)
 		setNotice('Задача сохранена')
 	}
@@ -232,7 +286,11 @@ export function PreviewTasks({
 						</strong>{' '}
 						выполнено
 					</span>
-					<span>Календарь · группировка по сроку</span>
+					<span>
+						{view === 'calendar'
+							? 'Календарь по неделям'
+							: 'Все задачи команды'}
+					</span>
 				</div>
 				<div className={styles.viewBar}>
 					<div className={styles.tabs}>
@@ -287,87 +345,139 @@ export function PreviewTasks({
 						</select>
 						<AppIcon name="chevronDown" size={13} />
 					</label>
-					<span className={styles.results}>Задач: {filtered.length}</span>
+					<span className={styles.results}>
+						{view === 'calendar'
+							? `На неделе: ${weekTasks.length}`
+							: `Задач: ${filtered.length}`}
+					</span>
 				</div>
-				{filtered.length === 0 ? (
-					<PreviewEmpty reset={reset} />
-				) : view === 'list' ? (
-					<div className={styles.taskList}>{filtered.map(taskRow)}</div>
+				{view === 'list' ? (
+					filtered.length === 0 ? (
+						<PreviewEmpty reset={reset} />
+					) : (
+						<div className={styles.taskList}>{filtered.map(taskRow)}</div>
+					)
 				) : (
-					<div className={styles.calendarGrid}>
-						{(calendarPreferences.weekStart === 'sunday'
-							? [days[6], ...days.slice(0, 6)]
-							: days
-						).map(day => (
-							<section key={day} className={styles.calendarDay}>
-								<header>
-									<h2>{day}</h2>
-									<span>
-										{
-											filtered.filter(
-												task =>
-													taskDay(
-														task.due,
-														calendarPreferences.timeZone
-													) === days.indexOf(day)
-											).length
-										}
-									</span>
-								</header>
-								{filtered
-									.filter(
-										task =>
-											taskDay(task.due, calendarPreferences.timeZone) ===
-											days.indexOf(day)
-									)
-									.map(task => (
-										<button
-											key={task.id}
-											className={styles.calendarTask}
-											onClick={() => setEditing(task)}
-											data-done={task.status === 'done'}
-										>
-											<span className={styles.taskDue}>{task.due}</span>
-											<strong>{task.title}</strong>
-											<small>{task.company}</small>
-											<PreviewStatus
-												tone={
-													task.status === 'done' ? 'success' : 'purple'
-												}
+					<>
+						<div className={styles.calendarToolbar}>
+							<h2 aria-live="polite" aria-atomic="true">
+								{weekLabel}
+							</h2>
+							<div
+								className={styles.calendarNavigation}
+								role="group"
+								aria-label="Выбор недели"
+							>
+								<button
+									className={styles.secondaryButton}
+									onClick={() => setWeekOffset(0)}
+								>
+									Сегодня
+								</button>
+								<button
+									className={styles.secondaryButton}
+									aria-label="Предыдущая неделя"
+									title="Предыдущая неделя"
+									onClick={() => setWeekOffset(value => value - 1)}
+								>
+									<AppIcon
+										name="chevronDown"
+										size={16}
+										className={styles.calendarPrevious}
+									/>
+								</button>
+								<button
+									className={styles.secondaryButton}
+									aria-label="Следующая неделя"
+									title="Следующая неделя"
+									onClick={() => setWeekOffset(value => value + 1)}
+								>
+									<AppIcon
+										name="chevronDown"
+										size={16}
+										className={styles.calendarNext}
+									/>
+								</button>
+							</div>
+						</div>
+						<div
+							className={styles.calendarGrid}
+							role="region"
+							aria-label={`Календарь задач: ${weekLabel}`}
+							tabIndex={0}
+						>
+							{weekDates.map(date => {
+								const dayTasks = weekTasks
+									.filter(item => item.date === date)
+									.sort((a, b) => taskTime(a.task) - taskTime(b.task))
+								return (
+									<section
+										key={date}
+										className={styles.calendarDay}
+										data-today={date === today}
+									>
+										<header>
+											<h3>
+												<span>
+													{days[(new Date(date).getUTCDay() + 6) % 7]}
+												</span>
+												<time
+													dateTime={new Date(date)
+														.toISOString()
+														.slice(0, 10)}
+													aria-current={
+														date === today ? 'date' : undefined
+													}
+												>
+													{calendarFormat(date, {
+														day: 'numeric',
+														month: 'short'
+													})}
+													{date === today && <small>Сегодня</small>}
+												</time>
+											</h3>
+											<span aria-label={`Задач: ${dayTasks.length}`}>
+												{dayTasks.length}
+											</span>
+										</header>
+										{dayTasks.map(({ task }) => (
+											<button
+												key={task.id}
+												className={styles.calendarTask}
+												onClick={() => setEditing(task)}
+												data-done={task.status === 'done'}
 											>
-												{taskStatuses[task.status]}
-											</PreviewStatus>
-										</button>
-									))}
-								{filtered.every(
-									task =>
-										taskDay(task.due, calendarPreferences.timeZone) !==
-										days.indexOf(day)
-								) && <p className={styles.quietText}>Нет задач</p>}
-							</section>
-						))}
-					</div>
-				)}
-				{view === 'calendar' &&
-					filtered.some(
-						task =>
-							taskDay(task.due, calendarPreferences.timeZone) === null
-					) && (
-						<section className={styles.unscheduledTasks}>
-							<h2>Без даты</h2>
-							<p className={styles.quietText}>
-								Задайте срок: сегодня, завтра, день недели или дату в
-								формате ДД.ММ.ГГГГ.
-							</p>
-							{filtered
-								.filter(
-									task =>
-										taskDay(task.due, calendarPreferences.timeZone) ===
-										null
+												<span className={styles.taskDue}>{task.due}</span>
+												<strong>{task.title}</strong>
+												<small>{task.company}</small>
+												<PreviewStatus
+													tone={
+														task.status === 'done' ? 'success' : 'purple'
+													}
+												>
+													{taskStatuses[task.status]}
+												</PreviewStatus>
+											</button>
+										))}
+										{dayTasks.length === 0 && (
+											<p className={styles.quietText}>Нет задач</p>
+										)}
+									</section>
 								)
-								.map(taskRow)}
-						</section>
-					)}
+							})}
+						</div>
+						{unscheduledTasks.length > 0 && (
+							<section className={styles.unscheduledTasks}>
+								<h2>Без даты · {unscheduledTasks.length}</h2>
+								<p className={styles.quietText}>
+									Не привязаны к неделе. Укажите срок в формате ДД.ММ.ГГГГ,
+									ЧЧ:ММ.
+								</p>
+								{unscheduledTasks.map(({ task }) => taskRow(task))}
+							</section>
+						)}
+					</>
+				)}
 				<p className={styles.notice} role="status">
 					{notice}
 				</p>
@@ -447,7 +557,11 @@ export function PreviewTasks({
 								required
 								pattern=".*\S.*"
 								defaultValue={
-									editing === 'new' ? 'Сегодня, 16:00' : editing.due
+									editing === 'new'
+										? view === 'calendar' && weekOffset !== 0
+											? `${calendarFormat(weekStart, { day: '2-digit', month: '2-digit', year: 'numeric' })}, 16:00`
+											: 'Сегодня, 16:00'
+										: editing.due
 								}
 							/>
 						</label>
