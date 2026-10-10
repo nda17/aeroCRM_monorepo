@@ -17,6 +17,7 @@ export const appIconNames = [
 	'analytics',
 	'settings',
 	'moon',
+	'sun',
 	'monitor',
 	'products',
 	'menu',
@@ -158,6 +159,12 @@ const iconRegistry: Record<AppIconName, ReactNode> = {
 		</>
 	),
 	moon: <path d="M20 14.4A8.5 8.5 0 0 1 9.6 4a8.5 8.5 0 1 0 10.4 10.4Z" />,
+	sun: (
+		<>
+			<circle cx="12" cy="12" r="4" />
+			<path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
+		</>
+	),
 	monitor: (
 		<>
 			<rect x="3" y="4" width="18" height="13" rx="2" />

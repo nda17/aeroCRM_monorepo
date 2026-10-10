@@ -321,7 +321,7 @@ export default function DesignPreview() {
 							}
 						>
 							<AppIcon
-								name={theme === 'dark' ? 'monitor' : 'moon'}
+								name={theme === 'dark' ? 'sun' : 'moon'}
 								size={17}
 							/>
 						</button>

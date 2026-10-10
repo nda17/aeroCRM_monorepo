@@ -407,7 +407,7 @@ export default function PreviewSettings({
 											aria-pressed={theme === 'light'}
 											onClick={() => onThemeChange('light')}
 										>
-											<AppIcon name="monitor" size={16} />
+											<AppIcon name="sun" size={16} />
 											Светлая
 										</button>
 										<button
