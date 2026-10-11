@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import Link from 'next/link'
 import { Button, ScreenState } from '@/shared/ui'
 import { invalidContractError } from '@/shared/api/authenticated-http-client'
 import {
 	getRichMailMessage,
 	getUnmatchedMailMessage,
 	getMailAttachment,
+	getMailProcessing,
 	mailCommand,
 	downloadMailAttachment
 } from '@/entities/mail/api/mail.api'
@@ -24,6 +26,10 @@ import {
 import { MailCommandNotice } from './MailCommandNotice'
 import { MailRichText } from './MailRichText'
 import { MailIntakeCopyControl } from './MailIntakeCopyControl'
+import { getMailIntakeProcessing } from '@/entities/intake/api/processing.api'
+import { useIntakeAccess } from '@/features/manage-intake/model/use-intake-access'
+import { useEmployeeNames } from '@/features/workspace-collaboration/model/use-employee-names'
+import { mailStateLabel } from './MailComposer'
 import styles from './Mail.module.scss'
 
 export const MailMessageReader = ({
@@ -184,6 +190,12 @@ export const MailMessageReader = ({
 			{item.direction === 'INBOUND' && item.sourceKind === 'IMAP' ? (
 				<MailIntakeCopyControl messageId={item.id} />
 			) : null}
+			<MailProcessingHistory
+				messageId={item.id}
+				showIntake={
+					item.direction === 'INBOUND' && item.sourceKind === 'IMAP'
+				}
+			/>
 			{onReply &&
 			(!replyMailboxIds || replyMailboxIds.includes(item.mailboxId)) ? (
 				<Button variant="secondary" onClick={() => onReply(item)}>
@@ -191,6 +203,168 @@ export const MailMessageReader = ({
 				</Button>
 			) : null}
 		</article>
+	)
+}
+
+const MailProcessingHistory = ({
+	messageId,
+	showIntake
+}: {
+	messageId: string
+	showIntake: boolean
+}) => {
+	const context = useMailContext()
+	const intake = useIntakeAccess()
+	const canRead =
+		!!context.session &&
+		!context.capabilities.isError &&
+		context.capabilities.data?.enabled === true &&
+		context.capabilities.data.mailPermissions.includes('mail:read')
+	const employeeName = useEmployeeNames({
+		workspaceId: context.workspace.workspaceId,
+		session: context.session,
+		revision: context.sessionRevision,
+		scopeKey: JSON.stringify(
+			context.capabilities.data?.mailPermissions ?? []
+		),
+		canRead
+	})
+	const replies = useQuery({
+		queryKey: ['mail-processing', ...context.key, messageId],
+		enabled: canRead,
+		queryFn: () =>
+			getMailProcessing(
+				context.session!.accessToken,
+				context.workspace.workspaceId,
+				messageId
+			),
+		gcTime: 0,
+		staleTime: 0,
+		retry: false,
+		refetchInterval: query =>
+			!query.state.error && canRead ? 5000 : false
+	})
+	const copy = useQuery({
+		queryKey: [
+			'crm-intake-mail-processing',
+			...context.key,
+			intake.scopeKey,
+			messageId
+		],
+		enabled: showIntake && intake.canRead && !!intake.session && canRead,
+		queryFn: () =>
+			getMailIntakeProcessing(
+				intake.session!.accessToken,
+				intake.workspaceId,
+				messageId
+			),
+		gcTime: 0,
+		staleTime: 0,
+		retry: false,
+		refetchInterval: query =>
+			!query.state.error && showIntake && intake.canRead ? 5000 : false
+	})
+	const date = (value: string) => new Date(value).toLocaleString('ru-RU')
+	const pending =
+		replies.isPending ||
+		(showIntake &&
+			!intake.permissions.isError &&
+			(!intake.confirmed || (intake.canRead && copy.isPending)))
+	const failed =
+		replies.isError ||
+		(showIntake &&
+			(intake.permissions.isError || (intake.canRead && copy.isError)))
+	const copied = copy.data?.copy
+	const acceptanceStatus = {
+		QUEUED: 'ожидает обработки',
+		RUNNING: 'создаём контакт и сделку',
+		RETRY_WAIT: 'ожидает повторной обработки',
+		BLOCKED: 'нужна проверка доступа',
+		FAILED: 'требуется внимание',
+		RECOVERING: 'проверяем и останавливаем обработку',
+		CANCELLED: 'обработка остановлена',
+		COMPLETED: 'принято в работу'
+	} as const
+	return (
+		<section className={styles.processing} aria-label="Обработка письма">
+			<h4 className={styles.title}>История обработки</h4>
+			{replies.data?.replies.length || copied ? (
+				<ul className={styles.list}>
+					{replies.data?.replies.map(reply => (
+						<li className={styles.item} key={reply.sendId}>
+							Ответ: {employeeName(reply.actorSubject)} ·{' '}
+							{reply.state === 'ACCEPTED'
+								? 'Ответ отправлен (принят почтовым сервером)'
+								: mailStateLabel[reply.state]}
+							{' · '}
+							{date(
+								reply.settledAt ?? reply.submittedAt ?? reply.createdAt
+							)}
+						</li>
+					))}
+					{copied ? (
+						<li className={styles.item}>
+							Обращение создал: {employeeName(copied.actorSubject)} ·{' '}
+							{date(copied.createdAt)}
+							{copied.canOpen && copied.entryId ? (
+								<>
+									{' · '}
+									<Link
+										href={`/inbox?workspaceId=${encodeURIComponent(intake.workspaceId)}&entry=${copied.entryId}`}
+									>
+										Открыть обращение
+									</Link>
+								</>
+							) : null}
+							{copied.acceptance ? (
+								<div>
+									{copied.acceptance.status === 'COMPLETED'
+										? 'Принял'
+										: 'Обработку начал'}
+									: {employeeName(copied.acceptance.actorSubject)} ·{' '}
+									{date(copied.acceptance.claimedAt)} · Статус:{' '}
+									{acceptanceStatus[copied.acceptance.status]}
+								</div>
+							) : null}
+						</li>
+					) : null}
+				</ul>
+			) : null}
+			{replies.data?.hasMore ? (
+				<p className={styles.muted}>Показаны последние 100 ответов.</p>
+			) : null}
+			{pending ? (
+				<p className={styles.muted}>Проверяем действия…</p>
+			) : null}
+			{showIntake && intake.confirmed && !intake.canRead ? (
+				<p className={styles.muted}>
+					Сведения об обращении недоступны по правам раздела «Входящие».
+				</p>
+			) : null}
+			{failed ? (
+				<div className={styles.stack} role="alert">
+					<p>Не удалось загрузить все действия по письму.</p>
+					<Button
+						variant="secondary"
+						onClick={() => {
+							if (replies.isError) void replies.refetch()
+							if (copy.isError) void copy.refetch()
+							if (intake.permissions.isError)
+								void intake.permissions.refetch()
+						}}
+					>
+						Повторить
+					</Button>
+				</div>
+			) : null}
+			{!pending &&
+			!failed &&
+			(!showIntake || intake.canRead) &&
+			!replies.data?.replies.length &&
+			!copied ? (
+				<p className={styles.muted}>Действий по письму пока нет.</p>
+			) : null}
+		</section>
 	)
 }
 

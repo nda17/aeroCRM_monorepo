@@ -16,6 +16,8 @@ assert.equal(local(runtimeUrl), local(migrationUrl));
 const { PrismaClient } = await import('@prisma/crm-intake-client');
 const { AcceptanceService } =
 	await import('../../dist/src/acceptance/acceptance.service.js');
+const { IntakeService } =
+	await import('../../dist/src/intake/intake.service.js');
 const { AcceptanceProcessor, ACCEPTANCE_CONSUMER } =
 	await import('../../dist/src/acceptance/acceptance.processor.js');
 const { AcceptancePublisher } =
@@ -123,6 +125,7 @@ const operations = {
 	}
 };
 const service = new AcceptanceService(runtime);
+const intake = new IntakeService(runtime);
 const processor = new AcceptanceProcessor(runtime, access, operations);
 let rabbit;
 let worker;
@@ -192,6 +195,77 @@ try {
 	assert.equal((await processor.claim(first.event, 0)).state, 'DONE');
 	assert.equal(writes.customers, 1);
 	assert.equal(writes.sales, 1);
+
+	// Two shared-scope managers race to accept an API entry whose source team neither manager belongs to.
+	const hiddenSourceTeamId = randomUUID();
+	const source = await runtime.intakeSource.create({
+		data: {
+			workspaceId,
+			name: 'PG shared source',
+			kind: 'API',
+			tokenHash: randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-', ''),
+			createdBySubject: context.subject,
+			teamId: hiddenSourceTeamId
+		}
+	});
+	const sharedEntry = await runtime.inboxEntry.create({
+		data: {
+			workspaceId,
+			title: 'Shared API lead',
+			name: 'Shared contact',
+			origin: 'API',
+			sourceId: source.id,
+			teamId: hiddenSourceTeamId,
+			createdBySubject: context.subject
+		}
+	});
+	const manager = subject => ({
+		...context,
+		subject,
+		role: 'MANAGER',
+		dataScope: 'OWN',
+		teamIds: []
+	});
+	const managers = [manager('shared-manager-a'), manager('shared-manager-b')];
+	const sharedDto = {
+		...command(1),
+		contact: { mode: 'CREATE_FROM_ENTRY' },
+		deal: {
+			title: 'Shared API acceptance',
+			currency: 'RUB',
+			amountMinor: 0,
+			pipelineId: randomUUID(),
+			stageId: randomUUID(),
+			nextTask: { title: 'Call shared lead', dueAt: '2026-09-01T00:00:00.000Z' }
+		}
+	};
+	const sharedRace = await Promise.allSettled(
+		managers.map(managerContext =>
+			service.accept(managerContext, sharedEntry.id, {
+				...sharedDto,
+				commandId: randomUUID()
+			})
+		)
+	);
+	assert.equal(sharedRace.filter(result => result.status === 'fulfilled').length, 1);
+	assert.equal(
+		sharedRace.filter(result => result.status === 'rejected' && result.reason?.getStatus?.() === 409).length,
+		1
+	);
+	const sharedAcceptance = await runtime.acceptance.findFirstOrThrow({
+		where: { workspaceId, entryId: sharedEntry.id, status: { not: 'CANCELLED' } }
+	});
+	assert.ok(managers.some(candidate => candidate.subject === sharedAcceptance.actorSubject));
+	const sharedSummary = await intake.processing(
+		manager('shared-reader'),
+		workspaceId,
+		sharedEntry.id
+	);
+	assert.equal(sharedSummary.items[0].acceptance.actorSubject, sharedAcceptance.actorSubject);
+	assert.equal(sharedSummary.items[0].acceptance.status, 'QUEUED');
+	const persistedPayload = sharedAcceptance.salesPayload;
+	assert.equal(persistedPayload.teamId, null);
+	assert.equal(persistedPayload.title, 'Shared API acceptance');
 	await assert.rejects(
 		() =>
 			service.get(
@@ -589,6 +663,7 @@ try {
 			await tx.intakeActivity.deleteMany({ where });
 			await tx.intakeCommand.deleteMany({ where });
 			await tx.inboxEntry.deleteMany({ where });
+			await tx.intakeSource.deleteMany({ where });
 		});
 	} finally {
 		await Promise.all([runtime.$disconnect(), migrator.$disconnect()]);

@@ -17,6 +17,7 @@ import {
 	CreateInboxEntryDto,
 	CreateIntakeSourceDto,
 	InboxListQuery,
+	InboxProcessingQuery,
 	IntakePageQuery,
 	IntakeWorkspaceQuery,
 	RejectInboxEntryDto,
@@ -42,6 +43,18 @@ export class IntakeController {
 			query
 		);
 	}
+	@Get('inbox/processing')
+	@Header('Cache-Control', 'no-store')
+	async processing(
+		@Headers('authorization') bearer: string | undefined,
+		@Query() query: InboxProcessingQuery
+	) {
+		return this.intake.processing(
+			await this.authorization.authorize(bearer, query.workspaceId),
+			query.workspaceId,
+			query.entryIds
+		);
+	}
 	@Get('inbox/:id')
 	async get(
 		@Headers('authorization') bearer: string | undefined,
@@ -51,7 +64,8 @@ export class IntakeController {
 		return this.intake.get(
 			await this.authorization.authorize(bearer, query.workspaceId),
 			query.workspaceId,
-			id
+			id,
+			query.view
 		);
 	}
 	@Get('inbox/:id/source')
@@ -65,7 +79,12 @@ export class IntakeController {
 			bearer,
 			query.workspaceId
 		);
-		const result = await this.intake.entrySource(access, query.workspaceId, id);
+		const result = await this.intake.entrySource(
+			access,
+			query.workspaceId,
+			id,
+			query.view
+		);
 		if (
 			JSON.stringify(
 				await this.authorization.authorize(bearer, query.workspaceId)
@@ -169,8 +188,6 @@ export class IntakeController {
 	}
 	private idempotency(key: string | undefined, commandId: string) {
 		if (key !== commandId)
-			throw new BadRequestException(
-				'Idempotency-Key must match commandId'
-			);
+			throw new BadRequestException('Idempotency-Key must match commandId');
 	}
 }

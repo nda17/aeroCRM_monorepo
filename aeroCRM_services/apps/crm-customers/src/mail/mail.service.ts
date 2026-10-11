@@ -120,19 +120,23 @@ export class MailService {
 		tx: MailTx = this.prisma
 	): Promise<string[]> {
 		assertMailPermission(a, `mail:${permission}`);
-		const grants = await tx.mailMailboxGrant.findMany({
-			where: {
-				workspaceId: a.customer.workspaceId,
-				subject: a.customer.subject,
-				membershipId: a.membershipId,
-				revokedAt: null,
-				...{
-					[`can${permission[0].toUpperCase() + permission.slice(1)}`]: true
-				}
-			},
-			select: { mailboxId: true },
-			take: 1001
-		});
+		const grants =
+			permission === 'read'
+				? []
+				: await tx.mailMailboxGrant.findMany({
+						where: {
+							workspaceId: a.customer.workspaceId,
+							mailbox: { kind: 'SHARED' },
+							subject: a.customer.subject,
+							membershipId: a.membershipId,
+							revokedAt: null,
+							...{
+								[`can${permission[0].toUpperCase() + permission.slice(1)}`]: true
+							}
+						},
+						select: { mailboxId: true },
+						take: 1001
+					});
 		if (grants.length > 1000)
 			throw new ServiceUnavailableException({ code: 'crm_mail_acl_limit' });
 		const personal = await tx.mailMailbox.findMany({
@@ -147,9 +151,20 @@ export class MailService {
 		});
 		if (personal.length > 1000)
 			throw new ServiceUnavailableException({ code: 'crm_mail_acl_limit' });
+		const shared =
+			permission === 'read'
+				? await tx.mailMailbox.findMany({
+						where: { workspaceId: a.customer.workspaceId, kind: 'SHARED' },
+						select: { id: true },
+						take: 1001
+					})
+				: [];
+		if (shared.length > 1000)
+			throw new ServiceUnavailableException({ code: 'crm_mail_acl_limit' });
 		return [
 			...new Set([
 				...personal.map((x) => x.id),
+				...shared.map((x) => x.id),
 				...grants.map((x) => x.mailboxId)
 			])
 		];
@@ -172,7 +187,8 @@ export class MailService {
 				m.ownerMembershipId !== a.membershipId
 			)
 				throw new NotFoundException();
-		} else {
+		} else if (m.kind !== 'SHARED') throw new NotFoundException();
+		else if (permission !== 'read') {
 			const grant = await tx.mailMailboxGrant.findUnique({
 				where: {
 					workspaceId_mailboxId_subject_membershipId: {
@@ -186,11 +202,7 @@ export class MailService {
 			if (
 				!grant ||
 				grant.revokedAt ||
-				!(permission === 'read'
-					? grant.canRead
-					: permission === 'send'
-						? grant.canSend
-						: grant.canManage) ||
+				!(permission === 'send' ? grant.canSend : grant.canManage) ||
 				(permission === 'manage' &&
 					!['OWNER', 'CRM_ADMIN'].includes(a.customer.role))
 			)
@@ -1092,6 +1104,7 @@ export class MailService {
 								{
 									direction: query.folder === 'INBOX' ? 'INBOUND' : 'OUTBOUND',
 									OR: [
+										{ mailbox: { kind: 'SHARED' } },
 										{
 											mailContactLink_messageId: { none: { state: 'LINKED' } }
 										},
@@ -1117,6 +1130,7 @@ export class MailService {
 										binding,
 										{
 											OR: [
+												{ mailbox: { kind: 'SHARED' } },
 												{
 													contactId: null,
 													OR: [
@@ -1280,7 +1294,8 @@ export class MailService {
 			where: { workspaceId: a.customer.workspaceId, id }
 		});
 		if (!m) throw new NotFoundException();
-		await this.mailbox(a, m.mailboxId, 'read', tx);
+		const mailbox = await this.mailbox(a, m.mailboxId, 'read', tx);
+		if (mailbox.kind === 'SHARED') return m;
 		const links = await tx.mailContactLink.findMany({
 			where: {
 				workspaceId: m.workspaceId,
@@ -1307,11 +1322,53 @@ export class MailService {
 			where: { workspaceId: a.customer.workspaceId, id }
 		});
 		if (!s) throw new NotFoundException();
-		await this.mailbox(a, s.mailboxId, 'read', tx);
+		const mailbox = await this.mailbox(a, s.mailboxId, 'read', tx);
+		if (mailbox.kind === 'SHARED') return s;
 		if (s.contactId) await this.contact(a, s.contactId, tx);
 		else if (s.scopeMessageId)
 			await this.readableMessage(a, s.scopeMessageId, tx);
 		return s;
+	}
+	async messageProcessing(a: MailAuthority, id: string) {
+		this.enabled();
+		requireMailId(id);
+		return this.prisma.$transaction(
+			async (tx) => {
+				const source = await tx.mailMessage.findFirst({
+					where: { workspaceId: a.customer.workspaceId, id },
+					select: { mailboxId: true }
+				});
+				const mailboxId = source
+					? (await this.readableMessage(a, id, tx)).mailboxId
+					: (await this.readableIntent(a, id, tx)).mailboxId;
+				const rows = await tx.mailSendIntent.findMany({
+					where: {
+						workspaceId: a.customer.workspaceId,
+						mailboxId,
+						replyToMessageId: id
+					},
+					orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+					take: 101
+				});
+				return {
+					schemaVersion: 1,
+					workspaceId: a.customer.workspaceId,
+					messageId: id,
+					replies: rows.slice(0, 100).map((row) => ({
+						sendId: row.id,
+						actorSubject: row.actorSubject,
+						membershipId: row.membershipId,
+						state: row.state,
+						createdAt: row.createdAt.toISOString(),
+						submittedAt: row.dispatchAdmittedAt?.toISOString() ?? null,
+						settledAt: row.settledAt?.toISOString() ?? null,
+						safeErrorCode: row.safeErrorCode
+					})),
+					hasMore: rows.length > 100
+				};
+			},
+			{ isolationLevel: 'RepeatableRead' }
+		);
 	}
 	async message(
 		a: MailAuthority,
@@ -1362,16 +1419,21 @@ export class MailService {
 					bodyStatus: 'COMPLETE',
 					bcc,
 					attachments: attachments.map(attachmentView),
-					links: intent.contactId
-						? [
-								{
-									externalEmail: addressList(intent.to)[0]?.email || '',
-									contactId: intent.contactId,
-									state: 'LINKED',
-									version: 1
-								}
-							]
-						: [],
+					links:
+						intent.contactId &&
+						(await this.prisma.contact.findFirst({
+							where: { ...customerScope(a.customer), id: intent.contactId },
+							select: { id: true }
+						}))
+							? [
+									{
+										externalEmail: addressList(intent.to)[0]?.email || '',
+										contactId: intent.contactId,
+										state: 'LINKED',
+										version: 1
+									}
+								]
+							: [],
 					provenance: {
 						folderPath: null,
 						uidValidity: null,
@@ -1476,6 +1538,7 @@ export class MailService {
 					...(linkedOnly
 						? []
 						: [
+								{ mailbox: { kind: 'SHARED' } },
 								{
 									mailContactLink_messageId: { none: { state: 'LINKED' } }
 								}
@@ -1720,16 +1783,18 @@ export class MailService {
 		await this.mailbox(a, file.mailboxId, 'read', tx);
 		if (file.messageId) await this.readableMessage(a, file.messageId, tx);
 		else {
-			if (file.contactId) await this.contact(a, file.contactId, tx);
 			const bound = await tx.mailSendAttachment.findFirst({
 				where: { workspaceId: file.workspaceId, attachmentId: file.id }
 			});
 			if (bound) await this.readableIntent(a, bound.sendId, tx);
-			else if (
-				file.uploadActor !== a.customer.subject ||
-				file.uploadMembershipId !== a.membershipId
-			)
-				throw new NotFoundException();
+			else {
+				if (file.contactId) await this.contact(a, file.contactId, tx);
+				if (
+					file.uploadActor !== a.customer.subject ||
+					file.uploadMembershipId !== a.membershipId
+				)
+					throw new NotFoundException();
+			}
 		}
 		if (
 			file.uploadActor &&

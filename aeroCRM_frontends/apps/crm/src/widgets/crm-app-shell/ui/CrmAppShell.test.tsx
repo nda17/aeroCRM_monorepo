@@ -300,7 +300,7 @@ describe('CRM navigation descriptions', () => {
 		expect(badge('Задачи')?.textContent).toBe('4')
 		expect(badge('Входящие')?.textContent).toBe('…')
 		expect(badge('Почта')).toBeNull()
-		expect(badge('Сообщения')?.textContent).toBe('99+')
+		expect(badge('Мессенджер')?.textContent).toBe('99+')
 		fixture.notificationSnapshot = {
 			...(fixture.notificationSnapshot as object),
 			workspaceId: '33333333-3333-4333-8333-333333333333',

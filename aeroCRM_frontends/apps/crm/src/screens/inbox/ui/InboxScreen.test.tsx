@@ -23,6 +23,17 @@ vi.mock('@/entities/intake', async original => ({
 	...(await original<typeof import('@/entities/intake')>()),
 	listInbox: vi.fn()
 }))
+vi.mock('@/features/manage-intake/model/use-inbox-processing', () => ({
+	useInboxProcessing: (_access: unknown, entryIds: string[]) => ({
+		data: { items: entryIds.map(entryId => ({ entryId, acceptance: null })) },
+		isSuccess: true,
+		isError: false,
+		isFetching: false
+	})
+}))
+vi.mock('@/features/workspace-collaboration/model/use-employee-names', () => ({
+	useEmployeeNames: () => (subject: string) => subject
+}))
 vi.mock('@/features/manage-intake', () => ({
 	useIntakeAccess: vi.fn(),
 	InboxEditor: ({ id, onClose }: { id?: string; onClose: () => void }) => (
@@ -219,7 +230,8 @@ describe('Inbox CSV integration', () => {
 			1,
 			25,
 			'',
-			'NEW'
+			'NEW',
+			'shared'
 		)
 		fireEvent.click(screen.getByRole('button', { name: 'Импорт CSV' }))
 		fireEvent.click(

@@ -36,7 +36,7 @@ export const CRM_NAVIGATION = [
 	{
 		href: '/messages',
 		icon: 'chat',
-		label: 'Сообщения',
+		label: 'Мессенджер',
 		description: 'Личные диалоги с коллегами и общий чат пространства.'
 	},
 	{

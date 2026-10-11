@@ -10,6 +10,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
 	getInboxEntry,
+	getInboxEntrySource,
 	listIntakeActivities,
 	mutateInbox,
 	getInboxAcceptance,
@@ -36,6 +37,7 @@ import {
 vi.mock('@/entities/intake', async () => ({
 	...(await vi.importActual('@/entities/intake')),
 	getInboxEntry: vi.fn(),
+	getInboxEntrySource: vi.fn(),
 	listIntakeActivities: vi.fn(),
 	mutateInbox: vi.fn(),
 	getInboxAcceptance: vi.fn(),
@@ -44,6 +46,23 @@ vi.mock('@/entities/intake', async () => ({
 vi.mock('@/entities/intake/api/mail-intake.api', () => ({
 	getMailIntakeSource: vi.fn()
 }))
+vi.mock('../model/use-inbox-processing', () => ({
+	useInboxProcessing: (_access: unknown, entryIds: string[]) => ({
+		data: {
+			items: entryIds.map(entryId => ({ entryId, acceptance: null }))
+		},
+		isSuccess: true,
+		isError: false,
+		isFetching: false
+	})
+}))
+vi.mock(
+	'@/features/workspace-collaboration/model/use-employee-names',
+	() => ({
+		useEmployeeNames: () => (subject: string) =>
+			subject === 'owner' ? 'Вы' : 'Сотрудник QA'
+	})
+)
 vi.mock('@/entities/sales', () => ({ listSalesPipelines: vi.fn() }))
 vi.mock('@/entities/customer', () => ({ listCustomers: vi.fn() }))
 vi.mock('@/entities/crm-team/api/team.api', async original => ({
@@ -243,7 +262,8 @@ describe('InboxEditor real command states', () => {
 		expect(getInboxEntry).toHaveBeenCalledWith(
 			'session-token',
 			workspaceId,
-			entry.id
+			entry.id,
+			'shared'
 		)
 		expect(screen.queryByText(entry.title)).toBeNull()
 		expect(
@@ -308,6 +328,32 @@ describe('InboxEditor real command states', () => {
 		mount(entry.id, false)
 		expect(await screen.findByText('Импорт CSV')).toBeTruthy()
 		expect(screen.queryByText('API · null')).toBeNull()
+	})
+	it('loads shared API entries but hides rejection outside the employee write scope', async () => {
+		const apiEntry = {
+			...entry,
+			origin: 'API' as const,
+			sourceId: '44444444-4444-4444-8444-444444444444',
+			createdBySubject: 'another-staff'
+		}
+		vi.mocked(getInboxEntry).mockResolvedValue(apiEntry)
+		vi.mocked(getInboxEntrySource).mockResolvedValue({
+			id: apiEntry.sourceId,
+			name: 'Форма сайта',
+			kind: 'API'
+		})
+		const limited = access()
+		limited.permissions.data!.dataScope = 'OWN'
+		limited.permissions.data!.role = 'MANAGER'
+		mount(entry.id, true, limited)
+		await screen.findByText('Запрос QA')
+		expect(getInboxEntry).toHaveBeenCalledWith(
+			'session-token',
+			workspaceId,
+			entry.id,
+			'shared'
+		)
+		expect(screen.queryByRole('button', { name: 'Отклонить' })).toBeNull()
 	})
 	it('keeps read-only record/history visible and never offers fake acceptance', async () => {
 		mount(entry.id, false)
@@ -721,6 +767,17 @@ describe('Inbox acceptance refresh owner boundary', () => {
 				isFetching: false,
 				refetch
 			},
+			processing: {
+				isSuccess: true,
+				isError: false,
+				isFetching: false,
+				refetch: vi.fn().mockResolvedValue({
+					isSuccess: true,
+					data: { items: [{ entryId: entry.id, acceptance: null }] }
+				})
+			},
+			summary: null,
+			foreign: false,
 			command: { resetError }
 		} as unknown as InboxAcceptanceContext
 		const view = (currentAccess = access(), id = entry.id) => (
@@ -743,8 +800,8 @@ describe('Inbox acceptance refresh owner boundary', () => {
 		async isSuccess => {
 			const test = setup()
 			test.start()
+			await waitFor(() => expect(test.refetch).toHaveBeenCalledOnce())
 			await act(async () => test.resolve({ isSuccess }))
-			expect(test.refetch).toHaveBeenCalledOnce()
 			if (isSuccess) {
 				expect(test.resetError).toHaveBeenCalledOnce()
 				expect(toast).toHaveBeenCalledWith(
@@ -773,7 +830,7 @@ describe('Inbox acceptance refresh owner boundary', () => {
 		async boundary => {
 			const test = setup()
 			test.start()
-			expect(test.refetch).toHaveBeenCalledOnce()
+			await waitFor(() => expect(test.refetch).toHaveBeenCalledOnce())
 			if (boundary === 'unmount') test.unmount()
 			else if (boundary === 'session')
 				useSessionStore.getState().setAuthenticated({

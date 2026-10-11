@@ -276,6 +276,22 @@ export class MailController {
 			query.bodyFormat
 		);
 	}
+	@Get('messages/:id/processing')
+	@Header('Cache-Control', 'no-store')
+	async messageProcessing(
+		@Headers('authorization') token: string | undefined,
+		@Query() query: MailQueryDto,
+		@Param('id', new ParseUUIDPipe({ version: '4' })) id: string
+	) {
+		const a = await this.mail.authority(token, query.workspaceId);
+		const result = await this.mail.messageProcessing(a, id);
+		if (
+			JSON.stringify(await this.mail.authority(token, query.workspaceId)) !==
+			JSON.stringify(a)
+		)
+			throw new ForbiddenException();
+		return result;
+	}
 	@Get('mailboxes/:id/unmatched') async unmatched(
 		@Headers('authorization') token: string | undefined,
 		@Query() query: MailQueryDto,

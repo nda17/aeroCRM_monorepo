@@ -71,7 +71,8 @@ describe('Workday Inbox summary', () => {
 			1,
 			1,
 			'',
-			'NEW'
+			'NEW',
+			'shared'
 		)
 		expect(screen.getByRole('link').getAttribute('href')).toBe('/inbox')
 		expect(screen.getByText(/Не зависят от периода задач/)).toBeTruthy()

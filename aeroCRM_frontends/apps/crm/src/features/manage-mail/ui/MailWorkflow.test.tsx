@@ -443,6 +443,27 @@ afterEach(() => {
 })
 
 describe('mail UI workflows', () => {
+	it('explains shared mailbox read access without exposing a read grant toggle', async () => {
+		request.mockImplementation(async config => {
+			const url = config.url ?? ''
+			if (url.endsWith('/capabilities')) return capabilities as never
+			if (url.endsWith('/mailboxes')) return mailPage([mailbox]) as never
+			if (url.endsWith(`/mailboxes/${mailboxId}/grants`))
+				return mailPage([]) as never
+			throw new Error(
+				`Unexpected mail API request: ${config.method} ${url}`
+			)
+		})
+		render(<MailSettings />, { wrapper: Providers })
+		fireEvent.click(
+			await screen.findByRole('button', { name: 'Доступ сотрудников' })
+		)
+		expect(
+			await screen.findByText(/Письма общего ящика видны всем сотрудникам/)
+		).toBeTruthy()
+		expect(screen.queryByLabelText('Чтение')).toBeNull()
+	})
+
 	it.each([
 		['BACKFILL', 'Загружается история'],
 		['SYNCING', 'Загружается история'],

@@ -4,6 +4,7 @@ import {
 	CreateInboxEntryDto,
 	CreateIntakeSourceDto,
 	InboxListQuery,
+	InboxProcessingQuery,
 	RejectInboxEntryDto
 } from './intake.dto';
 
@@ -70,6 +71,42 @@ describe('Intake DTO boundary', () => {
 				pipe.transform(
 					{ workspaceId: command.workspaceId, ...invalid },
 					{ type: 'query', metatype: InboxListQuery }
+				)
+			).rejects.toBeInstanceOf(BadRequestException);
+	});
+	it('allows only the opt-in shared read view and bounds processing UUID batches', async () => {
+		await expect(
+			pipe.transform(
+				{ workspaceId: command.workspaceId, view: 'shared' },
+				{ type: 'query', metatype: InboxListQuery }
+			)
+		).resolves.toMatchObject({ view: 'shared' });
+		const entryIds = Array.from({ length: 100 }, () => randomUUID());
+		await expect(
+			pipe.transform(
+				{
+					workspaceId: command.workspaceId,
+					view: 'shared',
+					entryIds: entryIds.join(',')
+				},
+				{ type: 'query', metatype: InboxProcessingQuery }
+			)
+		).resolves.toMatchObject({ entryIds: entryIds.join(',') });
+		for (const invalid of [
+			{ view: 'all' },
+			{ entryIds: '' },
+			{ entryIds: `${randomUUID()},` },
+			{ entryIds: Array.from({ length: 101 }, () => randomUUID()).join(',') },
+			{ entryIds: 'not-a-uuid' }
+		])
+			await expect(
+				pipe.transform(
+					{
+						workspaceId: command.workspaceId,
+						entryIds: randomUUID(),
+						...invalid
+					},
+					{ type: 'query', metatype: InboxProcessingQuery }
 				)
 			).rejects.toBeInstanceOf(BadRequestException);
 	});

@@ -132,7 +132,7 @@ const GrantForm = ({
 	)
 	const update = (
 		member: CrmMemberRow,
-		key: 'read' | 'send' | 'manage',
+		key: 'send' | 'manage',
 		checked: boolean
 	) =>
 		setGrants(previous => {
@@ -148,11 +148,7 @@ const GrantForm = ({
 				manage: false
 			}
 			const next = { ...grant, [key]: checked }
-			if ((key === 'send' || key === 'manage') && checked) next.read = true
-			if (key === 'read' && !checked) {
-				next.send = false
-				next.manage = false
-			}
+			if (checked) next.read = true
 			return [
 				...previous.filter(
 					value =>
@@ -177,8 +173,8 @@ const GrantForm = ({
 				}}
 			>
 				<p>
-					Разрешения ящика действуют вместе с правами сотрудника на
-					клиентов. Личная почта других сотрудников здесь недоступна.
+					Письма общего ящика видны всем сотрудникам с доступом к разделу
+					«Почта». Здесь настраиваются отправка писем и управление ящиком.
 				</p>
 				{stale ? (
 					<div role="alert">
@@ -229,38 +225,32 @@ const GrantForm = ({
 												<p>Доступ сотрудника отключён</p>
 											) : null}
 											<div className={styles.actions}>
-												{(['read', 'send', 'manage'] as const).map(
-													permission => (
-														<label
-															className={styles.check}
-															key={permission}
-														>
-															<input
-																type="checkbox"
-																checked={grant?.[permission] ?? false}
-																disabled={
-																	command.locked ||
-																	stale ||
-																	!!member.disabledAt
-																}
-																onChange={event =>
-																	update(
-																		member,
-																		permission,
-																		event.target.checked
-																	)
-																}
-															/>
-															{
-																{
-																	read: 'Чтение',
-																	send: 'Отправка',
-																	manage: 'Настройки'
-																}[permission]
+												{(['send', 'manage'] as const).map(permission => (
+													<label className={styles.check} key={permission}>
+														<input
+															type="checkbox"
+															checked={grant?.[permission] ?? false}
+															disabled={
+																command.locked ||
+																stale ||
+																!!member.disabledAt
 															}
-														</label>
-													)
-												)}
+															onChange={event =>
+																update(
+																	member,
+																	permission,
+																	event.target.checked
+																)
+															}
+														/>
+														{
+															{
+																send: 'Отправка',
+																manage: 'Настройки'
+															}[permission]
+														}
+													</label>
+												))}
 											</div>
 										</li>
 									)

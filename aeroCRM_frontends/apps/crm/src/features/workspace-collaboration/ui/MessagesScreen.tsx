@@ -139,7 +139,7 @@ function MessagesContent({
 	return (
 		<div className={styles.stack}>
 			<PageHeader
-				title="Сообщения"
+				title="Мессенджер"
 				description="Личные диалоги с коллегами и общий чат пространства."
 				actions={
 					<Button

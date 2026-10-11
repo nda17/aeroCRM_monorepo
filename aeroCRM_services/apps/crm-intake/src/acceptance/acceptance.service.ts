@@ -17,7 +17,7 @@ import {
 	IntakeCommandDto,
 	VersionedIntakeCommandDto
 } from '../intake/intake.dto';
-import { intakeEntryScope } from '../intake/intake.service';
+import { sharedIntakeEntryScope } from '../intake/intake.service';
 import { CrmIntakePrismaService } from '../prisma/crm-intake-prisma.service';
 import {
 	acceptanceHash,
@@ -106,10 +106,29 @@ export class AcceptanceService {
 	) {
 		this.assert(context, workspaceId, false);
 		await this.entry(this.prisma, context, entryId);
-		const row = await this.prisma.acceptance.findFirst({
-			where: { workspaceId, entryId },
+		const active = await this.prisma.acceptance.findFirst({
+			where: { workspaceId, entryId, status: { not: 'CANCELLED' } },
 			orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]
 		});
+		const row =
+			active ??
+			(await this.prisma.acceptance.findFirst({
+				where: {
+					workspaceId,
+					entryId,
+					status: 'CANCELLED',
+					...(['OWNER', 'CRM_ADMIN'].includes(context.role)
+						? {}
+						: { actorSubject: context.subject })
+				},
+				orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]
+			}));
+		if (
+			row &&
+			row.actorSubject !== context.subject &&
+			!['OWNER', 'CRM_ADMIN'].includes(context.role)
+		)
+			throw new ForbiddenException('Acceptance detail is not available');
 		return {
 			schemaVersion: 1 as const,
 			acceptance: row ? acceptanceView(row) : null
@@ -140,12 +159,13 @@ export class AcceptanceService {
 			'ACCEPTANCE_REQUESTED',
 			async tx => {
 				const entry = await this.entry(tx, context, entryId);
-				if (
-					entry.status !== 'NEW' ||
-					entry.version !== dto.expectedVersion
-				)
+				if (entry.status !== 'NEW' || entry.version !== dto.expectedVersion)
 					throw new ConflictException('Inbox entry changed');
-				if (entry.teamId && !context.teamIds.includes(entry.teamId))
+				if (
+					entry.origin !== 'API' &&
+					entry.teamId &&
+					!context.teamIds.includes(entry.teamId)
+				)
 					throw new ForbiddenException('Entry team is not available');
 				if (
 					await tx.acceptance.findFirst({
@@ -159,8 +179,7 @@ export class AcceptanceService {
 					throw new ConflictException('Acceptance already exists');
 				const workflowId = randomUUID();
 				const missingEntryName =
-					dto.contact.mode === 'CREATE_FROM_ENTRY' &&
-					entry.name === null;
+					dto.contact.mode === 'CREATE_FROM_ENTRY' && entry.name === null;
 				if (
 					missingEntryName
 						? typeof dto.contact.name !== 'string' ||
@@ -174,6 +193,10 @@ export class AcceptanceService {
 						'An explicit valid contact name is required for an unnamed entry'
 					);
 				const contactOperationId = randomUUID();
+				const downstreamTeamId =
+					entry.teamId && context.teamIds.includes(entry.teamId)
+						? entry.teamId
+						: null;
 				const contactPayload =
 					dto.contact.mode === 'EXISTING'
 						? { mode: 'EXISTING', contactId: dto.contact.contactId }
@@ -182,7 +205,7 @@ export class AcceptanceService {
 								name: missingEntryName ? dto.contact.name! : entry.name!,
 								phone: entry.phone,
 								email: entry.email,
-								teamId: entry.teamId
+								teamId: downstreamTeamId
 							};
 				const contactPayloadHash = acceptanceHash(contactPayload);
 				const salesPayload = {
@@ -192,7 +215,7 @@ export class AcceptanceService {
 						title: dto.deal.nextTask.title.trim(),
 						dueAt: dto.deal.nextTask.dueAt
 					},
-					teamId: entry.teamId,
+					teamId: downstreamTeamId,
 					contactOperation: {
 						operationId: contactOperationId,
 						payloadHash: contactPayloadHash
@@ -238,9 +261,7 @@ export class AcceptanceService {
 	) {
 		this.assert(context, dto.workspaceId, true);
 		if (recover && !['OWNER', 'CRM_ADMIN'].includes(context.role))
-			throw new ForbiddenException(
-				'Recovery requires a CRM administrator'
-			);
+			throw new ForbiddenException('Recovery requires a CRM administrator');
 		return this.command(
 			context,
 			entryId,
@@ -284,8 +305,7 @@ export class AcceptanceService {
 					data: {
 						generation: { increment: 1 },
 						version: { increment: 1 },
-						status:
-							recover || row.mode === 'RECOVER' ? 'RECOVERING' : 'QUEUED',
+						status: recover || row.mode === 'RECOVER' ? 'RECOVERING' : 'QUEUED',
 						mode: recover ? 'RECOVER' : row.mode,
 						...(recover
 							? {
@@ -340,9 +360,7 @@ export class AcceptanceService {
 								receipt.entityId !== entryId ||
 								receipt.requestHash !== hash
 							)
-								throw new ConflictException(
-									'Command binding does not match'
-								);
+								throw new ConflictException('Command binding does not match');
 							return receipt.response;
 						}
 						const row = await apply(tx);
@@ -397,8 +415,7 @@ export class AcceptanceService {
 		workspaceId: string,
 		write: boolean
 	) {
-		if (context.workspaceId !== workspaceId)
-			throw new ForbiddenException();
+		if (context.workspaceId !== workspaceId) throw new ForbiddenException();
 		assertIntakePermission(
 			context,
 			write ? 'intake:write' : 'intake:read',
@@ -411,10 +428,9 @@ export class AcceptanceService {
 		id: string
 	) {
 		const entry = await tx.inboxEntry.findFirst({
-			where: { AND: [intakeEntryScope(context), { id }] }
+			where: { AND: [sharedIntakeEntryScope(context), { id }] }
 		});
-		if (!entry)
-			throw new NotFoundException('Inbox entry is not available');
+		if (!entry) throw new NotFoundException('Inbox entry is not available');
 		return entry;
 	}
 }

@@ -31,6 +31,9 @@ export type InboxEntry = InboxEntryBase &
 		| { origin: 'MANUAL' | 'CSV'; name: string; sourceId: null }
 		| { origin: 'API'; name: string; sourceId: string }
 	)
+export type SharedInboxEntry = InboxEntry & {
+	relatedRecordsVisible: false
+}
 export interface IntakeSource {
 	id: string
 	workspaceId: string
@@ -82,9 +85,10 @@ const scoped = (value: Record<string, unknown>, workspaceId: string) =>
 	isUuidV4(workspaceId) &&
 	value.workspaceId === workspaceId
 
-export const parseInboxEntry = (
+const parseInboxEntryForView = (
 	value: unknown,
-	workspaceId: string
+	workspaceId: string,
+	shared: boolean
 ): InboxEntry | null => {
 	if (
 		!isRecord(value) ||
@@ -108,8 +112,10 @@ export const parseInboxEntry = (
 			'receivedAt',
 			'updatedAt',
 			'acceptedAt',
-			'rejectedAt'
+			'rejectedAt',
+			...(shared ? ['relatedRecordsVisible'] : [])
 		]) ||
+		(shared && value.relatedRecordsVisible !== false) ||
 		!scoped(value, workspaceId) ||
 		!isNonEmptyString(value.title, 200) ||
 		!isNonEmptyString(value.name, 200) ||
@@ -135,10 +141,7 @@ export const parseInboxEntry = (
 	if (
 		!(value.origin === 'MANUAL' && value.sourceId === null) &&
 		!(value.origin === 'CSV' && value.sourceId === null) &&
-		!(
-			value.origin === 'API' &&
-			isUuidV4(value.sourceId)
-		)
+		!(value.origin === 'API' && isUuidV4(value.sourceId))
 	)
 		return null
 	const untouched =
@@ -161,8 +164,9 @@ export const parseInboxEntry = (
 			return null
 	} else if (value.status === 'ACCEPTED') {
 		if (
-			!isUuidV4(value.contactId) ||
-			!isUuidV4(value.dealId) ||
+			(shared
+				? value.contactId !== null || value.dealId !== null
+				: !isUuidV4(value.contactId) || !isUuidV4(value.dealId)) ||
 			!isIsoDate(value.acceptedAt) ||
 			value.rejectedAt !== null ||
 			value.rejectionReason !== null
@@ -171,6 +175,19 @@ export const parseInboxEntry = (
 	} else return null
 	return value as unknown as InboxEntry
 }
+
+export const parseInboxEntry = (value: unknown, workspaceId: string) =>
+	parseInboxEntryForView(value, workspaceId, false)
+
+export const parseSharedInboxEntry = (
+	value: unknown,
+	workspaceId: string
+): SharedInboxEntry | null =>
+	parseInboxEntryForView(
+		value,
+		workspaceId,
+		true
+	) as SharedInboxEntry | null
 
 export const parseIntakeSource = (
 	value: unknown,
@@ -284,6 +301,19 @@ export const parseIntakePage = <T extends { id: string }>(
 		pageSize,
 		total: Number(value.total)
 	}
+}
+
+export const parseSharedInboxPage = (
+	value: unknown,
+	page: number,
+	pageSize: number,
+	workspaceId: string
+): IntakePage<SharedInboxEntry> | null => {
+	if (!isRecord(value) || value.schemaVersion !== 2) return null
+	const legacyPage = { ...value, schemaVersion: 1 }
+	return parseIntakePage(legacyPage, page, pageSize, item =>
+		parseSharedInboxEntry(item, workspaceId)
+	) as IntakePage<SharedInboxEntry> | null
 }
 
 export const parseIntakeResult = <T extends { id: string }>(

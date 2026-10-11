@@ -203,6 +203,22 @@ export type MailSendStatus = {
 		settledAt: string | null
 	}
 }
+export type MailProcessing = {
+	schemaVersion: 1
+	workspaceId: string
+	messageId: string
+	replies: {
+		sendId: string
+		actorSubject: string
+		membershipId: string | null
+		state: MailSendState
+		createdAt: string
+		submittedAt: string | null
+		settledAt: string | null
+		safeErrorCode: string | null
+	}[]
+	hasMore: boolean
+}
 
 export type MailGrant = {
 	subject: string
@@ -787,4 +803,57 @@ export const parseMailSendStatus = (
 	)
 		return null
 	return value as MailSendStatus
+}
+
+export const parseMailProcessing = (
+	value: unknown,
+	workspaceId: string,
+	messageId: string
+): MailProcessing | null => {
+	if (
+		!isRecord(value) ||
+		!hasExactKeys(value, [
+			'schemaVersion',
+			'workspaceId',
+			'messageId',
+			'replies',
+			'hasMore'
+		]) ||
+		value.schemaVersion !== 1 ||
+		value.workspaceId !== workspaceId ||
+		value.messageId !== messageId ||
+		!UUID(messageId) ||
+		!Array.isArray(value.replies) ||
+		value.replies.length > 100 ||
+		typeof value.hasMore !== 'boolean'
+	)
+		return null
+	const ids = new Set<string>()
+	for (const reply of value.replies) {
+		if (
+			!isRecord(reply) ||
+			!hasExactKeys(reply, [
+				'sendId',
+				'actorSubject',
+				'membershipId',
+				'state',
+				'createdAt',
+				'submittedAt',
+				'settledAt',
+				'safeErrorCode'
+			]) ||
+			!UUID(reply.sendId) ||
+			ids.has(reply.sendId) ||
+			!nonEmpty(reply.actorSubject, 256) ||
+			!(reply.membershipId === null || UUID(reply.membershipId)) ||
+			!enumValue(reply.state, SEND_STATES) ||
+			!isIsoDate(reply.createdAt) ||
+			!nullableDate(reply.submittedAt) ||
+			!nullableDate(reply.settledAt) ||
+			!nullableString(reply.safeErrorCode, 128)
+		)
+			return null
+		ids.add(reply.sendId)
+	}
+	return value as unknown as MailProcessing
 }

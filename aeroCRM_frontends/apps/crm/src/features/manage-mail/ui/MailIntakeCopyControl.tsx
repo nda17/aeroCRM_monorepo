@@ -24,6 +24,7 @@ import {
 	type MailIntakeCreate,
 	type MailIntakeCreated
 } from '@/entities/intake/api/mail-intake.api'
+import { getMailIntakeProcessing } from '@/entities/intake/api/processing.api'
 import {
 	useIntakeAccess,
 	type IntakeAccess
@@ -47,16 +48,60 @@ export const MailIntakeCopyControl = ({
 	const access = useIntakeAccess()
 	const context = useMailContext()
 	const [open, setOpen] = useState(false)
+	const processing = useQuery({
+		queryKey: [
+			'crm-intake-mail-processing',
+			...context.key,
+			access.scopeKey,
+			messageId
+		],
+		enabled: access.canRead && !!access.session,
+		queryFn: () =>
+			getMailIntakeProcessing(
+				access.session!.accessToken,
+				access.workspaceId,
+				messageId
+			),
+		retry: false,
+		gcTime: 0,
+		staleTime: 0,
+		refetchInterval: query =>
+			access.canRead && !query.state.error ? 5000 : false
+	})
 	if (access.confirmed && !access.canRead) return null
 	return (
 		<>
-			<Button
-				variant="secondary"
-				disabled={!access.canWrite}
-				onClick={() => setOpen(true)}
-			>
-				Создать обращение из письма
-			</Button>
+			{processing.data?.copy ? (
+				processing.data.copy.canOpen && processing.data.copy.entryId ? (
+					<Link
+						href={`/inbox?workspaceId=${encodeURIComponent(access.workspaceId)}&entry=${processing.data.copy.entryId}`}
+					>
+						Открыть созданное обращение
+					</Link>
+				) : (
+					<p role="status">Из письма уже создано обращение.</p>
+				)
+			) : processing.isError ? (
+				<div className={styles.form} role="alert">
+					<p>Не удалось проверить, создано ли обращение из письма.</p>
+					<Button
+						variant="secondary"
+						onClick={() => void processing.refetch()}
+					>
+						Повторить проверку
+					</Button>
+				</div>
+			) : processing.data ? (
+				<Button
+					variant="secondary"
+					disabled={!access.canWrite}
+					onClick={() => setOpen(true)}
+				>
+					Создать обращение из письма
+				</Button>
+			) : (
+				<p role="status">Проверяем связь письма с обращением…</p>
+			)}
 			{open ? (
 				<MailIntakeCopyPanel
 					key={JSON.stringify([
@@ -66,6 +111,8 @@ export const MailIntakeCopyControl = ({
 					])}
 					access={access}
 					messageId={messageId}
+					existingCopy={processing.data?.copy ?? null}
+					processingConfirmed={!!processing.data && !processing.isError}
 					onClose={() => setOpen(false)}
 				/>
 			) : null}
@@ -76,10 +123,14 @@ export const MailIntakeCopyControl = ({
 const MailIntakeCopyPanel = ({
 	access,
 	messageId,
+	existingCopy,
+	processingConfirmed,
 	onClose
 }: {
 	access: IntakeAccess
 	messageId: string
+	existingCopy: Awaited<ReturnType<typeof getMailIntakeProcessing>>['copy']
+	processingConfirmed: boolean
 	onClose: () => void
 }) => {
 	const context = useMailContext()
@@ -158,6 +209,9 @@ const MailIntakeCopyPanel = ({
 			void client.invalidateQueries({
 				queryKey: ['crm-inbox', access.workspaceId]
 			})
+			void client.invalidateQueries({
+				queryKey: ['crm-intake-mail-processing']
+			})
 		},
 		async (token, saved) => {
 			const receipt = await getMailIntakeCommand(
@@ -188,6 +242,8 @@ const MailIntakeCopyPanel = ({
 		access.canWrite &&
 		!command.locked &&
 		!created &&
+		processingConfirmed &&
+		!existingCopy &&
 		!preview.isError &&
 		!preview.isFetching
 	const submit = form.handleSubmit(draft => {
@@ -230,6 +286,28 @@ const MailIntakeCopyPanel = ({
 				</div>
 			) : (
 				<div className={styles.form}>
+					{!processingConfirmed ? (
+						<p role="status" className={styles.notice}>
+							Проверка связи письма с обращением недоступна. Повторите
+							проверку перед созданием.
+						</p>
+					) : null}
+					{existingCopy ? (
+						<p role="status" className={styles.notice}>
+							Из этого письма уже создано обращение. Ваш черновик остаётся
+							открытым, но повторное создание недоступно.
+							{existingCopy.canOpen && existingCopy.entryId ? (
+								<>
+									{' '}
+									<Link
+										href={`/inbox?workspaceId=${encodeURIComponent(access.workspaceId)}&entry=${existingCopy.entryId}`}
+									>
+										Открыть обращение
+									</Link>
+								</>
+							) : null}
+						</p>
+					) : null}
 					<p className={styles.notice}>
 						Будет создана отдельная копия выбранных полей. Она доступна
 						сотрудникам по правам раздела «Входящие». Доступ к исходному

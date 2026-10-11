@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
 	parseInboxEntry,
+	parseSharedInboxEntry,
+	parseSharedInboxPage,
 	parseIntakeActivity,
 	parseIntakePage,
 	parseIntakeResult,
@@ -143,6 +145,45 @@ describe('Intake exact workspace-bound contracts', () => {
 				workspaceId
 			)
 		).not.toBeNull()
+	})
+	it('accepts shared v2 entries only with redacted related record IDs', () => {
+		const accepted = {
+			...entry,
+			status: 'ACCEPTED',
+			contactId: null,
+			dealId: null,
+			acceptedAt: date,
+			relatedRecordsVisible: false
+		}
+		expect(parseSharedInboxEntry(accepted, workspaceId)).toEqual(accepted)
+		expect(parseInboxEntry(accepted, workspaceId)).toBeNull()
+		expect(
+			parseSharedInboxEntry(
+				{ ...accepted, relatedRecordsVisible: true },
+				workspaceId
+			)
+		).toBeNull()
+		expect(
+			parseSharedInboxEntry({ ...accepted, contactId: id }, workspaceId)
+		).toBeNull()
+		const page = {
+			schemaVersion: 2,
+			items: [accepted],
+			page: 1,
+			pageSize: 25,
+			total: 1
+		}
+		expect(parseSharedInboxPage(page, 1, 25, workspaceId)?.items).toEqual([
+			accepted
+		])
+		expect(
+			parseSharedInboxPage(
+				{ ...page, schemaVersion: 1 },
+				1,
+				25,
+				workspaceId
+			)
+		).toBeNull()
 	})
 	it.each([
 		{ ...source, token: 'unexpected-secret' },

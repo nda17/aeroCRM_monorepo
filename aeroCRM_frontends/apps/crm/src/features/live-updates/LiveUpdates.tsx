@@ -20,6 +20,8 @@ const roots = {
 		'crm-inbox-sla',
 		'crm-intake-entry',
 		'crm-intake-acceptance',
+		'crm-inbox-processing',
+		'crm-intake-mail-processing',
 		'crm-intake-history',
 		'crm-intake-notifications',
 		'crm-intake-sources'
@@ -38,6 +40,8 @@ const roots = {
 	],
 	support: ['support-chat', 'crm-support-notifications'],
 	mail: [
+		'mail-processing',
+		'crm-intake-mail-processing',
 		'crm-mail-notifications',
 		'mail-workspace-messages',
 		'mail-message',

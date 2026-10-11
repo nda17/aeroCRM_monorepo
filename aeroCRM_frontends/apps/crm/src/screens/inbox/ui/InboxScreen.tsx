@@ -35,6 +35,8 @@ import { ExportRecordsControl } from '@/features/export-records'
 import { listInboxSla } from '@/entities/intake-sla'
 import { SlaInboxBadge } from '@/features/manage-intake-sla'
 import { isUuidV4 } from '@/shared/lib/contract'
+import { useInboxProcessing } from '@/features/manage-intake/model/use-inbox-processing'
+import { useEmployeeNames } from '@/features/workspace-collaboration/model/use-employee-names'
 
 const statusName = {
 	NEW: 'Новое',
@@ -78,7 +80,8 @@ const InboxContent = ({
 				page,
 				25,
 				search,
-				status
+				status,
+				'shared'
 			),
 		retry: false,
 		gcTime: 0,
@@ -88,6 +91,12 @@ const InboxContent = ({
 		query.error instanceof AuthenticatedApiError &&
 		['unauthorized', 'forbidden'].includes(query.error.kind)
 	const entryIds = query.data?.items.map(entry => entry.id) ?? []
+	const processing = useInboxProcessing(
+		access,
+		entryIds,
+		tab === 'inbox' && !denied && !query.isError
+	)
+	const employeeName = useEmployeeNames(access)
 	const sla = useQuery({
 		queryKey: [
 			'crm-inbox-sla',
@@ -169,6 +178,30 @@ const InboxContent = ({
 					{statusName[entry.status]}
 				</StatusBadge>
 			)
+		},
+		{
+			id: 'processing',
+			header: 'Кто принял',
+			render: entry => {
+				if (processing.isError) return 'Не удалось проверить'
+				if (!processing.isSuccess) return 'Проверяем…'
+				const summary = processing.data.items.find(
+					item => item.entryId === entry.id
+				)?.acceptance
+				if (!summary) return entry.status === 'NEW' ? 'Свободно' : '—'
+				return (
+					<div>
+						<strong>{employeeName(summary.actorSubject)}</strong>
+						<div>
+							{summary.status === 'COMPLETED'
+								? 'Принято в работу'
+								: ['BLOCKED', 'FAILED'].includes(summary.status)
+									? 'Требуется внимание'
+									: 'Принимает в работу'}
+						</div>
+					</div>
+				)
+			}
 		},
 		{
 			id: 'sla',

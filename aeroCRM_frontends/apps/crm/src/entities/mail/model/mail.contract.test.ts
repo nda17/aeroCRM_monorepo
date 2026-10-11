@@ -4,6 +4,7 @@ import {
 	parseMailMailboxPage,
 	parseMailMailboxResult,
 	parseMailMessageResult,
+	parseMailProcessing,
 	parseMailRichMessageResult
 } from './mail.contract'
 
@@ -49,6 +50,7 @@ const message = {
 		references: []
 	}
 }
+const messageId = message.id
 const link = {
 	schemaVersion: 1,
 	workspaceId,
@@ -82,6 +84,56 @@ describe('mail contact link response contract', () => {
 		}
 	])('rejects malformed or out-of-scope link response %#', value => {
 		expect(parseMailLinkResult(value, workspaceId)).toBeNull()
+	})
+})
+
+describe('mail reply processing contract', () => {
+	const response = {
+		schemaVersion: 1,
+		workspaceId,
+		messageId,
+		replies: [
+			{
+				sendId: '44444444-4444-4444-8444-444444444444',
+				actorSubject: 'staff-2',
+				membershipId: '55555555-5555-4555-8555-555555555555',
+				state: 'UNKNOWN',
+				createdAt: '2026-10-12T10:00:00.000Z',
+				submittedAt: '2026-10-12T10:00:01.000Z',
+				settledAt: null,
+				safeErrorCode: 'SMTP_RESULT_UNKNOWN'
+			}
+		],
+		hasMore: false
+	}
+	it('accepts bounded actor and delivery facts bound to message and workspace', () => {
+		expect(parseMailProcessing(response, workspaceId, messageId)).toEqual(
+			response
+		)
+	})
+	it.each([
+		{ workspaceId: '66666666-6666-4666-8666-666666666666' },
+		{ messageId: '66666666-6666-4666-8666-666666666666' },
+		{ hasMore: 'false' },
+		{
+			replies: [
+				{
+					...response.replies[0],
+					actorSubject: '',
+					smtpResponse: 'secret provider response'
+				}
+			]
+		},
+		{ replies: [{ ...response.replies[0], membershipId: 'invalid' }] },
+		{ replies: [{ ...response.replies[0], state: 'DELIVERED' }] }
+	])('rejects malformed or unbound reply facts %#', override => {
+		expect(
+			parseMailProcessing(
+				{ ...response, ...override },
+				workspaceId,
+				messageId
+			)
+		).toBeNull()
 	})
 })
 

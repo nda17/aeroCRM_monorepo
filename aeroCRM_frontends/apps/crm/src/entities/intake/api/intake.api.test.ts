@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { authenticatedRequest } from '@/shared/api/authenticated-http-client'
 import {
 	listInbox,
+	getInboxEntry,
 	getInboxEntrySource,
 	mutateInbox,
 	mutateIntakeSource,
@@ -68,7 +69,7 @@ describe('Intake API requests', () => {
 			accessToken: 'session',
 			method: 'GET',
 			url: `/crm/intake/inbox/${id}/source`,
-			params: { workspaceId }
+			params: { workspaceId, view: 'shared' }
 		})
 	})
 	it.each([
@@ -182,6 +183,38 @@ describe('Intake API requests', () => {
 				search: 'Клиент',
 				status: 'REJECTED'
 			}
+		})
+	})
+	it('opts into the shared v2 list and detail with only redacted related IDs', async () => {
+		const sharedEntry = { ...entry, relatedRecordsVisible: false }
+		vi.mocked(authenticatedRequest).mockResolvedValueOnce({
+			schemaVersion: 2,
+			items: [sharedEntry],
+			total: 1,
+			page: 1,
+			pageSize: 25
+		})
+		await expect(
+			listInbox('session', workspaceId, 1, 25, '', '', 'shared')
+		).resolves.toMatchObject({ schemaVersion: 1, items: [sharedEntry] })
+		expect(authenticatedRequest).toHaveBeenLastCalledWith({
+			accessToken: 'session',
+			method: 'GET',
+			url: '/crm/intake/inbox',
+			params: { workspaceId, page: '1', pageSize: '25', view: 'shared' }
+		})
+		vi.mocked(authenticatedRequest).mockResolvedValueOnce({
+			schemaVersion: 2,
+			entry: sharedEntry
+		})
+		await expect(
+			getInboxEntry('session', workspaceId, id, 'shared')
+		).resolves.toMatchObject(sharedEntry)
+		expect(authenticatedRequest).toHaveBeenLastCalledWith({
+			accessToken: 'session',
+			method: 'GET',
+			url: `/crm/intake/inbox/${id}`,
+			params: { workspaceId, view: 'shared' }
 		})
 	})
 	it('sends the frozen command UUID in header/body and never invents source/actor/outcome fields', async () => {

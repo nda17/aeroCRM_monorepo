@@ -15,13 +15,9 @@ import {
 import { CrmIntakePrismaService } from '../prisma/crm-intake-prisma.service';
 import { SlaAuthorityClient } from './sla-authority.client';
 import { SlaReadinessService } from './sla-readiness.service';
-import { intakeEntryScope } from '../intake/intake.service';
+import { sharedIntakeEntryScope } from '../intake/intake.service';
 import { slaDeadline } from './sla-clock';
-import {
-	parseSlaRule,
-	type SlaCommand,
-	type SlaEvent
-} from './sla.contract';
+import { parseSlaRule, type SlaCommand, type SlaEvent } from './sla.contract';
 
 export async function slaDatabaseNow(
 	tx: Pick<Prisma.TransactionClient, '$queryRaw'>
@@ -55,10 +51,7 @@ export async function enqueueSla(
 		skipDuplicates: true
 	});
 }
-export function assertSlaManager(
-	context: IntakeAuthorization,
-	write = false
-) {
+export function assertSlaManager(context: IntakeAuthorization, write = false) {
 	assertIntakePermission(
 		context,
 		write ? 'intake:write' : 'intake:read',
@@ -186,7 +179,7 @@ export class SlaService {
 				const now = await slaDatabaseNow(tx);
 				const entries = await tx.inboxEntry.findMany({
 					where: {
-						AND: [intakeEntryScope(context), { id: { in: entryIds } }]
+						AND: [sharedIntakeEntryScope(context), { id: { in: entryIds } }]
 					},
 					select: { id: true, status: true }
 				});

@@ -105,3 +105,73 @@ describe("mail command receipts and fresh authorization", () => {
     ]);
   });
 });
+
+describe("shared mail reply processing", () => {
+  it("returns bounded reply actor and delivery state facts without message payloads", async () => {
+    const messageId = "33333333-3333-4333-8333-333333333333";
+    const mailboxId = "44444444-4444-4444-8444-444444444444";
+    const createdAt = new Date("2026-10-12T10:00:00.000Z");
+    const states = [
+      "QUEUED",
+      "SENDING",
+      "ACCEPTED",
+      "PARTIAL_ACCEPTED",
+      "FAILED",
+      "UNKNOWN",
+      "CANCELLED",
+    ];
+    const rows = Array.from({ length: 101 }, (_, index) => ({
+      state: states[index % states.length],
+      id: `55555555-5555-4555-8555-${String(index + 1).padStart(12, "0")}`,
+      actorSubject: `staff-${index}`,
+      membershipId: authority.membershipId,
+      createdAt,
+      dispatchAdmittedAt: index === 0 ? null : createdAt,
+      settledAt: index > 1 ? createdAt : null,
+      safeErrorCode:
+        states[index % states.length] === "FAILED" ? "SMTP_REJECTED" : null,
+      body: "must not be returned",
+    }));
+    const tx = {
+      mailMessage: { findFirst: jest.fn().mockResolvedValue({ mailboxId }) },
+      mailSendIntent: { findMany: jest.fn().mockResolvedValue(rows) },
+    };
+    const prisma = {
+      $transaction: jest.fn(async (callback) => callback(tx)),
+    };
+    const config = { enabled: true };
+    const service = new MailService(
+      prisma as never,
+      {} as never,
+      config as never,
+      {} as never,
+      {} as never,
+    );
+    jest
+      .spyOn(service, "readableMessage")
+      .mockResolvedValue({ mailboxId } as never);
+
+    const result = await service.messageProcessing(authority, messageId);
+    expect(result).toMatchObject({
+      schemaVersion: 1,
+      workspaceId: authority.customer.workspaceId,
+      messageId,
+      hasMore: true,
+    });
+    expect(result.replies).toHaveLength(100);
+    for (const state of states)
+      expect(result.replies.some((reply) => reply.state === state)).toBe(true);
+    expect(JSON.stringify(result)).not.toContain("must not be returned");
+    expect(tx.mailSendIntent.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          workspaceId: authority.customer.workspaceId,
+          mailboxId,
+          replyToMessageId: messageId,
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: 101,
+      }),
+    );
+  });
+});

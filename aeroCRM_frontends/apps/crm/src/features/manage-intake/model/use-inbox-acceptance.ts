@@ -10,12 +10,22 @@ import { useEffect, useRef } from 'react'
 import toast from 'react-hot-toast'
 import type { IntakeAccess } from './use-intake-access'
 import { useIntakeCommand } from './use-intake-command'
+import { useInboxProcessing } from './use-inbox-processing'
 
 export const useInboxAcceptance = (
 	access: IntakeAccess,
 	entryId?: string
 ) => {
 	const client = useQueryClient()
+	const processing = useInboxProcessing(access, entryId ? [entryId] : [])
+	const summary =
+		processing.isSuccess && !processing.isError
+			? processing.data.items[0]?.acceptance
+			: undefined
+	const foreign =
+		!!summary &&
+		summary.actorSubject !== access.session?.userId &&
+		!access.sourceManager
 	const key = [
 		'crm-intake-acceptance',
 		access.workspaceId,
@@ -26,7 +36,12 @@ export const useInboxAcceptance = (
 	]
 	const query = useQuery({
 		queryKey: key,
-		enabled: !!entryId && access.canRead,
+		enabled:
+			!!entryId &&
+			access.canRead &&
+			processing.isSuccess &&
+			!processing.isError &&
+			!foreign,
 		queryFn: () =>
 			getInboxAcceptance(
 				access.session!.accessToken,
@@ -45,7 +60,9 @@ export const useInboxAcceptance = (
 	})
 	const observed = useRef('')
 	const row =
-		access.canRead && !query.isError ? query.data?.acceptance : undefined
+		access.canRead && !foreign && !query.isError
+			? query.data?.acceptance
+			: undefined
 	useEffect(() => {
 		if (!row || !isAcceptanceTerminal(row.status)) return
 		const fingerprint = `${access.workspaceId}:${access.session?.userId}:${access.revision}:${access.scopeKey}:${row.id}:${row.status}`
@@ -55,6 +72,8 @@ export const useInboxAcceptance = (
 			'crm-intake-entry',
 			'crm-intake-history',
 			'crm-inbox',
+			'crm-inbox-processing',
+			'crm-intake-mail-processing',
 			'crm-customers'
 		])
 			void client.invalidateQueries({
@@ -75,6 +94,13 @@ export const useInboxAcceptance = (
 		mutateInboxAcceptance,
 		result => {
 			client.setQueryData(key, result)
+			void client.invalidateQueries({ queryKey: ['crm-inbox-processing'] })
+			void client.invalidateQueries({
+				queryKey: ['crm-intake-mail-processing']
+			})
+			void client.invalidateQueries({
+				queryKey: ['crm-inbox', access.workspaceId]
+			})
 			toast.success(
 				result.acceptance?.status === 'COMPLETED'
 					? 'Обращение принято: контакт, сделка и задача подтверждены'
@@ -86,8 +112,17 @@ export const useInboxAcceptance = (
 		},
 		`acceptance:${entryId ?? 'none'}`
 	)
+	useEffect(() => {
+		if (command.error?.kind === 'conflict' || query.isError)
+			void client.invalidateQueries({
+				queryKey: ['crm-inbox-processing', access.workspaceId]
+			})
+	}, [client, access.workspaceId, command.error, query.isError])
 	return {
 		query,
+		processing,
+		summary,
+		foreign,
 		row,
 		command,
 		// A failed/missing read is never interpreted as an absent workflow.
@@ -95,6 +130,10 @@ export const useInboxAcceptance = (
 			!!entryId &&
 			(command.locked ||
 				!access.canRead ||
+				!processing.isSuccess ||
+				processing.isError ||
+				processing.isFetching ||
+				foreign ||
 				!query.isSuccess ||
 				query.isFetching ||
 				(!!row && !isAcceptanceTerminal(row.status)))

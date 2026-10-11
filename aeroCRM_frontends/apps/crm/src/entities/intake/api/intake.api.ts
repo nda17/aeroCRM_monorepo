@@ -11,6 +11,8 @@ import {
 } from '@/shared/lib/contract'
 import {
 	parseInboxEntry,
+	parseSharedInboxEntry,
+	parseSharedInboxPage,
 	parseIntakeActivity,
 	parseIntakePage,
 	parseIntakeResult,
@@ -33,45 +35,65 @@ export const listInbox = async (
 	page: number,
 	pageSize: number,
 	search: string,
-	status: InboxStatus | ''
-) =>
-	checked(
-		parseIntakePage(
-			await authenticatedRequest({
-				accessToken,
-				method: 'GET',
-				url: `${root}/inbox`,
-				params: {
-					workspaceId: safeId(workspaceId),
-					page: String(page),
-					pageSize: String(pageSize),
-					...(search ? { search } : {}),
-					...(status ? { status } : {})
-				}
-			}),
-			page,
-			pageSize,
-			item => parseInboxEntry(item, workspaceId)
+	status: InboxStatus | '',
+	view?: 'shared'
+) => {
+	const params = {
+		workspaceId: safeId(workspaceId),
+		page: String(page),
+		pageSize: String(pageSize),
+		...(search ? { search } : {}),
+		...(status ? { status } : {}),
+		...(view ? { view } : {})
+	}
+	const value = await authenticatedRequest({
+		accessToken,
+		method: 'GET',
+		url: `${root}/inbox`,
+		params
+	})
+	if (view === 'shared')
+		return checked(
+			parseSharedInboxPage(value, page, pageSize, workspaceId)
+		)
+	return checked(
+		parseIntakePage(value, page, pageSize, item =>
+			parseInboxEntry(item, workspaceId)
 		)
 	)
+}
 export const getInboxEntry = async (
 	accessToken: string,
 	workspaceId: string,
-	id: string
-) =>
-	checked(
+	id: string,
+	view?: 'shared'
+) => {
+	const value = await authenticatedRequest({
+		accessToken,
+		method: 'GET',
+		url: `${root}/inbox/${safeId(id)}`,
+		params: { workspaceId: safeId(workspaceId), ...(view ? { view } : {}) }
+	})
+	if (view === 'shared') {
+		if (
+			!isRecord(value) ||
+			!hasExactKeys(value, ['schemaVersion', 'entry']) ||
+			value.schemaVersion !== 2
+		)
+			throw invalidContractError()
+		const entry = checked(parseSharedInboxEntry(value.entry, workspaceId))
+		if (entry.id !== id) throw invalidContractError()
+		return entry
+	}
+	return checked(
 		parseIntakeResult(
-			await authenticatedRequest({
-				accessToken,
-				method: 'GET',
-				url: `${root}/inbox/${safeId(id)}`,
-				params: { workspaceId: safeId(workspaceId) }
-			}),
+			value,
 			'entry',
 			item => parseInboxEntry(item, workspaceId),
 			id
 		)
 	)
+}
 export const getInboxEntrySource = async (
 	accessToken: string,
 	workspaceId: string,
@@ -81,7 +103,7 @@ export const getInboxEntrySource = async (
 		accessToken,
 		method: 'GET',
 		url: `${root}/inbox/${safeId(entryId)}/source`,
-		params: { workspaceId: safeId(workspaceId) }
+		params: { workspaceId: safeId(workspaceId), view: 'shared' }
 	})
 	if (
 		!isRecord(value) ||
@@ -150,7 +172,8 @@ export const listIntakeActivities = async (
 				params: {
 					workspaceId: safeId(workspaceId),
 					page: String(page),
-					pageSize: '25'
+					pageSize: '25',
+					view: 'shared'
 				}
 			}),
 			page,

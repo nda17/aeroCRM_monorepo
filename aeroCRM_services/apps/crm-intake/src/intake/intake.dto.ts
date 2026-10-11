@@ -15,6 +15,7 @@ import {
 
 export class IntakeWorkspaceQuery {
 	@IsUUID('4') workspaceId!: string;
+	@IsOptional() @IsIn(['shared']) view?: 'shared';
 }
 
 export class IntakePageQuery extends IntakeWorkspaceQuery {
@@ -28,6 +29,15 @@ export class InboxListQuery extends IntakePageQuery {
 		| 'NEW'
 		| 'ACCEPTED'
 		| 'REJECTED';
+}
+
+export class InboxProcessingQuery extends IntakeWorkspaceQuery {
+	@IsString()
+	@MaxLength(3699)
+	@Matches(
+		/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?:,[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}){0,99}$/i
+	)
+	entryIds!: string;
 }
 
 export class IntakeCommandDto {

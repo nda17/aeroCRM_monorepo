@@ -35,7 +35,8 @@ export const WorkdayInboxSummary = ({
 				1,
 				1,
 				'',
-				'NEW'
+				'NEW',
+				'shared'
 			)
 			if (
 				!context.current() ||

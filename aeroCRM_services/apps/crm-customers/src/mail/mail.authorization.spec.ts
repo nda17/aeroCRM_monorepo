@@ -54,7 +54,7 @@ describe("mailbox access follows the current membership and explicit grants", ()
     expect(grantLookup).not.toHaveBeenCalled();
   });
 
-  it("queries shared grants by current membership and rejects a stale revoked invite", async () => {
+	it("allows shared read without a per-user grant and still requires current membership for sending", async () => {
     const shared = {
       id: mailboxId,
       workspaceId,
@@ -67,10 +67,13 @@ describe("mailbox access follows the current membership and explicit grants", ()
       mailMailbox: { findFirst: jest.fn().mockResolvedValue(shared) },
       mailMailboxGrant: { findUnique },
     });
-    await expect(
-      svc.mailbox(authority(), mailboxId, "read"),
-    ).rejects.toBeInstanceOf(NotFoundException);
-    expect(findUnique).toHaveBeenCalledWith({
+		await expect(svc.mailbox(authority(), mailboxId, "read")).resolves.toEqual(
+			shared,
+		);
+		await expect(
+			svc.mailbox(authority(), mailboxId, "send"),
+		).rejects.toBeInstanceOf(NotFoundException);
+		expect(findUnique).toHaveBeenCalledWith({
       where: {
         workspaceId_mailboxId_subject_membershipId: {
           workspaceId,
@@ -82,30 +85,58 @@ describe("mailbox access follows the current membership and explicit grants", ()
     });
   });
 
-  it("lists only current-membership grants and personal mailboxes", async () => {
-    const grantRows = [{ mailboxId }];
-    const personalRows = [{ id: "66666666-6666-4666-8666-666666666666" }];
-    const grantFindMany = jest.fn().mockResolvedValue(grantRows);
-    const mailboxFindMany = jest.fn().mockResolvedValue(personalRows);
+	it("lists shared and personal read mailboxes, while send grants stay membership-bound", async () => {
+		const grantRows = [{ mailboxId }];
+		const personalRows = [{ id: "66666666-6666-4666-8666-666666666666" }];
+		const sharedRows = [{ id: mailboxId }];
+		const grantFindMany = jest.fn().mockResolvedValue(grantRows);
+		const mailboxFindMany = jest.fn((args) =>
+			Promise.resolve(args.where.kind === "SHARED" ? sharedRows : personalRows),
+		);
     const svc = service({
       mailMailboxGrant: { findMany: grantFindMany },
       mailMailbox: { findMany: mailboxFindMany },
     });
-    expect(await svc.visibleMailboxIds(authority(), "read")).toEqual([
-      personalRows[0].id,
-      mailboxId,
-    ]);
-    expect(grantFindMany.mock.calls[0][0].where).toMatchObject({
-      workspaceId,
-      subject: "same-person",
-      membershipId: currentMembership,
-      revokedAt: null,
-      canRead: true,
-    });
-    expect(mailboxFindMany.mock.calls[0][0].where.ownerMembershipId).toBe(
-      currentMembership,
-    );
-  });
+		expect(await svc.visibleMailboxIds(authority(), "read")).toEqual([
+			personalRows[0].id,
+			sharedRows[0].id,
+		]);
+		expect(grantFindMany).not.toHaveBeenCalled();
+		expect(mailboxFindMany.mock.calls[0][0].where.ownerMembershipId).toBe(
+			currentMembership,
+		);
+		expect(mailboxFindMany.mock.calls[1][0].where).toEqual({
+			workspaceId,
+			kind: "SHARED",
+		});
+		await svc.visibleMailboxIds(authority(), "send");
+		expect(grantFindMany.mock.calls[0][0].where).toMatchObject({
+			workspaceId,
+			subject: "same-person",
+			membershipId: currentMembership,
+			revokedAt: null,
+			canSend: true,
+		});
+	});
+
+	it("keeps a personal mailbox bound to the subject's current membership", async () => {
+		const personal = {
+			id: mailboxId,
+			workspaceId,
+			kind: "PERSONAL",
+			ownerSubject: "same-person",
+			ownerMembershipId: currentMembership,
+		};
+		const findUnique = jest.fn();
+		const svc = service({
+			mailMailbox: { findFirst: jest.fn().mockResolvedValue(personal) },
+			mailMailboxGrant: { findUnique },
+		});
+		await expect(svc.mailbox(authority(), mailboxId, "read")).resolves.toEqual(
+			personal,
+		);
+		expect(findUnique).not.toHaveBeenCalled();
+	});
 
   it("rechecks the owner role after provider probing before creating a shared mailbox", async () => {
     const initial = authority("OWNER");

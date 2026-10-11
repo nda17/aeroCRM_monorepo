@@ -116,7 +116,12 @@ export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 		],
 		enabled: !!id && access.canRead,
 		queryFn: () =>
-			getInboxEntry(access.session!.accessToken, access.workspaceId, id!),
+			getInboxEntry(
+				access.session!.accessToken,
+				access.workspaceId,
+				id!,
+				'shared'
+			),
 		retry: false,
 		gcTime: 0,
 		refetchOnWindowFocus: false
@@ -258,8 +263,17 @@ export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 		command.error &&
 		['unauthorized', 'forbidden'].includes(command.error.kind)
 	const conflict = !command.uncertain && command.error?.kind === 'conflict'
+	const entryWithinWriteScope =
+		!id ||
+		(!!record.data &&
+			(access.permissions.data?.dataScope === 'ALL' ||
+				record.data.createdBySubject === access.session?.userId ||
+				(access.permissions.data?.dataScope === 'TEAM' &&
+					!!record.data.teamId &&
+					access.permissions.data.teamIds.includes(record.data.teamId))))
 	const editable =
 		access.canWrite &&
+		entryWithinWriteScope &&
 		!command.locked &&
 		!denied &&
 		!conflict &&
@@ -435,7 +449,9 @@ export const InboxEditor = ({ access, id, onClose, onSaved }: Props) => {
 								/>
 								{entry.status === 'NEW' ? (
 									<div className={styles.actions}>
-										{access.canWrite && !rejecting ? (
+										{access.canWrite &&
+										entryWithinWriteScope &&
+										!rejecting ? (
 											<Button
 												variant="danger"
 												disabled={command.locked || acceptance.blocksEntry}

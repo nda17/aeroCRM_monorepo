@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
 	crmPermissionScope,
 	useCrmPermissions
@@ -77,6 +77,7 @@ export const MailComposer = ({
 	onQueued: () => void
 }) => {
 	const context = useMailContext()
+	const client = useQueryClient()
 	const [chosenContactId, setChosenContactId] = useState(contactId)
 	const [chooseContact, setChooseContact] = useState(false)
 	const [mailboxId, setMailboxId] = useState(
@@ -127,6 +128,10 @@ export const MailComposer = ({
 			mailCommand(token, '/send', data, parseMailSendResult),
 		result => {
 			setSendId(result.sendId)
+			if (reply)
+				void client.invalidateQueries({
+					queryKey: ['mail-processing', ...context.key, reply.id]
+				})
 			setText('')
 			setHtml(undefined)
 			setAttachments([])

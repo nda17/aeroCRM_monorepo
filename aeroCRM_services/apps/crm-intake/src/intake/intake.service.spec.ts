@@ -11,6 +11,7 @@ import { CrmIntakePrismaService } from '../prisma/crm-intake-prisma.service';
 import {
 	hashIntakeSourceToken,
 	intakeEntryScope,
+	sharedIntakeEntryScope,
 	IntakeService
 } from './intake.service';
 
@@ -78,7 +79,10 @@ describe('IntakeService', () => {
 		const tx = {
 			$queryRaw: jest.fn().mockResolvedValue([]),
 			workspaceClosureFence: { findUnique: jest.fn().mockResolvedValue(null) },
-			acceptance: { findFirst: jest.fn().mockResolvedValue(null) },
+			acceptance: {
+				findFirst: jest.fn().mockResolvedValue(null),
+				findMany: jest.fn().mockResolvedValue([])
+			},
 			$executeRaw: jest.fn(),
 			inboxEntry: {
 				create: jest.fn().mockResolvedValue(entry),
@@ -406,5 +410,103 @@ describe('IntakeService', () => {
 			expect(() => hashIntakeSourceToken(invalid)).toThrow(
 				BadRequestException
 			);
+	});
+
+	it('opts shared reads into v2, adds API visibility to OWN scope, and redacts accepted record IDs', async () => {
+		const { service, tx } = setup();
+		const scoped = {
+			...context,
+			role: 'MANAGER' as const,
+			dataScope: 'OWN' as const,
+			permissions: ['intake:read']
+		};
+		const accepted = {
+			...entry,
+			origin: 'API',
+			createdBySubject: 'another-staff',
+			status: 'ACCEPTED',
+			contactId: randomUUID(),
+			dealId: randomUUID(),
+			acceptedAt: now
+		};
+		tx.inboxEntry.findMany.mockResolvedValue([accepted]);
+		const result = await service.list(scoped, {
+			workspaceId,
+			view: 'shared',
+			page: 1,
+			pageSize: 25
+		});
+		expect(result.schemaVersion).toBe(2);
+		expect(result.items[0]).toMatchObject({
+			id: accepted.id,
+			contactId: null,
+			dealId: null,
+			relatedRecordsVisible: false
+		});
+		expect(JSON.stringify(result)).not.toContain(accepted.contactId);
+		expect(JSON.stringify(result)).not.toContain(accepted.dealId);
+		expect(tx.inboxEntry.findMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: {
+					AND: [sharedIntakeEntryScope(scoped)]
+				}
+			})
+		);
+	});
+
+	it('processing returns only visible entry IDs and acceptance actor facts', async () => {
+		const { service, tx } = setup();
+		const claimedAt = new Date('2026-10-12T10:00:00.000Z');
+		const actorEntryId = randomUUID();
+		const entryIds = [entry.id, actorEntryId];
+		tx.inboxEntry.findMany.mockResolvedValue(entryIds.map(id => ({ id })));
+		tx.acceptance.findMany.mockResolvedValue([
+			{
+				entryId: actorEntryId,
+				actorSubject: 'staff-claiming',
+				status: 'RUNNING',
+				createdAt: claimedAt
+			}
+		]);
+		const result = await service.processing(context, workspaceId, entryIds.join(','));
+		expect(result.items).toEqual([
+			{ entryId: entry.id, acceptance: null },
+			{
+				entryId: actorEntryId,
+				acceptance: {
+					actorSubject: 'staff-claiming',
+					status: 'RUNNING',
+					claimedAt: claimedAt.toISOString()
+				}
+			}
+		]);
+		expect(JSON.stringify(result)).not.toContain('contactId');
+		expect(tx.acceptance.findMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: expect.objectContaining({ status: { not: 'CANCELLED' } }),
+				select: {
+					entryId: true,
+					actorSubject: true,
+					status: true,
+					createdAt: true
+				}
+			})
+		);
+	});
+
+	it('does not return actor facts when any requested entry is outside shared scope', async () => {
+		const { service, tx } = setup();
+		tx.inboxEntry.findMany.mockResolvedValue([]);
+		tx.acceptance.findMany.mockResolvedValue([
+			{
+				entryId: randomUUID(),
+				actorSubject: 'private-actor',
+				status: 'RUNNING',
+				createdAt: now
+			}
+		]);
+		await expect(
+			service.processing(context, workspaceId, randomUUID())
+		).rejects.toBeInstanceOf(NotFoundException);
 	});
 });

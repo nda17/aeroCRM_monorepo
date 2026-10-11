@@ -3,6 +3,7 @@ import {
 	invalidContractError
 } from '@/shared/api/authenticated-http-client'
 import { authenticatedDownload } from '@/shared/api/authenticated-download'
+import { isUuidV4 } from '@/shared/lib/contract'
 import * as contract from '../model/mail.contract'
 
 const base = '/crm/customers/mail'
@@ -196,6 +197,22 @@ export const getMailSend = async (
 			workspaceId
 		)
 	)
+
+export const getMailProcessing = async (
+	token: string,
+	workspaceId: string,
+	messageId: string
+) => {
+	if (!isUuidV4(workspaceId) || !isUuidV4(messageId))
+		throw invalidContractError()
+	return checked(
+		contract.parseMailProcessing(
+			await read(token, workspaceId, `/messages/${messageId}/processing`),
+			workspaceId,
+			messageId
+		)
+	)
+}
 
 export const mailCommand = async <T>(
 	token: string,

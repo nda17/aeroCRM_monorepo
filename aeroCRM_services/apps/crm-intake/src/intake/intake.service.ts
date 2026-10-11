@@ -6,11 +6,7 @@ import {
 	NotFoundException,
 	ServiceUnavailableException
 } from '@nestjs/common';
-import {
-	InboxEntry,
-	IntakeSource,
-	Prisma
-} from '@prisma/crm-intake-client';
+import { InboxEntry, IntakeSource, Prisma } from '@prisma/crm-intake-client';
 import { createHash } from 'node:crypto';
 import {
 	assertIntakePermission,
@@ -46,6 +42,15 @@ export function intakeEntryScope(
 	};
 }
 
+export function sharedIntakeEntryScope(
+	context: IntakeAuthorization
+): Prisma.InboxEntryWhereInput {
+	return {
+		workspaceId: context.workspaceId,
+		OR: [intakeEntryScope(context), { origin: 'API' }]
+	};
+}
+
 export function inboxEntryView(entry: InboxEntry) {
 	return {
 		id: entry.id,
@@ -68,6 +73,15 @@ export function inboxEntryView(entry: InboxEntry) {
 		updatedAt: entry.updatedAt.toISOString(),
 		acceptedAt: entry.acceptedAt?.toISOString() ?? null,
 		rejectedAt: entry.rejectedAt?.toISOString() ?? null
+	};
+}
+
+export function sharedInboxEntryView(entry: InboxEntry) {
+	return {
+		...inboxEntryView(entry),
+		contactId: null,
+		dealId: null,
+		relatedRecordsVisible: false
 	};
 }
 
@@ -108,7 +122,9 @@ export class IntakeService {
 		const search = query.search?.trim();
 		const where: Prisma.InboxEntryWhereInput = {
 			AND: [
-				intakeEntryScope(context),
+				query.view === 'shared'
+					? sharedIntakeEntryScope(context)
+					: intakeEntryScope(context),
 				...(query.status ? [{ status: query.status }] : []),
 				...(search
 					? [
@@ -152,8 +168,10 @@ export class IntakeService {
 			{ isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }
 		);
 		return {
-			schemaVersion: 1,
-			items: items.map(inboxEntryView),
+			schemaVersion: query.view === 'shared' ? 2 : 1,
+			items: items.map(
+				query.view === 'shared' ? sharedInboxEntryView : inboxEntryView
+			),
 			page: query.page,
 			pageSize: query.pageSize,
 			total
@@ -163,20 +181,98 @@ export class IntakeService {
 	async get(
 		context: IntakeAuthorization,
 		workspaceId: string,
-		id: string
+		id: string,
+		view?: 'shared'
 	) {
 		this.assertContext(context, workspaceId, 'intake:read');
-		const entry = await this.entry(this.prisma, context, id);
-		return { schemaVersion: 1, entry: inboxEntryView(entry) };
+		const entry = await this.entry(this.prisma, context, id, view === 'shared');
+		return view === 'shared'
+			? { schemaVersion: 2, entry: sharedInboxEntryView(entry) }
+			: { schemaVersion: 1, entry: inboxEntryView(entry) };
+	}
+	async processing(
+		context: IntakeAuthorization,
+		workspaceId: string,
+		entryIds: string
+	) {
+		this.assertContext(context, workspaceId, 'intake:read');
+		const ids = entryIds.split(',');
+		if (
+			ids.length < 1 ||
+			ids.length > 100 ||
+			ids.some(
+				id =>
+					!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+						id
+					)
+			) ||
+			new Set(ids.map(id => id.toLowerCase())).size !== ids.length
+		)
+			throw new BadRequestException('Invalid entry IDs');
+		const [visible, acceptances] = await this.prisma.$transaction(
+			[
+				this.prisma.inboxEntry.findMany({
+					where: {
+						AND: [sharedIntakeEntryScope(context), { id: { in: ids } }]
+					},
+					select: { id: true }
+				}),
+				this.prisma.acceptance.findMany({
+					where: {
+						workspaceId,
+						entryId: { in: ids },
+						status: { not: 'CANCELLED' }
+					},
+					orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+					select: {
+						entryId: true,
+						actorSubject: true,
+						status: true,
+						createdAt: true
+					}
+				})
+			],
+			{ isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }
+		);
+		if (visible.length !== ids.length)
+			throw new NotFoundException({ code: 'crm_intake_entry_not_found' });
+		const byEntry = new Map<string, (typeof acceptances)[number]>();
+		for (const row of acceptances)
+			if (!byEntry.has(row.entryId)) byEntry.set(row.entryId, row);
+		return {
+			schemaVersion: 1,
+			workspaceId,
+			items: ids.map(entryId => {
+				const acceptance = byEntry.get(entryId);
+				return {
+					entryId,
+					acceptance: acceptance
+						? {
+								actorSubject: acceptance.actorSubject,
+								status: acceptance.status,
+								claimedAt: acceptance.createdAt.toISOString()
+							}
+						: null
+				};
+			})
+		};
 	}
 	async entrySource(
 		context: IntakeAuthorization,
 		workspaceId: string,
-		id: string
+		id: string,
+		view?: 'shared'
 	) {
 		this.assertContext(context, workspaceId, 'intake:read');
 		const entry = await this.prisma.inboxEntry.findFirst({
-			where: { AND: [intakeEntryScope(context), { id }] },
+			where: {
+				AND: [
+					view === 'shared'
+						? sharedIntakeEntryScope(context)
+						: intakeEntryScope(context),
+					{ id }
+				]
+			},
 			select: {
 				id: true,
 				source: { select: { id: true, name: true, kind: true } }
@@ -201,7 +297,7 @@ export class IntakeService {
 		query: IntakePageQuery
 	) {
 		this.assertContext(context, query.workspaceId, 'intake:read');
-		await this.entry(this.prisma, context, id);
+		await this.entry(this.prisma, context, id, query.view === 'shared');
 		const where = {
 			workspaceId: context.workspaceId,
 			entityId: id,
@@ -231,10 +327,7 @@ export class IntakeService {
 		};
 	}
 
-	async createManual(
-		context: IntakeAuthorization,
-		dto: CreateInboxEntryDto
-	) {
+	async createManual(context: IntakeAuthorization, dto: CreateInboxEntryDto) {
 		this.assertContext(context, dto.workspaceId, 'intake:write', true);
 		this.assertTeam(context, dto.teamId);
 		const data = {
@@ -280,8 +373,7 @@ export class IntakeService {
 	) {
 		this.assertContext(context, dto.workspaceId, 'intake:write', true);
 		const reason = dto.reason.trim();
-		if (!reason)
-			throw new BadRequestException('Rejection reason is required');
+		if (!reason) throw new BadRequestException('Rejection reason is required');
 		return this.command(
 			context,
 			dto,
@@ -301,8 +393,7 @@ export class IntakeService {
 				)
 					throw new ConflictException('Acceptance is already in progress');
 				const prior = await this.entry(tx, context, id);
-				if (prior.version !== dto.expectedVersion)
-					throw this.versionConflict();
+				if (prior.version !== dto.expectedVersion) throw this.versionConflict();
 				if (prior.status !== 'NEW')
 					throw new ConflictException({
 						code: 'crm_intake_entry_not_new',
@@ -358,10 +449,7 @@ export class IntakeService {
 		};
 	}
 
-	async createSource(
-		context: IntakeAuthorization,
-		dto: CreateIntakeSourceDto
-	) {
+	async createSource(context: IntakeAuthorization, dto: CreateIntakeSourceDto) {
 		this.assertSourceManager(context, dto.workspaceId, true);
 		this.assertTeam(context, dto.teamId);
 		const data = {
@@ -369,8 +457,7 @@ export class IntakeService {
 			teamId: dto.teamId ?? null,
 			tokenHash: hashIntakeSourceToken(dto.token)
 		};
-		if (!data.name)
-			throw new BadRequestException('Source name is required');
+		if (!data.name) throw new BadRequestException('Source name is required');
 		return this.command(
 			context,
 			dto,
@@ -527,8 +614,7 @@ export class IntakeService {
 							)
 								throw new ConflictException({
 									code: 'crm_intake_command_conflict',
-									message:
-										'Command ID was already used for another request'
+									message: 'Command ID was already used for another request'
 								});
 							if (kind === 'entry')
 								await this.entry(tx, context, receipt.entityId);
@@ -566,7 +652,8 @@ export class IntakeService {
 			} catch (error) {
 				if (String(error).includes('crm_workspace_closed'))
 					throw new ForbiddenException({
-						code: 'crm_workspace_closed', message: 'Workspace is closed'
+						code: 'crm_workspace_closed',
+						message: 'Workspace is closed'
 					});
 				if (
 					error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -579,9 +666,11 @@ export class IntakeService {
 					});
 				if (
 					!(error instanceof Prisma.PrismaClientKnownRequestError) ||
-					!(['P2034', 'P2002'].includes(error.code) ||
+					!(
+						['P2034', 'P2002'].includes(error.code) ||
 						(error.code === 'P2010' &&
-							['40001', '40P01'].includes(String(error.meta?.code))))
+							['40001', '40P01'].includes(String(error.meta?.code)))
+					)
 				)
 					throw error;
 				if (attempt === 2)
@@ -597,10 +686,16 @@ export class IntakeService {
 	private async entry(
 		tx: Prisma.TransactionClient,
 		context: IntakeAuthorization,
-		id: string
+		id: string,
+		shared = false
 	) {
 		const entry = await tx.inboxEntry.findFirst({
-			where: { AND: [intakeEntryScope(context), { id }] }
+			where: {
+				AND: [
+					shared ? sharedIntakeEntryScope(context) : intakeEntryScope(context),
+					{ id }
+				]
+			}
 		});
 		if (!entry)
 			throw new NotFoundException({
@@ -650,19 +745,13 @@ export class IntakeService {
 				'Only workspace owner and CRM admin can manage sources'
 			);
 	}
-	private assertTeam(
-		context: IntakeAuthorization,
-		teamId?: string | null
-	) {
+	private assertTeam(context: IntakeAuthorization, teamId?: string | null) {
 		if (teamId && !context.teamIds.includes(teamId))
 			throw new ForbiddenException(
 				'Team must belong to the authorized context'
 			);
 	}
-	private assertSourceVersion(
-		source: IntakeSource,
-		expectedVersion: number
-	) {
+	private assertSourceVersion(source: IntakeSource, expectedVersion: number) {
 		if (source.version !== expectedVersion) throw this.versionConflict();
 		if (source.revokedAt)
 			throw new ConflictException({

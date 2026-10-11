@@ -681,6 +681,67 @@ try {
 		role: 'AGENT',
 		permissions: ['intake:read']
 	};
+	const sharedOwnReader = {
+		...readerWithoutSourceManagement,
+		subject: 'shared-reader',
+		dataScope: 'OWN',
+		teamIds: []
+	};
+	assert.equal(
+		(
+			await service.list(sharedOwnReader, {
+				workspaceId: context.workspaceId,
+				page: 1,
+				pageSize: 25
+			})
+		).total,
+		0,
+		'v1 continues to hide another employee\'s API lead'
+	);
+	const sharedApiList = await service.list(sharedOwnReader, {
+		workspaceId: context.workspaceId,
+		page: 1,
+		pageSize: 25,
+		view: 'shared'
+	});
+	assert.equal(sharedApiList.schemaVersion, 2);
+	assert.deepEqual(
+		sharedApiList.items.map(item => item.id),
+		[apiEntry.id],
+		'shared view exposes API entries while retaining the workspace and scope fence'
+	);
+	assert.equal(sharedApiList.items[0].relatedRecordsVisible, false);
+	assert.equal(sharedApiList.items[0].contactId, null);
+	assert.equal(sharedApiList.items[0].dealId, null);
+	assert.equal(
+		(await service.get(sharedOwnReader, context.workspaceId, apiEntry.id, 'shared'))
+			.schemaVersion,
+		2
+	);
+	await assert.rejects(
+		service.get(sharedOwnReader, context.workspaceId, apiEntry.id),
+		http(404)
+	);
+	await assert.rejects(
+		service.get(sharedOwnReader, workspaceIds[1], apiEntry.id, 'shared'),
+		http(403)
+	);
+	const apiProcessing = await service.processing(
+		sharedOwnReader,
+		context.workspaceId,
+		apiEntry.id
+	);
+	assert.deepEqual(apiProcessing.items, [
+		{ entryId: apiEntry.id, acceptance: null }
+	]);
+	await assert.rejects(
+		service.processing(
+			sharedOwnReader,
+			context.workspaceId,
+			`${apiEntry.id},${first.entry.id}`
+		),
+		http(404)
+	);
 	assert.deepEqual(
 		await service.entrySource(
 			readerWithoutSourceManagement,

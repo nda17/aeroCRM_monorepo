@@ -8,7 +8,7 @@ import {
 	type IntakeAuthorization
 } from '../access/intake-authorization.client';
 import { CrmIntakePrismaService } from '../prisma/crm-intake-prisma.service';
-import { intakeEntryScope } from '../intake/intake.service';
+import { sharedIntakeEntryScope } from '../intake/intake.service';
 import type {
 	InboxNotificationsQuery,
 	InboxNotificationReadDto,
@@ -21,7 +21,7 @@ export class InboxNotificationsService {
 	private scope(access: IntakeAuthorization, workspaceId: string) {
 		assertIntakePermission(access, 'intake:read');
 		if (access.workspaceId !== workspaceId) throw new ForbiddenException();
-		return { workspaceId, entry: intakeEntryScope(access) };
+		return { workspaceId, entry: sharedIntakeEntryScope(access) };
 	}
 	async list(access: IntakeAuthorization, query: InboxNotificationsQuery) {
 		const scope = this.scope(access, query.workspaceId);

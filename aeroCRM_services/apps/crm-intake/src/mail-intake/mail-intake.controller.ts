@@ -3,6 +3,7 @@ import {
 	Body,
 	Controller,
 	Get,
+	Header,
 	Headers,
 	HttpCode,
 	Param,
@@ -51,5 +52,14 @@ export class MailIntakeController {
 		@Query() query: MailIntakeSourceQueryDto
 	) {
 		return this.mail.source(bearer, query.workspaceId, id);
+	}
+	@Get('messages/:messageId/processing')
+	@Header('Cache-Control', 'no-store')
+	processing(
+		@Headers('authorization') bearer: string | undefined,
+		@Param('messageId', new ParseUUIDPipe({ version: '4' })) id: string,
+		@Query() query: MailIntakeSourceQueryDto
+	) {
+		return this.mail.processing(bearer, query.workspaceId, id);
 	}
 }

@@ -117,7 +117,7 @@ export class MailIntakeService {
 				.digest('hex');
 			try {
 				return await this.prisma.$transaction(
-					async (tx) => {
+					async tx => {
 						await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`crm-intake:command:${dto.commandId}`}, 0))`;
 						const receipt = await tx.intakeCommand.findUnique({
 							where: { commandId: dto.commandId }
@@ -320,6 +320,61 @@ export class MailIntakeService {
 				source: { kind: 'MAIL', canOpen: false, messageId: null }
 			};
 		}
+	}
+
+	async processing(
+		bearer: string | undefined,
+		workspaceId: string,
+		messageId: string
+	) {
+		const context = await this.authority(bearer, workspaceId);
+		await this.mail.source(bearer, workspaceId, messageId, context.subject);
+		const source = await this.prisma.mailIntakeSource.findUnique({
+			where: { workspaceId_messageId: { workspaceId, messageId } },
+			select: {
+				entryId: true,
+				actorSubject: true,
+				createdAt: true
+			}
+		});
+		if (!source)
+			return { schemaVersion: 1, workspaceId, messageId, copy: null };
+		const [visible, acceptance] = await this.prisma.$transaction(
+			[
+				this.prisma.inboxEntry.findFirst({
+					where: { AND: [intakeEntryScope(context), { id: source.entryId }] },
+					select: { id: true }
+				}),
+				this.prisma.acceptance.findFirst({
+					where: {
+						workspaceId,
+						entryId: source.entryId,
+						status: { not: 'CANCELLED' }
+					},
+					orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+					select: { actorSubject: true, status: true, createdAt: true }
+				})
+			],
+			{ isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }
+		);
+		return {
+			schemaVersion: 1,
+			workspaceId,
+			messageId,
+			copy: {
+				entryId: visible?.id ?? null,
+				canOpen: !!visible,
+				actorSubject: source.actorSubject,
+				createdAt: source.createdAt.toISOString(),
+				acceptance: acceptance
+					? {
+							actorSubject: acceptance.actorSubject,
+							status: acceptance.status,
+							claimedAt: acceptance.createdAt.toISOString()
+						}
+					: null
+			}
+		};
 	}
 	private async entry(
 		tx: Prisma.TransactionClient,

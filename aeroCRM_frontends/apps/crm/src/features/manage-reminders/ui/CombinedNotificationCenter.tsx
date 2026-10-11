@@ -66,7 +66,7 @@ const sourceLabels = {
 	intake: 'Заявки',
 	mail: 'Почта',
 	support: 'Поддержка',
-	chat: 'Сообщения',
+	chat: 'Мессенджер',
 	tasks: 'Задачи'
 }
 const eventLabels = {
@@ -716,7 +716,7 @@ export function CombinedNotificationCenter({
 											mail: 'Почта',
 											support: 'Поддержка',
 											tasks: 'Задачи',
-											chat: 'Сообщения'
+											chat: 'Мессенджер'
 										}[source]
 									}
 									<span aria-hidden="true">

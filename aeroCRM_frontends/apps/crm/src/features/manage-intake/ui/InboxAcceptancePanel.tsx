@@ -19,6 +19,7 @@ import toast from 'react-hot-toast'
 import type { InboxAcceptanceContext } from '../model/use-inbox-acceptance'
 import type { IntakeAccess } from '../model/use-intake-access'
 import styles from './IntakeForms.module.scss'
+import { useEmployeeNames } from '@/features/workspace-collaboration/model/use-employee-names'
 
 const labels: Record<AcceptanceStatus, string> = {
 	QUEUED: 'Ожидает обработки',
@@ -58,7 +59,8 @@ export const InboxAcceptancePanel = ({
 }) => {
 	const [editing, setEditing] = useState(false)
 	const [confirmRecovery, setConfirmRecovery] = useState(false)
-	const { query, row, command } = context
+	const { query, row, command, processing, summary, foreign } = context
+	const employeeName = useEmployeeNames(access)
 	const refreshOwner = useRef<object | null>(null)
 	useLayoutEffect(() => {
 		refreshOwner.current = {}
@@ -80,6 +82,10 @@ export const InboxAcceptancePanel = ({
 	const admin = access.sourceManager
 	const fresh =
 		access.canRead &&
+		processing.isSuccess &&
+		!processing.isError &&
+		!processing.isFetching &&
+		!foreign &&
 		query.isSuccess &&
 		!query.isFetching &&
 		!query.isError
@@ -138,6 +144,17 @@ export const InboxAcceptancePanel = ({
 			query.isFetching
 		)
 			return
+		const latest = await processing.refetch()
+		if (!current() || !latest.isSuccess) return
+		const ownerSubject = latest.data.items[0]?.acceptance?.actorSubject
+		if (
+			ownerSubject &&
+			ownerSubject !== access.session?.userId &&
+			!admin
+		) {
+			command.resetError()
+			return
+		}
 		const result = await query.refetch()
 		if (!current()) return
 		if (result.isSuccess) {
@@ -155,6 +172,36 @@ export const InboxAcceptancePanel = ({
 			<h3>Принятие в работу</h3>
 			{!access.canRead ? (
 				<ScreenState compact variant="permission" />
+			) : processing.isError ? (
+				<ScreenState
+					compact
+					variant="error"
+					title="Не удалось проверить, кто работает с обращением"
+					action={
+						<Button onClick={() => void processing.refetch()}>
+							Повторить проверку
+						</Button>
+					}
+				/>
+			) : !processing.isSuccess ? (
+				<ScreenState
+					compact
+					variant="loading"
+					title="Проверяем обработку обращения…"
+				/>
+			) : foreign && summary ? (
+				<div className={styles.notice} role="status" aria-live="polite">
+					<strong>{labels[summary.status]}</strong>
+					<p>
+						{summary.status === 'COMPLETED' ? 'Принял' : 'Обработку начал'}
+						: {employeeName(summary.actorSubject)}
+					</p>
+					<p>{new Date(summary.claimedAt).toLocaleString('ru-RU')}</p>
+					<p>
+						Обращение уже закреплено за сотрудником. Повторное принятие
+						недоступно.
+					</p>
+				</div>
 			) : query.isError ? (
 				<ScreenState
 					compact
@@ -175,6 +222,10 @@ export const InboxAcceptancePanel = ({
 			) : row ? (
 				<div className={styles.notice} role="status" aria-live="polite">
 					<strong>{labels[row.status]}</strong>
+					<p>
+						{row.status === 'COMPLETED' ? 'Принял' : 'Обработку начал'}:{' '}
+						{employeeName(row.actorSubject)}
+					</p>
 					{row.status === 'COMPLETED' ? (
 						<p>
 							Контакт, сделка и первое действие подтверждены. Они доступны
