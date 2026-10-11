@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { ConflictException } from '@nestjs/common';
+import { Prisma } from '@prisma/crm-intake-client';
 import { AcceptanceService } from './acceptance.service';
 import {
 	acceptanceHash,
@@ -202,6 +204,30 @@ describe('durable Acceptance intent', () => {
 		await expect(
 			c.service.accept(c.context, c.entry.id, c.dto)
 		).rejects.toMatchObject({ status: 409 });
+		expect(c.tx.acceptanceOutbox.createMany).not.toHaveBeenCalled();
+	});
+	it('retries a wrapped serialization conflict and observes the competing acceptance as 409', async () => {
+		const c = setup();
+		c.prisma.$transaction.mockRejectedValueOnce(
+			new Prisma.PrismaClientKnownRequestError(
+				'Raw query failed. Code: 40001',
+				{
+					code: 'P2010',
+					clientVersion: '5.22.0',
+					meta: { code: '40001' }
+				}
+			)
+		);
+		c.tx.acceptance.findFirst.mockResolvedValue({ id: randomUUID() });
+
+		await expect(
+			c.service.accept(c.context, c.entry.id, c.dto)
+		).rejects.toBeInstanceOf(ConflictException);
+		expect(c.prisma.$transaction).toHaveBeenCalledTimes(2);
+		expect(c.tx.intakeCommand.findUnique).toHaveBeenCalledWith({
+			where: { commandId: c.dto.commandId }
+		});
+		expect(c.tx.acceptance.create).not.toHaveBeenCalled();
 		expect(c.tx.acceptanceOutbox.createMany).not.toHaveBeenCalled();
 	});
 	it('keeps proof, name snapshot and payloads out of the public status response', async () => {

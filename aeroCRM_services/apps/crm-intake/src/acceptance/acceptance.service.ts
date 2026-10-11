@@ -398,6 +398,8 @@ export class AcceptanceService {
 				if (
 					error instanceof Prisma.PrismaClientKnownRequestError &&
 					(['P2034', 'P2002'].includes(error.code) ||
+						(error.code === 'P2010' &&
+							['40001', '40P01'].includes(String(error.meta?.code))) ||
 						['55P03', '57014'].includes(String(error.meta?.code))) &&
 					attempt < 2
 				)

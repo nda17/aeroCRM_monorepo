@@ -896,10 +896,11 @@ try {
       2,
     );
     assert.equal(v2.schemaVersion, 2);
-    assert.equal(v2.total, 4);
+    assert.equal(v2.total, 5);
     assert(v2.items.every((item) =>
       [syncMailboxId, personalMailboxId].includes(item.mailboxId),
     ));
+    assert(v2.items.some((item) => item.mailboxId === syncMailboxId));
     assert.equal(
       v2.items.find((item) => item.messageId === fixtureIds[0].messageId)
         ?.contactId,
@@ -917,8 +918,14 @@ try {
     );
     assert.equal(
       v2.items.some((item) => item.messageId === fixtureIds[2].messageId),
-      false,
-      "v2 hides a notification when its linked contact is outside the caller's data scope",
+      true,
+      "shared-mail notifications remain visible even when their linked contact is outside the caller's data scope",
+    );
+    assert.equal(
+      v2.items.find((item) => item.messageId === fixtureIds[2].messageId)
+        ?.contactId,
+      null,
+      "shared-mail notifications redact contacts outside the caller's data scope",
     );
     const legacyNotifications = await mail.notifications(ownScopeAuthority, {
       workspaceId,
@@ -949,8 +956,20 @@ try {
           2,
         )
       ).total,
-      3,
-      "a shared mailbox grant is bound to the exact active membership",
+      4,
+      "shared-mail notifications are visible with mail:read permission",
+    );
+    const secondMembershipNotifications = await mail.notifications(
+      secondMembershipAuthority,
+      { workspaceId, page: 1, pageSize: 10, unreadOnly: "false" },
+      2,
+    );
+    assert.equal(
+      secondMembershipNotifications.items.some(
+        (item) => item.messageId === personalMessageId,
+      ),
+      false,
+      "PERSONAL notifications remain bound to their exact owner membership",
     );
     const noGrantAuthority = {
       ...secondMembershipAuthority,
@@ -969,8 +988,20 @@ try {
           2,
         )
       ).total,
-      0,
-      "another membership of the same subject cannot reuse the mailbox grant",
+      4,
+      "shared-mail read visibility does not depend on a mailbox grant",
+    );
+    const noGrantNotifications = await mail.notifications(
+      noGrantAuthority,
+      { workspaceId, page: 1, pageSize: 10, unreadOnly: "false" },
+      2,
+    );
+    assert.equal(
+      noGrantNotifications.items.some(
+        (item) => item.messageId === personalMessageId,
+      ),
+      false,
+      "a different membership cannot read the owner's PERSONAL notifications",
     );
     assert.equal(
       (
@@ -1042,7 +1073,7 @@ try {
       pageSize: 10,
       unreadOnly: "false",
     });
-    assert.equal(revokedList.total, 0);
+    assert.equal(revokedList.total, 2);
     assert.equal(
       (
         await syncMailForNotifications.notifications(
@@ -1056,15 +1087,18 @@ try {
           2,
         )
       ).items.filter((item) => item.mailboxId === syncMailboxId).length,
-      0,
-      "revoking the exact membership grant removes shared-mail v2 events immediately",
+      4,
+      "revoking a mailbox grant does not remove shared-mail read visibility",
     );
-    await assert.rejects(() =>
-      syncMailForNotifications.readNotification(commandAuthority, notifications.items[0].id, {
+    const revokedGrantRead = await syncMailForNotifications.readNotification(
+      commandAuthority,
+      notifications.items[0].id,
+      {
         ...readInput,
         read: false,
-      }),
+      },
     );
+    assert.equal(revokedGrantRead.readAt, null);
   } finally {
     if (previousProcessRole === undefined)
       delete process.env.CRM_CUSTOMERS_PROCESS_ROLE;

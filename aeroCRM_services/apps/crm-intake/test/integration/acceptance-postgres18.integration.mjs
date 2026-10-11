@@ -250,7 +250,12 @@ try {
 	assert.equal(sharedRace.filter(result => result.status === 'fulfilled').length, 1);
 	assert.equal(
 		sharedRace.filter(result => result.status === 'rejected' && result.reason?.getStatus?.() === 409).length,
-		1
+		1,
+		JSON.stringify(sharedRace.map(result =>
+			result.status === 'fulfilled'
+				? { status: result.status }
+				: { status: result.status, error: safeError(result.reason) }
+		))
 	);
 	const sharedAcceptance = await runtime.acceptance.findFirstOrThrow({
 		where: { workspaceId, entryId: sharedEntry.id, status: { not: 'CANCELLED' } }
@@ -990,6 +995,15 @@ function command(expectedVersion) {
 }
 function status(code) {
 	return error => error?.getStatus?.() === code;
+}
+function safeError(error) {
+	return {
+		name: error?.constructor?.name,
+		code: error?.code,
+		databaseCode: error?.meta?.code,
+		httpStatus: error?.getStatus?.(),
+		responseCode: error?.getResponse?.()?.code
+	};
 }
 function required(name) {
 	const value = process.env[name];
