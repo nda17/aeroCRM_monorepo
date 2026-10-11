@@ -5,12 +5,12 @@
 	margin: auto;
 	padding: 1.5rem;
 	border: 1px solid var(--color-border, #e5e7eb);
-	border-radius: 1rem;
+	border-radius: 0.625rem;
 	color: var(--color-text, #111827);
 	background: var(--color-surface, #fff);
 	box-shadow: 0 24px 64px rgb(0 0 0 / 20%);
 	&::backdrop {
-		background: rgb(15 23 42 / 45%);
+		background: rgb(0 0 0 / 40%);
 	}
 	h2 {
 		margin: 0 0 0.75rem;

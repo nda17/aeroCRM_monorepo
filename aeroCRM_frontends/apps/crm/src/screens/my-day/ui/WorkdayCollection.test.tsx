@@ -92,6 +92,8 @@ const task: WorkdayTask = Object.freeze({
 const onStatus = vi.fn()
 const onOpen = vi.fn()
 const onPage = vi.fn()
+const onCalendarDate = vi.fn()
+const onReschedule = vi.fn()
 const refetch = vi.fn()
 const namesRefetch = vi.fn()
 const namesLookup = vi.fn()
@@ -131,10 +133,14 @@ let namesRows: AssigneeLabels['items']
 let namesError: boolean
 let unavailable: 'IN_PROGRESS' | 'OPEN' | undefined
 let fetching: 'IN_PROGRESS' | 'OPEN' | undefined
+let totalOverride: number | undefined
+let pageOverride = 1
 const element = (
-	view: 'list' | 'board',
+	view: 'list' | 'board' | 'calendar',
 	canWrite = true,
-	filters: WorkdayFilters = initialWorkdayFilters()
+	filters: WorkdayFilters = initialWorkdayFilters(),
+	calendarDate = onCalendarDate,
+	reschedule = onReschedule
 ) => (
 	<WorkdayCollection
 		filters={filters}
@@ -143,10 +149,12 @@ const element = (
 		onOpen={onOpen}
 		onStatus={onStatus}
 		onPage={onPage}
+		onCalendarDate={calendarDate}
+		onReschedule={reschedule}
 	/>
 )
 const setup = (
-	view: 'list' | 'board',
+	view: 'list' | 'board' | 'calendar',
 	canWrite = true,
 	filters?: WorkdayFilters
 ) => render(element(view, canWrite, filters))
@@ -220,6 +228,8 @@ const pointer = (
 beforeEach(() => {
 	vi.clearAllMocks()
 	pageTasks = [task]
+	totalOverride = undefined
+	pageOverride = 1
 	namesRows = []
 	namesError = false
 	namesLookup.mockImplementation((binding: AssigneeBinding) =>
@@ -268,19 +278,24 @@ beforeEach(() => {
 										? pageTasks
 										: [],
 								total:
-									!filters.status ||
+									totalOverride ??
+									(!filters.status ||
 									filters.status === 'OPEN' ||
 									filters.status === 'ACTIVE' ||
 									filters.status === 'CANCELLED'
 										? 21
-										: 0,
+										: 0),
 								asOf: '2026-09-07T10:00:00Z',
 								counts: {
 									OPEN: 21,
 									IN_PROGRESS: 0,
 									COMPLETED: 0,
 									CANCELLED: 21
-								}
+								},
+								page: pageOverride,
+								pageSize: filters.pageSize,
+								timeZone: filters.timeZone,
+								range: null
 							}
 			}) as never
 	)
@@ -575,6 +590,159 @@ describe('MyDay server-paged list and board', () => {
 		expect(column.queryByRole('navigation')).toBeNull()
 		fireEvent.click(column.getByRole('button', { name: 'Повторить' }))
 		expect(refetch).toHaveBeenCalledOnce()
+	})
+})
+
+describe('MyDay weekly calendar', () => {
+	const filters: WorkdayFilters = {
+		...initialWorkdayFilters(),
+		period: 'RANGE',
+		from: '2026-09-07',
+		to: '2026-09-13'
+	}
+	const calendar = (canWrite = true, calendarFilters = filters) =>
+		setup('calendar', canWrite, calendarFilters)
+
+	it('uses the local day at the moment Today is clicked after midnight', () => {
+		vi.useFakeTimers({ toFake: ['Date'] })
+		try {
+			vi.setSystemTime(new Date('2026-10-04T20:59:59.000Z'))
+			totalOverride = 1
+			calendar()
+			const today = screen.getByRole('button', {
+				name: 'Сегодня в календаре'
+			})
+
+			vi.setSystemTime(new Date('2026-10-04T21:00:01.000Z'))
+			expect(
+				screen.getByRole('button', { name: 'Сегодня в календаре' })
+			).toBe(today)
+			fireEvent.click(today)
+			expect(onCalendarDate).toHaveBeenCalledExactlyOnceWith('2026-10-05')
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+	it('navigates by whole weeks, selects today, and forwards a chosen date', () => {
+		vi.useFakeTimers({ toFake: ['Date'] })
+		try {
+			vi.setSystemTime(new Date('2026-09-07T10:00:00.000Z'))
+			totalOverride = 1
+			calendar()
+			expect(
+				screen.getByRole('heading', { level: 2 }).textContent
+			).toContain('7')
+			fireEvent.click(
+				screen.getByRole('button', { name: 'Предыдущая неделя' })
+			)
+			expect(onCalendarDate).toHaveBeenCalledExactlyOnceWith('2026-08-31')
+			fireEvent.click(
+				screen.getByRole('button', { name: 'Следующая неделя' })
+			)
+			expect(onCalendarDate).toHaveBeenNthCalledWith(2, '2026-09-14')
+			fireEvent.click(
+				screen.getByRole('button', { name: 'Сегодня в календаре' })
+			)
+			expect(onCalendarDate).toHaveBeenNthCalledWith(3, '2026-09-07')
+			fireEvent.change(screen.getByLabelText('Дата недели'), {
+				target: { value: '2026-10-22' }
+			})
+			expect(onCalendarDate).toHaveBeenNthCalledWith(4, '2026-10-22')
+			expect(useWorkdayTasks).toHaveBeenCalledWith(filters, true)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+	it('labels calendar counts as page-only when the server reports more results', () => {
+		totalOverride = 3
+		calendar()
+		expect(screen.getByRole('status').textContent).toContain(
+			'На этой странице 1 из 3 задач недели'
+		)
+		expect(screen.getByRole('status').textContent).toContain(
+			'Остальные задачи доступны на других страницах'
+		)
+		const monday = screen.getByRole('region', { name: /понедельник, 7/ })
+		expect(within(monday).getByText('На странице: 1')).toBeTruthy()
+		expect(
+			within(monday).getByRole('button', { name: task.title })
+		).toBeTruthy()
+		const tuesday = screen.getByRole('region', { name: /вторник, 8/ })
+		expect(
+			within(tuesday).getByText('На этой странице задач нет')
+		).toBeTruthy()
+		expect(
+			within(tuesday).queryByText('Нет задач по выбранным фильтрам')
+		).toBeNull()
+		expect(
+			screen.getByRole('navigation', { name: 'Страницы календаря задач' })
+		).toBeTruthy()
+	})
+	it('shows the last page as empty without claiming the week has no tasks', () => {
+		pageTasks = []
+		pageOverride = 2
+		totalOverride = 21
+		calendar(true, { ...filters, page: 2 })
+		expect(
+			screen.getByText('На этой странице задач больше нет')
+		).toBeTruthy()
+		expect(
+			screen.getByText(/Задачи недели остаются доступны/)
+		).toBeTruthy()
+		expect(
+			screen.queryByText('Нет задач по выбранным фильтрам')
+		).toBeNull()
+		fireEvent.click(
+			within(
+				screen.getByRole('navigation', {
+					name: 'Страницы календаря задач'
+				})
+			).getByRole('button', { name: 'Назад' })
+		)
+		expect(onPage).toHaveBeenCalledExactlyOnceWith(1)
+	})
+	it('keeps task status and reschedule actions wired, while READ_ONLY keeps details available', () => {
+		totalOverride = 1
+		calendar()
+		fireEvent.click(
+			screen.getByRole('button', { name: `Готово: ${task.title}` })
+		)
+		expect(onStatus).toHaveBeenCalledExactlyOnceWith(task, 'COMPLETED')
+		fireEvent.click(
+			screen.getByRole('button', { name: `Изменить срок: ${task.title}` })
+		)
+		expect(onReschedule).toHaveBeenCalledExactlyOnceWith(task)
+		fireEvent.change(
+			screen.getByLabelText(`Статус задачи «${task.title}»`),
+			{
+				target: { value: 'IN_PROGRESS' }
+			}
+		)
+		expect(onStatus).toHaveBeenNthCalledWith(2, task, 'IN_PROGRESS')
+
+		cleanup()
+		vi.clearAllMocks()
+		pageTasks = [task]
+		totalOverride = 1
+		calendar(false)
+		expect(
+			(
+				screen.getByLabelText(
+					`Статус задачи «${task.title}»`
+				) as HTMLSelectElement
+			).disabled
+		).toBe(true)
+		expect(
+			(
+				screen.getByRole('button', {
+					name: `Изменить срок: ${task.title}`
+				}) as HTMLButtonElement
+			).disabled
+		).toBe(true)
+		fireEvent.click(screen.getByRole('button', { name: task.title }))
+		expect(onOpen).toHaveBeenCalledExactlyOnceWith(task)
+		expect(onStatus).not.toHaveBeenCalled()
+		expect(onReschedule).not.toHaveBeenCalled()
 	})
 })
 

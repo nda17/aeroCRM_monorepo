@@ -1,5 +1,5 @@
 .panel {
-	@apply flex min-w-0 flex-col gap-4 rounded-2xl border border-crm-border bg-crm-surface p-4 sm:p-6;
+	@apply flex min-w-0 flex-col gap-4 rounded-lg border border-crm-border bg-crm-surface p-4 sm:p-5;
 	h2 {
 		@apply text-lg font-semibold text-crm-text;
 	}
@@ -35,7 +35,7 @@
 	@apply grid min-w-0 gap-4 sm:grid-cols-2;
 }
 .form {
-	@apply flex min-w-0 flex-col gap-4 rounded-xl border border-crm-border bg-crm-surface-muted p-4;
+	@apply flex min-w-0 flex-col gap-4 border-t border-crm-border pt-5;
 	h3 {
 		@apply font-semibold text-crm-text;
 	}
@@ -43,7 +43,7 @@
 .rules {
 	@apply flex min-w-0 flex-col gap-3;
 	li {
-		@apply flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-crm-border p-3;
+		@apply flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-crm-border py-3;
 		> div,
 		> span {
 			@apply min-w-0 break-words;

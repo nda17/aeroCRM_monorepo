@@ -4,7 +4,7 @@
 .filters {
 	@apply flex flex-wrap items-end gap-3;
 	> div {
-		@apply min-w-0 flex-1 sm:flex-none;
+		@apply w-full min-w-0 sm:w-56;
 	}
 }
 .timeZone {
@@ -15,34 +15,34 @@
 }
 .sectionHeading {
 	h2 {
-		@apply text-base font-semibold text-crm-text;
+		@apply text-sm font-semibold text-crm-text;
 	}
 	p {
 		@apply mt-1 text-xs leading-5 text-crm-muted;
 	}
 }
 .attentionSection {
-	@apply rounded-panel border border-crm-border bg-crm-surface p-4;
+	@apply rounded-lg border border-crm-border bg-crm-surface p-4;
 }
 .attentionGrid {
 	@apply mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3;
 	> div {
-		@apply flex items-center justify-between gap-3 rounded-lg bg-crm-bg p-3 sm:flex-col sm:items-start;
+		@apply flex items-center justify-between gap-3 rounded-md bg-crm-surface-muted p-3 sm:flex-col sm:items-start;
 	}
 	span {
 		@apply text-xs text-crm-muted;
 	}
 	strong {
-		@apply text-2xl font-semibold text-crm-text;
+		@apply text-2xl font-semibold tabular-nums tracking-tight text-crm-text;
 	}
 }
 .metricGrid {
 	@apply grid grid-cols-1 gap-3 md:grid-cols-3;
 }
 .metricCard {
-	@apply flex min-w-0 flex-col items-start rounded-panel border border-crm-border bg-crm-surface p-4;
+	@apply flex min-w-0 flex-col items-start rounded-lg border border-crm-border bg-crm-surface p-4;
 	> strong {
-		@apply mt-3 max-w-full break-words text-3xl font-bold tracking-tight text-crm-text;
+		@apply mt-3 max-w-full break-words text-3xl font-semibold tabular-nums tracking-tight text-crm-text;
 	}
 	> small {
 		@apply mt-1 text-xs leading-5 text-crm-muted;
@@ -55,12 +55,12 @@
 	@apply mt-1 text-xs leading-5 text-crm-muted;
 }
 .metricAmount {
-	@apply mt-3 w-full break-words border-t border-crm-border pt-3 text-lg font-semibold text-crm-text;
+	@apply mt-3 w-full break-words border-t border-crm-border pt-3 text-base font-semibold tabular-nums text-crm-text;
 }
 .summaryPanel {
-	@apply flex flex-col justify-between gap-4 rounded-panel border border-crm-border bg-crm-surface p-4 sm:flex-row sm:items-center;
+	@apply flex flex-col justify-between gap-4 rounded-lg border border-crm-border bg-crm-surface p-4 sm:flex-row sm:items-center;
 	h2 {
-		@apply text-base font-semibold text-crm-text;
+		@apply text-sm font-semibold text-crm-text;
 	}
 	p {
 		@apply mt-1 max-w-xl text-xs leading-5 text-crm-muted;
@@ -69,7 +69,7 @@
 .summaryValue {
 	@apply flex shrink-0 flex-col gap-1 sm:items-end;
 	strong {
-		@apply text-3xl font-bold tracking-tight text-crm-text;
+		@apply text-3xl font-semibold tabular-nums tracking-tight text-crm-text;
 	}
 	span {
 		@apply text-xs text-crm-muted;
@@ -79,22 +79,22 @@
 	@apply flex min-w-0 flex-col gap-3;
 }
 .employeeRow {
-	@apply grid min-w-0 grid-cols-2 gap-3 rounded-panel border border-crm-border bg-crm-surface p-4 md:grid-cols-5;
+	@apply grid min-w-0 grid-cols-2 gap-3 rounded-lg border border-crm-border bg-crm-surface p-4 md:grid-cols-5;
 	h3 {
 		@apply col-span-2 break-words text-sm font-semibold text-crm-text md:col-span-5;
 	}
 	> div {
-		@apply flex flex-col items-start gap-1 text-lg font-semibold;
+		@apply flex flex-col items-start gap-1 text-base font-semibold tabular-nums;
 	}
 	> div > span {
 		@apply text-xs font-normal text-crm-muted;
 	}
 }
 .pagination {
-	@apply flex flex-wrap items-center justify-end gap-3 text-sm text-crm-muted;
+	@apply flex flex-wrap items-center justify-end gap-3 text-xs text-crm-muted;
 }
 .emptyNote {
-	@apply rounded-lg bg-crm-surface p-3 text-sm text-crm-muted;
+	@apply rounded-md bg-crm-surface-muted p-3 text-[13px] text-crm-muted;
 }
 .footnote {
 	@apply text-xs leading-5 text-crm-muted;

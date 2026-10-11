@@ -1,9 +1,16 @@
 .button {
-	@apply inline-flex min-w-0 max-w-full shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+	@apply inline-flex min-w-0 max-w-full shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md border font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50;
+	&:focus-visible {
+		outline: 2px solid rgb(var(--crm-primary));
+		outline-offset: -2px;
+	}
 }
 
 .primary {
-	@apply border-crm-action bg-crm-action text-white hover:bg-crm-action/90;
+	@apply border-crm-action bg-crm-action text-crm-action-text enabled:hover:border-crm-action-hover enabled:hover:bg-crm-action-hover;
+	&:focus-visible {
+		outline-offset: 2px;
+	}
 }
 
 .accent {
@@ -11,11 +18,11 @@
 }
 
 .secondary {
-	@apply border-crm-border bg-crm-surface text-crm-text hover:border-crm-border-strong hover:bg-crm-surface-muted;
+	@apply border-crm-border bg-crm-surface text-crm-text enabled:hover:border-crm-border-strong enabled:hover:bg-crm-surface-muted;
 }
 
 .ghost {
-	@apply border-transparent bg-transparent text-crm-muted hover:bg-primary/10 hover:text-primary;
+	@apply border-transparent bg-transparent text-crm-muted enabled:hover:bg-crm-selected enabled:hover:text-crm-text;
 }
 
 .danger {

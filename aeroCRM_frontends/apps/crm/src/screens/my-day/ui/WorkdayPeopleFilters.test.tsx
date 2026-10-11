@@ -201,7 +201,7 @@ describe('Workday scoped people filters', () => {
 				initial: { teamId: ids[0], assigneeSubject: employees[0].subject }
 			})
 		)
-		expect(screen.getByText(/В режиме «Мои задачи»/)).toBeTruthy()
+		expect(screen.queryByText(/В режиме «Мои задачи»/)).toBeNull()
 		expect(screen.queryByRole('combobox')).toBeNull()
 		expect(authenticatedRequest).not.toHaveBeenCalled()
 		expect(changed).not.toHaveBeenCalled()

@@ -1,5 +1,5 @@
 .launcher {
-	@apply fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] z-40 flex h-11 w-11 items-center justify-center rounded-full border-0 bg-crm-action p-0 text-white shadow-floating transition-colors hover:bg-crm-action/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2;
+	@apply fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] z-40 flex h-11 w-11 items-center justify-center rounded-lg border border-crm-border bg-crm-action p-0 text-crm-action-text shadow-panel transition-colors hover:bg-crm-action-hover;
 	@media (max-width: 639px) {
 		bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 12vh);
 		bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 12dvh);
@@ -9,10 +9,10 @@
 	@apply hidden;
 }
 .badge {
-	@apply absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-crm-action shadow-panel;
+	@apply absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border border-crm-border bg-crm-surface px-1 text-[10px] font-semibold text-crm-text;
 }
 .dialog {
-	@apply fixed inset-auto left-0 top-[var(--support-top,0px)] z-50 m-0 h-[var(--support-height,100dvh)] max-h-none w-full max-w-none overflow-hidden border-0 bg-crm-surface p-0 text-crm-text shadow-floating sm:bottom-5 sm:left-auto sm:right-5 sm:top-auto sm:h-[min(42rem,calc(100dvh-7rem))] sm:w-[25rem] sm:rounded-2xl sm:border sm:border-crm-border;
+	@apply fixed inset-auto left-0 top-[var(--support-top,0px)] z-50 m-0 h-[var(--support-height,100dvh)] max-h-none w-full max-w-none overflow-hidden border-0 bg-crm-surface p-0 text-crm-text shadow-floating sm:bottom-5 sm:left-auto sm:right-5 sm:top-auto sm:h-[min(42rem,calc(100dvh-7rem))] sm:w-[25rem] sm:rounded-lg sm:border sm:border-crm-border;
 }
 .dialog[data-state='open'] {
 	@apply animate-[support-slide-in_240ms_cubic-bezier(0.22,1,0.36,1)_both] motion-reduce:animate-none;
@@ -60,13 +60,13 @@
 	@apply flex shrink-0 items-center justify-between gap-3 border-b border-crm-border bg-crm-surface-muted px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))];
 }
 .header h2 {
-	@apply text-base font-bold;
+	@apply text-base font-semibold;
 }
 .header p {
 	@apply mt-1 text-xs text-crm-muted;
 }
 .iconButton {
-	@apply flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-0 bg-transparent text-crm-muted hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+	@apply flex h-11 w-11 shrink-0 items-center justify-center rounded-md border-0 bg-transparent text-crm-muted hover:bg-crm-surface-muted hover:text-crm-text;
 }
 .threadHeading {
 	@apply flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-crm-border px-4 py-3;
@@ -75,13 +75,13 @@
 	@apply w-full break-words text-sm font-semibold;
 }
 .backButton {
-	@apply text-sm text-primary;
+	@apply inline-flex min-h-11 items-center text-sm text-primary;
 }
 .newTicket {
-	@apply inline-flex min-w-0 flex-row items-center justify-center gap-2 whitespace-nowrap text-white;
+	@apply inline-flex min-w-0 flex-row items-center justify-center gap-2 whitespace-nowrap text-crm-action-text;
 }
 .newTicket svg {
-	@apply shrink-0 text-white;
+	@apply shrink-0 text-crm-action-text;
 }
 .threadHeading > span {
 	@apply text-xs text-crm-muted;
@@ -102,7 +102,7 @@
 	@apply text-sm leading-6;
 }
 .ticket {
-	@apply mb-2 flex w-full flex-col gap-2 rounded-xl border border-crm-border bg-crm-surface p-3 text-left text-sm hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+	@apply mb-2 flex min-h-11 w-full min-w-0 flex-col gap-2 rounded-lg border border-crm-border bg-crm-surface p-3 text-left text-sm hover:bg-crm-surface-muted;
 }
 .ticket strong {
 	@apply break-words;
@@ -120,20 +120,20 @@
 	@apply min-h-11 px-2 text-primary disabled:text-crm-muted disabled:opacity-50;
 }
 .message {
-	@apply mb-3 mr-5 rounded-2xl rounded-tl-sm border border-crm-border bg-crm-surface-muted p-3 text-sm;
+	@apply mb-3 mr-5 rounded-lg rounded-tl-sm bg-crm-surface-muted p-3 text-sm;
 }
 .ownMessage {
-	@apply mb-3 ml-5 rounded-2xl rounded-tr-sm border border-primary/20 bg-primary/10 p-3 text-sm;
+	@apply mb-3 ml-5 rounded-lg rounded-tr-sm bg-primary/10 p-3 text-sm;
 }
 .message p,
 .ownMessage p {
-	@apply whitespace-pre-wrap break-words leading-6;
+	@apply whitespace-pre-wrap break-words leading-6 [overflow-wrap:anywhere];
 }
 .messageMeta {
 	@apply mb-1 flex flex-wrap items-center justify-between gap-2 text-xs text-crm-muted;
 }
 .attachmentLink {
-	@apply mt-2 block max-w-full break-all text-left text-xs text-primary underline disabled:opacity-50;
+	@apply mt-2 block min-h-11 max-w-full break-all text-left text-xs text-primary underline disabled:opacity-50 lg:min-h-9;
 }
 .olderButton {
 	@apply mb-4 min-h-11 w-full rounded-lg border border-crm-border px-3 py-2 text-sm text-primary disabled:opacity-50;
@@ -146,19 +146,22 @@
 }
 .composer input:not([type='file']),
 .composer textarea {
-	@apply w-full rounded-lg border border-crm-border bg-crm-surface px-3 py-2 text-sm font-normal text-crm-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-crm-surface-muted;
+	@apply min-h-11 min-w-0 w-full rounded-md border border-crm-border bg-crm-surface px-3 py-2 text-base font-normal text-crm-text outline-none focus:border-primary focus:ring-0 focus-visible:outline-none disabled:bg-crm-surface-muted sm:text-sm;
 }
 .composer textarea {
 	@apply min-h-20 resize-none;
 }
 .composerActions {
-	@apply flex items-center justify-between gap-2;
+	@apply flex min-w-0 flex-wrap items-center justify-between gap-2;
 }
 .fileButton {
 	@apply relative inline-flex min-h-11 cursor-pointer items-center text-xs font-medium text-primary;
 }
 .fileButton input {
 	@apply absolute inset-0 w-full cursor-pointer opacity-0 disabled:cursor-not-allowed;
+}
+.fileButton:focus-within {
+	@apply rounded-md outline outline-2 outline-offset-2 outline-primary;
 }
 .limit {
 	@apply text-[10px] leading-4 text-crm-muted;
@@ -176,7 +179,7 @@
 	@apply min-w-0 flex-1 break-words;
 }
 .files button {
-	@apply min-h-9 px-2 text-primary disabled:opacity-50;
+	@apply min-h-11 px-2 text-primary disabled:opacity-50 lg:min-h-9;
 }
 .error {
 	@apply text-xs leading-5 text-crm-danger;
@@ -185,7 +188,7 @@
 	@apply absolute inset-0 z-10 flex min-h-0 flex-col items-center justify-center gap-4 bg-crm-surface p-4;
 }
 .preview > button {
-	@apply absolute right-3 top-3 bg-crm-surface shadow-panel;
+	@apply absolute right-3 top-3 border border-crm-border bg-crm-surface;
 }
 .preview img {
 	@apply max-h-[80%] max-w-full object-contain;

@@ -1,5 +1,5 @@
 .state {
-	@apply flex min-h-64 w-full flex-col items-center justify-center rounded-2xl border border-crm-border bg-crm-surface px-6 py-10 text-center;
+	@apply flex min-h-64 w-full flex-col items-center justify-center rounded-lg border border-crm-border bg-crm-surface px-6 py-10 text-center;
 }
 
 .compact {
@@ -7,7 +7,7 @@
 }
 
 .icon {
-	@apply mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl;
+	@apply mb-4 inline-flex h-12 w-12 items-center justify-center rounded-lg;
 }
 
 .loadingIcon {
@@ -35,7 +35,7 @@
 }
 
 .title {
-	@apply text-base font-bold text-crm-text;
+	@apply text-base font-semibold text-crm-text;
 }
 
 .description {

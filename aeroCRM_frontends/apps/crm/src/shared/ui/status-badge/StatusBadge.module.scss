@@ -1,5 +1,5 @@
 .badge {
-	@apply inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold;
+	@apply inline-flex w-fit items-center gap-1.5 max-w-full whitespace-normal rounded-md border border-transparent px-2 py-1 text-xs font-medium;
 }
 
 .dot {
@@ -7,23 +7,23 @@
 }
 
 .neutral {
-	@apply border-crm-border bg-crm-surface-muted text-crm-muted;
+	@apply border-transparent bg-crm-surface-muted text-crm-muted;
 }
 
 .success {
-	@apply border-crm-success/20 bg-crm-success/10 text-crm-success;
+	@apply border-transparent bg-crm-success/10 text-crm-success;
 }
 
 .warning {
-	@apply border-crm-warning/20 bg-crm-warning/10 text-crm-warning;
+	@apply border-transparent bg-crm-warning/10 text-crm-warning;
 }
 
 .danger {
-	@apply border-crm-danger/20 bg-crm-danger/10 text-crm-danger;
+	@apply border-transparent bg-crm-danger/10 text-crm-danger;
 }
 
 .info {
-	@apply border-crm-info/20 bg-crm-info/10 text-crm-info;
+	@apply border-transparent bg-crm-info/10 text-crm-info;
 }
 
 .accent {

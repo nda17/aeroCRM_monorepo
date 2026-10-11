@@ -1,29 +1,43 @@
 .screen {
-	@apply flex min-w-0 flex-col gap-4;
+	@apply flex min-w-0 flex-col gap-3;
 }
 .filters {
-	@apply min-w-0 rounded-xl border border-crm-border bg-crm-surface p-3 sm:p-4;
+	@apply min-w-0 rounded-lg border border-crm-border bg-crm-surface p-3 sm:p-4;
 }
 .toolbar {
-	@apply mb-3 flex flex-wrap items-center justify-between gap-2;
+	@apply mb-2 flex flex-wrap items-center justify-between gap-2;
 }
 .viewSwitch {
 	@apply flex flex-wrap items-center gap-2;
 }
+.viewSwitch[role='group'] {
+	@apply gap-1 rounded-lg border border-crm-border bg-crm-surface-muted p-1;
+
+	> button {
+		@apply border-transparent bg-transparent text-crm-muted hover:bg-crm-surface hover:text-crm-text;
+	}
+
+	> button[aria-pressed='true'] {
+		@apply border-crm-border bg-crm-surface text-crm-text shadow-sm;
+	}
+}
 .filterGrid {
-	@apply grid min-w-0 grid-cols-1 items-end gap-3 min-[360px]:grid-cols-2 xl:grid-cols-4;
+	@apply grid min-w-0 grid-cols-1 items-end gap-x-3 gap-y-2 min-[360px]:grid-cols-2 xl:grid-cols-[minmax(180px,1.5fr)_minmax(140px,1fr)_minmax(160px,1fr)_auto];
+}
+.applyFilters {
+	@apply w-fit justify-self-start xl:justify-self-end;
 }
 .advanced {
-	@apply col-span-full min-w-0 rounded-xl border border-crm-border bg-crm-surface-muted;
+	@apply col-span-full min-w-0 rounded-md;
 }
 .advanced > summary {
-	@apply min-h-11 cursor-pointer rounded-xl px-3 py-3 text-sm font-medium text-crm-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary;
+	@apply min-h-11 w-fit cursor-pointer rounded-md py-3 text-sm font-medium text-crm-muted hover:text-crm-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 lg:min-h-9 lg:py-2 lg:text-[13px];
 }
 .advancedGrid {
-	@apply grid min-w-0 grid-cols-1 gap-3 px-3 pb-3 sm:grid-cols-2 xl:grid-cols-3;
+	@apply grid min-w-0 grid-cols-1 gap-3 rounded-lg border border-crm-border bg-crm-surface-muted p-3 sm:grid-cols-2 xl:grid-cols-3;
 }
 .hint {
-	@apply text-sm leading-5 text-crm-muted;
+	@apply text-xs leading-5 text-crm-muted;
 }
 .filters > .hint {
 	@apply mt-3;
@@ -32,16 +46,16 @@
 	@apply grid grid-cols-2 gap-3 lg:grid-cols-4;
 }
 .summaryItem {
-	@apply flex min-w-0 flex-col items-start gap-1 rounded-xl border border-crm-border bg-crm-surface p-3 text-left transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed;
+	@apply flex min-w-0 flex-col items-start gap-1 rounded-lg border border-crm-border bg-crm-surface p-3 text-left text-xs transition-colors hover:border-crm-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed lg:flex-row lg:items-center lg:justify-between;
 }
 .summaryValue {
-	@apply text-2xl font-semibold text-crm-text;
+	@apply text-2xl font-semibold tabular-nums tracking-tight text-crm-text;
 }
 .overdue {
 	@apply border-crm-danger/30 text-crm-danger;
 }
 .pagination {
-	@apply flex flex-wrap items-center justify-between gap-3 text-sm text-crm-muted;
+	@apply flex flex-wrap items-center justify-between gap-3 text-xs text-crm-muted;
 }
 .copy {
 	@apply flex min-w-0 flex-col items-start gap-2;
@@ -50,25 +64,25 @@
 	@apply flex min-w-0 flex-col gap-3;
 }
 .groupHeading {
-	@apply text-lg font-semibold text-crm-text;
+	@apply text-sm font-semibold text-crm-text;
 }
 .taskTitle {
-	@apply min-h-11 max-w-full break-words text-left font-semibold text-crm-text underline-offset-4 hover:underline focus-visible:rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary;
+	@apply min-h-11 max-w-full break-words text-left text-sm font-semibold text-crm-text underline-offset-4 hover:text-primary hover:underline focus-visible:rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary lg:min-h-9;
 }
 .board {
-	@apply grid min-w-0 grid-cols-1 items-start gap-4 xl:grid-cols-2 2xl:grid-cols-4;
+	@apply grid min-w-0 grid-cols-1 items-start gap-3 xl:grid-cols-2 2xl:grid-cols-4;
 }
 .compactBoard {
 	@apply 2xl:grid-cols-2;
 }
 .column {
-	@apply flex min-w-0 flex-col gap-4 rounded-panel border border-crm-border bg-crm-surface-muted p-3 transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none sm:p-4;
+	@apply flex min-w-0 flex-col gap-3 rounded-lg border border-crm-border bg-crm-surface-muted p-3 transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none;
 }
 .columnActive {
 	@apply border-primary ring-2 ring-primary/20;
 }
 .columnHeading {
-	@apply flex items-center justify-between gap-3 font-semibold text-crm-text [overflow-wrap:anywhere];
+	@apply flex items-center justify-between gap-3 text-sm font-semibold text-crm-text [overflow-wrap:anywhere];
 
 	> span {
 		@apply shrink-0;
@@ -78,7 +92,7 @@
 	@apply flex min-w-0 flex-col gap-3;
 }
 .card {
-	@apply flex min-w-0 flex-col gap-3 rounded-2xl border border-crm-border bg-crm-surface p-4;
+	@apply flex min-w-0 flex-col gap-3 rounded-lg border border-crm-border bg-crm-surface p-3;
 }
 .cardTop {
 	@apply flex min-w-0 items-start gap-2;
@@ -87,7 +101,7 @@
 	@apply flex-1;
 }
 .dragHandle {
-	@apply flex h-11 w-11 shrink-0 touch-none items-center justify-center rounded-xl text-crm-muted transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-default disabled:opacity-40;
+	@apply flex h-11 w-11 shrink-0 touch-none items-center justify-center rounded-md text-crm-muted transition-colors hover:bg-crm-surface-muted hover:text-crm-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-default disabled:opacity-40 lg:h-9 lg:w-9;
 }
 .dragHandle:not(:disabled) {
 	@apply cursor-grab active:cursor-grabbing;
@@ -99,37 +113,37 @@
 	@apply pointer-events-none rotate-2 scale-[1.025] border-primary/50 shadow-floating motion-reduce:rotate-0 motion-reduce:scale-100;
 }
 .overlayTitle {
-	@apply break-words text-base font-semibold text-crm-text;
+	@apply break-words text-sm font-semibold text-crm-text;
 }
 .dropHint {
-	@apply flex min-h-20 items-center justify-center rounded-2xl border-2 border-dashed border-primary/20 bg-primary/5 p-4 text-center text-sm text-crm-muted transition-colors duration-200 motion-reduce:transition-none;
+	@apply flex min-h-20 items-center justify-center rounded-lg border border-dashed border-crm-border-strong bg-crm-surface/50 p-4 text-center text-xs text-crm-muted transition-colors duration-200 motion-reduce:transition-none;
 }
 .dropHintActive {
 	@apply border-primary/70 bg-primary/10 text-primary;
 }
 .cardFooter {
-	@apply flex flex-wrap items-center justify-between gap-2 text-sm text-crm-muted;
+	@apply flex flex-wrap items-center justify-between gap-2 text-xs text-crm-muted;
 }
 .assigneeName {
 	@apply min-w-0 break-words [overflow-wrap:anywhere];
 }
 .error {
-	@apply flex flex-col items-start gap-3 rounded-2xl border border-crm-danger/30 bg-crm-danger/5 p-4 text-sm text-crm-danger;
+	@apply flex flex-col items-start gap-3 rounded-lg border border-crm-danger/30 bg-crm-danger/5 p-4 text-sm text-crm-danger;
 }
 .mobileWide {
 	@apply max-md:col-span-full;
 }
 .inboxSummary {
-	@apply flex min-w-0 flex-wrap items-center justify-between gap-4 rounded-panel border border-crm-border bg-crm-surface p-4;
+	@apply flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-crm-border bg-crm-surface px-3 py-2;
 }
 .inboxLink {
-	@apply flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-1 rounded-md text-crm-text outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-primary;
+	@apply flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-1 rounded-md text-sm text-crm-text hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 lg:min-h-9 lg:flex-row lg:items-center lg:justify-start lg:gap-3;
 }
 .empty {
 	@apply py-6 text-center text-sm text-crm-muted;
 }
 .overviewLink {
-	@apply inline-flex min-h-11 items-center justify-center rounded-xl border border-crm-border bg-crm-surface px-3 py-2 text-sm font-medium text-crm-text hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+	@apply inline-flex min-h-11 items-center justify-center rounded-md border border-crm-border bg-crm-surface px-3 py-2 text-sm font-medium text-crm-text hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:min-h-9 lg:text-[13px];
 }
 .filterChips {
 	@apply flex flex-wrap items-center gap-2;
@@ -145,38 +159,31 @@
 }
 
 .scopeFilter {
-	@apply rounded-xl bg-primary p-3;
-
-	label,
-	button,
-	select,
-	select + span {
-		@apply text-white;
-	}
-
-	select {
-		@apply border-white/40 bg-primary hover:border-white focus:border-white focus:ring-white/30;
-	}
-
-	option {
-		@apply bg-crm-surface text-crm-text;
-	}
+	@apply min-w-0;
 }
 .peopleFilters {
 	@apply col-span-full min-w-0;
 }
 .historySwitch {
-	@apply mb-4 flex flex-wrap gap-2;
+	@apply mb-3 flex flex-wrap gap-x-5 gap-y-0 border-b border-crm-border;
+
+	> button {
+		@apply rounded-none border-x-0 border-b-2 border-t-0 border-transparent bg-transparent px-0 text-crm-muted hover:bg-transparent hover:text-crm-text;
+	}
+
+	> button[aria-pressed='true'] {
+		@apply border-b-primary text-crm-text;
+	}
 }
 .draftNotice {
-	@apply mt-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-medium text-crm-text;
+	@apply mt-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-[13px] font-medium text-crm-text;
 }
 .appliedFilters {
-	@apply mb-2 mt-4 text-sm font-semibold text-crm-text;
+	@apply mb-1 mt-2 text-xs font-medium text-crm-muted;
 }
 
 .overdueBadge {
-	@apply inline-flex min-h-9 items-center gap-2 rounded-lg border border-crm-danger/40 bg-crm-danger/10 px-3 py-1.5 text-sm font-bold text-crm-danger;
+	@apply inline-flex min-h-9 items-center gap-2 rounded-md border border-crm-danger/40 bg-crm-danger/10 px-3 py-1.5 text-xs font-semibold text-crm-danger;
 
 	svg {
 		@apply shrink-0;
@@ -187,4 +194,47 @@
 }
 .overdueRow > td:first-child {
 	@apply border-l-4 border-l-crm-danger;
+}
+
+.calendar {
+	@apply flex min-w-0 flex-col gap-3;
+}
+.calendarToolbar {
+	@apply flex flex-wrap items-center justify-between gap-3;
+}
+.calendarHeading {
+	@apply min-w-0;
+
+	h2 {
+		@apply text-base font-semibold text-crm-text;
+	}
+}
+.calendarNavigation {
+	@apply flex min-w-0 max-w-full flex-wrap items-center gap-2;
+}
+.calendarDate {
+	@apply w-40;
+}
+.calendarViewport {
+	@apply min-w-0 overflow-x-auto pb-2;
+}
+.calendarGrid {
+	@apply grid min-w-0 grid-cols-1 items-start gap-3 md:min-w-[70rem] md:grid-cols-7;
+}
+.calendarDay {
+	@apply flex min-w-0 flex-col gap-2 rounded-lg border border-crm-border bg-crm-surface-muted p-2;
+
+	&[data-today='true'] {
+		@apply border-primary/50;
+	}
+}
+.calendarDayHeading {
+	@apply flex flex-wrap items-center justify-between gap-1 text-[13px] font-semibold text-crm-text;
+
+	> span {
+		@apply text-xs font-medium text-primary;
+	}
+}
+.calendarEmpty {
+	@apply py-5 text-center text-xs leading-5 text-crm-muted;
 }

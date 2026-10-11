@@ -42,6 +42,9 @@ import {
 	workdayLayoutStorageKey,
 	readStoredWorkdayLayout,
 	writeStoredWorkdayLayout,
+	workdayCalendarDay,
+	workdayCalendarWeek,
+	workdayCalendarFilters,
 	type WorkdayView
 } from '../model/workday-view'
 import { WorkdayCollection } from './WorkdayCollection'
@@ -82,11 +85,21 @@ const MyDayContent = ({
 		key: string | null
 		view: WorkdayView
 	}>({ key: null, view: 'list' })
-	if (hydrated && storageKey && layout.key !== storageKey)
+	if (hydrated && storageKey && layout.key !== storageKey) {
+		const storedView = readStoredWorkdayLayout(storageKey)
 		setLayout({
 			key: storageKey,
-			view: readStoredWorkdayLayout(storageKey)
+			view: storedView
 		})
+		if (storedView === 'calendar') {
+			const day = workdayCalendarDay(
+				new Date().toISOString(),
+				filters.timeZone
+			)
+			const weekFilters = day && workdayCalendarFilters(filters, day)
+			if (weekFilters) setFilters(weekFilters)
+		}
+	}
 	const view = layout.view
 	const setView = (next: WorkdayView) => {
 		setLayout({ key: storageKey, view: next })
@@ -121,7 +134,7 @@ const MyDayContent = ({
 		return true
 	}
 	const savedParameters: SavedTaskParameters = {
-		layout: view,
+		layout: view === 'calendar' ? 'list' : view,
 		period: filters.period,
 		timeZone: filters.timeZone,
 		scope: filters.scope,
@@ -140,6 +153,26 @@ const MyDayContent = ({
 		page: 1,
 		pageSize: 1
 	})
+	const selectCalendarDate = (day: string) => {
+		const next = workdayCalendarFilters(filters, day)
+		if (!next || !command.canClose() || !context.current()) return
+		draftGuard.confirmDiscard(() => {
+			if (!command.canClose() || !context.current()) return
+			setSelected(null)
+			setFilters(next)
+			// "Today" may revisit the same week after midnight; refresh its snapshot.
+			if (
+				filters.period === 'RANGE' &&
+				filters.from === next.from &&
+				filters.to === next.to &&
+				filters.page === 1
+			)
+				void client.invalidateQueries({
+					queryKey: ['crm-workday', 'list', ...context.key],
+					refetchType: 'active'
+				})
+		})
+	}
 	// A newly mounted child observes the same stale permissions query and may
 	// trigger a background refetch. Keep that bound subtree mounted (but hidden
 	// and inert) until verification finishes; unmounting would refetch forever.
@@ -235,6 +268,98 @@ const MyDayContent = ({
 				description="Ваша роль не даёт доступа к задачам сотрудников."
 			/>
 		)
+	const periodSummary = (
+		<>
+			{overview.data ? (
+				<p className={styles.hint}>
+					Данные на{' '}
+					{new Intl.DateTimeFormat('ru-RU', {
+						dateStyle: 'medium',
+						timeStyle: 'medium',
+						timeZone: filters.timeZone
+					}).format(new Date(overview.data.asOf))}{' '}
+					({filters.timeZone}). Для актуальных сроков и счётчиков нажмите
+					«Обновить».
+				</p>
+			) : null}
+			{overview.query.isError ? (
+				<div role="alert" className={styles.error}>
+					Счётчики временно недоступны.
+					<Button
+						variant="secondary"
+						onClick={() => void overview.query.refetch()}
+					>
+						Повторить
+					</Button>
+				</div>
+			) : (
+				<section
+					className={styles.summary}
+					aria-label="Сводка по выбранному периоду"
+					aria-busy={overview.query.isFetching}
+				>
+					{(
+						[
+							['OPEN', 'К выполнению'],
+							['IN_PROGRESS', 'В работе'],
+							['COMPLETED', 'Готово']
+						] as const
+					).map(([status, label]) => (
+						<button
+							type="button"
+							className={styles.summaryItem}
+							key={status}
+							disabled={command.pending || command.ambiguous}
+							onClick={() => {
+								if (!command.canClose()) return
+								draftGuard.confirmDiscard(() => {
+									if (!command.canClose() || !context.current()) return
+									setSelected(null)
+									setView('list')
+									setFilters(value => ({ ...value, status, page: 1 }))
+									toast(`Показаны задачи: ${label.toLowerCase()}`)
+								})
+							}}
+						>
+							<span className={styles.hint}>{label}</span>
+							<strong className={styles.summaryValue}>
+								{overview.data?.counts[status] ?? '—'}
+							</strong>
+						</button>
+					))}
+					<button
+						className={`${styles.summaryItem} ${styles.overdue}`}
+						disabled={command.pending || command.ambiguous}
+						onClick={() => {
+							if (!command.canClose()) return
+							draftGuard.confirmDiscard(() => {
+								if (!command.canClose() || !context.current()) return
+								setSelected(null)
+								if (view === 'calendar') setView('list')
+								setFilters(value => ({
+									...value,
+									period: 'OVERDUE',
+									from: undefined,
+									to: undefined,
+									status: 'ACTIVE',
+									page: 1
+								}))
+								toast('Показаны просроченные задачи')
+							})
+						}}
+					>
+						<span>Просрочено за все дни</span>
+						<strong className={styles.summaryValue}>
+							{overview.data?.overdueCount ?? '—'}
+						</strong>
+					</button>
+				</section>
+			)}
+			<WorkdayInboxSummary
+				disabled={command.pending || command.ambiguous}
+			/>
+		</>
+	)
 	return (
 		<>
 			{verifyingBoundAccess ? (
@@ -380,6 +505,11 @@ const MyDayContent = ({
 						context={context}
 						scope="TASKS"
 						parameters={savedParameters}
+						saveNotice={
+							view === 'calendar'
+								? 'Календарный вид запоминается в этом браузере. Сохранённое представление запомнит фильтры недели и откроется списком.'
+								: undefined
+						}
 						onOpen={parameters => {
 							if (!command.canClose() || !context.current()) return false
 							const next = parameters as SavedTaskParameters
@@ -420,15 +550,47 @@ const MyDayContent = ({
 							authority: context.permissions.data
 						}}
 						onChange={next => {
-							if (!command.canClose()) return false
+							if (!command.canClose() || !context.current()) return false
 							draftGuard.confirmDiscard(() => {
+								if (!command.canClose() || !context.current()) return
+								if (view === 'calendar') {
+									const week = next.from && workdayCalendarWeek(next.from)
+									if (
+										next.period !== 'RANGE' ||
+										!week ||
+										next.from !== week.from ||
+										next.to !== week.to
+									)
+										setView('list')
+								}
 								setSelected(null)
 								setFilters(next)
 							})
 						}}
 						onViewChange={next => {
-							if (!command.canClose()) return false
+							if (!command.canClose() || !context.current()) return false
 							draftGuard.confirmDiscard(() => {
+								if (!command.canClose() || !context.current()) return
+								if (next === 'calendar') {
+									const day =
+										filters.from ??
+										workdayCalendarDay(
+											overview.data?.range?.from ??
+												overview.data?.asOf ??
+												new Date().toISOString(),
+											filters.timeZone
+										)
+									const weekFilters =
+										day && workdayCalendarFilters(filters, day)
+									if (!weekFilters) {
+										toast.error('Не удалось определить неделю календаря')
+										return
+									}
+									setSelected(null)
+									setView(next)
+									setFilters(weekFilters)
+									return
+								}
 								setSelected(null)
 								setView(next)
 								setFilters(value => ({
@@ -448,93 +610,13 @@ const MyDayContent = ({
 							})
 						}}
 					/>
-					{overview.data ? (
-						<p className={styles.hint}>
-							Данные на{' '}
-							{new Intl.DateTimeFormat('ru-RU', {
-								dateStyle: 'medium',
-								timeStyle: 'medium',
-								timeZone: filters.timeZone
-							}).format(new Date(overview.data.asOf))}{' '}
-							({filters.timeZone}). Для актуальных сроков и счётчиков
-							нажмите «Обновить».
-						</p>
-					) : null}
-					{overview.query.isError ? (
-						<div role="alert" className={styles.error}>
-							Счётчики временно недоступны.
-							<Button
-								variant="secondary"
-								onClick={() => void overview.query.refetch()}
-							>
-								Повторить
-							</Button>
-						</div>
-					) : (
-						<section
-							className={styles.summary}
-							aria-label="Сводка по выбранному периоду"
-							aria-busy={overview.query.isFetching}
-						>
-							{(
-								[
-									['OPEN', 'К выполнению'],
-									['IN_PROGRESS', 'В работе'],
-									['COMPLETED', 'Готово']
-								] as const
-							).map(([status, label]) => (
-								<button
-									type="button"
-									className={styles.summaryItem}
-									key={status}
-									disabled={command.pending || command.ambiguous}
-									onClick={() => {
-										if (!command.canClose()) return
-										setSelected(null)
-										setView('list')
-										setFilters(value => ({ ...value, status, page: 1 }))
-										toast(`Показаны задачи: ${label.toLowerCase()}`)
-									}}
-								>
-									<span className={styles.hint}>{label}</span>
-									<strong className={styles.summaryValue}>
-										{overview.data?.counts[status] ?? '—'}
-									</strong>
-								</button>
-							))}
-							<button
-								className={`${styles.summaryItem} ${styles.overdue}`}
-								disabled={command.pending || command.ambiguous}
-								onClick={() => {
-									if (!command.canClose()) return
-									setSelected(null)
-									setFilters(value => ({
-										...value,
-										period: 'OVERDUE',
-										from: undefined,
-										to: undefined,
-										status: 'ACTIVE',
-										page: 1
-									}))
-									toast('Показаны просроченные задачи')
-								}}
-							>
-								<span>Просрочено за все дни</span>
-								<strong className={styles.summaryValue}>
-									{overview.data?.overdueCount ?? '—'}
-								</strong>
-							</button>
-						</section>
-					)}
-					<WorkdayInboxSummary
-						disabled={command.pending || command.ambiguous}
-					/>
+					{view !== 'calendar' ? periodSummary : null}
 					<WorkdayCollection
 						key={JSON.stringify([
 							context.key,
 							{ ...filters, page: undefined },
 							view,
-							boundPlanner?.version
+							view === 'board' ? boundPlanner?.version : undefined
 						])}
 						planner={boundPlanner}
 						settingsPending={planner.query.isFetching}
@@ -543,6 +625,10 @@ const MyDayContent = ({
 						onColumn={moveToColumn}
 						filters={filters}
 						view={view}
+						onCalendarDate={selectCalendarDate}
+						calendarNavigationDisabled={
+							command.pending || command.ambiguous || !context.canRead
+						}
 						canWrite={context.canWrite && !command.locked}
 						onOpen={task => {
 							if (command.canClose())
@@ -561,7 +647,9 @@ const MyDayContent = ({
 						onResetFilters={() => {
 							if (command.canClose())
 								draftGuard.confirmDiscard(() => {
+									if (!command.canClose() || !context.current()) return
 									setSelected(null)
+									if (view === 'calendar') setView('list')
 									setFilters({
 										...initialWorkdayFilters(),
 										status: undefined,
@@ -578,6 +666,7 @@ const MyDayContent = ({
 								setFilters(value => ({ ...value, page }))
 						}}
 					/>
+					{view === 'calendar' ? periodSummary : null}
 					{selected ? (
 						<WorkdayTaskDrawer
 							taskId={selected}

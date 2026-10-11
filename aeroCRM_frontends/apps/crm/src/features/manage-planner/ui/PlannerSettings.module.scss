@@ -8,7 +8,7 @@
 	}
 }
 .row {
-	@apply flex min-w-0 flex-col gap-3 rounded-xl border border-crm-border bg-crm-surface-muted p-3;
+	@apply flex min-w-0 flex-col gap-3 rounded-lg border border-crm-border bg-crm-surface p-4;
 }
 .fields {
 	@apply grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2;
@@ -20,7 +20,7 @@
 	@apply text-sm leading-6 text-crm-muted;
 }
 .error {
-	@apply flex flex-col items-start gap-3 rounded-xl border border-crm-danger/30 bg-crm-danger/5 p-4 text-sm text-crm-danger;
+	@apply flex min-w-0 flex-col items-start gap-3 rounded-lg border border-crm-danger/30 bg-crm-danger/5 p-4 text-sm text-crm-danger;
 }
 .archived {
 	@apply border-dashed;

@@ -101,15 +101,7 @@ export const WorkdayPeopleFilters = forwardRef<
 			}
 		}
 	}))
-	if (scope === 'MINE')
-		return (
-			<p className={styles.hint}>
-				{authority?.dataScope !== 'OWN'
-					? 'Чтобы выбрать сотрудника по ФИО, переключите «Чьи задачи» на доступную вам область «Мои отделы» или «Вся команда». '
-					: ''}
-				В режиме «Мои задачи» показываются только назначенные вам задачи.
-			</p>
-		)
+	if (scope === 'MINE') return null
 	return (
 		<div
 			className={styles.content}

@@ -4,11 +4,14 @@
 
 @layer base {
 	:root {
-		@apply [color-scheme:light] [--crm-primary:123_63_160] [--crm-bg:248_245_255] [--crm-surface:255_255_255] [--crm-surface-muted:250_248_255] [--crm-border:224_214_240] [--crm-border-strong:196_168_232] [--crm-text:26_26_26] [--crm-muted:103_91_112] [--crm-success:32_118_64] [--crm-warning:129_84_13] [--crm-danger:185_52_40] [--crm-info:39_98_138];
+		@apply [color-scheme:light] [--crm-primary:121_84_149] [--crm-action:112_71_152] [--crm-action-text:255_255_255] [--crm-action-hover:96_58_133] [--crm-bg:255_255_255] [--crm-surface:255_255_255] [--crm-surface-muted:245_246_248] [--crm-sidebar:246_247_248] [--crm-selected:238_233_243] [--crm-border:228_230_233] [--crm-border-strong:196_200_207] [--crm-text:38_40_45] [--crm-muted:104_113_124] [--crm-success:57_111_80] [--crm-warning:131_86_42] [--crm-danger:156_70_58] [--crm-info:57_99_134];
+		--color-surface: rgb(var(--crm-surface));
+		--color-text: rgb(var(--crm-text));
+		--color-border: rgb(var(--crm-border));
 	}
 
 	:root[data-theme='dark'] {
-		@apply [color-scheme:dark] [--crm-primary:205_164_244] [--crm-bg:18_16_25] [--crm-surface:28_24_37] [--crm-surface-muted:34_29_45] [--crm-border:66_55_82] [--crm-border-strong:132_110_160] [--crm-text:243_238_250] [--crm-muted:188_177_203] [--crm-success:112_216_155] [--crm-warning:241_196_110] [--crm-danger:255_153_142] [--crm-info:130_196_242];
+		@apply [color-scheme:dark] [--crm-primary:211_197_223] [--crm-action:227_227_227] [--crm-action-text:36_36_36] [--crm-action-hover:255_255_255] [--crm-bg:24_24_24] [--crm-surface:37_37_37] [--crm-surface-muted:33_33_33] [--crm-sidebar:32_32_32] [--crm-selected:51_51_51] [--crm-border:52_52_52] [--crm-border-strong:80_80_80] [--crm-text:229_229_229] [--crm-muted:171_171_171] [--crm-success:161_193_174] [--crm-warning:205_179_152] [--crm-danger:217_164_153] [--crm-info:161_185_205];
 	}
 
 	*,
@@ -31,7 +34,8 @@
 	}
 
 	body {
-		@apply m-0 bg-crm-bg font-sans text-crm-text antialiased;
+		@apply m-0 bg-crm-bg font-sans text-sm leading-relaxed text-crm-text antialiased;
+		letter-spacing: -0.012em;
 	}
 
 	a {
@@ -58,7 +62,8 @@
 	}
 
 	:focus-visible {
-		@apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-crm-surface;
+		outline: 2px solid rgb(var(--crm-primary));
+		outline-offset: 2px;
 	}
 
 	::selection {

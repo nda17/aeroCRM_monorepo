@@ -5,10 +5,10 @@
 	@apply grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end;
 }
 .fieldsGrid {
-	@apply grid min-w-0 gap-4 sm:grid-cols-2;
+	@apply grid min-w-0 grid-cols-1 gap-4;
 }
 .card {
-	@apply flex min-w-0 flex-col gap-4 rounded-xl border border-crm-border bg-crm-surface p-4;
+	@apply flex min-w-0 flex-col gap-4 rounded-lg border border-crm-border bg-crm-surface p-4;
 }
 .heading {
 	@apply flex min-w-0 flex-wrap items-start justify-between gap-3;
@@ -29,10 +29,10 @@
 	@apply break-words text-sm leading-6 text-crm-muted;
 }
 .warning {
-	@apply flex min-w-0 flex-col gap-3 rounded-xl border border-crm-warning/30 bg-crm-warning/10 p-4 text-sm leading-6 text-crm-text;
+	@apply flex min-w-0 flex-col gap-3 rounded-lg border border-crm-warning/30 bg-crm-warning/10 p-4 text-sm leading-6 text-crm-text;
 }
 .error {
-	@apply rounded-xl border border-crm-danger/20 bg-crm-danger/10 p-3 text-sm leading-6 text-crm-danger;
+	@apply rounded-lg border border-crm-danger/20 bg-crm-danger/10 p-3 text-sm leading-6 text-crm-danger;
 }
 .actions {
 	@apply flex min-w-0 flex-wrap gap-2;
@@ -54,4 +54,10 @@
 }
 .form {
 	@apply m-0 flex min-w-0 flex-col gap-4 border-0 p-0;
+}
+
+@container (min-width: 600px) {
+	.fieldsGrid {
+		@apply grid-cols-2;
+	}
 }

@@ -5,7 +5,7 @@
 	@apply grid min-w-0 gap-6 lg:grid-cols-2;
 }
 .card {
-	@apply min-w-0 rounded-2xl border border-crm-border bg-crm-surface p-4 sm:p-6;
+	@apply min-w-0 rounded-lg border border-crm-border bg-crm-surface p-4 sm:p-5;
 }
 
 .orderCard {
@@ -33,10 +33,10 @@
 	}
 }
 .tag {
-	@apply rounded-full bg-crm-surface-muted px-3 py-1 text-xs font-medium text-crm-muted;
+	@apply rounded-md bg-crm-surface-muted px-2 py-1 text-xs font-medium text-crm-muted;
 }
 .quote {
-	@apply min-w-0 rounded-xl border border-crm-info/20 bg-crm-info/10 p-4 sm:p-5;
+	@apply min-w-0 rounded-lg bg-crm-surface-muted p-4 sm:p-5;
 }
 .facts {
 	@apply flex min-w-0 flex-col gap-3;
@@ -64,13 +64,13 @@
 	@apply flex min-w-0 flex-col gap-4;
 }
 .fields {
-	@apply grid min-w-0 gap-4 sm:grid-cols-2;
+	@apply grid min-w-0 grid-cols-1 gap-4;
 }
 .actions {
 	@apply flex flex-wrap items-center gap-3;
 }
 .consent {
-	@apply flex items-start gap-3 rounded-xl border border-crm-border p-4 text-sm leading-6 text-crm-text;
+	@apply flex min-h-11 min-w-0 items-start gap-3 border-t border-crm-border pt-4 text-sm leading-6 text-crm-text;
 
 	input {
 		@apply mt-1 h-4 w-4 shrink-0 accent-crm-info;
@@ -80,11 +80,17 @@
 	@apply whitespace-pre-wrap break-words text-sm leading-6 text-crm-muted;
 }
 .notice {
-	@apply rounded-xl border border-crm-warning/20 bg-crm-warning/10 p-4 text-sm leading-6 text-crm-warning;
+	@apply rounded-lg border border-crm-warning/20 bg-crm-warning/10 p-4 text-sm leading-6 text-crm-warning;
 }
 .error {
-	@apply rounded-xl border border-crm-danger/20 bg-crm-danger/10 p-4 text-sm leading-6 text-crm-danger;
+	@apply rounded-lg border border-crm-danger/20 bg-crm-danger/10 p-4 text-sm leading-6 text-crm-danger;
 }
 .link {
-	@apply inline-flex min-h-10 items-center gap-2 rounded-lg font-medium text-crm-info underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-crm-info;
+	@apply inline-flex min-h-11 items-center gap-2 rounded-md font-medium text-crm-info underline underline-offset-4;
+}
+
+@container (min-width: 600px) {
+	.fields {
+		@apply grid-cols-2;
+	}
 }

@@ -2,7 +2,7 @@
 	@apply flex min-w-0 flex-col gap-5;
 }
 .notice {
-	@apply rounded-xl border border-crm-border bg-crm-surface-muted p-4 text-sm leading-relaxed text-crm-muted;
+	@apply rounded-lg bg-crm-surface-muted p-4 text-sm leading-relaxed text-crm-muted;
 }
 .note {
 	@apply text-sm leading-relaxed text-crm-muted;
@@ -15,17 +15,17 @@
 }
 .preview h3,
 .receipt h3 {
-	@apply font-bold text-crm-text;
+	@apply font-semibold text-crm-text;
 }
 .preview p {
 	@apply text-sm text-crm-muted;
 }
 .receipt {
-	@apply flex flex-col gap-4;
+	@apply flex min-w-0 flex-col gap-4;
 }
 .receipt span {
 	@apply break-all font-mono text-xs;
 }
 .error {
-	@apply rounded-xl border border-crm-danger/20 bg-crm-danger/10 p-4 text-sm text-crm-danger;
+	@apply rounded-lg border border-crm-danger/20 bg-crm-danger/10 p-4 text-sm text-crm-danger;
 }

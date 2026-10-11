@@ -8,7 +8,7 @@
 	@apply flex min-w-0 flex-col gap-4 border-0 p-0 disabled:opacity-70;
 }
 .formGrid {
-	@apply grid grid-cols-1 gap-4 sm:grid-cols-2;
+	@apply grid min-w-0 grid-cols-1 gap-4;
 }
 .actions {
 	@apply flex flex-wrap items-center gap-3;
@@ -17,13 +17,13 @@
 	@apply text-sm leading-6 text-crm-muted;
 }
 .error {
-	@apply flex flex-col gap-3 rounded-xl border border-crm-danger/20 bg-crm-danger/10 p-4 text-sm text-crm-danger;
+	@apply flex min-w-0 flex-col gap-3 rounded-lg border border-crm-danger/20 bg-crm-danger/10 p-4 text-sm text-crm-danger;
 }
 .summary {
-	@apply flex flex-col gap-4 rounded-2xl border border-crm-border bg-crm-surface p-4;
+	@apply flex min-w-0 flex-col gap-4 border-b border-crm-border pb-5;
 }
 .details {
-	@apply grid grid-cols-1 gap-3 sm:grid-cols-2;
+	@apply grid min-w-0 grid-cols-1 gap-3;
 	div {
 		@apply min-w-0;
 	}
@@ -35,9 +35,9 @@
 	}
 }
 .section {
-	@apply flex flex-col gap-4 rounded-2xl border border-crm-border p-4;
+	@apply flex min-w-0 flex-col gap-4 border-t border-crm-border pt-5;
 	h3 {
-		@apply text-base font-bold text-crm-text;
+		@apply text-base font-semibold text-crm-text;
 	}
 }
 .history {
@@ -66,7 +66,7 @@
 	@apply break-words text-lg font-semibold text-crm-text;
 }
 .contactLink {
-	@apply break-words text-lg font-semibold text-primary hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+	@apply min-h-11 break-words rounded text-lg font-semibold text-primary hover:underline lg:min-h-9;
 }
 .contactChannels {
 	@apply flex flex-wrap gap-x-4 gap-y-2 text-sm text-primary;
@@ -78,7 +78,7 @@
 	@apply text-xl font-semibold;
 }
 .nextAction {
-	@apply flex flex-col gap-2 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm text-crm-text;
+	@apply flex min-w-0 flex-col gap-2 rounded-lg bg-crm-surface-muted p-4 text-sm text-crm-text;
 	h3 {
 		@apply text-xs font-semibold text-crm-muted;
 	}
@@ -87,12 +87,12 @@
 	}
 }
 .tabs {
-	@apply flex gap-1 border-b border-crm-border;
+	@apply flex min-w-0 gap-3 border-b border-crm-border;
 
 	button {
-		@apply min-w-0 flex-1 rounded-t-lg px-3 py-3 text-sm font-semibold text-crm-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+		@apply min-h-11 min-w-0 flex-1 border-b-2 border-transparent px-2 py-3 text-sm font-medium text-crm-muted;
 		&[aria-selected='true'] {
-			@apply bg-primary/10 text-primary;
+			@apply border-primary text-primary;
 		}
 	}
 }
@@ -105,9 +105,16 @@
 	}
 }
 .nextTaskToggle {
-	@apply flex items-start gap-2 text-sm;
+	@apply flex min-h-11 items-start gap-2 py-2 text-sm;
 	input {
 		@apply mt-1 h-4 w-4 shrink-0 accent-primary;
+	}
+}
+
+@container (min-width: 600px) {
+	.formGrid,
+	.details {
+		@apply grid-cols-2;
 	}
 }
 
@@ -116,7 +123,7 @@
 	container-name: sales-create;
 }
 .createForm {
-	@apply mx-auto grid w-full max-w-6xl grid-cols-1 items-start;
+	@apply grid w-full grid-cols-1 items-start;
 
 	> * {
 		@apply min-w-0 col-span-full;

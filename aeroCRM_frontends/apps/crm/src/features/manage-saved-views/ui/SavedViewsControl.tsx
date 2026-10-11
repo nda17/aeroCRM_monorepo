@@ -11,7 +11,7 @@ import {
 	type SavedViewScope
 } from '@/entities/crm-saved-views'
 import { useDirtyForm } from '@/shared/lib/dirty-form'
-import { Button, TextField } from '@/shared/ui'
+import { Button, HelpHint, TextField } from '@/shared/ui'
 import {
 	useSavedViews,
 	type SavedViewsContext
@@ -30,7 +30,8 @@ export const SavedViewsControl = ({
 	parameters,
 	onOpen,
 	legacy,
-	onImported
+	onImported,
+	saveNotice
 }: {
 	context: SavedViewsContext
 	scope: SavedViewScope
@@ -38,6 +39,7 @@ export const SavedViewsControl = ({
 	onOpen: (parameters: SavedViewParameters) => boolean | void
 	legacy?: readonly LegacyDealView[]
 	onImported?: () => void
+	saveNotice?: string
 }) => {
 	const [editor, setEditor] = useState<
 		{ kind: 'create' } | { kind: 'rename'; view: SavedView } | null
@@ -161,7 +163,12 @@ export const SavedViewsControl = ({
 			aria-label="Сохранённые представления"
 		>
 			<div className={styles.heading}>
-				<span className={styles.title}>Мои фильтры</span>
+				<HelpHint
+					label="Мои фильтры"
+					description={`Сохраняются применённые фильтры и вид «Список» или «Доска». Они доступны только вам в этом пространстве на любом устройстве. Выберите условия, примените их и нажмите «Сохранить фильтры».${saveNotice ? ` ${saveNotice}` : ''}`}
+				>
+					<span className={styles.title}>Мои фильтры</span>
+				</HelpHint>
 				<Button
 					size="sm"
 					variant="secondary"
@@ -178,10 +185,6 @@ export const SavedViewsControl = ({
 					Сохранить фильтры
 				</Button>
 			</div>
-			<p className={styles.message}>
-				Сохраняются применённые фильтры и вид «Список» или «Доска». Они
-				доступны только вам в этом пространстве на любом устройстве.
-			</p>
 			{views.query.isError ? (
 				<div className={styles.message} role="alert">
 					Не удалось загрузить представления.{' '}
@@ -214,11 +217,7 @@ export const SavedViewsControl = ({
 						</Button>
 					))}
 				</div>
-			) : (
-				<p className={styles.message}>
-					Выберите условия, примените их и нажмите «Сохранить фильтры».
-				</p>
-			)}
+			) : null}
 			{selectedView && views.canManage ? (
 				<div className={styles.actions}>
 					<Button
@@ -251,6 +250,9 @@ export const SavedViewsControl = ({
 			) : null}
 			{editor ? (
 				<form className={styles.editor} onSubmit={submit}>
+					{saveNotice && editor.kind === 'create' ? (
+						<p className={styles.saveNotice}>{saveNotice}</p>
+					) : null}
 					<TextField
 						label={
 							editor.kind === 'rename'

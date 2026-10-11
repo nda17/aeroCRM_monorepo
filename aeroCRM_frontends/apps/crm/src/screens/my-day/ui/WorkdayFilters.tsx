@@ -180,6 +180,29 @@ export const WorkdayFilters = ({
 				]
 			: [])
 	]
+	const dateFields = (
+		<>
+			{period === 'DAY' || period === 'RANGE' ? (
+				<TextField
+					label={period === 'DAY' ? 'День' : 'С даты'}
+					type="date"
+					required
+					value={from}
+					onChange={e => setFrom(e.target.value)}
+				/>
+			) : null}
+			{period === 'RANGE' ? (
+				<TextField
+					label="По дату включительно"
+					type="date"
+					required
+					min={from}
+					value={to}
+					onChange={e => setTo(e.target.value)}
+				/>
+			) : null}
+		</>
+	)
 	return (
 		<section className={styles.filters} aria-label="Период и вид задач">
 			<div className={styles.toolbar}>
@@ -219,14 +242,18 @@ export const WorkdayFilters = ({
 					role="group"
 					aria-label="Представление задач"
 				>
-					{(['list', 'board'] as const).map(mode => (
+					{(['list', 'board', 'calendar'] as const).map(mode => (
 						<Button
 							key={mode}
 							variant={view === mode ? 'primary' : 'secondary'}
 							aria-pressed={view === mode}
 							onClick={() => onViewChange(mode)}
 						>
-							{mode === 'list' ? 'Список' : 'Доска'}
+							{mode === 'list'
+								? 'Список'
+								: mode === 'board'
+									? 'Доска'
+									: 'Календарь'}
 						</Button>
 					))}
 				</div>
@@ -272,6 +299,14 @@ export const WorkdayFilters = ({
 				/>
 				<SelectField
 					label="Период"
+					labelHelp={
+						view === 'calendar' ? (
+							<HelpHint
+								label="Период календаря"
+								description="Календарь показывает неделю. Выбор другого периода откроет список с применёнными фильтрами."
+							/>
+						) : undefined
+					}
 					value={period}
 					onChange={e => setPeriod(e.target.value as WorkdayPeriod)}
 				>
@@ -287,7 +322,7 @@ export const WorkdayFilters = ({
 					labelHelp={
 						<HelpHint
 							label="Область задач"
-							description="Область зависит от вашей роли. «Мои задачи» показывает назначенные вам. «Мои отделы» добавляет задачи доступных отделов, «Вся команда» — все разрешённые вашей ролью задачи."
+							description={`Область зависит от вашей роли. «Мои задачи» показывает назначенные вам. «Мои отделы» добавляет задачи доступных отделов, «Вся команда» — все разрешённые вашей ролью задачи.${allowedScopes.some(allowed => allowed !== 'MINE') ? ' Чтобы выбрать сотрудника по ФИО, переключите область на «Мои отделы» или «Вся команда».' : ''}`}
 						/>
 					}
 					value={scope}
@@ -299,26 +334,19 @@ export const WorkdayFilters = ({
 						</option>
 					))}
 				</SelectField>
-				{period === 'DAY' || period === 'RANGE' ? (
-					<TextField
-						label={period === 'DAY' ? 'День' : 'С даты'}
-						type="date"
-						required
-						value={from}
-						onChange={e => setFrom(e.target.value)}
-					/>
-				) : null}
-				{period === 'RANGE' ? (
-					<TextField
-						label="По дату включительно"
-						type="date"
-						required
-						min={from}
-						value={to}
-						onChange={e => setTo(e.target.value)}
-					/>
-				) : null}
-				<div className={styles.peopleFilters}>
+				<Button
+					type="submit"
+					variant="primary"
+					className={styles.applyFilters}
+					disabled={!validDates || !isWorkdayTimeZone(timeZone)}
+				>
+					Применить
+				</Button>
+				{view !== 'calendar' ? dateFields : null}
+				<div
+					className={styles.peopleFilters}
+					hidden={scope === 'MINE' || !peopleContext}
+				>
 					{peopleContext ? (
 						<WorkdayPeopleFilters
 							ref={peopleRef}
@@ -332,11 +360,12 @@ export const WorkdayFilters = ({
 				<details className={styles.advanced}>
 					<summary>Дополнительные фильтры</summary>
 					<div className={styles.advancedGrid}>
+						{view === 'calendar' ? dateFields : null}
 						<WorkdayTimeZoneSelect
 							value={timeZone}
 							onChange={setTimeZone}
 						/>
-						{view === 'list' ? (
+						{view !== 'board' ? (
 							<SelectField
 								label="Статус"
 								value={status}
@@ -360,22 +389,17 @@ export const WorkdayFilters = ({
 						) : null}
 					</div>
 				</details>
-				<Button
-					type="submit"
-					variant="primary"
-					disabled={!validDates || !isWorkdayTimeZone(timeZone)}
-				>
-					Применить
-				</Button>
 			</form>
 			{hasDraftChanges ? (
 				<p className={styles.draftNotice} role="status">
 					Фильтры изменены. Нажмите «Применить», чтобы обновить задачи.
 				</p>
 			) : null}
-			<p className={styles.appliedFilters}>
-				Применено: {scopes[value.scope]} · {periods[value.period]}.
-			</p>
+			{!chips.length ? (
+				<p className={styles.appliedFilters}>
+					Применено: {scopes[value.scope]} · {periods[value.period]}.
+				</p>
+			) : null}
 			{chips.length ? (
 				<div
 					className={styles.filterChips}

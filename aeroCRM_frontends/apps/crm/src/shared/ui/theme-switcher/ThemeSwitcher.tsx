@@ -19,7 +19,7 @@ const labels: Record<ThemePreference, string> = {
 	system: 'Как на устройстве'
 }
 const icons: Record<ThemePreference, AppIconName> = {
-	light: 'settings',
+	light: 'sun',
 	dark: 'moon',
 	system: 'monitor'
 }

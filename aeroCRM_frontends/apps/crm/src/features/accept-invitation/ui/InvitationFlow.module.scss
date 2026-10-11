@@ -1,5 +1,5 @@
 .content {
-	@apply flex flex-col gap-5 text-sm leading-6 text-crm-text;
+	@apply flex min-w-0 flex-col gap-5 text-sm leading-6 text-crm-text;
 }
 .content h2 {
 	@apply text-xl font-semibold;
@@ -17,5 +17,5 @@
 	@apply mt-5 flex flex-col gap-3 border-t border-crm-border pt-4 text-sm text-crm-muted;
 }
 .navigation a {
-	@apply text-primary underline underline-offset-4;
+	@apply inline-flex min-h-11 items-center self-start rounded text-primary underline underline-offset-4;
 }

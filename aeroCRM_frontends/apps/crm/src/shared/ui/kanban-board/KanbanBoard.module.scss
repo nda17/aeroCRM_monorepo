@@ -1,5 +1,5 @@
 .board {
-	@apply w-full overflow-x-auto pb-2 focus-visible:rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2;
+	@apply w-full overflow-x-auto pb-2 focus-visible:rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2;
 }
 
 .columns {
@@ -7,7 +7,7 @@
 }
 
 .column {
-	@apply w-[19rem] shrink-0 rounded-2xl border border-crm-border bg-crm-surface-muted p-3;
+	@apply w-[19rem] grow shrink-0 rounded-lg border border-crm-border bg-crm-surface-muted p-3;
 }
 
 .columnHeader {
@@ -15,11 +15,11 @@
 }
 
 .columnTitle {
-	@apply min-w-0 text-sm font-bold text-crm-text;
+	@apply min-w-0 text-sm font-semibold text-crm-text;
 }
 
 .columnMeta {
-	@apply inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 px-2 text-xs font-bold text-primary;
+	@apply inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 px-2 text-xs font-semibold text-primary;
 }
 
 .cardList {
@@ -31,5 +31,5 @@
 }
 
 .emptyColumn {
-	@apply rounded-xl border border-dashed border-crm-border-strong bg-crm-surface px-4 py-8 text-center text-sm leading-5 text-crm-muted;
+	@apply rounded-md border border-dashed border-crm-border-strong bg-crm-surface px-4 py-8 text-center text-sm leading-5 text-crm-muted;
 }

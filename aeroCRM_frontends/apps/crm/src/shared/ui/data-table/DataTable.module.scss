@@ -1,5 +1,5 @@
 .wrapper {
-	@apply w-full overflow-hidden rounded-2xl border border-crm-border bg-crm-surface;
+	@apply w-full overflow-hidden rounded-lg border border-crm-border bg-crm-surface;
 }
 
 .embedded {
@@ -10,9 +10,9 @@
 	@apply w-full overflow-x-auto;
 }
 
-.scrollArea:focus-visible,
-.scrollArea:focus-within {
-	@apply outline-none ring-2 ring-inset ring-primary/20;
+.scrollArea:focus-visible {
+	outline: 2px solid rgb(var(--crm-primary));
+	outline-offset: -2px;
 }
 
 .table {
@@ -28,7 +28,7 @@
 }
 
 .headerCell {
-	@apply border-b border-crm-border px-4 py-3 text-xs font-bold uppercase tracking-[0.06em] text-crm-muted;
+	@apply border-b border-crm-border px-4 py-3 text-xs font-medium text-crm-muted;
 }
 
 .bodyRow:last-child .cell {
@@ -86,7 +86,7 @@
 	}
 
 	.cards .bodyRow {
-		@apply grid grid-cols-1 gap-4 rounded-xl border border-crm-border bg-crm-surface p-4 min-[360px]:grid-cols-2;
+		@apply grid grid-cols-1 gap-4 rounded-lg border border-crm-border bg-crm-surface p-4 min-[360px]:grid-cols-2;
 	}
 
 	.cards .interactiveRow:hover,

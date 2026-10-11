@@ -298,7 +298,10 @@ const TaskEditor = ({
 				inert={command.context.permissions.isFetching}
 				aria-hidden={command.context.permissions.isFetching}
 			>
-				<div className={styles.content}>
+				<div
+					className={`${styles.content} ${styles.taskLayout}`}
+					data-mode={mode}
+				>
 					{!command.context.canWrite ? (
 						<p className={styles.note}>
 							Режим чтения. Просмотр задачи и истории остаётся доступным.
@@ -389,7 +392,7 @@ const TaskEditor = ({
 						</section>
 					) : null}
 					<section
-						className={styles.section}
+						className={`${styles.section} ${styles.taskParameters}`}
 						aria-label="Параметры задачи"
 					>
 						<p className={styles.note}>Ответственный: {displayAssignee}</p>
@@ -462,6 +465,7 @@ const TaskEditor = ({
 						</div>
 					</section>
 					<div
+						className={styles.taskControls}
 						hidden={mode === 'reschedule'}
 						inert={mode === 'reschedule'}
 					>
@@ -666,11 +670,11 @@ const TaskEditor = ({
 							)}
 						</section>
 					</div>
-					<div className={styles.footer}>
-						<Button variant="secondary" onClick={close}>
-							Закрыть
-						</Button>
-					</div>
+				</div>
+				<div className={styles.footer}>
+					<Button variant="secondary" onClick={close}>
+						Закрыть
+					</Button>
 				</div>
 			</div>
 		</Drawer>

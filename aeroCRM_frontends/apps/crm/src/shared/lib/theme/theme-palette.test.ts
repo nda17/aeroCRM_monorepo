@@ -16,6 +16,7 @@ const tailwindConfig = readFileSync(
 const surfaces = ['bg', 'surface', 'surface-muted'] as const
 const statuses = ['success', 'warning', 'danger', 'info'] as const
 const textTokens = ['text', 'muted', 'primary', ...statuses] as const
+const actionTokens = ['action', 'action-text', 'action-hover'] as const
 const themes: Theme[] = ['light', 'dark']
 
 function readPalette(theme: Theme): Record<string, Color> {
@@ -93,13 +94,23 @@ describe.each(themes)('aeroCRM %s palette contrast', theme => {
 	const palette = readPalette(theme)
 
 	it('defines valid RGB values for every tested semantic token', () => {
-		for (const token of [...surfaces, ...textTokens]) {
+		for (const token of [...surfaces, ...textTokens, ...actionTokens]) {
 			expect(palette[token], token).toHaveLength(3)
 			for (const channel of palette[token]) {
 				expect(Number.isInteger(channel), token).toBe(true)
 				expect(channel, token).toBeGreaterThanOrEqual(0)
 				expect(channel, token).toBeLessThanOrEqual(255)
 			}
+		}
+	})
+
+	it('keeps semantic action text AA-readable on the action and its hover color', () => {
+		for (const background of ['action', 'action-hover'] as const) {
+			expectReadable(
+				palette['action-text'],
+				palette[background],
+				`${theme} crm-action-text on crm-${background}`
+			)
 		}
 	})
 
@@ -129,7 +140,7 @@ describe.each(themes)('aeroCRM %s palette contrast', theme => {
 	it.each(surfaces)(
 		'keeps filled actions AA-readable over crm-%s, including hover',
 		surface => {
-			for (const token of ['crm-action', 'crm-action-danger']) {
+			for (const token of ['crm-action-danger']) {
 				for (const opacity of [1, 0.9]) {
 					expectReadable(
 						[255, 255, 255],

@@ -1,9 +1,9 @@
 .content {
-	@apply col-span-full grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-2;
+	@apply col-span-full grid min-w-0 grid-cols-1 items-start gap-3 lg:grid-cols-2;
 }
 .field {
-	@apply flex min-w-0 flex-col gap-3;
+	@apply flex min-w-0 flex-col gap-2;
 }
 .hint {
-	@apply col-span-full text-sm leading-relaxed text-crm-muted;
+	@apply col-span-full text-xs leading-5 text-crm-muted;
 }

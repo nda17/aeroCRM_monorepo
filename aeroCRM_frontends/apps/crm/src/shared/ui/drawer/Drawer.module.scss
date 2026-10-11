@@ -3,7 +3,7 @@
 }
 
 .dialog::backdrop {
-	@apply bg-secondary/60 backdrop-blur-[1px];
+	@apply bg-black/40 backdrop-blur-[2px];
 }
 
 .left {
@@ -58,7 +58,8 @@
 	}
 
 	&:focus-visible {
-		@apply outline-none ring-2 ring-inset ring-primary/40;
+		outline: 2px solid rgb(var(--crm-primary));
+		outline-offset: -2px;
 	}
 }
 
@@ -71,7 +72,8 @@
 }
 
 .panel {
-	@apply flex h-full min-h-0 flex-col bg-crm-surface shadow-2xl;
+	container-type: inline-size;
+	@apply flex h-full min-h-0 flex-col bg-crm-surface shadow-floating;
 }
 
 .header {
@@ -83,7 +85,7 @@
 }
 
 .title {
-	@apply break-words text-lg font-bold tracking-tight text-crm-text;
+	@apply break-words text-lg font-semibold tracking-tight text-crm-text;
 }
 
 .description {
@@ -95,11 +97,11 @@
 }
 
 .sizeButton {
-	@apply hidden min-h-10 rounded-xl px-3 text-sm text-crm-muted transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 sm:inline-flex sm:items-center;
+	@apply hidden min-h-10 rounded-md px-3 text-sm text-crm-muted transition-colors hover:bg-crm-surface-muted hover:text-crm-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2 sm:inline-flex sm:items-center;
 }
 
 .closeButton {
-	@apply inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-transparent bg-transparent text-crm-muted transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 lg:h-10 lg:w-10;
+	@apply inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent text-crm-muted transition-colors hover:bg-crm-surface-muted hover:text-crm-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2 lg:h-10 lg:w-10;
 }
 
 .content {

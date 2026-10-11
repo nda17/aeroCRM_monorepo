@@ -1,29 +1,29 @@
 .screen {
-	@apply flex flex-col gap-6;
+	@apply flex min-w-0 flex-col gap-4;
 }
 
 .panel {
-	@apply overflow-hidden rounded-panel border border-crm-border bg-crm-surface shadow-panel;
+	@apply min-w-0 overflow-hidden rounded-lg border border-crm-border bg-crm-surface;
 }
 
 .panelHeader {
-	@apply flex flex-col gap-4 border-b border-crm-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between lg:px-6;
+	@apply flex flex-col gap-3 border-b border-crm-border p-4 sm:flex-row sm:items-center sm:justify-between;
 }
 
 .panelTitle {
-	@apply text-lg font-bold text-crm-text;
+	@apply text-sm font-semibold text-crm-text;
 }
 
 .panelDescription {
-	@apply mt-1 text-sm text-crm-muted;
+	@apply mt-1 text-xs leading-5 text-crm-muted;
 }
 
 .contactButton {
-	@apply flex min-w-[14rem] items-center gap-3 rounded-lg text-left transition-colors hover:text-primary;
+	@apply flex min-h-11 min-w-[14rem] items-center gap-3 rounded-md text-left transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:min-h-9;
 }
 
 .avatar {
-	@apply flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary;
+	@apply flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary;
 }
 
 .contactCopy {
@@ -41,11 +41,22 @@
 .tabs {
 	@apply flex flex-wrap items-center gap-2;
 }
+.tabs[role='group'] {
+	@apply gap-x-5 gap-y-0 border-b border-crm-border;
+
+	> button {
+		@apply rounded-none border-x-0 border-b-2 border-t-0 border-transparent bg-transparent px-0 text-crm-muted hover:bg-transparent hover:text-crm-text;
+	}
+
+	> button[aria-pressed='true'] {
+		@apply border-b-primary text-crm-text;
+	}
+}
 .search {
 	@apply grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:max-w-sm;
 }
 .pagination {
-	@apply flex flex-wrap items-center justify-between gap-3 border-t border-crm-border px-5 py-4 text-sm text-crm-muted;
+	@apply flex flex-wrap items-center justify-between gap-3 border-t border-crm-border px-4 py-3 text-xs text-crm-muted;
 }
 .notes {
 	@apply block max-w-xs truncate;

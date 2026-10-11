@@ -1,5 +1,5 @@
 .panel {
-	@apply min-w-0 rounded-2xl border border-crm-border bg-crm-surface p-4 sm:p-6;
+	@apply min-w-0 rounded-lg border border-crm-border bg-crm-surface p-4 sm:p-5;
 }
 
 .heading {
@@ -30,7 +30,7 @@
 }
 
 .refreshNotice {
-	@apply flex flex-col gap-3 rounded-xl border border-crm-border bg-crm-surface-muted p-3 text-sm text-crm-muted;
+	@apply flex min-w-0 flex-col gap-3 rounded-lg bg-crm-surface-muted p-3 text-sm text-crm-muted;
 }
 
 .error {
@@ -46,7 +46,7 @@
 }
 
 .preview {
-	@apply flex min-w-0 flex-col items-center justify-center gap-2 rounded-xl border border-crm-border bg-crm-surface-muted p-5;
+	@apply flex min-w-0 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-crm-border bg-crm-surface-muted p-5;
 
 	> :first-child {
 		@apply w-48 max-w-full justify-center;

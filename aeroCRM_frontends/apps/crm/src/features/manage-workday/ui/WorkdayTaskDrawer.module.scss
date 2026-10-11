@@ -1,8 +1,27 @@
 .content {
 	@apply flex min-w-0 flex-col gap-6;
 }
+.taskControls:not([hidden]) {
+	@apply flex min-w-0 flex-col gap-6;
+}
+
+@container (min-width: 900px) {
+	.taskLayout[data-mode='details'] {
+		@apply grid grid-cols-2 items-start gap-x-8;
+
+		> * {
+			@apply min-w-0 col-span-full;
+		}
+
+		> .taskParameters,
+		> .taskControls {
+			grid-column: auto;
+		}
+	}
+}
+
 .section {
-	@apply flex min-w-0 flex-col gap-4 rounded-xl border border-crm-border bg-crm-surface p-4;
+	@apply flex min-w-0 flex-col gap-4 border-b border-crm-border pb-5;
 }
 .heading {
 	@apply text-base font-semibold text-crm-text;
@@ -11,7 +30,7 @@
 	@apply break-words text-sm leading-6 text-crm-muted;
 }
 .dealLink {
-	@apply inline-flex min-h-11 items-center self-start rounded-lg px-3 py-2 text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary;
+	@apply inline-flex min-h-11 min-w-0 items-center self-start break-words rounded-md px-3 py-2 text-sm font-medium text-primary underline-offset-4 hover:underline;
 }
 .error {
 	@apply break-words rounded-lg border border-crm-danger/20 bg-crm-danger/10 p-3 text-sm leading-6 text-crm-danger;
@@ -34,7 +53,7 @@
 .history {
 	@apply flex flex-col gap-3;
 	li {
-		@apply min-w-0 rounded-lg border border-crm-border p-3;
+		@apply min-w-0 border-l-2 border-crm-border py-1 pl-3;
 	}
 }
 .pagination {

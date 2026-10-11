@@ -28,6 +28,16 @@ const setup = (view: 'list' | 'board' = 'list') => {
 	return { onChange, onViewChange }
 }
 describe('MyDay filters', () => {
+	it('explains the MINE scope from the scope field help button', () => {
+		setup()
+		expect(screen.queryByText(/В режиме «Мои задачи»/)).toBeNull()
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Пояснение: Область задач' })
+		)
+		expect(screen.getByRole('tooltip').textContent).toContain(
+			'«Мои задачи» показывает назначенные вам.'
+		)
+	})
 	it('quick overdue view preserves ACTIVE with current scope and timezone', () => {
 		const onChange = vi.fn()
 		render(

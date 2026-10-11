@@ -10,13 +10,13 @@
 	}
 }
 .callPanel {
-	@apply flex min-w-0 flex-col gap-3 rounded-xl border border-crm-border bg-crm-surface-muted p-3;
+	@apply flex min-w-0 flex-col gap-3 border-t border-crm-border pt-5;
 }
 .callHours {
 	@apply grid min-w-0 grid-cols-1 gap-3;
 }
 .notice {
-	@apply flex flex-col gap-3 rounded-xl border border-crm-warning/20 bg-crm-warning/10 p-4 text-sm text-crm-warning;
+	@apply flex min-w-0 flex-col gap-3 rounded-lg border border-crm-warning/20 bg-crm-warning/10 p-4 text-sm text-crm-warning;
 }
 .hint {
 	@apply text-xs leading-relaxed text-crm-muted;
@@ -28,13 +28,13 @@
 	}
 }
 .companySearch {
-	@apply grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto];
+	@apply grid min-w-0 grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto];
 }
 .companyResults {
-	@apply flex max-h-64 flex-col gap-1 overflow-y-auto rounded-xl border border-crm-border p-2;
+	@apply flex min-w-0 max-h-64 flex-col gap-1 overflow-y-auto rounded-lg border border-crm-border p-2;
 }
 .companyResult {
-	@apply flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-3 py-2 text-left text-sm text-crm-text hover:bg-crm-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-crm-action disabled:cursor-not-allowed disabled:opacity-50;
+	@apply flex min-h-11 min-w-0 w-full flex-wrap items-center gap-x-3 gap-y-1 break-words rounded-md px-3 py-2 text-left text-sm text-crm-text hover:bg-crm-surface-muted disabled:cursor-not-allowed disabled:opacity-50;
 	&[aria-pressed='true'] {
 		@apply bg-crm-surface-muted font-semibold;
 	}
@@ -55,7 +55,7 @@
 	@apply flex min-w-0 flex-col items-start gap-3;
 }
 .lookupCard {
-	@apply flex min-w-0 w-full flex-col gap-3 rounded-xl border border-crm-border bg-crm-surface-muted p-4 text-sm text-crm-text;
+	@apply flex min-w-0 w-full flex-col gap-3 rounded-lg bg-crm-surface-muted p-4 text-sm text-crm-text;
 
 	p,
 	dd,
@@ -87,7 +87,7 @@
 	}
 }
 .lookupCheckbox {
-	@apply flex min-h-11 w-full cursor-pointer items-start gap-3 rounded-lg py-2 text-sm leading-6 text-crm-text;
+	@apply flex min-h-11 min-w-0 w-full cursor-pointer items-start gap-3 rounded-md py-2 text-sm leading-6 text-crm-text;
 
 	input {
 		@apply mt-0.5 h-5 w-5 shrink-0 accent-crm-action;

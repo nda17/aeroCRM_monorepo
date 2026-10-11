@@ -39,6 +39,7 @@ import {
 	PendingCommandProvider
 } from '@/shared/lib/pending-command'
 import { DirtyFormProvider } from '@/shared/lib/dirty-form'
+import { workdayLayoutStorageKey } from '../model/workday-view'
 import MyDayScreen from './MyDayScreen'
 import PlannerPage from '@/app/(workspace)/planner/page'
 import TasksPage, { metadata } from '@/app/(workspace)/tasks/page'
@@ -314,6 +315,88 @@ afterEach(() => {
 })
 
 describe('MyDay actual permission query lifecycle', () => {
+	it('refreshes the task page and overview when Today selects the current week again', async () => {
+		vi.useFakeTimers({ toFake: ['Date'] })
+		try {
+			vi.setSystemTime(new Date('2026-09-07T10:00:00.000Z'))
+			window.localStorage.setItem(
+				workdayLayoutStorageKey(workspaceId, 'actor'),
+				'calendar'
+			)
+			render(<MyDayScreen />, { wrapper: Wrapper })
+			await findTaskButton()
+			const callsBeforeToday =
+				vi.mocked(listWorkdayTasks).mock.calls.length
+
+			fireEvent.click(
+				screen.getByRole('button', { name: 'Сегодня в календаре' })
+			)
+			await waitFor(() =>
+				expect(listWorkdayTasks).toHaveBeenCalledTimes(
+					callsBeforeToday + 2
+				)
+			)
+			await waitFor(() => expect(client.isFetching()).toBe(0))
+			expect(
+				listWorkdayTasks.mock.calls.slice(-2).map(([, request]) => request)
+			).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						period: 'RANGE',
+						from: '2026-09-07',
+						to: '2026-09-13',
+						page: 1
+					})
+				])
+			)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+	it('keeps the list task mounted when the first planner settings resolve', async () => {
+		const response = deferred<typeof plannerSettings>()
+		let plannerResolved = false
+		const resolvePlanner = async () => {
+			if (plannerResolved) return
+			plannerResolved = true
+			await act(async () => {
+				response.resolve(plannerSettings)
+				await response.promise
+			})
+		}
+		vi.mocked(authenticatedRequest).mockImplementation(async request => {
+			if (request.url === '/crm/access/permissions') return permissions
+			if (request.url === '/crm/sales/planner/settings')
+				return response.promise
+			throw new Error(`Unexpected test request ${request.url}`)
+		})
+		try {
+			render(<MyDayScreen />, { wrapper: Wrapper })
+			const button = await screen.findByRole('button', {
+				name: task.title
+			})
+			await waitFor(() =>
+				expect(permissionsReadCount()).toBeGreaterThan(0)
+			)
+			const permissionReadsBeforePlanner = permissionsReadCount()
+
+			await resolvePlanner()
+			await waitFor(() => {
+				expect(
+					client
+						.getQueryCache()
+						.findAll({ queryKey: ['crm-planner'] })
+						.some(query => query.state.status === 'success')
+				).toBe(true)
+				expect(client.isFetching()).toBe(0)
+			})
+
+			expect(screen.getByRole('button', { name: task.title })).toBe(button)
+			expect(permissionsReadCount()).toBe(permissionReadsBeforePlanner)
+		} finally {
+			await resolvePlanner()
+		}
+	})
 	it.each([
 		{ surface: 'list', state: 'ACTIVE' },
 		{ surface: 'list', state: 'READ_ONLY' },
@@ -354,27 +437,39 @@ describe('MyDay actual permission query lifecycle', () => {
 			const before = permissionsReadCount()
 			const response = deferred<CrmPermissions>()
 			vi.mocked(authenticatedRequest).mockReturnValueOnce(response.promise)
-			let pending!: Promise<void>
-			await act(async () => {
-				pending = client.refetchQueries({ queryKey: ['crm-permissions'] })
-				await Promise.resolve()
-			})
-			await screen.findByText(/Проверяем актуальные права доступа/)
-			expect(permissionsReadCount()).toBe(before + 1)
-			await act(async () => {
-				response.resolve(permissions)
-				await pending
-			})
-			await waitFor(() => expect(client.isFetching()).toBe(0))
-			await findTaskButton()
-			expect(
-				screen.queryByText('Счётчики временно недоступны.')
-			).toBeNull()
-			const settledCount = permissionsReadCount()
-			await act(async () => {
-				await new Promise(resolve => setTimeout(resolve, 100))
-			})
-			expect(permissionsReadCount()).toBe(settledCount)
+			let pending: Promise<void> | undefined
+			let responseResolved = false
+			const resolveResponse = async () => {
+				if (responseResolved) return
+				responseResolved = true
+				await act(async () => {
+					response.resolve(permissions)
+					if (pending) await pending
+				})
+			}
+			try {
+				await act(async () => {
+					pending = client.refetchQueries({
+						queryKey: ['crm-permissions']
+					})
+					await Promise.resolve()
+				})
+				await screen.findByText(/Проверяем актуальные права доступа/)
+				expect(permissionsReadCount()).toBe(before + 1)
+				await resolveResponse()
+				await waitFor(() => expect(client.isFetching()).toBe(0))
+				await findTaskButton()
+				expect(
+					screen.queryByText('Счётчики временно недоступны.')
+				).toBeNull()
+				const settledCount = permissionsReadCount()
+				await act(async () => {
+					await new Promise(resolve => setTimeout(resolve, 100))
+				})
+				expect(permissionsReadCount()).toBe(settledCount)
+			} finally {
+				await resolveResponse()
+			}
 		}
 	)
 	it.each(['ACTIVE', 'READ_ONLY'] as const)(

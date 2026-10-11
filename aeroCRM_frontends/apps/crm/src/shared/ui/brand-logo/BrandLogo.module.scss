@@ -7,7 +7,7 @@
 }
 
 .logo:focus-visible {
-	@apply rounded-xl outline-none ring-2 ring-primary/40 ring-offset-2;
+	@apply rounded-md outline outline-2 outline-primary outline-offset-2;
 }
 
 .wordmark {

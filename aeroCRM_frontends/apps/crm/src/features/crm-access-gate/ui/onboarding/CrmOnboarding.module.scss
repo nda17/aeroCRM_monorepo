@@ -19,11 +19,11 @@
 }
 
 .card {
-	@apply relative flex cursor-pointer gap-3 rounded-xl border border-crm-border bg-crm-surface-muted p-5 transition hover:border-crm-border-strong hover:bg-primary/5 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20;
+	@apply relative flex min-w-0 cursor-pointer gap-3 rounded-lg border border-crm-border bg-crm-surface p-4 transition-colors hover:border-crm-border-strong hover:bg-crm-surface-muted focus-within:border-primary;
 }
 
 .cardSelected {
-	@apply border-primary bg-primary/10 ring-2 ring-primary/20;
+	@apply border-primary bg-primary/5;
 }
 
 .cardDisabled {
@@ -35,7 +35,7 @@
 }
 
 .cardClickTarget {
-	@apply absolute inset-0 z-10 cursor-pointer rounded-xl;
+	@apply absolute inset-0 z-10 cursor-pointer rounded-lg;
 }
 
 .cardClickTargetDisabled {
@@ -59,7 +59,7 @@
 }
 
 .version {
-	@apply rounded-full bg-crm-surface px-2 py-1 text-xs font-medium uppercase tracking-wide text-primary ring-1 ring-primary/20;
+	@apply rounded-md border border-crm-border bg-crm-surface-muted px-2 py-1 text-xs font-medium text-crm-muted;
 }
 
 .description {
@@ -71,11 +71,11 @@
 }
 
 .tag {
-	@apply rounded-full bg-crm-surface px-2.5 py-1 text-xs text-crm-muted ring-1 ring-crm-border;
+	@apply rounded-md bg-crm-surface-muted px-2.5 py-1 text-xs text-crm-muted;
 }
 
 .stagesLabel {
-	@apply mt-4 block text-xs font-semibold uppercase tracking-wide text-crm-muted;
+	@apply mt-4 block text-xs font-semibold text-crm-muted;
 }
 
 .stages {
@@ -91,15 +91,15 @@
 }
 
 .copy {
-	@apply mt-6 rounded-xl bg-primary/10 p-4 text-sm leading-6 text-crm-text;
+	@apply mt-6 rounded-lg bg-crm-surface-muted p-4 text-sm leading-6 text-crm-text;
 }
 
 .ownerNote {
-	@apply mt-3 rounded-xl bg-crm-warning/10 p-4 text-sm leading-6 text-crm-warning;
+	@apply mt-3 rounded-lg bg-crm-warning/10 p-4 text-sm leading-6 text-crm-warning;
 }
 
 .error {
-	@apply mt-3 rounded-xl bg-crm-danger/10 p-4 text-sm leading-6 text-crm-danger outline-none focus:ring-2 focus:ring-crm-danger/30;
+	@apply mt-3 rounded-lg border border-crm-danger/20 bg-crm-danger/10 p-4 text-sm leading-6 text-crm-danger focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-crm-danger;
 }
 
 .actions {

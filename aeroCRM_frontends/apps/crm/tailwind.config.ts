@@ -7,11 +7,15 @@ const config: Config = {
 			colors: {
 				primary: 'rgb(var(--crm-primary) / <alpha-value>)',
 				'crm-brand': '#7b3fa0',
-				'crm-action': '#7b3fa0',
+				'crm-action': 'rgb(var(--crm-action) / <alpha-value>)',
+				'crm-action-text': 'rgb(var(--crm-action-text) / <alpha-value>)',
+				'crm-action-hover': 'rgb(var(--crm-action-hover) / <alpha-value>)',
 				'crm-action-danger': '#c0392b',
 				accent: '#ff9902',
 				secondary: '#161d25',
 				'crm-bg': 'rgb(var(--crm-bg) / <alpha-value>)',
+				'crm-sidebar': 'rgb(var(--crm-sidebar) / <alpha-value>)',
+				'crm-selected': 'rgb(var(--crm-selected) / <alpha-value>)',
 				'crm-surface': 'rgb(var(--crm-surface) / <alpha-value>)',
 				'crm-surface-muted':
 					'rgb(var(--crm-surface-muted) / <alpha-value>)',
@@ -46,11 +50,11 @@ const config: Config = {
 					'linear-gradient(120deg, #470b58 0%, #c21b84 42%, #fa595e 72%, #f8bd31 100%)'
 			},
 			boxShadow: {
-				panel: '0 18px 52px rgba(71, 11, 88, 0.08)',
-				floating: '0 24px 70px rgba(31, 18, 42, 0.2)'
+				panel: '0 1px 2px rgba(0, 0, 0, 0.04)',
+				floating: '0 12px 36px rgba(0, 0, 0, 0.16)'
 			},
 			borderRadius: {
-				panel: '1.25rem'
+				panel: '0.625rem'
 			}
 		}
 	},

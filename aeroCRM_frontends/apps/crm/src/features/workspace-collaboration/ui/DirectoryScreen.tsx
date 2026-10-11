@@ -234,7 +234,7 @@ function DirectoryContent({ context }: { context: CollaborationContext }) {
 										entry.subject !== context.binding.subject ? (
 											<Link
 												href={`/messages?workspaceId=${context.workspace.workspaceId}&recipient=${encodeURIComponent(entry.subject)}`}
-												className="text-sm font-semibold text-primary"
+												className="inline-flex min-h-11 items-center rounded-md text-sm font-semibold text-primary"
 											>
 												Написать
 											</Link>

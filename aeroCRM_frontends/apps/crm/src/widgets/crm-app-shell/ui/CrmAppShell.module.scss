@@ -1,5 +1,5 @@
 .shell {
-	@apply min-h-screen bg-crm-bg text-crm-text lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:transition-[grid-template-columns] lg:duration-300 lg:ease-in-out motion-reduce:transition-none;
+	@apply min-h-screen bg-crm-bg text-crm-text lg:grid lg:grid-cols-[13.625rem_minmax(0,1fr)] lg:transition-[grid-template-columns] lg:duration-300 lg:ease-in-out motion-reduce:transition-none;
 }
 
 .shellCollapsed {
@@ -7,7 +7,7 @@
 }
 
 .skipLink {
-	@apply fixed left-4 top-0 z-[100] -translate-y-full rounded-lg bg-crm-action px-4 py-3 text-sm font-semibold text-white shadow-lg transition-transform focus:top-4 focus:translate-y-0 focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 motion-reduce:transition-none;
+	@apply fixed left-4 top-0 z-[100] -translate-y-full rounded-lg bg-crm-action px-4 py-3 text-sm font-medium text-crm-action-text shadow-lg transition-transform focus:top-4 focus:translate-y-0 focus:outline-none motion-reduce:transition-none;
 }
 
 .sidebar {
@@ -15,7 +15,7 @@
 }
 
 .sidebarContent {
-	@apply flex h-full w-[15rem] flex-col border-r border-crm-border bg-crm-surface transition-transform duration-300 ease-in-out motion-reduce:transition-none;
+	@apply flex h-full w-[13.625rem] flex-col border-r border-crm-border bg-crm-sidebar transition-transform duration-300 ease-in-out motion-reduce:transition-none;
 }
 
 .sidebarContentCollapsed {
@@ -23,15 +23,15 @@
 }
 
 .sidebarBrand {
-	@apply flex min-h-16 min-w-0 shrink-0 flex-col items-center justify-center gap-1 border-b border-crm-border px-4 py-3;
+	@apply flex min-h-24 min-w-0 shrink-0 flex-col items-start justify-center gap-3 border-b border-crm-border px-6 py-5;
 }
 
 .sidebarBrand > a {
-	@apply w-48 justify-center;
+	@apply w-40 justify-start;
 }
 
 .companyName {
-	@apply block w-48 max-w-full break-words text-center text-sm font-medium leading-5 text-crm-muted;
+	@apply block w-full min-w-0 truncate text-left text-xs font-medium leading-5 text-crm-muted;
 }
 
 .mobileCompanyName {
@@ -51,11 +51,11 @@
 }
 
 .navigationLink {
-	@apply flex min-h-11 items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-sm font-medium text-crm-muted transition-colors hover:border-crm-border hover:bg-crm-surface-muted hover:text-crm-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-crm-surface;
+	@apply flex min-h-11 items-center gap-3 rounded-md border border-transparent px-3 py-2.5 text-sm font-medium text-crm-muted transition-colors hover:bg-crm-selected hover:text-crm-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2;
 }
 
 .navigationLinkActive {
-	@apply border-primary/20 bg-primary/10 font-semibold text-primary;
+	@apply border-transparent bg-crm-selected font-medium text-crm-text;
 }
 
 .navigationLinkDisabled {
@@ -63,15 +63,15 @@
 }
 
 .navigationIcon {
-	@apply flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-crm-surface-muted text-primary transition-colors;
+	@apply flex h-5 w-5 shrink-0 items-center justify-center text-crm-muted transition-colors;
 }
 
 .navigationLinkActive .navigationIcon {
-	@apply bg-primary/20 text-primary;
+	@apply text-primary;
 }
 
 .sidebarCaption {
-	@apply m-3 rounded-xl border border-crm-border bg-crm-surface-muted px-3 py-3 text-xs leading-5 text-crm-muted;
+	@apply mx-6 mb-5 border-t border-crm-border pt-4 text-[11px] leading-5 text-crm-muted;
 }
 
 .workspace {
@@ -79,15 +79,15 @@
 }
 
 .topbar {
-	@apply sticky top-0 z-30 flex min-h-16 flex-wrap items-center gap-3 border-b border-crm-border bg-crm-surface/95 px-4 py-3 backdrop-blur sm:px-6;
+	@apply sticky top-0 z-30 flex min-h-16 flex-wrap items-center gap-3 border-b border-crm-border bg-crm-bg/95 px-4 py-2 backdrop-blur sm:px-6;
 }
 
 .mobileMenuButton {
-	@apply flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-crm-border bg-crm-surface text-primary transition-colors hover:border-crm-border-strong hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 lg:hidden;
+	@apply flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-crm-border bg-crm-bg text-crm-muted transition-colors hover:border-crm-border-strong hover:bg-crm-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2 lg:hidden;
 }
 
 .sidebarToggle {
-	@apply hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-crm-border bg-crm-surface text-primary transition-colors hover:border-crm-border-strong hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 lg:flex;
+	@apply hidden h-10 w-10 shrink-0 items-center justify-center rounded-md border border-crm-border bg-crm-bg text-crm-muted transition-colors hover:border-crm-border-strong hover:bg-crm-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2 lg:flex;
 }
 
 .sidebarToggleIcon {
@@ -99,11 +99,11 @@
 }
 
 .sectionContext {
-	@apply flex min-w-[7rem] flex-1 flex-col gap-0.5;
+	@apply flex min-w-[7rem] flex-1 flex-col gap-0.5 lg:flex-row lg:items-center lg:gap-3;
 }
 
 .productName {
-	@apply hidden text-xs font-medium text-crm-muted lg:block;
+	@apply hidden max-w-60 truncate text-xs font-normal text-crm-muted lg:block;
 }
 
 .sectionContext .mobileBrand {
@@ -127,7 +127,7 @@
 }
 
 .productSwitchTrigger {
-	@apply flex min-h-11 w-11 cursor-pointer list-none items-center justify-center gap-2 rounded-xl border border-crm-border bg-crm-surface px-3 py-2 text-sm font-semibold transition-colors hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:w-auto;
+	@apply flex min-h-11 w-11 cursor-pointer list-none items-center justify-center gap-2 rounded-md border border-crm-border bg-crm-surface px-3 py-2 text-sm font-semibold transition-colors hover:bg-crm-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2 sm:w-auto;
 
 	&::-webkit-details-marker {
 		@apply hidden;
@@ -153,14 +153,14 @@
 }
 
 .productSwitchPanel {
-	@apply absolute right-0 top-full z-40 mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-2xl border border-crm-border bg-crm-surface p-2 shadow-xl;
+	@apply absolute right-0 top-full z-40 mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-lg border border-crm-border bg-crm-surface p-2 shadow-xl;
 
 	p {
 		@apply px-2 py-2 text-xs leading-5 text-crm-muted;
 	}
 
 	a {
-		@apply flex flex-col gap-0.5 rounded-xl px-3 py-2.5 text-sm text-crm-text transition-colors hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+		@apply flex flex-col gap-0.5 rounded-md px-3 py-2.5 text-sm text-crm-text transition-colors hover:bg-crm-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2;
 
 		span {
 			@apply text-xs text-crm-muted;
@@ -181,7 +181,7 @@
 }
 
 .accountCard {
-	@apply flex min-w-0 max-w-[55%] items-center gap-2 rounded-xl p-1 text-crm-text hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:max-w-64;
+	@apply flex min-w-0 max-w-[55%] items-center gap-2 rounded-md p-1 text-crm-text hover:bg-crm-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2 sm:max-w-64;
 }
 
 .accountAvatar {
@@ -201,7 +201,7 @@
 }
 
 .siteLink {
-	@apply inline-flex min-h-10 shrink-0 items-center rounded-lg px-2 text-sm font-semibold text-primary hover:bg-crm-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+	@apply inline-flex min-h-10 shrink-0 items-center rounded-lg px-2 text-sm font-semibold text-primary hover:bg-crm-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2;
 }
 
 .siteLink {
@@ -209,7 +209,7 @@
 }
 
 .content {
-	@apply flex min-w-0 flex-col gap-4 p-4 outline-none sm:p-5 xl:p-6;
+	@apply flex min-w-0 flex-col gap-5 p-4 outline-none sm:p-6 xl:p-8;
 }
 
 .content:focus-visible {
@@ -224,12 +224,12 @@
 	@apply flex flex-col gap-2 border-t border-crm-border pt-4;
 
 	a {
-		@apply rounded-lg px-3 py-2 text-sm font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+		@apply rounded-lg px-3 py-2 text-sm font-semibold text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2;
 	}
 }
 
 .mobileCaption {
-	@apply mt-auto rounded-xl border border-crm-border bg-crm-surface-muted px-3 py-3 text-xs leading-5 text-crm-muted;
+	@apply mt-auto rounded-md border border-crm-border bg-crm-surface-muted px-3 py-3 text-xs leading-5 text-crm-muted;
 }
 .logoutLink {
 	flex: none;
@@ -237,7 +237,7 @@
 	border-radius: 8px;
 	color: rgb(var(--crm-primary));
 	font-size: 13px;
-	font-weight: 700;
+	font-weight: 500;
 
 	&:hover {
 		background: rgb(var(--crm-surface-muted));
@@ -245,7 +245,7 @@
 }
 
 .navigationBadge {
-	@apply ml-auto inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold tabular-nums text-white;
+	@apply ml-auto inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center rounded-md bg-crm-selected px-1.5 text-xs font-medium tabular-nums text-crm-muted;
 }
 .navigationBadgeUnknown {
 	@apply bg-crm-surface-muted text-crm-muted;

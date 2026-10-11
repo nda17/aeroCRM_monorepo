@@ -4,29 +4,40 @@
 .tabs {
 	@apply flex flex-wrap items-center gap-2;
 }
+.tabs[role='group'] {
+	@apply gap-x-5 gap-y-0 border-b border-crm-border;
+
+	> button {
+		@apply rounded-none border-x-0 border-b-2 border-t-0 border-transparent bg-transparent px-0 text-crm-muted hover:bg-transparent hover:text-crm-text;
+	}
+
+	> button[aria-pressed='true'] {
+		@apply border-b-primary text-crm-text;
+	}
+}
 .panel {
-	@apply overflow-hidden rounded-panel border border-crm-border bg-crm-surface shadow-panel;
+	@apply min-w-0 overflow-hidden rounded-lg border border-crm-border bg-crm-surface;
 }
 .panelHeader {
 	@apply flex flex-wrap items-center justify-between gap-3 border-b border-crm-border p-3 sm:p-4;
 }
 .panelTitle {
-	@apply text-base font-semibold text-crm-text;
+	@apply text-sm font-semibold text-crm-text;
 }
 .search {
 	@apply flex w-full flex-col gap-3 sm:flex-row sm:items-end lg:w-auto;
 }
 .entryButton {
-	@apply flex min-w-0 max-w-full flex-col items-start gap-1 rounded-lg text-left [overflow-wrap:anywhere] transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+	@apply flex min-h-11 min-w-0 max-w-full flex-col items-start justify-center gap-1 rounded-md text-left [overflow-wrap:anywhere] transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:min-h-9;
 }
 .entryButton strong {
 	@apply font-semibold;
 }
 .entryButton span {
-	@apply text-sm text-crm-muted;
+	@apply text-xs text-crm-muted;
 }
 .contact {
-	@apply flex min-w-0 flex-col gap-1 text-sm [overflow-wrap:anywhere];
+	@apply flex min-w-0 flex-col gap-1 text-[13px] [overflow-wrap:anywhere];
 }
 .entriesTable table {
 	@apply md:table-fixed md:min-w-[960px];
@@ -49,5 +60,5 @@
 	@apply w-[14%];
 }
 .pagination {
-	@apply flex flex-wrap items-center justify-end gap-3 border-t border-crm-border p-3 text-sm text-crm-muted;
+	@apply flex flex-wrap items-center justify-end gap-3 border-t border-crm-border p-3 text-xs text-crm-muted;
 }

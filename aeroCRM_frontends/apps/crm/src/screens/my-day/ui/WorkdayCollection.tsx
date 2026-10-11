@@ -38,6 +38,7 @@ import {
 	DataTable,
 	ScreenState,
 	SelectField,
+	TextField,
 	AppIcon,
 	type DataTableColumn
 } from '@/shared/ui'
@@ -45,6 +46,9 @@ import {
 	isWorkdayOverdue,
 	groupWorkdayTasks,
 	workdayDate,
+	workdayCalendarDay,
+	workdayCalendarWeek,
+	shiftWorkdayCalendarDay,
 	WORKDAY_BOARD_STATUSES,
 	WORKDAY_STATUS_LABELS,
 	type WorkdayView
@@ -208,6 +212,8 @@ const TaskDue = ({
 )
 
 interface CollectionProps {
+	onCalendarDate?: (day: string) => void
+	calendarNavigationDisabled?: boolean
 	onReschedule?: (task: WorkdayTask) => void
 	onResetFilters?: () => void
 	planner?: PlannerSettings
@@ -224,7 +230,9 @@ interface CollectionProps {
 }
 
 export const WorkdayCollection = (props: CollectionProps) =>
-	props.view === 'board' ? (
+	props.view === 'calendar' ? (
+		<WorkdayCalendar {...props} />
+	) : props.view === 'board' ? (
 		props.onColumn && (!props.planner || props.settingsError) ? (
 			<ScreenState
 				variant={props.settingsError ? 'error' : 'loading'}
@@ -414,6 +422,234 @@ const WorkdayList = ({
 				/>
 			) : null}
 		</div>
+	)
+}
+
+const WorkdayCalendar = ({
+	filters,
+	canWrite,
+	onOpen,
+	onReschedule,
+	onStatus,
+	onPage,
+	onCalendarDate,
+	calendarNavigationDisabled = false
+}: CollectionProps) => {
+	const week =
+		filters.period === 'RANGE' ? workdayCalendarWeek(filters.from) : null
+	const validWeek =
+		!!week && filters.from === week.from && filters.to === week.to
+	const { query, data, context } = useWorkdayTasks(filters, validWeek)
+	const names = useWorkdayNames(context, data?.items ?? [])
+	const today = workdayCalendarDay(
+		data?.asOf ?? new Date().toISOString(),
+		filters.timeZone
+	)
+	const previousWeek =
+		week &&
+		workdayCalendarWeek(shiftWorkdayCalendarDay(week.from, -7) ?? '')
+	const nextWeek =
+		week &&
+		workdayCalendarWeek(shiftWorkdayCalendarDay(week.from, 7) ?? '')
+	const navigationDisabled =
+		calendarNavigationDisabled || !onCalendarDate || !context.canRead
+	const partial =
+		!!data && (data.page !== 1 || data.items.length < data.total)
+	const dateLabel = (day: string) =>
+		new Intl.DateTimeFormat('ru-RU', {
+			weekday: 'long',
+			day: 'numeric',
+			month: 'long',
+			year: 'numeric',
+			timeZone: 'UTC'
+		}).format(new Date(`${day}T00:00:00.000Z`))
+	const dayTasks = new Map<string, WorkdayTask[]>(
+		week?.days.map(day => [day, []]) ?? []
+	)
+	for (const task of data?.items ?? []) {
+		const day = workdayCalendarDay(task.dueAt, filters.timeZone)
+		if (day) dayTasks.get(day)?.push(task)
+	}
+	return (
+		<section
+			className={styles.calendar}
+			aria-label="Календарь задач"
+			aria-busy={query.isFetching}
+		>
+			<div className={styles.calendarToolbar}>
+				<div className={styles.calendarHeading}>
+					<h2 aria-live="polite">
+						{week
+							? new Intl.DateTimeFormat('ru-RU', {
+									day: 'numeric',
+									month: 'long',
+									year: 'numeric',
+									timeZone: 'UTC'
+								}).formatRange(
+									new Date(`${week.from}T00:00:00.000Z`),
+									new Date(`${week.to}T00:00:00.000Z`)
+								)
+							: 'Выберите неделю'}
+					</h2>
+					<p className={styles.hint}>
+						Сроки задач · {filters.timeZone} · понедельник–воскресенье
+					</p>
+				</div>
+				<div className={styles.calendarNavigation}>
+					<TextField
+						label="Дата недели"
+						labelHidden
+						type="date"
+						containerClassName={styles.calendarDate}
+						value={week?.from ?? ''}
+						min="0001-01-01"
+						max="9999-12-31"
+						disabled={navigationDisabled}
+						onChange={event => onCalendarDate?.(event.target.value)}
+					/>
+					<Button
+						variant="secondary"
+						size="sm"
+						aria-label="Сегодня в календаре"
+						disabled={navigationDisabled || !today}
+						onClick={() => {
+							const currentDay = workdayCalendarDay(
+								new Date().toISOString(),
+								filters.timeZone
+							)
+							if (currentDay) onCalendarDate?.(currentDay)
+						}}
+					>
+						Сегодня
+					</Button>
+					<Button
+						variant="secondary"
+						size="sm"
+						aria-label="Предыдущая неделя"
+						disabled={navigationDisabled || !previousWeek}
+						onClick={() =>
+							previousWeek && onCalendarDate?.(previousWeek.from)
+						}
+					>
+						<span aria-hidden="true">←</span>
+					</Button>
+					<Button
+						variant="secondary"
+						size="sm"
+						aria-label="Следующая неделя"
+						disabled={navigationDisabled || !nextWeek}
+						onClick={() => nextWeek && onCalendarDate?.(nextWeek.from)}
+					>
+						<span aria-hidden="true">→</span>
+					</Button>
+				</div>
+			</div>
+			<NamesError names={names} />
+			{!validWeek || query.isError ? (
+				<ScreenState
+					variant="error"
+					description="Не удалось загрузить неделю календаря. Это не означает, что задач нет."
+					action={
+						<Button onClick={() => void query.refetch()}>Повторить</Button>
+					}
+				/>
+			) : !data ? (
+				<ScreenState variant="loading" />
+			) : (
+				<>
+					<p className={styles.hint} role="status">
+						На этой странице {data.items.length} из {data.total} задач
+						недели по выбранным фильтрам.
+						{partial
+							? ' Остальные задачи доступны на других страницах. Счётчики по дням относятся только к этой странице.'
+							: ' Показаны все задачи недели по выбранным фильтрам.'}
+					</p>
+					{data.total > 0 && !data.items.length ? (
+						<ScreenState
+							variant="empty"
+							title="На этой странице задач больше нет"
+							description="Задачи недели остаются доступны на предыдущих страницах."
+							action={
+								<Button
+									disabled={query.isFetching}
+									onClick={() =>
+										onPage(
+											Math.max(1, Math.ceil(data.total / filters.pageSize))
+										)
+									}
+								>
+									Вернуться к задачам
+								</Button>
+							}
+						/>
+					) : (
+						<div className={styles.calendarViewport}>
+							<div className={styles.calendarGrid}>
+								{week!.days.map(day => {
+									const tasks = dayTasks.get(day) ?? []
+									return (
+										<section
+											key={day}
+											className={styles.calendarDay}
+											aria-label={dateLabel(day)}
+											data-today={today === day}
+										>
+											<h3 className={styles.calendarDayHeading}>
+												<time dateTime={day}>
+													{new Intl.DateTimeFormat('ru-RU', {
+														weekday: 'short',
+														day: 'numeric',
+														month: 'short',
+														timeZone: 'UTC'
+													}).format(new Date(`${day}T00:00:00.000Z`))}
+												</time>
+												{today === day ? <span>Сегодня</span> : null}
+											</h3>
+											<p className={styles.hint}>
+												{partial ? 'На странице' : 'Задач'}: {tasks.length}
+											</p>
+											{tasks.length ? (
+												<ul className={styles.cards}>
+													{tasks.map(task => (
+														<WorkdayCard
+															key={task.id}
+															task={task}
+															timeZone={filters.timeZone}
+															asOf={data.asOf}
+															enabled={canWrite && !query.isFetching}
+															onOpen={onOpen}
+															onReschedule={onReschedule}
+															onStatus={onStatus}
+															commandContext={context}
+															assigneeName={names.name(task)}
+															draggable={false}
+														/>
+													))}
+												</ul>
+											) : (
+												<p className={styles.calendarEmpty}>
+													{partial
+														? 'На этой странице задач нет'
+														: 'Нет задач по выбранным фильтрам'}
+												</p>
+											)}
+										</section>
+									)
+								})}
+							</div>
+						</div>
+					)}
+					<WorkdayPagination
+						page={filters.page}
+						pageSize={filters.pageSize}
+						total={data.total}
+						pending={query.isFetching}
+						onPage={onPage}
+						label="Страницы календаря задач"
+					/>
+				</>
+			)}
+		</section>
 	)
 }
 
@@ -705,24 +941,28 @@ const WorkdayCard = ({
 	timeZone,
 	asOf,
 	onOpen,
+	onReschedule,
 	onStatus,
 	commandContext,
 	assigneeName,
 	columnId,
 	columns,
-	onSelectColumn
+	onSelectColumn,
+	draggable = true
 }: {
 	task: WorkdayTask
 	enabled: boolean
 	timeZone: string
 	asOf: string
 	onOpen: (task: WorkdayTask) => void
+	onReschedule?: (task: WorkdayTask) => void
 	onStatus: CollectionProps['onStatus']
 	commandContext: WorkdayCommandContext
 	assigneeName: string
-	columnId: string
+	columnId?: string
 	columns?: PlannerColumn[]
-	onSelectColumn: (task: WorkdayTask, id: string) => void
+	onSelectColumn?: (task: WorkdayTask, id: string) => void
+	draggable?: boolean
 }) => {
 	const { unresolved } = useWorkdayTaskCommandState(
 		commandContext,
@@ -736,7 +976,7 @@ const WorkdayCard = ({
 		isDragging
 	} = useDraggable({
 		id: task.id,
-		disabled: !enabled || unresolved,
+		disabled: !draggable || !enabled || unresolved,
 		data: { task, columnId }
 	})
 	return (
@@ -748,28 +988,30 @@ const WorkdayCard = ({
 				<button className={styles.taskTitle} onClick={() => onOpen(task)}>
 					{task.title}
 				</button>
-				<button
-					ref={setActivatorNodeRef}
-					className={styles.dragHandle}
-					{...attributes}
-					{...listeners}
-					disabled={!enabled || unresolved}
-					aria-label={`Переместить задачу «${task.title}»`}
-				>
-					<svg
-						width="20"
-						height="20"
-						viewBox="0 0 20 20"
-						fill="currentColor"
-						aria-hidden="true"
+				{draggable ? (
+					<button
+						ref={setActivatorNodeRef}
+						className={styles.dragHandle}
+						{...attributes}
+						{...listeners}
+						disabled={!enabled || unresolved}
+						aria-label={`Переместить задачу «${task.title}»`}
 					>
-						{[5, 10, 15].flatMap(y =>
-							[7, 13].map(x => (
-								<circle key={`${x}:${y}`} cx={x} cy={y} r="1.3" />
-							))
-						)}
-					</svg>
-				</button>
+						<svg
+							width="20"
+							height="20"
+							viewBox="0 0 20 20"
+							fill="currentColor"
+							aria-hidden="true"
+						>
+							{[5, 10, 15].flatMap(y =>
+								[7, 13].map(x => (
+									<circle key={`${x}:${y}`} cx={x} cy={y} r="1.3" />
+								))
+							)}
+						</svg>
+					</button>
+				) : null}
 			</div>
 			<TaskDue task={task} timeZone={timeZone} asOf={asOf} />
 			<div className={styles.cardFooter}>
@@ -778,7 +1020,7 @@ const WorkdayCard = ({
 					Ответственный: {assigneeName}
 				</span>
 			</div>
-			{columns ? (
+			{columns && onSelectColumn ? (
 				<div className={styles.copy}>
 					<SelectField
 						label={`Колонка задачи «${task.title}»`}
@@ -810,6 +1052,7 @@ const WorkdayCard = ({
 					enabled={enabled}
 					onStatus={onStatus}
 					onOpen={onOpen}
+					onReschedule={onReschedule}
 					commandContext={commandContext}
 				/>
 			)}

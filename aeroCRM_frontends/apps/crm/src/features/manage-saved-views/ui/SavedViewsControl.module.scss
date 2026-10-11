@@ -1,16 +1,19 @@
 .control {
-	@apply flex min-w-0 flex-col gap-2 rounded-xl border border-crm-border bg-crm-surface p-3;
+	@apply flex min-w-0 flex-col gap-1.5 border-b border-crm-border pb-3;
 }
 .heading {
-	@apply flex flex-wrap items-center justify-between gap-2;
+	@apply flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1.5;
+	> button {
+		@apply lg:min-h-8 lg:py-1;
+	}
 }
 .title {
-	@apply text-sm font-semibold text-crm-text;
+	@apply text-xs font-semibold text-crm-text;
 }
 .list {
-	@apply flex flex-wrap items-center gap-2;
+	@apply flex min-w-0 flex-wrap items-center gap-1.5;
 	button {
-		@apply min-w-0 max-w-full break-words text-left;
+		@apply min-w-0 max-w-full break-words text-left lg:min-h-8 lg:px-2.5 lg:py-1;
 	}
 }
 .actions {
@@ -23,5 +26,8 @@
 	}
 }
 .message {
-	@apply text-sm text-crm-muted;
+	@apply text-xs leading-5 text-crm-muted;
+}
+.saveNotice {
+	@apply basis-full text-sm leading-5 text-crm-muted;
 }
