@@ -1045,13 +1045,12 @@ try {
     0,
     "archived contacts fall outside current notification scope and counts",
   );
-  await assert.rejects(() =>
-    syncMailForNotifications.readNotification(
-      secondMembershipAuthority,
-      generatedNotificationId,
-      { schemaVersion: 1, workspaceId, read: true },
-    ),
+  const archivedSharedRead = await syncMailForNotifications.readNotification(
+    secondMembershipAuthority,
+    generatedNotificationId,
+    { schemaVersion: 1, workspaceId, read: true },
   );
+  assert(archivedSharedRead.readAt, "shared notification reads remain available after the linked contact is archived");
   await runtime.contact.update({
     where: { id: syncContactId },
     data: { archivedAt: null },
@@ -1420,8 +1419,8 @@ try {
     );
   }
 
-  // Standalone mail uses the same mailbox ACL without treating hidden linked
-  // mail as unlinked. Use real relational filters, cursor, command and guards.
+  // Shared mail remains readable outside contact scope while linked contact
+  // details stay redacted. Use real relational filters, cursor, command and guards.
   const standaloneSource = randomUUID();
   const standaloneLink = randomUUID();
   const hiddenSource = randomUUID();
@@ -1458,17 +1457,20 @@ try {
   } });
   const standaloneQuery = { workspaceId, mailboxId: ids.mailbox, folder: "INBOX", limit: 1 };
   const standalonePage = await mail.messages(ownAuthority, standaloneQuery);
-  assert.deepEqual(standalonePage.items.map(row => row.id), [standaloneSource],
-    "hidden newer mail must be filtered before LIMIT, not create an empty visible page");
+  assert.deepEqual(standalonePage.items.map(row => row.id), [hiddenSource],
+    "shared mail remains visible even when its linked contact is outside the caller's data scope");
   assert(standalonePage.nextCursor);
   const nextStandalonePage = await mail.messages(ownAuthority, {
     ...standaloneQuery, cursor: standalonePage.nextCursor,
   });
-  assert(!nextStandalonePage.items.some(row => [standaloneSource, hiddenSource].includes(row.id)));
+  assert.deepEqual(nextStandalonePage.items.map(row => row.id), [standaloneSource]);
   await assert.rejects(() => mail.messages(ownAuthority, {
     ...standaloneQuery, folder: "SENT", cursor: standalonePage.nextCursor,
   }), "a cursor cannot be reused for another mail folder");
-  await assert.rejects(() => mail.message(ownAuthority, hiddenSource));
+  const hiddenSourceDetail = await mail.message(ownAuthority, hiddenSource);
+  assert.equal(hiddenSourceDetail.item.id, hiddenSource);
+  assert.deepEqual(hiddenSourceDetail.item.links, [],
+    "shared message detail redacts links outside the caller's contact scope");
   assert.equal((await mail.message(ownAuthority, standaloneSource)).item.id, standaloneSource);
 
   await runtime.mailAttachment.create({ data: {
@@ -1518,14 +1520,15 @@ try {
     expectedVersion: 1, externalEmail: "standalone@example.org", contactId: hiddenContact,
   });
   for (const sendId of [standaloneReply.sendId, standaloneChild.sendId])
-    await assert.rejects(() => mail.sendStatus(ownAuthority, sendId),
-      "later source linking must hide every inherited reply from out-of-scope staff");
-  await assert.rejects(() => mail.attachmentMetadata(ownAuthority, localUpload),
-    "even the uploader cannot bypass lost source scope after binding");
+    assert.equal((await mail.sendStatus(ownAuthority, sendId)).item.state, "QUEUED",
+      "shared-mail readers retain access to replies after a source contact is linked");
+  assert.equal((await mail.attachmentMetadata(ownAuthority, localUpload)).item.id, localUpload,
+    "shared-mail readers retain access to reply attachments after source linking");
   const ownSent = await mail.messages(ownAuthority, {
     workspaceId, mailboxId: ids.mailbox, folder: "SENT", limit: 100,
   });
-  assert(!ownSent.items.some(row => [standaloneReply.sendId, standaloneChild.sendId].includes(row.id)));
+  assert([standaloneReply.sendId, standaloneChild.sendId].every(id => ownSent.items.some(row => row.id === id)),
+    "shared sent mail remains visible after source contact linking");
   await assert.rejects(() => mail.replySource(commandAuthority, ids.mailbox, null, standaloneSource),
     "queued null replies require source-context revalidation before admission");
   console.log("Standalone mail actual database checks passed: pre-pagination scope, nullable replies, flat inherited ACL, upload binding and immutable guard");
