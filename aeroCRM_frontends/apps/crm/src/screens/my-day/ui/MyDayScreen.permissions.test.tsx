@@ -180,17 +180,44 @@ const deferred = <T,>() => {
 }
 const titleField = () => screen.getByLabelText('Название задачи')
 const findTaskButton = async () => {
-	await screen.findByRole('button', { name: task.title })
-	await waitFor(() =>
+	await waitFor(() => {
+		const active = client
+			.getQueryCache()
+			.getAll()
+			.filter(query => query.isActive())
+		const permissionsQueries = active.filter(
+			query => query.queryKey[0] === 'crm-permissions'
+		)
+		const plannerQueries = active.filter(
+			query => query.queryKey[0] === 'crm-planner'
+		)
+		const taskQueries = active.filter(
+			query =>
+				query.queryKey[0] === 'crm-workday' && query.queryKey[1] === 'list'
+		)
+		const settled = (query: (typeof active)[number]) =>
+			query.state.status === 'success' &&
+			query.state.fetchStatus === 'idle'
+		const items = (query: (typeof taskQueries)[number]) =>
+			(query.state.data as { items?: Array<{ id: string }> } | undefined)
+				?.items ?? []
+
+		expect(permissionsQueries.length).toBeGreaterThan(0)
+		expect(permissionsQueries.every(settled)).toBe(true)
+		expect(plannerQueries.length).toBeGreaterThan(0)
+		expect(plannerQueries.every(settled)).toBe(true)
+		expect(taskQueries.length).toBeGreaterThan(0)
+		expect(taskQueries.every(settled)).toBe(true)
 		expect(
-			client
-				.getQueryCache()
-				.findAll({ queryKey: ['crm-planner'] })
-				.some(query => query.state.status === 'success')
+			taskQueries.some(query =>
+				items(query).some(item => item.id === task.id)
+			)
 		).toBe(true)
-	)
-	await waitFor(() => expect(client.isFetching()).toBe(0))
-	return screen.getByRole('button', { name: task.title })
+	})
+	const button = await screen.findByRole('button', { name: task.title })
+	expect(button.isConnected).toBe(true)
+	expect(screen.getByRole('button', { name: task.title })).toBe(button)
+	return button
 }
 const permissionsReadCount = () =>
 	vi
@@ -315,6 +342,60 @@ afterEach(() => {
 })
 
 describe('MyDay actual permission query lifecycle', () => {
+	it('waits for active task data before looking up its live accessible button', async () => {
+		const response = deferred<typeof page>()
+		const pageCallStarted = deferred<true>()
+		let pageResolved = false
+		const resolvePage = async () => {
+			if (pageResolved) return
+			pageResolved = true
+			await act(async () => {
+				response.resolve({
+					...page,
+					page: 1,
+					pageSize: 20,
+					items: [task],
+					total: 1
+				})
+				await response.promise
+			})
+		}
+		vi.mocked(listWorkdayTasks).mockImplementation(
+			async (_token, request) => {
+				if (request.pageSize === 20) {
+					pageCallStarted.resolve(true)
+					return response.promise
+				}
+				return {
+					...page,
+					page: request.page,
+					pageSize: request.pageSize,
+					items: [task],
+					total: 1
+				}
+			}
+		)
+		render(<MyDayScreen />, { wrapper: Wrapper })
+		const roleLookup = vi.spyOn(screen, 'findByRole')
+		try {
+			const pendingButton = findTaskButton()
+			await pageCallStarted.promise
+			expect(roleLookup).not.toHaveBeenCalled()
+			expect(screen.queryByRole('button', { name: task.title })).toBeNull()
+
+			await resolvePage()
+			const button = await pendingButton
+			expect(button.isConnected).toBe(true)
+			expect(button.closest('[hidden], [inert]')).toBeNull()
+			expect(screen.getByRole('button', { name: task.title })).toBe(button)
+			expect(roleLookup).toHaveBeenCalledExactlyOnceWith('button', {
+				name: task.title
+			})
+		} finally {
+			await resolvePage()
+			roleLookup.mockRestore()
+		}
+	})
 	it('refreshes the task page and overview when Today selects the current week again', async () => {
 		vi.useFakeTimers({ toFake: ['Date'] })
 		try {
@@ -338,7 +419,10 @@ describe('MyDay actual permission query lifecycle', () => {
 			)
 			await waitFor(() => expect(client.isFetching()).toBe(0))
 			expect(
-				listWorkdayTasks.mock.calls.slice(-2).map(([, request]) => request)
+				vi
+					.mocked(listWorkdayTasks)
+					.mock.calls.slice(-2)
+					.map(([, request]) => request)
 			).toEqual(
 				expect.arrayContaining([
 					expect.objectContaining({
