@@ -1,0 +1,92 @@
+name: aeroCRM Telegram Business webhook activation
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Green CI run ID for the exact released production commit
+        required: true
+      sha:
+        description: Full 40-character released production commit SHA
+        required: true
+      infra_sha:
+        description: Exact released private infra commit SHA
+        required: true
+      backend_env_hash:
+        description: Released backend env aggregate with Telegram Business enabled
+        required: true
+      telegram_env_bundle_hash:
+        description: SHA-256 of enabled canonical Telegram Business env bundle
+        required: true
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: aerocrm-production-release
+  cancel-in-progress: false
+jobs:
+  activate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify green exact-SHA production CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.ci_run_id }}
+          SHA: ${{ inputs.sha }}
+          INFRA_SHA: ${{ inputs.infra_sha }}
+          ENV_HASH: ${{ inputs.backend_env_hash }}
+          BUNDLE_HASH: ${{ inputs.telegram_env_bundle_hash }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/prod_0.1.0 ]]
+          [[ "$RUN_ID" =~ ^[0-9]+$ && "$SHA" =~ ^[a-f0-9]{40}$ && "$INFRA_SHA" =~ ^[a-f0-9]{40}$ &&
+            "$ENV_HASH" =~ ^[a-f0-9]{64}$ && "$BUNDLE_HASH" =~ ^[a-f0-9]{64}$ ]]
+          read -r conclusion head_sha branch workflow_path <<< "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '[.conclusion,.head_sha,.head_branch,.path] | join(" ")')"
+          [[ "$conclusion" == success && "$head_sha" == "$SHA" && "$branch" == prod_0.1.0 && "$workflow_path" == .github/workflows/ci.yml ]]
+      - uses: actions/checkout@v4
+        with:
+          repository: nda17/aeroCRM_infra
+          ref: ${{ inputs.infra_sha }}
+          ssh-key: ${{ secrets.INFRA_DEPLOY_KEY }}
+          persist-credentials: false
+          path: infra
+      - name: Confirm released backend revision, readiness and enabled roles
+        env:
+          SHA: ${{ inputs.sha }}
+          INFRA_SHA: ${{ inputs.infra_sha }}
+          RUN_ID: ${{ inputs.ci_run_id }}
+          ENV_HASH: ${{ inputs.backend_env_hash }}
+          BACK_HOST: ${{ secrets.BACKEND_SSH_HOST }}
+          BACK_USER: ${{ secrets.BACKEND_SSH_USER }}
+          BACK_PORT: ${{ secrets.BACKEND_SSH_PORT }}
+          BACK_KEY: ${{ secrets.BACKEND_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$BACK_HOST" =~ ^[A-Za-z0-9.-]+$ && "$BACK_USER" =~ ^[A-Za-z_][A-Za-z0-9_-]*$ && "$BACK_PORT" =~ ^[0-9]{1,5}$ ]]
+          [[ "$(git -C infra rev-parse HEAD)" == "$INFRA_SHA" ]]
+          mkdir -p "$RUNNER_TEMP/telegram-ssh"
+          printf '%s\n' "$BACK_KEY" > "$RUNNER_TEMP/telegram-ssh/key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/telegram-ssh/known_hosts"
+          chmod 600 "$RUNNER_TEMP/telegram-ssh/key" "$RUNNER_TEMP/telegram-ssh/known_hosts"
+          ssh -i "$RUNNER_TEMP/telegram-ssh/key" -p "$BACK_PORT" -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/telegram-ssh/known_hosts" "$BACK_USER@$BACK_HOST" \
+            'cat /opt/aerocrm/releases/backend-state.json' > "$RUNNER_TEMP/telegram-backend-state.json"
+          node -e 'const fs=require("node:fs"),s=JSON.parse(fs.readFileSync(process.argv[1]));
+            if(s.manifest?.releaseSha!==process.env.SHA || s.manifest?.ciRunId!==process.env.RUN_ID ||
+              s.infraSha!==process.env.INFRA_SHA || s.envHash!==process.env.ENV_HASH) process.exit(1);' \
+            "$RUNNER_TEMP/telegram-backend-state.json"
+          ssh -i "$RUNNER_TEMP/telegram-ssh/key" -p "$BACK_PORT" -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/telegram-ssh/known_hosts" "$BACK_USER@$BACK_HOST" \
+            "set -e; cd /opt/aerocrm; for port in 5300 5303; do curl --fail --silent --show-error --max-time 10 http://127.0.0.1:\$port/health/ready >/dev/null; done; IMAGE_SHA='$SHA' docker compose -f compose/backend.yml exec -T crm-access-api sh -c 'test \"\$TELEGRAM_BUSINESS_ENABLED\" = true'; IMAGE_SHA='$SHA' docker compose -f compose/backend.yml exec -T crm-access-telegram-worker sh -c 'test \"\$TELEGRAM_BUSINESS_ENABLED\" = true'"
+          rm -f "$RUNNER_TEMP/telegram-backend-state.json"
+      - name: Activate and verify provider webhook
+        env:
+          CRM_ACCESS_TELEGRAM_BUSINESS_ENV_BUNDLE: ${{ secrets.CRM_ACCESS_TELEGRAM_BUSINESS_ENV_BUNDLE }}
+          TELEGRAM_ENV_BUNDLE_HASH: ${{ inputs.telegram_env_bundle_hash }}
+        run: |
+          set -euo pipefail
+          node infra/scripts/telegram-business-webhook.mjs
+      - name: Remove temporary backend SSH material
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/telegram-ssh" "$RUNNER_TEMP/telegram-backend-state.json"

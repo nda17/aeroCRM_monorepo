@@ -33,6 +33,9 @@ vi.mock('@/features/manage-crm-billing', () => ({
 vi.mock('@/features/manage-mail/ui/MailSettings', () => ({
 	MailSettings: () => null
 }))
+vi.mock('@/features/telegram-business/ui/TelegramSettings', () => ({
+	TelegramSettings: () => null
+}))
 vi.mock('@/entities/crm-team', async original => ({
 	...(await original<object>()),
 	listTeamRecords: vi.fn()

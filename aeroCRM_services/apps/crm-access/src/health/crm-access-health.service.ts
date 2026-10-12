@@ -87,6 +87,20 @@ export class CrmAccessHealthService {
 				 (c.relname='crm_workspace_access' AND t.tgname='provision_workspace_collaboration'))`;
 			if (!collaboration?.enabled)
 				throw new Error('Workspace collaboration schema is not ready');
+			await this.prisma.$queryRaw`SELECT s.last_sequence,e.sequence,r.through_sequence,c.last_inbound_at,c.last_outbound_at,m.delivery_status,i.raw_body,d.dispatch_admitted_at
+				FROM crm_access.workspace_messenger_streams s
+				FULL JOIN crm_access.workspace_messenger_entries e ON false
+				FULL JOIN crm_access.workspace_messenger_read_cursors r ON false
+				FULL JOIN crm_access.telegram_channels c ON false
+				FULL JOIN crm_access.telegram_messages m ON false
+				FULL JOIN crm_access.telegram_webhook_inbox i ON false
+				FULL JOIN crm_access.telegram_deliveries d ON false LIMIT 0`;
+			const [messengerProjection] = await this.prisma.$queryRaw<{ enabled: boolean }[]>`
+				SELECT count(*) = 1 AS enabled FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
+				JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='crm_access'
+				AND c.relname='crm_chat_messages' AND t.tgname='workspace_messenger_internal_projection' AND t.tgenabled IN ('O','A')`;
+			if (!messengerProjection?.enabled)
+				throw new Error('Workspace Messenger projection is not ready');
 			const [customRoleContract] = await this.prisma.$queryRaw<
 				{ allowed: boolean }[]
 			>`SELECT crm_access.is_valid_custom_role_permissions(ARRAY['sales:read']::text[]) AS allowed`;

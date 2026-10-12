@@ -110,7 +110,7 @@
 			]
 		},
 		"crm-access": {
-			"manifestSha256": "571fa16a4f05a38b5a9cedc4c59d1d6c0d00b127cc3be26db02014fd1e78f127",
+			"manifestSha256": "f8eb00aae9f6fe215a20c0be1e68f86e5dedf3afc80f3f14abe30263bfc3fe1b",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -147,6 +147,10 @@
 				{
 					"name": "20261008010000_messenger_storage_prefix",
 					"checksum": "394f86ac5af5c20c2d6df6d84ac9220e7f40bc73af18e5b0d5781cb9285ef039"
+				},
+				{
+					"name": "20261012010000_telegram_business_messenger",
+					"checksum": "b2c08ea9c44ce25a2759dc7bc43763c930b06c459ca5428d498d5e9c4e124b26"
 				}
 			]
 		},

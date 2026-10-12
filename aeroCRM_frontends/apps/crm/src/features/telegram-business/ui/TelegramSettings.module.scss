@@ -1,0 +1,74 @@
+.panel {
+	display: grid;
+	gap: 1rem;
+	padding: 1.5rem;
+	border: 1px solid rgb(var(--crm-border));
+	border-radius: 1rem;
+	background: rgb(var(--crm-surface));
+	scroll-margin-top: 2rem;
+}
+.panel h2 {
+	font-size: 1.125rem;
+	font-weight: 700;
+}
+.panel h3 {
+	font-weight: 700;
+}
+.panel p {
+	line-height: 1.6;
+}
+.panel a {
+	color: rgb(var(--crm-primary));
+	text-decoration: underline;
+}
+.panel summary {
+	cursor: pointer;
+	font-weight: 600;
+}
+.channel,
+.wizard {
+	display: grid;
+	gap: 0.75rem;
+	padding: 1rem;
+	border: 1px solid rgb(var(--crm-border));
+	border-radius: 0.75rem;
+}
+.steps {
+	display: grid;
+	gap: 1rem;
+	padding-left: 1.5rem;
+	list-style: decimal;
+	line-height: 1.6;
+}
+.actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+}
+.stack {
+	display: grid;
+	gap: 0.75rem;
+	margin-top: 0.75rem;
+}
+.checkbox {
+	display: flex;
+	gap: 0.75rem;
+	align-items: flex-start;
+}
+.checkbox input {
+	margin-top: 0.35rem;
+	flex-shrink: 0;
+}
+.hint {
+	color: rgb(var(--crm-muted));
+	font-size: 0.875rem;
+}
+@media (max-width: 640px) {
+	.panel {
+		padding: 1rem;
+	}
+	.wizard {
+		padding: 0.75rem;
+	}
+}

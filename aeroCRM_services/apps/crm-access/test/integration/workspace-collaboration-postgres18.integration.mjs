@@ -12,6 +12,12 @@ const {
 const {
 	WorkspaceChatService
 } = require('../../dist/src/workspace-chat/workspace-chat.service.js');
+const {
+	WorkspaceMessengerService
+} = require('../../dist/src/workspace-chat/workspace-messenger.service.js');
+const {
+	TelegramBusinessService
+} = require('../../dist/src/telegram-business/telegram-business.service.js');
 assert.equal(process.env.CRM_ACCESS_INTEGRATION_ALLOW_MUTATION, 'true');
 const databaseUrl = required('CRM_ACCESS_TEST_DATABASE_URL');
 const runtimeRole = required('CRM_ACCESS_TEST_RUNTIME_ROLE');
@@ -104,6 +110,8 @@ const auth = {
 };
 const directory = new DirectoryService(prisma, auth);
 const chat = new WorkspaceChatService(prisma, auth);
+const messenger = new WorkspaceMessengerService(prisma, auth, chat);
+const telegram = new TelegramBusinessService(prisma, auth, {});
 const makeCommand = (fields = {}) => ({
 	schemaVersion: 1,
 	workspaceId,
@@ -451,6 +459,67 @@ try {
 		room.id,
 		makeCommand({ text: 'Common room message' })
 	);
+	const projectedInternal = await prisma.workspaceMessengerEntry.findUnique({
+		where: { workspaceId_internalMessageId: { workspaceId, internalMessageId: roomMessage.item.id } }
+	});
+	assert.ok(projectedInternal, 'workspace chat insert is projected by the migration trigger');
+	const telegramChannel = await prisma.telegramChannel.create({
+		data: {
+			workspaceId,
+			ownerUserId: `tg-${randomUUID()}`.slice(0, 32),
+			ownerName: 'Synthetic work account',
+			connectionId: `test-${randomUUID()}`,
+			status: 'ACTIVE',
+			canReply: true
+		}
+	});
+	const insertExternal = () => prisma.$transaction(async tx => {
+		const providerChatId = `chat-${randomUUID()}`.slice(0, 32);
+		const dialog = await tx.telegramDialog.create({
+			data: { workspaceId, channelId: telegramChannel.id, providerChatId, peerName: 'Synthetic customer', lastInboundAt: new Date() }
+		});
+		const telegramMessage = await tx.telegramMessage.create({
+			data: {
+				workspaceId, channelId: telegramChannel.id, dialogId: dialog.id,
+				providerChatId, providerMessageId: `msg-${randomUUID()}`.slice(0, 32),
+				direction: 'INBOUND', origin: 'CUSTOMER', contentKind: 'TEXT',
+				authorUserId: '9001', authorName: 'Synthetic customer', text: 'External feed message', providerAt: new Date()
+			}
+		});
+		const stream = await tx.workspaceMessengerStream.upsert({
+			where: { workspaceId },
+			create: { workspaceId, lastSequence: 1 },
+			update: { lastSequence: { increment: 1 } }
+		});
+		const entry = await tx.workspaceMessengerEntry.create({
+			data: { workspaceId, sequence: stream.lastSequence, kind: 'TELEGRAM_INBOUND', telegramMessageId: telegramMessage.id, createdAt: telegramMessage.providerAt }
+		});
+		return { entry, telegramMessage };
+	});
+	const [concurrentInternal, externalProjection] = await Promise.all([
+		chat.send('Bearer local-test', room.id, makeCommand({ text: 'Concurrent internal feed message' })),
+		insertExternal()
+	]);
+	const replyCommand = makeCommand({ text: 'Ответ клиенту' });
+	const duplicateReplies = await Promise.all([
+		telegram.reply('Bearer local-test', externalProjection.telegramMessage.id, replyCommand),
+		telegram.reply('Bearer local-test', externalProjection.telegramMessage.id, replyCommand)
+	]);
+	assert.equal(duplicateReplies[0].messageId, duplicateReplies[1].messageId, 'parallel same-command replies converge on one durable receipt');
+	assert.equal(await prisma.telegramDelivery.count({ where: { commandId: replyCommand.commandId } }), 1);
+	assert.equal(await prisma.workspaceMessengerEntry.count({ where: { telegramMessageId: duplicateReplies[0].messageId } }), 1);
+	await assert.rejects(
+		telegram.reply('Bearer local-test', externalProjection.telegramMessage.id, { ...replyCommand, text: 'Changed command payload' }),
+		error => error.status === 409
+	);
+	const streamRows = await prisma.workspaceMessengerEntry.findMany({ where: { workspaceId }, orderBy: { sequence: 'asc' } });
+	const concurrentSequences = streamRows.map(item => item.sequence);
+	assert.equal(new Set(concurrentSequences).size, concurrentSequences.length, 'internal trigger and Telegram transaction serialize unique workspace sequences');
+	const mixedFeed = await messenger.messages('Bearer local-test', room.id, { workspaceId, limit: 50 });
+	const externalEntry = mixedFeed.items.find(item => item.id === externalProjection.entry.id);
+	assert.equal(externalEntry.kind, 'TELEGRAM_INBOUND');
+	assert.equal(externalEntry.author.kind, 'TELEGRAM_USER');
+	assert.equal(externalEntry.author.subject, null, 'Telegram customers do not acquire synthetic employee identities');
 	actor = {
 		...actor,
 		subject: peerSubject,
@@ -458,6 +527,10 @@ try {
 		role: 'MANAGER',
 		permissions: ['access:read-team']
 	};
+	const peerReplyCommand = makeCommand({ text: 'Ответ другого сотрудника' });
+	const peerReply = await telegram.reply('Bearer local-test', externalProjection.telegramMessage.id, peerReplyCommand);
+	assert.notEqual(peerReply.messageId, duplicateReplies[0].messageId, 'a second active employee can create an independently attributed reply');
+	const directParticipantBeforeMessengerRead = await prisma.crmChatParticipant.findMany({ where: { conversationId: direct.conversation.id }, orderBy: { subject: 'asc' } });
 	const roomMessages = await chat.messages('Bearer local-test', room.id, {
 		workspaceId,
 		limit: 50
@@ -469,14 +542,38 @@ try {
 		pageSize: 10,
 		unreadOnly: true
 	});
-	assert.equal(notificationPage.unreadCount, 1);
-	assert.equal(notificationPage.items[0].messageId, roomMessage.item.id);
+	assert.equal(notificationPage.unreadCount, 3, 'the combined badge counts two internal messages and the Telegram inbound once');
+	assert.deepEqual(
+		new Set(notificationPage.items.map(item => item.messageId)),
+		new Set([roomMessage.item.id, concurrentInternal.item.id, externalProjection.telegramMessage.id]),
+		'unread notifications contain the external inbound and internal messages, never the CRM outbound reply'
+	);
 	const roomRead = await chat.read(
 		'Bearer local-test',
 		room.id,
-		makeCommand({ throughSequence: roomMessage.item.sequence })
+		makeCommand({ throughSequence: roomMessages.items.at(-1).sequence })
 	);
 	assert.equal(roomRead.unreadCount, 0);
+	const messengerRead = await messenger.read('Bearer local-test', room.id, {
+		workspaceId,
+		commandId: randomUUID(),
+		throughSequence: mixedFeed.lastSequence
+	});
+	assert.deepEqual(Object.keys(messengerRead).sort(), ['conversationId', 'schemaVersion', 'subject', 'throughSequence', 'unreadCount', 'workspaceId']);
+	assert.ok(messengerRead.throughSequence >= mixedFeed.lastSequence);
+	assert.equal(messengerRead.unreadCount, 0);
+	const lowerMessengerRead = await messenger.read('Bearer local-test', room.id, {
+		workspaceId,
+		commandId: randomUUID(),
+		throughSequence: externalProjection.entry.sequence
+	});
+	assert.equal(lowerMessengerRead.throughSequence, messengerRead.throughSequence, 'v3 read cursor remains monotonic for a lower replayed sequence');
+	const directParticipantAfterMessengerRead = await prisma.crmChatParticipant.findMany({ where: { conversationId: direct.conversation.id }, orderBy: { subject: 'asc' } });
+	assert.deepEqual(
+		directParticipantAfterMessengerRead.map(item => ({ subject: item.subject, readThroughSequence: item.readThroughSequence })),
+		directParticipantBeforeMessengerRead.map(item => ({ subject: item.subject, readThroughSequence: item.readThroughSequence })),
+		'workspace messenger read projection leaves direct-message receipts unchanged'
+	);
 	assert.equal(
 		(
 			await chat.notifications('Bearer local-test', {

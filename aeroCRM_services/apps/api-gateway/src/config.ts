@@ -1,4 +1,4 @@
-export type GatewayAuthPolicy = 'required' | 'optional' | 'crm-source';
+export type GatewayAuthPolicy = 'required' | 'optional' | 'crm-source' | 'telegram-webhook';
 
 export const CRM_SOURCE_INGEST_PREFIX = '/api/v1/crm/intake/ingest';
 
@@ -235,7 +235,8 @@ const readRoutes = (
 		if (
 			candidate.authPolicy !== 'required' &&
 			candidate.authPolicy !== 'optional' &&
-			candidate.authPolicy !== 'crm-source'
+			candidate.authPolicy !== 'crm-source' &&
+			candidate.authPolicy !== 'telegram-webhook'
 		) {
 			throw new Error(
 				`${name}.authPolicy must be required or optional or crm-source`
@@ -248,6 +249,12 @@ const readRoutes = (
 			throw new Error(
 				`${name}.crm-source policy is restricted to ${CRM_SOURCE_INGEST_PREFIX}`
 			);
+		}
+		if (
+			candidate.authPolicy === 'telegram-webhook' &&
+			pathPrefix !== '/api/v1/telegram-bot/business-webhook'
+		) {
+			throw new Error(`${name}.telegram-webhook policy is restricted to the Telegram Business webhook`);
 		}
 		if (
 			typeof candidate.timeoutMs !== 'number' ||

@@ -240,6 +240,28 @@ on:
         description: Approved canonical seven-key CRM_ACCESS_CHAT_ENV_BUNDLE SHA-256
         required: false
         type: string
+      crm_telegram_business_env_install:
+        description: Install reviewed Telegram Business API and worker environment
+        required: false
+        type: boolean
+        default: false
+      crm_telegram_business_env_before_hash:
+        description: Approved backend env aggregate before Telegram Business installation
+        required: false
+        type: string
+      crm_telegram_business_env_bundle_hash:
+        description: SHA-256 of canonical CRM_ACCESS_TELEGRAM_BUSINESS_ENV_BUNDLE
+        required: false
+        type: string
+      crm_telegram_business_migration:
+        description: Apply reviewed additive CRM Access Telegram Business migration and ACL
+        required: false
+        type: boolean
+        default: false
+      crm_telegram_business_migration_env_hash:
+        description: SHA-256 of private migrations/crm-access.env
+        required: false
+        type: string
       crm_meeting3_migration:
         description: Backend only; apply reviewed Access, Intake and Sales meeting 3 migrations
         required: false
@@ -349,6 +371,11 @@ jobs:
           CHAT_ENV_INSTALL: ${{ inputs.crm_chat_env_install && 'true' || 'false' }}
           CHAT_ENV_BEFORE_HASH: ${{ inputs.crm_chat_env_before_hash }}
           CHAT_ENV_BUNDLE_HASH: ${{ inputs.crm_chat_env_bundle_hash }}
+          TELEGRAM_ENV_INSTALL: ${{ inputs.crm_telegram_business_env_install && 'true' || 'false' }}
+          TELEGRAM_ENV_BEFORE_HASH: ${{ inputs.crm_telegram_business_env_before_hash }}
+          TELEGRAM_ENV_BUNDLE_HASH: ${{ inputs.crm_telegram_business_env_bundle_hash }}
+          TELEGRAM_MIGRATION: ${{ inputs.crm_telegram_business_migration && 'true' || 'false' }}
+          TELEGRAM_MIGRATION_HASH: ${{ inputs.crm_telegram_business_migration_env_hash }}
           MAIL_MIGRATION_HASH: ${{ inputs.crm_corporate_mail_migration_env_hash }}
           FILE_IMPORTS_MIGRATION: ${{ inputs.crm_file_imports_migration && 'true' || 'false' }}
           FILE_IMPORTS_MIGRATION_HASH: ${{ inputs.crm_file_imports_migration_env_hash }}
@@ -457,6 +484,31 @@ jobs:
               "$CHAT_ENV_BEFORE_HASH" =~ ^[a-f0-9]{64}$ && "$CHAT_ENV_BUNDLE_HASH" =~ ^[a-f0-9]{64}$ ]]
           else
             [[ "$CHAT_ENV_INSTALL" == false && -z "$CHAT_ENV_BEFORE_HASH" && -z "$CHAT_ENV_BUNDLE_HASH" ]]
+          fi
+          if [[ "$TELEGRAM_ENV_INSTALL" == true ]]; then
+            [[ "$TARGET" == backend && "$CUTOVER" == false && "$CLOSURE_ENABLE" == false &&
+              "$MAIL_ENV_INSTALL" == false && "$CHAT_ENV_INSTALL" == false && "$STORAGE_INSTALL" == false &&
+              "$BILLING_MIGRATION" == false && "$CUSTOM_ROLES_MIGRATION" == false &&
+              "$SALES_COMMERCE_MIGRATION" == false && "$INTAKE_NOTIFICATIONS_MIGRATION" == false &&
+              "$MAIL_MIGRATION" == false && "$FILE_IMPORTS_MIGRATION" == false &&
+              "$PLANNER_MIGRATION" == false && "$UX_MIGRATION" == false &&
+              "$COLLABORATION_MIGRATION" == false && "$MEETING3_MIGRATION" == false &&
+              "$CLOSURE_MIGRATION" == false && "$IDENTITY_ACL_REPAIR" == false &&
+              "$TELEGRAM_ENV_BEFORE_HASH" =~ ^[a-f0-9]{64}$ && "$TELEGRAM_ENV_BUNDLE_HASH" =~ ^[a-f0-9]{64}$ ]]
+          else
+            [[ "$TELEGRAM_ENV_INSTALL" == false && -z "$TELEGRAM_ENV_BEFORE_HASH" && -z "$TELEGRAM_ENV_BUNDLE_HASH" ]]
+          fi
+          if [[ "$TELEGRAM_MIGRATION" == true ]]; then
+            [[ "$TARGET" == backend && "$CUTOVER" == false && "$CLOSURE_ENABLE" == false &&
+              "$TELEGRAM_ENV_INSTALL" == true && "$TELEGRAM_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ &&
+              "$BILLING_MIGRATION" == false && "$CUSTOM_ROLES_MIGRATION" == false &&
+              "$SALES_COMMERCE_MIGRATION" == false && "$INTAKE_NOTIFICATIONS_MIGRATION" == false &&
+              "$MAIL_MIGRATION" == false && "$FILE_IMPORTS_MIGRATION" == false &&
+              "$PLANNER_MIGRATION" == false && "$UX_MIGRATION" == false &&
+              "$COLLABORATION_MIGRATION" == false && "$MEETING3_MIGRATION" == false &&
+              "$CLOSURE_MIGRATION" == false && "$IDENTITY_ACL_REPAIR" == false ]]
+          else
+            [[ "$TELEGRAM_MIGRATION" == false && -z "$TELEGRAM_MIGRATION_HASH" ]]
           fi
           if [[ "$MEETING3_MIGRATION" == true ]]; then
             [[ "$TARGET" == backend && "$CUTOVER" == false && "$CLOSURE_ENABLE" == false &&
@@ -594,6 +646,9 @@ jobs:
           node --check infra/scripts/chat-storage-probe.cjs
           node --check infra/scripts/crm-sales-commerce-migration.mjs
           node --check infra/scripts/crm-intake-notifications-migration.mjs
+          node --check infra/scripts/backend-telegram-business-env.mjs
+          node --check infra/scripts/telegram-business-migration.mjs
+          node infra/scripts/telegram-business-migration.mjs --policy-self-test
           node --check infra/scripts/workspace-closure-migration.mjs
           node --check infra/scripts/workspace-closure-enable.mjs
           node --check infra/scripts/backend-rollback-compatibility-guard.mjs
@@ -609,7 +664,7 @@ jobs:
           node infra/scripts/workspace-closure-enable.mjs --policy-self-test
           node infra/scripts/backend-rollback-compatibility-guard.mjs --policy-self-test
           # This release gate covers the introduced state, transaction and real Compose regressions.
-          REQUIRE_DOCKER_COMPOSE_TEST=true node --test infra/scripts/backend-release*.test.mjs infra/scripts/backend-mail-env.test.mjs infra/scripts/backend-chat-env.test.mjs infra/scripts/backend-runtime-storage-env.test.mjs infra/scripts/runtime-storage-copy.test.cjs infra/scripts/chat-storage-probe.test.cjs
+          REQUIRE_DOCKER_COMPOSE_TEST=true node --test infra/scripts/backend-release*.test.mjs infra/scripts/backend-mail-env.test.mjs infra/scripts/backend-chat-env.test.mjs infra/scripts/backend-telegram-business-env.test.mjs infra/scripts/backend-runtime-storage-env.test.mjs infra/scripts/runtime-storage-copy.test.cjs infra/scripts/chat-storage-probe.test.cjs
       - name: Stage reviewed private runtime storage cutover
         if: inputs.runtime_storage_install
         env:
@@ -633,6 +688,16 @@ jobs:
           set -euo pipefail
           umask 077
           node infra/scripts/backend-chat-env.mjs --stage "$RUNNER_TEMP/crm-access-chat-env.json" "$CHAT_ENV_BUNDLE_HASH"
+      - name: Stage private Telegram Business env delta
+        if: inputs.crm_telegram_business_env_install
+        env:
+          CRM_ACCESS_TELEGRAM_BUSINESS_ENV_BUNDLE: ${{ secrets.CRM_ACCESS_TELEGRAM_BUSINESS_ENV_BUNDLE }}
+          TELEGRAM_ENV_BUNDLE_HASH: ${{ inputs.crm_telegram_business_env_bundle_hash }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          node infra/scripts/backend-telegram-business-env.mjs --stage "$RUNNER_TEMP/crm-access-telegram-business-env.json" "$TELEGRAM_ENV_BUNDLE_HASH"
       - name: Stage reviewed private Customers env bundle
         if: inputs.crm_mail_env_install
         env:
@@ -661,7 +726,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ inputs.ci_run_id }}
           SHA: ${{ needs.verify.outputs.sha }}
-          REQUIRE_UNIFORM: ${{ (inputs.billing_capacity_migration || inputs.crm_custom_roles_migration || inputs.crm_sales_commerce_migration || inputs.crm_intake_notifications_migration || inputs.crm_corporate_mail_migration || inputs.crm_file_imports_migration || inputs.crm_planner_customization_migration || inputs.crm_ux_unification_migration || inputs.crm_workspace_collaboration_migration || inputs.crm_meeting3_migration || inputs.workspace_closure_migration || inputs.workspace_closure_identity_acl_repair || inputs.workspace_closure_enable || inputs.crm_contracts_cutover) && 'true' || 'false' }}
+          REQUIRE_UNIFORM: ${{ (inputs.billing_capacity_migration || inputs.crm_custom_roles_migration || inputs.crm_sales_commerce_migration || inputs.crm_intake_notifications_migration || inputs.crm_corporate_mail_migration || inputs.crm_file_imports_migration || inputs.crm_planner_customization_migration || inputs.crm_ux_unification_migration || inputs.crm_workspace_collaboration_migration || inputs.crm_meeting3_migration || inputs.crm_telegram_business_migration || inputs.workspace_closure_migration || inputs.workspace_closure_identity_acl_repair || inputs.workspace_closure_enable || inputs.crm_contracts_cutover) && 'true' || 'false' }}
         run: |
           set -euo pipefail
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name backend-manifest --dir manifest
@@ -703,6 +768,11 @@ jobs:
           CHAT_ENV_INSTALL: ${{ inputs.crm_chat_env_install && 'true' || 'false' }}
           CHAT_ENV_BEFORE_HASH: ${{ inputs.crm_chat_env_before_hash }}
           CHAT_ENV_BUNDLE_HASH: ${{ inputs.crm_chat_env_bundle_hash }}
+          TELEGRAM_ENV_INSTALL: ${{ inputs.crm_telegram_business_env_install && 'true' || 'false' }}
+          TELEGRAM_ENV_BEFORE_HASH: ${{ inputs.crm_telegram_business_env_before_hash }}
+          TELEGRAM_ENV_BUNDLE_HASH: ${{ inputs.crm_telegram_business_env_bundle_hash }}
+          TELEGRAM_MIGRATION: ${{ inputs.crm_telegram_business_migration && 'true' || 'false' }}
+          TELEGRAM_MIGRATION_HASH: ${{ inputs.crm_telegram_business_migration_env_hash }}
           MAIL_MIGRATION_HASH: ${{ inputs.crm_corporate_mail_migration_env_hash }}
           FILE_IMPORTS_MIGRATION: ${{ inputs.crm_file_imports_migration && 'true' || 'false' }}
           FILE_IMPORTS_MIGRATION_HASH: ${{ inputs.crm_file_imports_migration_env_hash }}
@@ -769,6 +839,9 @@ jobs:
             fi
             if [ "$MAIL_ENV_INSTALL" = true ]; then
               scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes "$RUNNER_TEMP/crm-customers-mail-env.json" "$dest:$stage/crm-customers-mail-env.json"
+            fi
+            if [ "$TELEGRAM_ENV_INSTALL" = true ]; then
+              scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes "$RUNNER_TEMP/crm-access-telegram-business-env.json" "$dest:$stage/crm-access-telegram-business-env.json"
             fi
             if [ "$CUTOVER" = true ] || [ "$CLOSURE_ENABLE" = true ]; then
               ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" \
@@ -842,6 +915,9 @@ jobs:
             if [ "$CHAT_ENV_INSTALL" = true ]; then
               manifest_env="$manifest_env CRM_CHAT_ENV_INSTALL='true' CRM_CHAT_ENV_BEFORE_HASH='$CHAT_ENV_BEFORE_HASH' CRM_CHAT_ENV_BUNDLE_HASH='$CHAT_ENV_BUNDLE_HASH'"
             fi
+            if [ "$TELEGRAM_ENV_INSTALL" = true ]; then
+              manifest_env="$manifest_env CRM_TELEGRAM_BUSINESS_ENV_INSTALL='true' CRM_TELEGRAM_BUSINESS_ENV_BEFORE_HASH='$TELEGRAM_ENV_BEFORE_HASH' CRM_TELEGRAM_BUSINESS_ENV_BUNDLE_HASH='$TELEGRAM_ENV_BUNDLE_HASH'"
+            fi
             if [[ "$UX_MIGRATION" == true ]]; then
               node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --crm-ux-unification")
             fi
@@ -851,8 +927,11 @@ jobs:
             if [[ "$MEETING3_MIGRATION" == true ]]; then
               node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --meeting3")
             fi
+            if [[ "$TELEGRAM_MIGRATION" == true ]]; then
+              node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --telegram-business")
+            fi
             if [ "$CLOSURE_ENABLE" = true ]; then manifest_env=; fi
-            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && $manifest_env REVIEWED_INFRA_DIR='$stage' '$stage/scripts/release.sh' '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH' '$INTAKE_NOTIFICATIONS_MIGRATION' '$INTAKE_NOTIFICATIONS_MIGRATION_HASH' '$CLOSURE_MIGRATION' '$CLOSURE_MIGRATION_HASH' '$IDENTITY_ACL_REPAIR' '$IDENTITY_ENV_HASH' '$MAIL_MIGRATION' '$MAIL_MIGRATION_HASH' '$FILE_IMPORTS_MIGRATION' '$FILE_IMPORTS_MIGRATION_HASH' '$PLANNER_MIGRATION' '$PLANNER_MIGRATION_HASH' '$UX_MIGRATION' '$UX_MIGRATION_HASH' '$COLLABORATION_MIGRATION' '$COLLABORATION_MIGRATION_HASH' '$MEETING3_MIGRATION' '$MEETING3_MIGRATION_HASH'"
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && $manifest_env REVIEWED_INFRA_DIR='$stage' '$stage/scripts/release.sh' '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH' '$INTAKE_NOTIFICATIONS_MIGRATION' '$INTAKE_NOTIFICATIONS_MIGRATION_HASH' '$CLOSURE_MIGRATION' '$CLOSURE_MIGRATION_HASH' '$IDENTITY_ACL_REPAIR' '$IDENTITY_ENV_HASH' '$MAIL_MIGRATION' '$MAIL_MIGRATION_HASH' '$FILE_IMPORTS_MIGRATION' '$FILE_IMPORTS_MIGRATION_HASH' '$PLANNER_MIGRATION' '$PLANNER_MIGRATION_HASH' '$UX_MIGRATION' '$UX_MIGRATION_HASH' '$COLLABORATION_MIGRATION' '$COLLABORATION_MIGRATION_HASH' '$MEETING3_MIGRATION' '$MEETING3_MIGRATION_HASH' '$TELEGRAM_MIGRATION' '$TELEGRAM_MIGRATION_HASH'"
           else
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash'"
           fi
@@ -862,6 +941,9 @@ jobs:
       - name: Remove runner private Chat bundle
         if: always() && inputs.crm_chat_env_install
         run: rm -f "$RUNNER_TEMP/crm-access-chat-env.json"
+      - name: Remove runner private Telegram Business bundle
+        if: always() && inputs.crm_telegram_business_env_install
+        run: rm -f "$RUNNER_TEMP/crm-access-telegram-business-env.json"
       - name: Remove runner private runtime storage bundles
         if: always() && inputs.runtime_storage_install
         run: rm -f "$RUNNER_TEMP/runtime-storage-env.json" "$RUNNER_TEMP/storage-manifest.json"

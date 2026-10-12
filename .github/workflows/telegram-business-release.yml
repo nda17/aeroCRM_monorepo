@@ -1,0 +1,63 @@
+name: aeroCRM Telegram Business release
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Green full-backend CI run ID for the exact production commit
+        required: true
+      sha:
+        description: Full 40-character production commit SHA
+        required: true
+      infra_sha:
+        description: Full reviewed private infra commit SHA
+        required: true
+      backend_env_hash:
+        description: Approved backend env aggregate after scoped Telegram Business installation
+        required: true
+      backend_env_before_hash:
+        description: Approved backend env aggregate before scoped Telegram Business installation
+        required: true
+      telegram_env_bundle_hash:
+        description: SHA-256 of canonical private Telegram Business env bundle
+        required: true
+      crm_access_migration_env_hash:
+        description: SHA-256 of private migrations/crm-access.env
+        required: false
+      apply_migration:
+        description: Apply additive Telegram Business schema and ACL on first release
+        type: boolean
+        default: true
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  release:
+    uses: ./.github/workflows/release.yml
+    with:
+      target: backend
+      ci_run_id: ${{ inputs.ci_run_id }}
+      sha: ${{ inputs.sha }}
+      infra_sha: ${{ inputs.infra_sha }}
+      backend_env_hash: ${{ inputs.backend_env_hash }}
+      crm_telegram_business_env_install: true
+      crm_telegram_business_env_before_hash: ${{ inputs.backend_env_before_hash }}
+      crm_telegram_business_env_bundle_hash: ${{ inputs.telegram_env_bundle_hash }}
+      crm_telegram_business_migration: ${{ inputs.apply_migration }}
+      crm_telegram_business_migration_env_hash: ${{ inputs.apply_migration && inputs.crm_access_migration_env_hash || '' }}
+      billing_capacity_migration: false
+      crm_custom_roles_migration: false
+      crm_sales_commerce_migration: false
+      crm_intake_notifications_migration: false
+      crm_corporate_mail_migration: false
+      crm_file_imports_migration: false
+      crm_planner_customization_migration: false
+      crm_ux_unification_migration: false
+      crm_workspace_collaboration_migration: false
+      crm_meeting3_migration: false
+      workspace_closure_migration: false
+      workspace_closure_identity_acl_repair: false
+      workspace_closure_enable: false
+      crm_contracts_cutover: false
+      crm_contracts_cutover_resume: false
+    secrets: inherit

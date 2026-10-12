@@ -72,8 +72,15 @@ import { DirectoryController } from './directory/directory.controller';
 import { DirectoryService } from './directory/directory.service';
 import { WorkspaceChatController } from './workspace-chat/workspace-chat.controller';
 import { WorkspaceChatService } from './workspace-chat/workspace-chat.service';
+import { WorkspaceMessengerController } from './workspace-chat/workspace-messenger.controller';
+import { WorkspaceMessengerService } from './workspace-chat/workspace-messenger.service';
 import { AccessLiveChangesController } from './live/live-changes.controller';
 import { AccessLiveChangesService } from './live/live-changes.service';
+import { TelegramBusinessController, TelegramBusinessWebhookController } from './telegram-business/telegram-business.controller';
+import { TelegramBusinessService } from './telegram-business/telegram-business.service';
+import { TelegramBusinessWebhook } from './telegram-business/telegram-business.webhook';
+import { TelegramBusinessBot } from './telegram-business/telegram-business.bot';
+import { TelegramBusinessWorker } from './telegram-business/telegram-business.worker';
 
 const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 
@@ -90,6 +97,9 @@ const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 					CrmAccessController,
 					DirectoryController,
 					WorkspaceChatController,
+					WorkspaceMessengerController,
+					TelegramBusinessController,
+					TelegramBusinessWebhookController,
 					ChatAttachmentsController,
 					AccessLiveChangesController,
 					WorkspaceClosureController,
@@ -115,6 +125,11 @@ const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 		CrmAuthorizationService,
 		DirectoryService,
 		WorkspaceChatService,
+		WorkspaceMessengerService,
+		TelegramBusinessService,
+		TelegramBusinessWebhook,
+		TelegramBusinessBot,
+		TelegramBusinessWorker,
 		ChatAttachmentsService,
 		ChatObjects,
 		ChatUploadScopeGuard,

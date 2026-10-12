@@ -15,6 +15,7 @@ import { WorkspaceBrandingSettings } from '@/features/manage-workspace-branding'
 import { ReminderSettings } from '@/features/manage-reminders'
 import { SlaSettings } from '@/features/manage-intake-sla'
 import { MailSettings } from '@/features/manage-mail/ui/MailSettings'
+import { TelegramSettings } from '@/features/telegram-business/ui/TelegramSettings'
 import { BillingEntryCard } from '@/features/manage-crm-billing'
 import {
 	WorkspaceClosureCard,
@@ -460,6 +461,7 @@ const SettingsScreen = () => {
 			<MailSettings
 				key={`${session?.userId}:${sessionRevision}:${workspace.workspaceId}`}
 			/>
+			<TelegramSettings />
 			<CrmCommercialPolicyCard />
 			{workspace.membership.role === 'OWNER' &&
 			getRuntimeConfig().crmBillingEnabled ? (

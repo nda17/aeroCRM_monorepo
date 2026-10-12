@@ -2,12 +2,12 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import {
 	ensureDirectConversation,
 	listChatMessagesV2,
-	listConversations,
 	listDirectory,
 	readChatConversation,
 	sendChatMessageV2,
@@ -15,6 +15,13 @@ import {
 	downloadChatAttachment,
 	type ChatConversation
 } from '@/entities/workspace-collaboration'
+import {
+	getTelegramMessengerFeed,
+	listTelegramConversations,
+	markTelegramConversationRead,
+	replyToTelegramMessage,
+	type MessengerEntry
+} from '@/entities/telegram-business'
 import {
 	AuthenticatedApiError,
 	invalidContractError
@@ -123,7 +130,7 @@ function MessagesContent({
 		queryKey: ['workspace-chat-conversations', ...context.key, page, q],
 		enabled: context.ready,
 		queryFn: async () => {
-			const result = await listConversations(
+			const result = await listTelegramConversations(
 				context.session!.accessToken,
 				{ ...context.binding, page, pageSize: 30, q }
 			)
@@ -140,7 +147,7 @@ function MessagesContent({
 		<div className={styles.stack}>
 			<PageHeader
 				title="Мессенджер"
-				description="Личные диалоги с коллегами и общий чат пространства."
+				description="Коллеги и сообщения клиентов из Telegram — в общем чате пространства."
 				actions={
 					<Button
 						disabled={!context.canWrite}
@@ -150,6 +157,11 @@ function MessagesContent({
 					</Button>
 				}
 			/>
+			<p className={styles.muted}>
+				<Link href="/settings#telegram">Подключить рабочий Telegram</Link>
+				{' · '}Чтобы написать клиенту, нажмите «Ответить в Telegram» у его
+				сообщения. Обычное сообщение в общем чате видят только сотрудники.
+			</p>
 			<div className={styles.chatLayout}>
 				<aside
 					className={clsx(styles.sidebar, selected && styles.hiddenMobile)}
@@ -480,6 +492,15 @@ function ChatThread({
 }) {
 	const [before, setBefore] = useState<number | undefined>()
 	const [text, setText] = useState('')
+	const [now, setNow] = useState(() => Date.now())
+	useEffect(() => {
+		const timer = window.setInterval(() => setNow(Date.now()), 5000)
+		return () => window.clearInterval(timer)
+	}, [])
+	const [replyTarget, setReplyTarget] = useState<NonNullable<
+		MessengerEntry['telegram']
+	> | null>(null)
+	const guard = useDirtyFormGuard()
 	const bottom = useRef<HTMLDivElement>(null)
 	const scroll = useRef<HTMLOListElement>(null)
 	const lastMarked = useRef(0)
@@ -495,7 +516,7 @@ function ChatThread({
 		queryKey: ['workspace-chat-messages', ...context.key, id, before],
 		enabled: context.ready,
 		queryFn: async () => {
-			const result = await listChatMessagesV2(
+			const legacy = await listChatMessagesV2(
 				context.session!.accessToken,
 				{
 					...context.binding,
@@ -505,7 +526,51 @@ function ChatThread({
 				}
 			)
 			if (!context.current()) throw invalidContractError()
-			return result
+			if (legacy.conversation.kind !== 'WORKSPACE')
+				return {
+					...legacy,
+					items: legacy.items.map(message => ({
+						...message,
+						telegram: null as MessengerEntry['telegram'],
+						entryKind: 'INTERNAL' as MessengerEntry['kind'],
+						deletedAt: null as string | null,
+						editedAt: null as string | null
+					}))
+				}
+			const feed = await getTelegramMessengerFeed(
+				context.session!.accessToken,
+				{
+					...context.binding,
+					conversationId: id,
+					beforeSequence: before,
+					limit: 50
+				}
+			)
+			if (!context.current()) throw invalidContractError()
+			return {
+				...legacy,
+				conversation: {
+					...legacy.conversation,
+					lastSequence: feed.lastSequence,
+					readThroughSequence: feed.readThroughSequence,
+					unreadCount: feed.unreadCount,
+					canSend: feed.canSend
+				},
+				nextBeforeSequence: feed.nextBeforeSequence,
+				items: feed.items.map(message => ({
+					id: message.id,
+					sequence: message.sequence,
+					senderSubject: message.author.subject,
+					senderName: message.author.displayName,
+					text: message.text,
+					createdAt: message.createdAt,
+					attachments: message.internal?.attachments ?? [],
+					telegram: message.telegram,
+					entryKind: message.kind,
+					deletedAt: message.deletedAt,
+					editedAt: message.editedAt
+				}))
+			}
 		},
 		retry: false,
 		gcTime: 0,
@@ -514,27 +579,53 @@ function ChatThread({
 	const data =
 		context.ready && !messages.isError ? messages.data : undefined
 	const conversation = data?.conversation
+	const clearComposer = () => {
+		setText('')
+		setReplyTarget(null)
+		attachments.reset()
+		dirty.resetBaseline(JSON.stringify({ text: '', files: [] }))
+		initialScroll.current = false
+		setBefore(undefined)
+		requestAnimationFrame(() =>
+			bottom.current?.scrollIntoView({ block: 'end' })
+		)
+	}
 	const send = useCollaborationCommand(
 		context,
 		`chat:send:${id}`,
 		async (token, command: Parameters<typeof sendChatMessageV2>[1]) =>
 			(await lookupChatSendV2(token, command)) ??
 			(await sendChatMessageV2(token, command)),
-		() => {
+		clearComposer
+	)
+	const reply = useCollaborationCommand(
+		context,
+		`telegram:reply:${id}`,
+		replyToTelegramMessage,
+		clearComposer
+	)
+	const sending = send.locked || reply.locked
+	const selectReply = (
+		target: NonNullable<MessengerEntry['telegram']> | null
+	) => {
+		if (sending) return
+		guard.confirmDiscard(() => {
 			setText('')
 			attachments.reset()
 			dirty.resetBaseline(JSON.stringify({ text: '', files: [] }))
-			initialScroll.current = false
-			setBefore(undefined)
-			requestAnimationFrame(() =>
-				bottom.current?.scrollIntoView({ block: 'end' })
-			)
-		}
-	)
+			send.reset()
+			reply.reset()
+			setReplyTarget(target)
+		})
+	}
 	const read = useCollaborationCommand(
 		context,
 		`chat:read:${id}`,
-		readChatConversation,
+		async (token, command: Parameters<typeof readChatConversation>[1]) => {
+			if (conversation?.kind === 'WORKSPACE')
+				await markTelegramConversationRead(token, command)
+			else await readChatConversation(token, command)
+		},
 		() => undefined,
 		false
 	)
@@ -613,9 +704,15 @@ function ChatThread({
 	const canSend =
 		context.canWrite &&
 		conversation?.canSend &&
-		!send.locked &&
-		(!!text.trim() || attachments.files.length > 0) &&
-		attachments.ready
+		!sending &&
+		(replyTarget
+			? !!text.trim() &&
+				text.trim().length <= 4096 &&
+				replyTarget.canReply &&
+				(!replyTarget.replyUntil ||
+					Date.parse(replyTarget.replyUntil) > now)
+			: (text.trim().length > 0 || attachments.files.length > 0) &&
+				attachments.ready)
 	return (
 		<section className={styles.thread} aria-label="Переписка">
 			<div className={styles.threadHeader}>
@@ -703,14 +800,47 @@ function ChatThread({
 										key={message.id}
 										className={clsx(styles.message, own && styles.own)}
 									>
-										{!own ? (
+										{!own || message.telegram ? (
 											<span className={styles.name}>
 												{message.senderName}
 											</span>
 										) : null}
+										{message.telegram ? (
+											<p className={styles.meta}>
+												Telegram · {message.telegram.accountName} ·{' '}
+												{message.entryKind === 'TELEGRAM_INBOUND'
+													? 'От'
+													: 'Кому'}
+												: {message.telegram.peerName}
+												{message.entryKind === 'TELEGRAM_OUTBOUND' &&
+												!message.senderSubject
+													? ' · Отправлено из Telegram'
+													: ''}
+											</p>
+										) : null}
 										<p className={styles.messageText}>
-											<MessageText text={message.text} />
+											{message.deletedAt ? (
+												'Сообщение удалено в Telegram'
+											) : (
+												<MessageText text={message.text} />
+											)}
 										</p>
+										{message.telegram &&
+										message.telegram.contentKind !== 'TEXT' &&
+										!message.deletedAt ? (
+											<p className={styles.muted}>
+												{
+													{
+														PHOTO: 'Фото',
+														VIDEO: 'Видео',
+														DOCUMENT: 'Документ',
+														VOICE: 'Голосовое сообщение',
+														OTHER: 'Вложение'
+													}[message.telegram.contentKind]
+												}{' '}
+												· Откройте вложение в Telegram
+											</p>
+										) : null}
 
 										{message.attachments.map(file => (
 											<Button
@@ -749,7 +879,24 @@ function ChatThread({
 													}
 												)}
 											</time>
-											{own ? (
+											{message.editedAt && !message.deletedAt ? (
+												<span>Изменено</span>
+											) : null}
+											{message.telegram?.deliveryStatus ? (
+												<span role="status">
+													{
+														{
+															QUEUED: 'Ожидает отправки',
+															SENDING: 'Отправляется в Telegram…',
+															SENT: 'Отправлено в Telegram',
+															FAILED: 'Не отправлено',
+															UNKNOWN:
+																'Результат неизвестен — проверьте чат в Telegram перед новой отправкой',
+															CANCELLED: 'Отправка отменена'
+														}[message.telegram.deliveryStatus]
+													}
+												</span>
+											) : own && !message.telegram ? (
 												<span>
 													{conversation?.peerReadThroughSequence != null &&
 													conversation.peerReadThroughSequence >=
@@ -759,6 +906,32 @@ function ChatThread({
 												</span>
 											) : null}
 										</div>
+										{message.telegram &&
+										message.entryKind === 'TELEGRAM_INBOUND' &&
+										!message.deletedAt ? (
+											<div className={styles.row}>
+												<Button
+													variant="secondary"
+													size="sm"
+													disabled={
+														!context.canWrite ||
+														!message.telegram.canReply ||
+														sending
+													}
+													onClick={() => selectReply(message.telegram!)}
+												>
+													Ответить в Telegram
+												</Button>
+												{!message.telegram.canReply ? (
+													<span className={styles.muted}>
+														{message.telegram.replyUntil &&
+														Date.parse(message.telegram.replyUntil) <= now
+															? 'Прошло 24 часа. Дождитесь нового сообщения клиента.'
+															: 'Ответ недоступен. Проверьте подключение и разрешения Telegram.'}
+													</span>
+												) : null}
+											</div>
+										) : null}
 									</li>
 								)
 							})
@@ -778,12 +951,24 @@ function ChatThread({
 				onDragOver={event => event.preventDefault()}
 				onDrop={event => {
 					event.preventDefault()
-					if (!send.locked && conversation?.canSend)
+					if (
+						!replyTarget &&
+						!sending &&
+						context.canWrite &&
+						conversation?.canSend
+					)
 						attachments.add(Array.from(event.dataTransfer.files))
 				}}
 				onSubmit={event => {
 					event.preventDefault()
-					if (canSend)
+					if (canSend && replyTarget)
+						void reply.execute(() => ({
+							...context.binding,
+							commandId: crypto.randomUUID(),
+							sourceMessageId: replyTarget.messageId,
+							text: text.trim()
+						}))
+					else if (canSend)
 						void send.execute(() => ({
 							...context.binding,
 							conversationId: id,
@@ -793,17 +978,39 @@ function ChatThread({
 						}))
 				}}
 			>
+				{replyTarget ? (
+					<div className={styles.replyContext} role="status">
+						<strong>Ответ в Telegram: {replyTarget.peerName}</strong>
+						<p>
+							От аккаунта {replyTarget.accountName}. Ответ увидит клиент;
+							ваше имя сохранится в CRM.
+						</p>
+						<Button
+							type="button"
+							variant="ghost"
+							disabled={sending}
+							onClick={() => selectReply(null)}
+						>
+							Отменить ответ клиенту
+						</Button>
+					</div>
+				) : conversation?.kind === 'WORKSPACE' ? (
+					<p className={styles.muted}>
+						Сообщение сотрудникам · Клиенты не видят эту переписку.
+					</p>
+				) : null}
 				<TextareaField
-					label="Сообщение"
-					placeholder="Напишите сообщение…"
-					rows={3}
-					maxLength={10000}
-					value={text}
-					disabled={
-						!context.canWrite || !conversation?.canSend || send.locked
+					label={replyTarget ? 'Ответ клиенту в Telegram' : 'Сообщение'}
+					placeholder={
+						replyTarget ? 'Напишите ответ клиенту…' : 'Напишите сообщение…'
 					}
+					rows={3}
+					maxLength={replyTarget ? 4096 : 10000}
+					value={text}
+					disabled={!context.canWrite || !conversation?.canSend || sending}
 					onChange={event => {
 						send.reset()
+						reply.reset()
 						setText(event.target.value)
 					}}
 					onKeyDown={event => {
@@ -817,79 +1024,88 @@ function ChatThread({
 					}}
 				/>
 
-				<input
-					ref={fileInput}
-					type="file"
-					multiple
-					hidden
-					accept=".png,.jpg,.jpeg,.webp,.pdf,.txt,.csv,.docx,.xlsx"
-					onChange={event => {
-						attachments.add(Array.from(event.target.files ?? []))
-						event.target.value = ''
-					}}
-				/>
-				<Button
-					type="button"
-					variant="secondary"
-					disabled={
-						!attachments.enabled ||
-						!context.canWrite ||
-						!conversation?.canSend ||
-						send.locked
-					}
-					onClick={() => fileInput.current?.click()}
-				>
-					Прикрепить файлы
-				</Button>
-				<span className={styles.muted}>
-					До 5 МБ на файл, 10 файлов и 20 МБ на сообщение. Можно перетащить
-					файлы сюда.
-				</span>
-				{attachments.error ? (
-					<p role="alert">{attachments.error}</p>
-				) : null}
-				{attachments.files.map(row => (
-					<div key={row.key} className={styles.stack}>
-						<span>
-							{row.file.name} —{' '}
-							{row.attachment?.state === 'READY'
-								? 'Готово'
-								: `${row.progress}%`}
+				{!replyTarget ? (
+					<>
+						<input
+							ref={fileInput}
+							type="file"
+							multiple
+							hidden
+							accept=".png,.jpg,.jpeg,.webp,.pdf,.txt,.csv,.docx,.xlsx"
+							onChange={event => {
+								attachments.add(Array.from(event.target.files ?? []))
+								event.target.value = ''
+							}}
+						/>
+						<Button
+							type="button"
+							variant="secondary"
+							disabled={
+								!attachments.enabled ||
+								!context.canWrite ||
+								!conversation?.canSend ||
+								sending
+							}
+							onClick={() => fileInput.current?.click()}
+						>
+							Прикрепить файлы
+						</Button>
+						<span className={styles.muted}>
+							До 5 МБ на файл, 10 файлов и 20 МБ на сообщение. Можно
+							перетащить файлы сюда.
 						</span>
-						{row.running ? (
-							<progress
-								max={100}
-								value={row.progress}
-								aria-label={`Загрузка ${row.file.name}`}
-							/>
+						{attachments.error ? (
+							<p role="alert">{attachments.error}</p>
 						) : null}
-						{row.error ? <p role="alert">{row.error}</p> : null}
-						<div className={styles.row}>
-							{row.error ? (
-								<Button
-									type="button"
-									variant="secondary"
-									disabled={
-										!context.canWrite || send.locked || row.running
-									}
-									onClick={() => void attachments.upload(row)}
-								>
-									Проверить / повторить
-								</Button>
-							) : null}
-							<Button
-								type="button"
-								variant="ghost"
-								disabled={!context.canWrite || send.locked}
-								onClick={() => void attachments.remove(row)}
-							>
-								{row.running ? 'Отменить' : 'Удалить'}
-							</Button>
-						</div>
-					</div>
-				))}
+						{attachments.files.map(row => (
+							<div key={row.key} className={styles.stack}>
+								<span>
+									{row.file.name} —{' '}
+									{row.attachment?.state === 'READY'
+										? 'Готово'
+										: `${row.progress}%`}
+								</span>
+								{row.running ? (
+									<progress
+										max={100}
+										value={row.progress}
+										aria-label={`Загрузка ${row.file.name}`}
+									/>
+								) : null}
+								{row.error ? <p role="alert">{row.error}</p> : null}
+								<div className={styles.row}>
+									{row.error ? (
+										<Button
+											type="button"
+											variant="secondary"
+											disabled={
+												!context.canWrite || send.locked || row.running
+											}
+											onClick={() => void attachments.upload(row)}
+										>
+											Проверить / повторить
+										</Button>
+									) : null}
+									<Button
+										type="button"
+										variant="ghost"
+										disabled={!context.canWrite || send.locked}
+										onClick={() => void attachments.remove(row)}
+									>
+										{row.running ? 'Отменить' : 'Удалить'}
+									</Button>
+								</div>
+							</div>
+						))}
+					</>
+				) : (
+					<p className={styles.muted}>
+						Текстовый ответ, до 4096 символов. Для файла откройте Telegram.
+					</p>
+				)}
 				{downloadError ? <p role="alert">{downloadError}</p> : null}
 				<CommandNotice command={send} />
+				<CommandNotice command={reply} />
 				<CommandNotice command={read} />
 				<div className={styles.row}>
 					<span className={styles.muted}>
@@ -902,9 +1118,9 @@ function ChatThread({
 					<Button
 						type="submit"
 						disabled={!canSend}
-						isLoading={send.running}
+						isLoading={send.running || reply.running}
 					>
-						Отправить
+						{replyTarget ? 'Отправить в Telegram' : 'Отправить'}
 					</Button>
 				</div>
 			</form>

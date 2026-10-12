@@ -17,7 +17,8 @@ let application: INestApplication | undefined;
 
 async function bootstrap(): Promise<void> {
 	const app = await NestFactory.create(CrmAccessModule, {
-		forceCloseConnections: true
+		forceCloseConnections: true,
+		rawBody: true
 	});
 	application = app;
 	const instance = app.getHttpAdapter().getInstance();
@@ -27,7 +28,8 @@ async function bootstrap(): Promise<void> {
 			getCrmAccessTrustProxyConfig(process.env.TRUST_PROXY)
 		);
 	}
-	configureCrmAccessApiPrefix(app);	app.use(crmAccessRequestContextMiddleware);
+	configureCrmAccessApiPrefix(app);
+	app.use(crmAccessRequestContextMiddleware);
 	app.enableCors({
 		origin: getCrmAccessCorsAllowedOrigins(
 			process.env.MODE,

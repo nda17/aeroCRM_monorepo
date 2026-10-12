@@ -25,6 +25,12 @@ import {
 	readChatConversation,
 	sendChatMessageV2
 } from '@/entities/workspace-collaboration'
+import {
+	getTelegramMessengerFeed,
+	listTelegramConversations,
+	markTelegramConversationRead,
+	replyToTelegramMessage
+} from '@/entities/telegram-business'
 import { DirectoryScreen } from './DirectoryScreen'
 import { MessagesScreen } from './MessagesScreen'
 import { PendingCommandProvider } from '@/shared/lib/pending-command'
@@ -45,6 +51,13 @@ vi.mock('@/entities/workspace-collaboration', async importOriginal => ({
 	lookupChatSendV2: vi.fn(),
 	readChatConversation: vi.fn(),
 	sendChatMessageV2: vi.fn()
+}))
+vi.mock('@/entities/telegram-business', async importOriginal => ({
+	...(await importOriginal<object>()),
+	getTelegramMessengerFeed: vi.fn(),
+	listTelegramConversations: vi.fn(),
+	markTelegramConversationRead: vi.fn(),
+	replyToTelegramMessage: vi.fn()
 }))
 vi.mock('@/shared/ui', async importOriginal => ({
 	...(await importOriginal<object>()),
@@ -141,6 +154,49 @@ const message = {
 	text: 'Добрый день',
 	createdAt: '2026-10-05T10:00:00.000Z'
 }
+const workspaceConversation = {
+	...conversation,
+	kind: 'WORKSPACE' as const,
+	title: 'Общий чат',
+	peer: null,
+	lastMessage: {
+		id: '99999999-9999-4999-8999-999999999999',
+		text: 'Сообщение клиента',
+		senderName: 'Клиент Telegram',
+		senderSubject: null,
+		createdAt: '2026-10-05T10:00:00.000Z'
+	}
+}
+const telegramEntry = (overrides: Record<string, unknown> = {}) => ({
+	id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+	sequence: 2,
+	kind: 'TELEGRAM_INBOUND' as const,
+	text: 'Вопрос клиента',
+	createdAt: '2026-10-05T10:01:00.000Z',
+	editedAt: null,
+	deletedAt: null,
+	author: {
+		kind: 'TELEGRAM_USER' as const,
+		displayName: 'Клиент Telegram',
+		subject: null,
+		membershipId: null
+	},
+	internal: null,
+	telegram: {
+		messageId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+		channelId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+		dialogId: 'telegram-dialog-1',
+		accountName: 'Рабочий аккаунт',
+		peerName: 'Клиент Telegram',
+		contentKind: 'TEXT' as const,
+		mediaAvailable: false,
+		deliveryStatus: null,
+		canReply: true,
+		replyUntil: '2099-10-05T10:01:00.000Z',
+		replyUnavailableReason: null
+	},
+	...overrides
+})
 
 let client: QueryClient
 let access: Record<string, unknown>
@@ -232,6 +288,30 @@ beforeEach(() => {
 		unreadCount: 0,
 		items: [conversation]
 	} as never)
+	vi.mocked(listTelegramConversations).mockResolvedValue({
+		schemaVersion: 3,
+		workspaceId,
+		subject: session.userId,
+		page: 1,
+		pageSize: 30,
+		total: 1,
+		unreadCount: 0,
+		items: [conversation]
+	} as never)
+	vi.mocked(getTelegramMessengerFeed).mockResolvedValue({
+		schemaVersion: 3,
+		workspaceId,
+		subject: session.userId,
+		conversationId,
+		items: [],
+		nextBeforeSequence: null,
+		lastSequence: 0,
+		readThroughSequence: 0,
+		unreadCount: 0,
+		canSend: true
+	} as never)
+	vi.mocked(markTelegramConversationRead).mockResolvedValue({} as never)
+	vi.mocked(replyToTelegramMessage).mockResolvedValue({} as never)
 	vi.mocked(listChatMessagesV2).mockResolvedValue({
 		schemaVersion: 2,
 		workspaceId,
@@ -275,6 +355,60 @@ afterEach(() => {
 })
 
 describe('workspace collaboration regression behavior', () => {
+	const openWorkspaceFeed = async (items: Record<string, unknown>[]) => {
+		const legacy = {
+			...workspaceConversation,
+			lastSequence: items.length,
+			canSend: true
+		}
+		vi.mocked(listTelegramConversations).mockResolvedValue({
+			schemaVersion: 3,
+			workspaceId,
+			subject: session.userId,
+			page: 1,
+			pageSize: 30,
+			total: 1,
+			unreadCount: 0,
+			items: [legacy]
+		} as never)
+		vi.mocked(listChatMessagesV2).mockResolvedValue({
+			schemaVersion: 2,
+			workspaceId,
+			subject: session.userId,
+			conversation: legacy,
+			items: [],
+			nextBeforeSequence: null
+		} as never)
+		vi.mocked(getTelegramMessengerFeed).mockResolvedValue({
+			schemaVersion: 3,
+			workspaceId,
+			subject: session.userId,
+			conversationId,
+			items,
+			nextBeforeSequence: null,
+			lastSequence: items.length,
+			readThroughSequence: items.length,
+			unreadCount: 0,
+			canSend: true
+		} as never)
+		window.history.replaceState(
+			{},
+			'',
+			`/messages?conversationId=${conversationId}`
+		)
+		render(view(<MessagesScreen />))
+		fireEvent.click(
+			(await screen.findByText('Общий чат')).closest('button')!
+		)
+		await screen.findByRole('heading', { name: 'Общий чат' })
+		await waitFor(() =>
+			expect(getTelegramMessengerFeed).toHaveBeenCalledWith(
+				'test-token',
+				expect.objectContaining({ conversationId })
+			)
+		)
+	}
+
 	it('retains the exact chat command and text when the first send outcome is unknown', async () => {
 		vi.mocked(sendChatMessageV2)
 			.mockRejectedValueOnce(new Error('connection lost after dispatch'))
@@ -337,6 +471,107 @@ describe('workspace collaboration regression behavior', () => {
 				}) as HTMLTextAreaElement
 			).value
 		).toBe('Черновик останется')
+	})
+
+	it('shows Telegram customers as external authors and replies to the selected CRM message id', async () => {
+		await openWorkspaceFeed([telegramEntry()])
+		expect(await screen.findByText('Клиент Telegram')).toBeTruthy()
+		expect(
+			screen.getByText('Telegram · Рабочий аккаунт · От: Клиент Telegram')
+		).toBeTruthy()
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Ответить в Telegram' })
+		)
+		const composer = await screen.findByRole('textbox', {
+			name: 'Ответ клиенту в Telegram'
+		})
+		fireEvent.change(composer, { target: { value: 'Здравствуйте!' } })
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Отправить в Telegram' })
+		)
+		await waitFor(() =>
+			expect(replyToTelegramMessage).toHaveBeenCalledTimes(1)
+		)
+		expect(
+			vi.mocked(replyToTelegramMessage).mock.calls[0]?.[1]
+		).toMatchObject({
+			workspaceId,
+			subject: session.userId,
+			sourceMessageId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+			text: 'Здравствуйте!'
+		})
+		expect(sendChatMessageV2).not.toHaveBeenCalled()
+	})
+
+	it('keeps workspace messages internal by default and requires an explicit Telegram reply target', async () => {
+		const internal = telegramEntry({
+			id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+			sequence: 1,
+			kind: 'INTERNAL',
+			text: 'Внутренняя заметка',
+			author: {
+				kind: 'EMPLOYEE',
+				displayName: 'Иван Сотрудник',
+				subject: session.userId,
+				membershipId: '88888888-8888-4888-8888-888888888888'
+			},
+			internal: {
+				conversationId,
+				messageId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+				attachments: []
+			},
+			telegram: null
+		})
+		await openWorkspaceFeed([internal, telegramEntry()])
+		expect(
+			screen.getByText(
+				'Сообщение сотрудникам · Клиенты не видят эту переписку.'
+			)
+		).toBeTruthy()
+		expect(screen.getByRole('textbox', { name: 'Сообщение' })).toBeTruthy()
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Ответить в Telegram' })
+		)
+		expect(
+			await screen.findByRole('textbox', {
+				name: 'Ответ клиенту в Telegram'
+			})
+		).toBeTruthy()
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Отменить ответ клиенту' })
+		)
+		expect(
+			await screen.findByRole('textbox', { name: 'Сообщение' })
+		).toBeTruthy()
+		expect(sendChatMessageV2).not.toHaveBeenCalled()
+		expect(replyToTelegramMessage).not.toHaveBeenCalled()
+	})
+
+	it('surfaces UNKNOWN delivery without retrying or resending automatically', async () => {
+		const unknown = telegramEntry({
+			kind: 'TELEGRAM_OUTBOUND',
+			text: 'Уже отправленный ответ',
+			author: {
+				kind: 'TELEGRAM_ACCOUNT',
+				displayName: 'Рабочий аккаунт',
+				subject: null,
+				membershipId: null
+			},
+			telegram: {
+				...telegramEntry().telegram,
+				deliveryStatus: 'UNKNOWN',
+				canReply: false
+			}
+		})
+		await openWorkspaceFeed([unknown])
+		expect(
+			await screen.findByText(
+				/Результат неизвестен — проверьте чат в Telegram/
+			)
+		).toBeTruthy()
+		expect(replyToTelegramMessage).not.toHaveBeenCalled()
+		expect(sendChatMessageV2).not.toHaveBeenCalled()
+		expect(getTelegramMessengerFeed).toHaveBeenCalledTimes(1)
 	})
 
 	it('keeps archive authority on the owner entry while team lead edits remain available without team-wide grants', async () => {

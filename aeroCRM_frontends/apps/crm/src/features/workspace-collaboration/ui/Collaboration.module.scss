@@ -98,6 +98,13 @@
 .composer {
 	@apply flex min-w-0 flex-col gap-3 border-t border-crm-border p-4;
 }
+.replyContext {
+	@apply flex min-w-0 flex-col items-start gap-2 rounded-lg border border-crm-border bg-crm-surface-muted p-3 text-sm text-crm-text;
+	strong,
+	p {
+		@apply break-words [overflow-wrap:anywhere];
+	}
+}
 .empty {
 	@apply flex flex-1 items-center justify-center p-8 text-center text-crm-muted;
 }

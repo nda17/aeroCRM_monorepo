@@ -117,6 +117,55 @@
       "SELECT",
       "INSERT",
       "UPDATE"
+    ],
+    "workspace_messenger_streams": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "workspace_messenger_entries": [
+      "SELECT",
+      "INSERT"
+    ],
+    "workspace_messenger_read_cursors": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "telegram_connect_sessions": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "telegram_connections": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "telegram_channels": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "telegram_dialogs": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "telegram_messages": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "telegram_webhook_inbox": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "telegram_deliveries": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
     ]
   },
   "sequences": {
@@ -142,7 +191,8 @@
     "enforce_workspace_closure_operation",
     "provision_workspace_collaboration",
     "signal_workspace_collaboration",
-    "guard_chat_attachment"
+    "guard_chat_attachment",
+    "project_workspace_messenger_internal"
   ],
   "routineExecute": [
     "is_valid_custom_role_permissions(text[])",

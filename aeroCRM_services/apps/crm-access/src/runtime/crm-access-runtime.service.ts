@@ -1,12 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-export type CrmAccessRole = 'api' | 'worker' | 'outbox-publisher';
+export type CrmAccessRole =
+	| 'api'
+	| 'worker'
+	| 'outbox-publisher'
+	| 'telegram-worker';
 export function parseCrmAccessRole(
 	value: string | undefined
 ): CrmAccessRole {
 	const role = value?.trim() || 'api';
-	if (!['api', 'worker', 'outbox-publisher'].includes(role))
+	if (!['api', 'worker', 'outbox-publisher', 'telegram-worker'].includes(role))
 		throw new Error('CRM_ACCESS_PROCESS_ROLE is invalid');
 	return role as CrmAccessRole;
 }
@@ -14,7 +18,7 @@ export function parseCrmAccessPort(
 	value: string | undefined,
 	role: CrmAccessRole = 'api'
 ): number {
-	const expected = { api: 5300, worker: 5301, 'outbox-publisher': 5302 }[
+	const expected = { api: 5300, worker: 5301, 'outbox-publisher': 5302, 'telegram-worker': 5303 }[
 		role
 	];
 	const port = value?.trim() ? Number(value) : expected;
@@ -33,6 +37,7 @@ export class CrmAccessRuntimeService {
 	readonly workerEnabled: boolean;
 	readonly publisherEnabled: boolean;
 	readonly rabbitEnabled: boolean;
+	readonly telegramWorkerEnabled: boolean;
 
 	constructor(config: ConfigService) {
 		this.role = parseCrmAccessRole(
@@ -45,5 +50,6 @@ export class CrmAccessRuntimeService {
 		this.workerEnabled = this.role === 'worker';
 		this.publisherEnabled = this.role === 'outbox-publisher';
 		this.rabbitEnabled = this.workerEnabled || this.publisherEnabled;
+		this.telegramWorkerEnabled = this.role === 'telegram-worker';
 	}
 }

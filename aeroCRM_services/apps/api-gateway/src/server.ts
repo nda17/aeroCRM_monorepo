@@ -970,6 +970,11 @@ export const createGateway = (
 				return;
 			}
 			routeId = route.id;
+			if (route.authPolicy === 'telegram-webhook' &&
+				(target.rawPath !== '/api/v1/telegram-bot/business-webhook' || request.method !== 'POST')) {
+				sendError(request, response, 404, 'Not Found', 'Route not found', 'route_not_found', requestId, correlationId, corsHeaders);
+				return;
+			}
 			const sourceAuthentication = route.authPolicy === 'crm-source';
 			const tildaSourceAuthentication =
 				sourceAuthentication &&

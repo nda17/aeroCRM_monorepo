@@ -80,6 +80,8 @@ model CrmWorkspaceAccess {
   savedViews                    CrmSavedView[]
   directoryEntries              CrmDirectoryEntry[]
   chatConversations             CrmChatConversation[]
+  messengerStream               WorkspaceMessengerStream?
+  telegramChannels              TelegramChannel[]
 
   @@index([lifecycle, updatedAt])
   @@map("crm_workspace_access")
@@ -470,6 +472,7 @@ model CrmChatMessage {
   conversation CrmChatConversation @relation(fields:[conversationId,workspaceId],references:[id,workspaceId],onDelete:Restrict)
   @@unique([id,workspaceId])
   attachments CrmChatAttachment[]
+  messengerEntries WorkspaceMessengerEntry[]
   @@unique([id,conversationId,workspaceId])
   sender CrmChatParticipant @relation(fields:[conversationId,senderSubject,workspaceId],references:[conversationId,subject,workspaceId],onDelete:Restrict,onUpdate:NoAction,map:"crm_chat_sender_fk")
   @@unique([conversationId,sequence])
@@ -504,5 +507,210 @@ model CrmChatAttachment {
   message CrmChatMessage? @relation(fields:[messageId,conversationId,workspaceId],references:[id,conversationId,workspaceId],onDelete:Restrict,onUpdate:NoAction)
   @@index([workspaceId,state,expiresAt])
   @@map("crm_chat_attachments")
+  @@schema("crm_access")
+}
+
+// The common Messenger feed extends the workspace conversation without
+// manufacturing employee participants for Telegram customers.
+model WorkspaceMessengerStream {
+  workspaceId  String @id @map("workspace_id") @db.Uuid
+  lastSequence Int    @default(0) @map("last_sequence")
+  workspace    CrmWorkspaceAccess @relation(fields: [workspaceId], references: [workspaceId], onDelete: Restrict)
+
+  @@map("workspace_messenger_streams")
+  @@schema("crm_access")
+}
+
+model WorkspaceMessengerEntry {
+  id                String   @id @default(uuid()) @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  sequence          Int
+  kind              String   @db.VarChar(24)
+  internalMessageId String?  @map("internal_message_id") @db.Uuid
+  telegramMessageId String?  @map("telegram_message_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at")
+  internalMessage   CrmChatMessage? @relation(fields: [internalMessageId, workspaceId], references: [id, workspaceId], onDelete: Restrict, onUpdate: NoAction)
+  telegramMessage   TelegramMessage? @relation(fields: [telegramMessageId, workspaceId], references: [id, workspaceId], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([workspaceId, sequence])
+  @@unique([workspaceId, internalMessageId])
+  @@unique([workspaceId, telegramMessageId])
+  @@index([workspaceId, sequence])
+  @@map("workspace_messenger_entries")
+  @@schema("crm_access")
+}
+
+model WorkspaceMessengerReadCursor {
+  workspaceId         String   @map("workspace_id") @db.Uuid
+  subject             String   @db.VarChar(256)
+  membershipId        String   @map("membership_id") @db.Uuid
+  throughSequence     Int      @default(0) @map("through_sequence")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@id([workspaceId, subject, membershipId])
+  @@map("workspace_messenger_read_cursors")
+  @@schema("crm_access")
+}
+
+model TelegramConnectSession {
+  id                String   @id @default(uuid()) @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  actorSubject      String   @map("actor_subject") @db.VarChar(256)
+  actorMembershipId String   @map("actor_membership_id") @db.Uuid
+  channelId         String?  @map("channel_id") @db.Uuid
+  commandId         String   @unique @map("command_id") @db.Uuid
+  nonceHash         String   @unique @map("nonce_hash") @db.Char(64)
+  telegramUserId    String?  @map("telegram_user_id") @db.VarChar(32)
+  ownerName         String?  @map("owner_name") @db.VarChar(302)
+  ownerUsername     String?  @map("owner_username") @db.VarChar(100)
+  connectionId      String?  @map("connection_id") @db.VarChar(256)
+  state             String   @default("WAITING_TELEGRAM") @db.VarChar(24)
+  version           Int      @default(1)
+  expiresAt         DateTime @map("expires_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([workspaceId, state, expiresAt])
+  @@index([telegramUserId, state])
+  @@map("telegram_connect_sessions")
+  @@schema("crm_access")
+}
+
+model TelegramConnection {
+  connectionId   String   @id @map("connection_id") @db.VarChar(256)
+  telegramUserId String   @map("telegram_user_id") @db.VarChar(32)
+  enabled        Boolean
+  canReply       Boolean  @map("can_reply")
+  lastUpdateId   BigInt?  @map("last_update_id")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([telegramUserId])
+  @@map("telegram_connections")
+  @@schema("crm_access")
+}
+
+model TelegramChannel {
+  id                String   @id @default(uuid()) @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  ownerUserId       String   @map("owner_user_id") @db.VarChar(32)
+  ownerName         String   @map("owner_name") @db.VarChar(302)
+  ownerUsername     String?  @map("owner_username") @db.VarChar(100)
+  connectionId      String   @unique @map("connection_id") @db.VarChar(256)
+  generation        Int      @default(1)
+  version           Int      @default(1)
+  status            String   @db.VarChar(16)
+  canReply          Boolean  @map("can_reply")
+  connectedAt       DateTime @default(now()) @map("connected_at")
+  disconnectedAt    DateTime? @map("disconnected_at")
+  lastInboundAt     DateTime? @map("last_inbound_at")
+  lastOutboundAt    DateTime? @map("last_outbound_at")
+  lastErrorCode     String?  @map("last_error_code") @db.VarChar(80)
+  workspace         CrmWorkspaceAccess @relation(fields: [workspaceId], references: [workspaceId], onDelete: Restrict)
+  dialogs           TelegramDialog[]
+  messages          TelegramMessage[]
+
+  @@unique([workspaceId, id])
+  @@unique([ownerUserId])
+  @@index([workspaceId, status])
+  @@map("telegram_channels")
+  @@schema("crm_access")
+}
+
+model TelegramDialog {
+  id               String   @id @default(uuid()) @db.Uuid
+  workspaceId      String   @map("workspace_id") @db.Uuid
+  channelId        String   @map("channel_id") @db.Uuid
+  providerChatId   String   @map("provider_chat_id") @db.VarChar(32)
+  peerName         String   @map("peer_name") @db.VarChar(302)
+  lastInboundAt    DateTime? @map("last_inbound_at")
+  channel          TelegramChannel @relation(fields: [channelId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  messages         TelegramMessage[]
+
+  @@unique([id, workspaceId])
+  @@unique([channelId, providerChatId])
+  @@map("telegram_dialogs")
+  @@schema("crm_access")
+}
+
+model TelegramMessage {
+  id                String   @id @default(uuid()) @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  channelId         String   @map("channel_id") @db.Uuid
+  dialogId          String   @map("dialog_id") @db.Uuid
+  providerChatId    String   @map("provider_chat_id") @db.VarChar(32)
+  providerMessageId String?  @map("provider_message_id") @db.VarChar(32)
+  direction         String   @db.VarChar(8)
+  origin            String   @db.VarChar(16)
+  contentKind       String   @map("content_kind") @db.VarChar(16)
+  mediaAvailable    Boolean  @default(false) @map("media_available")
+  authorUserId      String?  @map("author_user_id") @db.VarChar(32)
+  authorName        String   @map("author_name") @db.VarChar(302)
+  actorSubject      String?  @map("actor_subject") @db.VarChar(256)
+  actorMembershipId String?  @map("actor_membership_id") @db.Uuid
+  text              String   @db.VarChar(10000)
+  providerAt        DateTime? @map("provider_at")
+  editedAt          DateTime? @map("edited_at")
+  deletedAt         DateTime? @map("deleted_at")
+  deliveryStatus    String?  @map("delivery_status") @db.VarChar(16)
+  createdAt         DateTime @default(now()) @map("created_at")
+  channel           TelegramChannel @relation(fields: [channelId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  dialog            TelegramDialog @relation(fields: [dialogId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  messengerEntries  WorkspaceMessengerEntry[]
+
+  @@unique([id, workspaceId])
+  @@unique([channelId, providerChatId, providerMessageId])
+  @@index([workspaceId, createdAt])
+  @@map("telegram_messages")
+  @@schema("crm_access")
+}
+
+model TelegramWebhookInbox {
+  id           String   @id @default(uuid()) @db.Uuid
+  botKey       String   @map("bot_key") @db.VarChar(64)
+  updateId     BigInt   @map("update_id")
+  payloadHash  String   @map("payload_hash") @db.Char(64)
+  rawBody      String   @map("raw_body") @db.Text
+  payload      Json
+  state        String   @default("PENDING") @db.VarChar(16)
+  attempts     Int      @default(0)
+  nextRunAt    DateTime @default(now()) @map("next_run_at")
+  leaseToken   String?  @map("lease_token") @db.Uuid
+  leaseUntil   DateTime? @map("lease_until")
+  lastErrorCode String? @map("last_error_code") @db.VarChar(80)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([botKey, updateId])
+  @@index([state, nextRunAt])
+  @@map("telegram_webhook_inbox")
+  @@schema("crm_access")
+}
+
+model TelegramDelivery {
+  commandId         String   @id @map("command_id") @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  actorSubject      String   @map("actor_subject") @db.VarChar(256)
+  actorMembershipId String   @map("actor_membership_id") @db.Uuid
+  requestHash       String   @map("request_hash") @db.Char(64)
+  sourceMessageId   String   @map("source_message_id") @db.Uuid
+  messageId         String   @unique @map("message_id") @db.Uuid
+  channelId         String   @map("channel_id") @db.Uuid
+  channelGeneration Int      @map("channel_generation")
+  dialogId          String   @map("dialog_id") @db.Uuid
+  connectionId      String   @map("connection_id") @db.VarChar(256)
+  providerChatId    String   @map("provider_chat_id") @db.VarChar(32)
+  state             String   @default("QUEUED") @db.VarChar(16)
+  attempts          Int      @default(0)
+  nextRunAt         DateTime @default(now()) @map("next_run_at")
+  leaseToken        String?  @map("lease_token") @db.Uuid
+  leaseUntil        DateTime? @map("lease_until")
+  dispatchAdmittedAt DateTime? @map("dispatch_admitted_at")
+  lastErrorCode     String?  @map("last_error_code") @db.VarChar(80)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([state, nextRunAt])
+  @@index([workspaceId, actorSubject, actorMembershipId])
+  @@map("telegram_deliveries")
   @@schema("crm_access")
 }

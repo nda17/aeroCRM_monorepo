@@ -9,11 +9,11 @@ import {
 	Injectable,
 	NotFoundException
 } from '@nestjs/common';
-import type {
-	CrmChatConversation,
-	CrmChatMessage,
-	CrmChatParticipant,
-	Prisma
+import {
+	Prisma,
+	type CrmChatConversation,
+	type CrmChatMessage,
+	type CrmChatParticipant
 } from '@prisma/crm-access-client';
 import { CrmAuthorizationService } from '../authorization/crm-authorization.service';
 import { CrmAccessPrismaService } from '../prisma/crm-access-prisma.service';
@@ -626,49 +626,45 @@ export class WorkspaceChatService {
 	async notifications(token: string | undefined, query: NotificationQueryDto) {
 		const actor = await this.actor(token, query.workspaceId);
 		const conversations = await this.visible(actor);
-		const info = new Map(
-			conversations.map(row => [
-				row.id,
-				{
-					row,
-					through:
-						row.participants.find(
-							p =>
-								p.subject === actor.subject &&
-								p.membershipId === actor.membershipId
-						)?.readThroughSequence ?? 0
-				}
-			])
-		);
-		const conditions = conversations.map(row => ({
-			conversationId: row.id,
-			...(query.unreadOnly
-				? { sequence: { gt: info.get(row.id)!.through } }
-				: {})
-		}));
-		const where: Prisma.CrmChatMessageWhereInput = {
-			workspaceId: actor.workspaceId,
-			senderSubject: { not: actor.subject },
-			OR: conditions
-		};
-		const unreadWhere: Prisma.CrmChatMessageWhereInput = {
-			workspaceId: actor.workspaceId,
-			senderSubject: { not: actor.subject },
-			OR: conversations.map(row => ({
-				conversationId: row.id,
-				sequence: { gt: info.get(row.id)!.through }
-			}))
-		};
-		const [total, unreadCount, rows] = await Promise.all([
-			this.prisma.crmChatMessage.count({ where }),
-			this.prisma.crmChatMessage.count({ where: unreadWhere }),
-			this.prisma.crmChatMessage.findMany({
-				where,
-				orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-				skip: (query.page - 1) * query.pageSize,
-				take: query.pageSize
-			})
-		]);
+		const info = new Map(conversations.map(row => [row.id, row]));
+		// A workspace message appears once through the v3 feed, while direct
+		// messages keep their existing sequence and membership boundary.
+		const source = Prisma.sql`WITH received AS (
+			SELECT COALESCE(tm.id,im.id) AS id, c.id AS conversation_id,
+				e.sequence, COALESCE(tm.text,im.text) AS text,
+				COALESCE(tm.author_name,im.sender_name) AS sender_name,
+				e.created_at, CASE WHEN e.sequence<=COALESCE(cur.through_sequence,0) THEN cur.updated_at ELSE NULL END AS read_at,
+				(e.sequence>COALESCE(cur.through_sequence,0)) AS unread, 'WORKSPACE' AS kind
+			FROM crm_access.workspace_messenger_entries e
+			JOIN crm_access.crm_chat_conversations c ON c.workspace_id=e.workspace_id AND c.kind='WORKSPACE'
+			LEFT JOIN crm_access.crm_chat_messages im ON im.id=e.internal_message_id AND im.workspace_id=e.workspace_id
+			LEFT JOIN crm_access.telegram_messages tm ON tm.id=e.telegram_message_id AND tm.workspace_id=e.workspace_id
+			LEFT JOIN crm_access.workspace_messenger_read_cursors cur ON cur.workspace_id=e.workspace_id
+				AND cur.subject=${actor.subject} AND cur.membership_id=${actor.membershipId}::uuid
+			WHERE e.workspace_id=${actor.workspaceId}::uuid AND
+				((im.id IS NOT NULL AND im.sender_subject<>${actor.subject}) OR
+				 (tm.id IS NOT NULL AND tm.origin='CUSTOMER' AND tm.direction='INBOUND'))
+			UNION ALL
+			SELECT m.id, c.id AS conversation_id, m.sequence, m.text, m.sender_name,
+				m.created_at, CASE WHEN m.sequence<=p.read_through_sequence THEN p.read_at ELSE NULL END AS read_at,
+				(m.sequence>p.read_through_sequence) AS unread, 'DIRECT' AS kind
+			FROM crm_access.crm_chat_messages m
+			JOIN crm_access.crm_chat_conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id AND c.kind='DIRECT'
+			JOIN crm_access.crm_chat_participants p ON p.conversation_id=c.id AND p.workspace_id=c.workspace_id
+				AND p.subject=${actor.subject} AND p.membership_id=${actor.membershipId}::uuid
+			WHERE m.workspace_id=${actor.workspaceId}::uuid AND m.sender_subject<>${actor.subject}
+		)`;
+		type Count = { total: bigint; unread_count: bigint };
+		type Row = { id: string; conversation_id: string; sequence: number; text: string; sender_name: string; created_at: Date; read_at: Date | null; unread: boolean; kind: string };
+		const [summary] = await this.prisma.$queryRaw<Count[]>`${source}
+			SELECT count(*) AS total,count(*) FILTER (WHERE unread) AS unread_count FROM received`;
+		const rows = await this.prisma.$queryRaw<Row[]>`${source}
+			SELECT id,conversation_id,sequence,text,sender_name,created_at,read_at,unread,kind
+			FROM received ${query.unreadOnly ? Prisma.sql`WHERE unread` : Prisma.empty}
+			ORDER BY created_at DESC,id DESC
+			LIMIT ${query.pageSize} OFFSET ${(query.page - 1) * query.pageSize}`;
+		const unreadCount = Number(summary?.unread_count ?? 0n);
+		const total = query.unreadOnly ? unreadCount : Number(summary?.total ?? 0n);
 		return {
 			schemaVersion: 1,
 			workspaceId: actor.workspaceId,
@@ -677,31 +673,17 @@ export class WorkspaceChatService {
 			pageSize: query.pageSize,
 			total,
 			unreadCount,
-			items: await Promise.all(
-				rows.map(async row => {
-					const item = info.get(row.conversationId)!;
-					const peer = await this.peer(actor, item.row);
-					const participant = item.row.participants.find(
-						p =>
-							p.subject === actor.subject &&
-							p.membershipId === actor.membershipId
-					);
-					return {
-						id: row.id,
-						messageId: row.id,
-						conversationId: row.conversationId,
-						sequence: row.sequence,
-						title: peer?.displayName ?? 'Общий чат',
-						text: row.text,
-						senderName: row.senderName,
-						createdAt: row.createdAt.toISOString(),
-						readAt:
-							row.sequence <= item.through
-								? (participant?.readAt?.toISOString() ?? null)
-								: null
-					};
-				})
-			)
+			items: await Promise.all(rows.map(async row => {
+				const conversation = info.get(row.conversation_id);
+				if (!conversation) throw new NotFoundException('Conversation was not found');
+				const peer = row.kind === 'DIRECT' ? await this.peer(actor, conversation) : null;
+				return {
+					id: row.id, messageId: row.id, conversationId: row.conversation_id,
+					sequence: row.sequence, title: peer?.displayName ?? 'Общий чат',
+					text: row.text, senderName: row.sender_name,
+					createdAt: row.created_at.toISOString(), readAt: row.read_at?.toISOString() ?? null
+				};
+			}))
 		};
 	}
 }
