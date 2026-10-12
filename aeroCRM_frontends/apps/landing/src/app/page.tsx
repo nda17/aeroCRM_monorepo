@@ -13,6 +13,8 @@ export const generateMetadata = async (): Promise<Metadata> => {
 		openGraph: {
 			title: content.seo.ogTitle,
 			description: content.seo.ogDescription,
+			siteName: 'aeroCRM',
+			locale: 'ru_RU',
 			url: 'https://aerocrm.space',
 			type: 'website',
 			images: [
@@ -35,12 +37,41 @@ const HomePage = async () => {
 		getHomePageContent(),
 		getCrmPricingPolicy()
 	])
+	const siteUrl = 'https://aerocrm.space/'
+	const organizationId = `${siteUrl}#organization`
+	const structuredData = [
+		{
+			'@context': 'https://schema.org',
+			'@type': 'WebSite',
+			'@id': `${siteUrl}#website`,
+			url: siteUrl,
+			name: 'aeroCRM',
+			publisher: { '@id': organizationId }
+		},
+		{
+			'@context': 'https://schema.org',
+			'@type': 'Organization',
+			'@id': organizationId,
+			name: content.footer.infoLines[0] || 'ООО «ЮБС»',
+			legalName: content.footer.infoLines[0] || 'ООО «ЮБС»',
+			url: content.footer.ybsUrl,
+			email: content.footer.email
+		}
+	]
 
 	return (
-		<Home
-			content={content}
-			crmPricingPolicy={crmPricingPolicy}
-		/>
+		<>
+			<script
+				type="application/ld+json"
+				dangerouslySetInnerHTML={{
+					__html: JSON.stringify(structuredData).replace(/</g, '\\u003c')
+				}}
+			/>
+			<Home
+				content={content}
+				crmPricingPolicy={crmPricingPolicy}
+			/>
+		</>
 	)
 }
 

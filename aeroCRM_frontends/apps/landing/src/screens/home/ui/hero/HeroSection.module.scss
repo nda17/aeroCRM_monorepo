@@ -61,11 +61,11 @@
 		}
 
 		.percentWrapper {
-			@apply relative;
+			@apply relative inline-block whitespace-nowrap;
 		}
 
 		.titleSide {
-			@apply w-[98px] md:w-[8.5rem] lg:w-[10.3rem] h-[42px] md:h-[3.2rem] lg:h-[3.7rem] rounded-[20px] absolute top-[-4px] md:top-[-1px] lg:top-0 right-[-5px] md:right-[-8px] lg:right-[-9px] z-[-1];
+			@apply h-[42px] md:h-[3.2rem] lg:h-[3.7rem] rounded-[20px] absolute top-[-4px] md:top-[-1px] lg:top-0 left-[-5px] md:left-[-8px] lg:left-[-9px] right-[-5px] md:right-[-8px] lg:right-[-9px] z-[-1];
 			transform: rotate(-5deg);
 			background: linear-gradient(
 				87.12deg,

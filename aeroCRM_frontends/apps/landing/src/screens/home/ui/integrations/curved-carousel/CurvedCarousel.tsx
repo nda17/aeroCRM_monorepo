@@ -106,6 +106,12 @@ const slides: Slide[] = [
 	},
 ]
 
+const visualsByIconKey: Partial<Record<HomePageIntegrationItem['iconKey'], Slide>> = {
+	email: slides[0],
+	telegram: slides[1],
+	webhook: slides[2]
+}
+
 const withAlpha = (hex: string, alpha: string) => `${hex}${alpha}`
 
 const getCardStyle = (slide: Slide): CardStyle => ({
@@ -122,7 +128,7 @@ const renderCards = (
 	isDuplicate = false
 ) =>
 	items.map((slide, index) => {
-		const visual = slides[index % slides.length]
+		const visual = visualsByIconKey[slide.iconKey] ?? slides[2]
 
 		return (
 			<article
@@ -139,6 +145,7 @@ const renderCards = (
 							viewBox="0 0 48 48"
 							fill="none"
 							color="currentColor"
+							aria-hidden="true"
 						>
 							{visual.icon}
 						</svg>
@@ -152,7 +159,7 @@ const renderCards = (
 				<div className={styles.cardFooter}>
 					<span className={styles.status}>
 						<span className={styles.statusDot} />
-						<span>Источник обращений</span>
+						<span>Интеграция с CRM</span>
 					</span>
 				</div>
 			</article>

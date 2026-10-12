@@ -24,11 +24,8 @@ const sitemap = async (): Promise<MetadataRoute.Sitemap> => {
 			// Stored CMS content is preserved, but withdrawn pages are not public.
 			!/^\/products(?:\/|$)/.test(item.path)
 	)
-	const lastModified = new Date()
-
 	return items.map(item => ({
 		url: buildUrl(baseUrl, item.path),
-		lastModified,
 		changeFrequency: item.changeFrequency,
 		priority: item.priority
 	}))

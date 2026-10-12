@@ -4,7 +4,14 @@ import { Metadata } from 'next'
 export const metadata: Metadata = {
 	title: 'Политика обработки персональных данных',
 	description: 'Политика обработки персональных данных aeroCRM на aerocrm.space',
-	alternates: { canonical: 'https://aerocrm.space/legal-documentation/personal-policy' }
+	alternates: { canonical: 'https://aerocrm.space/legal-documentation/personal-policy' },
+	openGraph: {
+		url: 'https://aerocrm.space/legal-documentation/personal-policy',
+		siteName: 'aeroCRM',
+		locale: 'ru_RU',
+		type: 'website',
+		images: [{ url: '/opengraph-image', width: 1200, height: 630, alt: 'aeroCRM' }]
+	}
 }
 
 async function fetchContent(): Promise<string> {

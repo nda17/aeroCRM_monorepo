@@ -195,18 +195,18 @@ export const DEFAULT_HOME_PAGE_HEAD_CONTENT: HomePageContent['head'] = {
 export const DEFAULT_HOME_PAGE_TECHNICAL_SEO_CONTENT: HomePageContent['technicalSeo'] =
 	{
 		baseUrl: 'https://aerocrm.space',
-		robotsDisallow: [
-			'/logout/',
-			'/login/',
-			'/register/',
-			'/restore-password/',
-			'/social-auth/'
-		],
+		robotsDisallow: ['/logout/'],
 		sitemapItems: [
 			{
 				path: '/',
 				changeFrequency: 'weekly',
 				priority: 1,
+				enabled: true
+			},
+			{
+				path: '/mobile-app',
+				changeFrequency: 'monthly',
+				priority: 0.6,
 				enabled: true
 			},
 			{

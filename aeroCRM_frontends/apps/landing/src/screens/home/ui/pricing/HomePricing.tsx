@@ -30,10 +30,10 @@ const HomePricing = ({ content, crmPricingPolicy }: Props) => {
 
 	return (
 		<section id="pricing" className={styles.section}>
-			<h2 className={styles.title}>Тариф aeroCRM</h2>
+			<h2 className={styles.title}>{content.title}</h2>
 			<div className={styles.toggle}>
 				<button className={`${styles.toggleBtn} ${billing === 'monthly' ? styles.toggleBtnActive : ''}`} onClick={() => setBilling('monthly')} type="button">{content.monthlyToggleText}</button>
-				<button className={`${styles.toggleBtn} ${billing === 'yearly' ? styles.toggleBtnActive : ''}`} onClick={() => setBilling('yearly')} type="button">{content.yearlyToggleText}<span className={styles.toggleDiscount}>−10%</span></button>
+				<button className={`${styles.toggleBtn} ${billing === 'yearly' ? styles.toggleBtnActive : ''}`} onClick={() => setBilling('yearly')} type="button">{content.yearlyToggleText}<span className={styles.toggleDiscount}>{content.discountText}</span></button>
 			</div>
 			<div className={styles.gridLayout}>
 				<div className={`${styles.card} ${styles.cardPopular}`}>
@@ -50,7 +50,7 @@ const HomePricing = ({ content, crmPricingPolicy }: Props) => {
 						</div>
 						<div className={styles.bottom}>
 							<div className={styles.priceWrap}><span className={styles.price}>{price === null ? 'Цена уточняется' : formatRub(price)}</span><span className={styles.priceNote}>{billing === 'yearly' ? 'в год' : 'в месяц'}</span></div>
-							<Link href={ctaHref} className={styles.btn}>Попробовать aeroCRM</Link>
+							<Link href={ctaHref} className={styles.btn}>{content.buttonText}</Link>
 						</div>
 					</div>
 				</div>

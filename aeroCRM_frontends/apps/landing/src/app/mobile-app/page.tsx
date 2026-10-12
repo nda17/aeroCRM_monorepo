@@ -7,7 +7,14 @@ export const metadata: Metadata = {
 	title: 'Мобильные приложения',
 	description:
 		'Приложение aeroCRM для Android: версия, требования и скачивание APK.',
-	alternates: { canonical: 'https://aerocrm.space/mobile-app' }
+	alternates: { canonical: 'https://aerocrm.space/mobile-app' },
+	openGraph: {
+		url: 'https://aerocrm.space/mobile-app',
+		siteName: 'aeroCRM',
+		locale: 'ru_RU',
+		type: 'website',
+		images: [{ url: '/opengraph-image', width: 1200, height: 630, alt: 'aeroCRM' }]
+	}
 }
 
 const MobileAppsPage = () => (

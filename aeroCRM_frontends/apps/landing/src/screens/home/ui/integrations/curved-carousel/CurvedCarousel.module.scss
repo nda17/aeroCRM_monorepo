@@ -39,22 +39,8 @@
 .viewport {
 	--carousel-gap: 14px;
 
-	@apply relative left-1/2 w-[100vw] overflow-hidden bg-transparent pt-8 pb-9;
+	@apply relative left-1/2 w-[100vw] overflow-x-auto overflow-y-hidden bg-transparent pt-8 pb-9;
 	transform: translateX(-50%);
-	mask-image: linear-gradient(
-		90deg,
-		transparent 0%,
-		#000 7%,
-		#000 93%,
-		transparent 100%
-	);
-	-webkit-mask-image: linear-gradient(
-		90deg,
-		transparent 0%,
-		#000 7%,
-		#000 93%,
-		transparent 100%
-	);
 }
 
 @media (max-width: 991px) {
@@ -64,14 +50,12 @@
 }
 
 .track {
-	@apply flex w-max items-center bg-transparent;
+	@apply mx-auto flex w-max items-center bg-transparent;
 	gap: var(--carousel-gap);
-	animation: integrations-marquee 34s linear infinite;
-	will-change: transform;
 }
 
-.viewport:hover .track {
-	animation-play-state: paused;
+.group.groupDuplicate {
+	display: none;
 }
 
 .group {
@@ -297,12 +281,6 @@
 		0 0 12px var(--card-accent-glow);
 }
 
-@keyframes integrations-marquee {
-	to {
-		transform: translateX(calc(-50% - (var(--carousel-gap) / 2)));
-	}
-}
-
 @keyframes card-drift {
 	0%,
 	100% {
@@ -325,37 +303,13 @@
 	}
 
 	.viewport {
-		@apply overflow-hidden bg-transparent px-[4vw] pb-5 pt-3;
-		scroll-snap-type: none;
-		scroll-padding-inline: 0;
-		scrollbar-width: none;
-		overscroll-behavior-x: none;
-		touch-action: none;
-		pointer-events: none;
-		user-select: none;
-		mask-image: linear-gradient(
-			90deg,
-			transparent 0%,
-			#000 5%,
-			#000 95%,
-			transparent 100%
-		);
-		-webkit-mask-image: linear-gradient(
-			90deg,
-			transparent 0%,
-			#000 5%,
-			#000 95%,
-			transparent 100%
-		);
-	}
-
-	.viewport::-webkit-scrollbar {
-		display: none;
+		@apply bg-transparent px-[4vw] pb-5 pt-3;
+		scroll-snap-type: x proximity;
+		scroll-padding-inline: 4vw;
 	}
 
 	.track {
 		@apply w-max;
-		animation: integrations-marquee 30s linear infinite;
 	}
 
 	.group {
@@ -370,6 +324,8 @@
 		--float-delay: 0s;
 		--card-height: 208px;
 		@apply w-[266px] p-[0.95rem];
+		animation: none;
+		will-change: auto;
 		box-shadow:
 			inset 0 1px 0 rgb(255 255 255 / 0.82),
 			0 14px 28px var(--card-accent-glow),
@@ -482,11 +438,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.track {
-		animation: none;
-	}
-
 	.card {
 		animation: none;
+		will-change: auto;
 	}
 }

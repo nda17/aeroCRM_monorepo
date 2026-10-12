@@ -4,7 +4,14 @@ import { Metadata } from 'next'
 export const metadata: Metadata = {
 	title: 'Публичная оферта',
 	description: 'Публичная оферта aeroCRM на aerocrm.space',
-	alternates: { canonical: 'https://aerocrm.space/legal-documentation/oferta' }
+	alternates: { canonical: 'https://aerocrm.space/legal-documentation/oferta' },
+	openGraph: {
+		url: 'https://aerocrm.space/legal-documentation/oferta',
+		siteName: 'aeroCRM',
+		locale: 'ru_RU',
+		type: 'website',
+		images: [{ url: '/opengraph-image', width: 1200, height: 630, alt: 'aeroCRM' }]
+	}
 }
 
 async function fetchContent(): Promise<string> {
