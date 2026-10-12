@@ -762,8 +762,8 @@ const useDatabaseBackup = (
 			const fileSize = job.fileSize
 			toast.success(
 				fileSize === null
-					? `Backup ${getDatabaseBackupTargetLabel(target)} создан и отправлен в Telegram`
-					: `Backup ${getDatabaseBackupTargetLabel(target)} отправлен в Telegram: ${formatFileSize(fileSize)}`
+					? `Backup ${getDatabaseBackupTargetLabel(target)} создан и сохранён в приватном S3`
+					: `Backup ${getDatabaseBackupTargetLabel(target)} сохранён в приватном S3: ${formatFileSize(fileSize)}`
 			)
 			void queryClient.invalidateQueries({
 				queryKey: SETTINGS_QUERY_KEY
@@ -915,7 +915,7 @@ const DatabaseBackupPanel = ({
 					role="status"
 				>
 					{disabledReason ??
-						'Копия будет создана в фоне и отправлена в настроенный чат Telegram.'}
+						'Копия будет создана в фоне и сохранена в приватном S3. В Telegram отправляется уведомление о результате.'}
 				</p>
 				<div className={styles.backupMetaGrid}>
 					<div className={styles.statusItem}>
@@ -1228,7 +1228,7 @@ const formatRestoreJobDate = (value: string | null) => {
 	}).format(parsed)
 }
 
-const DatabaseRestorePanel = ({
+export const DatabaseRestorePanel = ({
 	isDev,
 	isUserLoading,
 	userId
@@ -1271,8 +1271,23 @@ const DatabaseRestorePanel = ({
 		queryKey: RESTORE_SETTINGS_QUERY_KEY,
 		queryFn: devToolsService.getDatabaseRestoresSettings,
 		enabled: Boolean(userId),
-		refetchInterval: 10_000
+		retry: (failureCount, error) =>
+			!(isAxiosError(error) && error.response?.status === 404) &&
+			failureCount < 3,
+		refetchInterval: query =>
+			isAxiosError(query.state.error) &&
+			query.state.error.response?.status === 404
+				? false
+				: 10_000
 	})
+	const isRestoreSettingsAvailable =
+		databaseRestoreSettings.isSuccess &&
+		databaseRestoreSettings.isFetchedAfterMount &&
+		!databaseRestoreSettings.isFetching &&
+		Boolean(databaseRestoreSettings.data)
+	const isRestoreUnavailable =
+		isAxiosError(databaseRestoreSettings.error) &&
+		databaseRestoreSettings.error.response?.status === 404
 	const trackDatabaseRestoreJob = useCallback(
 		async (job: DatabaseRestoreJob) => {
 			await queryClient.cancelQueries({
@@ -1307,8 +1322,11 @@ const DatabaseRestorePanel = ({
 				restoreJobMarker!.jobId,
 				signal
 			),
-		enabled: Boolean(userId && restoreJobMarker?.jobId),
+		enabled: Boolean(
+			userId && restoreJobMarker?.jobId && isRestoreSettingsAvailable
+		),
 		refetchInterval: query => {
+			if (!isRestoreSettingsAvailable) return false
 			const job = query.state.data
 			if (job?.status === 'RECOVERY_REQUIRED' && !job.recoveryResolvedAt) {
 				return DATABASE_RESTORE_JOB_POLL_INTERVAL_MS
@@ -1606,6 +1624,7 @@ const DatabaseRestorePanel = ({
 					Date.now() - recoveryStartedAt <
 						DATABASE_RESTORE_PUBLICATION_GRACE_MS))
 		if (
+			!isRestoreSettingsAvailable ||
 			!marker ||
 			!databaseRestoreJob.isError ||
 			(status !== 403 && status !== 404) ||
@@ -1623,6 +1642,7 @@ const DatabaseRestorePanel = ({
 			'Задание восстановления больше недоступно. Проверьте журнал событий и состояние целевой БД.'
 		)
 	}, [
+		isRestoreSettingsAvailable,
 		databaseRestoreJob.error,
 		databaseRestoreJob.data,
 		databaseRestoreJob.isError,
@@ -1712,7 +1732,10 @@ const DatabaseRestorePanel = ({
 		)
 	}
 
-	if (databaseRestoreSettings.isLoading) {
+	if (
+		databaseRestoreSettings.isLoading ||
+		(!isRestoreSettingsAvailable && !databaseRestoreSettings.isError)
+	) {
 		return (
 			<div className={styles.card}>
 				<SkeletonLoader count={1} className="h-[52px]" />
@@ -1721,7 +1744,31 @@ const DatabaseRestorePanel = ({
 		)
 	}
 
-	if (!databaseRestoreSettings.data) {
+	if (isRestoreUnavailable) {
+		return (
+			<div className={styles.card}>
+				<p className={styles.panelTitle}>Восстановление баз данных</p>
+				<p className={styles.empty}>
+					Восстановление недоступно в текущем окружении. Резервные копии и
+					их история доступны выше.
+				</p>
+				{restoreJobMarker && (
+					<div className={styles.hint} role="status">
+						<p>
+							Результат ранее начатого восстановления не проверен;
+							идентификатор сохранён.
+						</p>
+						<p>
+							ID: {restoreJobMarker.jobId} · Цель:{' '}
+							{restoreJobMarker.target}
+						</p>
+					</div>
+				)}
+			</div>
+		)
+	}
+
+	if (databaseRestoreSettings.isError || !databaseRestoreSettings.data) {
 		return (
 			<div className={styles.card}>
 				<p className={styles.empty}>
@@ -3172,7 +3219,7 @@ const AdminDatabases: NextPage = () => {
 				title="Резервные копии и восстановление"
 				description="Создавайте копии отдельных баз, проверяйте историю и расписание. Восстановление вынесено в отдельный защищённый раздел."
 				risk="medium"
-				riskText="Копии отправляются в настроенный чат Telegram. Создание копии не изменяет рабочую базу."
+				riskText="Копии сохраняются в приватном S3. В Telegram отправляются уведомления о результате. Создание копии не изменяет рабочую базу."
 			/>
 			<DatabaseSections
 				panels={{
@@ -3270,7 +3317,8 @@ const AdminDatabases: NextPage = () => {
 									</h2>
 									<p className={styles.hint}>
 										Время указано по Москве. Копии создаются отдельно для
-										каждой базы и отправляются в Telegram.
+										каждой базы и сохраняются в приватном S3. В Telegram
+										отправляются уведомления о результате.
 									</p>
 								</div>
 								<span

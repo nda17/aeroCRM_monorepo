@@ -6,6 +6,18 @@ export default defineConfig({
 	resolve: {
 		alias: [
 			{
+				find: /^@\/features\//,
+				replacement: fileURLToPath(
+					new URL('../../packages/web/src/features/', import.meta.url)
+				)
+			},
+			{
+				find: /^@\/entities\/site-settings/,
+				replacement: fileURLToPath(
+					new URL('../../packages/web/src/entities/site-settings/', import.meta.url)
+				)
+			},
+			{
 				find: /^@\/entities\/user$/,
 				replacement: fileURLToPath(
 					new URL(

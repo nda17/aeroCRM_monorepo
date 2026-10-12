@@ -1,5 +1,7 @@
 'use client'
 
+import { telegramInfoAdminService } from '@/screens/admin/model/telegram/telegram-info-admin.api'
+
 import { useAdminDirtyGuard } from '@/screens/admin/model/navigation/AdminNavigationGuard'
 
 import { UserRole, useAuthStore, useUser } from '@/entities/user'
@@ -15,7 +17,6 @@ import Heading from '@/shared/ui/heading/Heading'
 import SkeletonLoader from '@/shared/ui/skeleton-loader/SkeletonLoader'
 import {
 	adminTelegramBotService,
-	identityTelegramAuthService,
 	supportTelegramService,
 	type AdminTelegramBotSettings,
 	type TelegramWebhookBot
@@ -38,17 +39,17 @@ const SUPPORT_ROUTING_SETTINGS_QUERY_KEY = [
 	'admin-support-routing-settings'
 ]
 const SUPPORT_WEBHOOK_QUERY_KEY = ['admin-support-webhook']
-const IDENTITY_AUTH_SETTINGS_QUERY_KEY = ['admin-telegram-auth-settings']
-const IDENTITY_WEBHOOK_QUERY_KEY = ['admin-telegram-auth-webhook']
+const IDENTITY_INFO_SETTINGS_QUERY_KEY = ['admin-telegram-info-settings']
 const IDENTITY_INFO_WEBHOOK_QUERY_KEY = ['admin-telegram-info-webhook']
-const WEBHOOK_BOTS: TelegramWebhookBot[] = ['info', 'auth', 'support']
+type ActiveWebhookBot = Exclude<TelegramWebhookBot, 'auth'>
+const WEBHOOK_BOTS: ActiveWebhookBot[] = ['info', 'support']
 const MIN_TASK_TIME_GAP_MINUTES = 5
 const MAX_TELEGRAM_TOPIC_ID = 2147483647
 const OPERATIONS_TELEGRAM_TOPIC_FIELDS = [
 	{
 		key: 'databaseBackupThreadId',
 		label: 'Backups',
-		description: 'Ручные и автоматические backup базы данных'
+		description: 'Уведомления о резервных копиях в приватном S3'
 	},
 	{
 		key: 'paymentsThreadId',
@@ -192,14 +193,14 @@ const AdminTelegramBot: NextPage = () => {
 		enabled: auth
 	})
 	const {
-		data: identityAuthSettings,
-		isLoading: isIdentityAuthSettingsLoading,
-		isFetching: isIdentityAuthSettingsFetching,
-		isError: isIdentityAuthSettingsError,
-		refetch: refetchIdentityAuthSettings
+		data: identityInfoSettings,
+		isLoading: isIdentityInfoSettingsLoading,
+		isFetching: isIdentityInfoSettingsFetching,
+		isError: isIdentityInfoSettingsError,
+		refetch: refetchIdentityInfoSettings
 	} = useQuery({
-		queryKey: IDENTITY_AUTH_SETTINGS_QUERY_KEY,
-		queryFn: identityTelegramAuthService.getSettings
+		queryKey: IDENTITY_INFO_SETTINGS_QUERY_KEY,
+		queryFn: telegramInfoAdminService.getSettings
 	})
 	const {
 		data: dailySummarySettings,
@@ -223,22 +224,13 @@ const AdminTelegramBot: NextPage = () => {
 		enabled: auth
 	})
 	const {
-		data: identityWebhookStatus,
-		isFetching: isIdentityWebhookStatusFetching,
-		isError: isIdentityWebhookStatusError,
-		refetch: refetchIdentityWebhookStatus
-	} = useQuery({
-		queryKey: IDENTITY_WEBHOOK_QUERY_KEY,
-		queryFn: identityTelegramAuthService.getWebhookStatus
-	})
-	const {
 		data: identityInfoWebhookStatus,
 		isFetching: isIdentityInfoWebhookStatusFetching,
 		isError: isIdentityInfoWebhookStatusError,
 		refetch: refetchIdentityInfoWebhookStatus
 	} = useQuery({
 		queryKey: IDENTITY_INFO_WEBHOOK_QUERY_KEY,
-		queryFn: identityTelegramAuthService.getInfoWebhookStatus
+		queryFn: telegramInfoAdminService.getWebhookStatus
 	})
 	const isOperationsChatFrozen = Boolean(
 		settings?.dailySummaryChatId.trim()
@@ -346,14 +338,9 @@ const AdminTelegramBot: NextPage = () => {
 	})
 
 	const webhookMutation = useMutation({
-		mutationFn: async (bot: TelegramWebhookBot) => {
-			if (bot === 'auth') {
-				const result = await identityTelegramAuthService.reinstallWebhook()
-				return { title: result.title }
-			}
+		mutationFn: async (bot: ActiveWebhookBot) => {
 			if (bot === 'info') {
-				const result =
-					await identityTelegramAuthService.reinstallInfoWebhook()
+				const result = await telegramInfoAdminService.reinstallWebhook()
 				return { title: result.title }
 			}
 			const result = await supportTelegramService.reinstallWebhook()
@@ -399,15 +386,13 @@ const AdminTelegramBot: NextPage = () => {
 		})
 	}
 
-	const handleReinstallWebhook = (bot: TelegramWebhookBot) => {
+	const handleReinstallWebhook = (bot: ActiveWebhookBot) => {
 		const promise = webhookMutation.mutateAsync(bot).finally(async () => {
 			await queryClient.invalidateQueries({
 				queryKey:
-					bot === 'auth'
-						? IDENTITY_WEBHOOK_QUERY_KEY
-						: bot === 'info'
-							? IDENTITY_INFO_WEBHOOK_QUERY_KEY
-							: SUPPORT_WEBHOOK_QUERY_KEY
+					bot === 'info'
+						? IDENTITY_INFO_WEBHOOK_QUERY_KEY
+						: SUPPORT_WEBHOOK_QUERY_KEY
 			})
 		})
 
@@ -421,9 +406,8 @@ const AdminTelegramBot: NextPage = () => {
 	const handleRefreshWebhookStatuses = () => {
 		const promise = Promise.all([
 			refetchSupportWebhookStatus({ throwOnError: true }),
-			refetchIdentityWebhookStatus({ throwOnError: true }),
 			refetchIdentityInfoWebhookStatus({ throwOnError: true }),
-			refetchIdentityAuthSettings({ throwOnError: true })
+			refetchIdentityInfoSettings({ throwOnError: true })
 		])
 
 		toast.promise(promise, {
@@ -891,21 +875,15 @@ const AdminTelegramBot: NextPage = () => {
 	})
 	const webhookStatusItems = [
 		...(supportWebhookStatus ? [supportWebhookStatus] : []),
-		...(identityWebhookStatus ? [identityWebhookStatus] : []),
 		...(identityInfoWebhookStatus ? [identityInfoWebhookStatus] : [])
 	]
 	const statusByBot = new Map(
 		webhookStatusItems.map(status => [status.bot, status])
 	)
-	const isBotTokenConfigured = (bot: TelegramWebhookBot) => {
-		if (bot === 'auth') {
-			return Boolean(identityAuthSettings?.authTelegramBotTokenConfigured)
-		}
-		if (bot === 'info') {
-			return Boolean(identityInfoWebhookStatus?.configured)
-		}
-		return Boolean(supportWebhookStatus?.configured)
-	}
+	const isBotTokenConfigured = (bot: ActiveWebhookBot) =>
+		bot === 'info'
+			? identityInfoSettings?.infoTelegramBotTokenConfigured
+			: supportWebhookStatus?.configured
 
 	return (
 		<section className={styles.wrapper}>
@@ -915,7 +893,7 @@ const AdminTelegramBot: NextPage = () => {
 			<AdminSectionHeading
 				text="Telegram-боты"
 				title="Webhook и сообщения в Telegram"
-				description="Показывает webhook Identity-ботов и Support_bot, маршрутизацию служебных сообщений и расписание резервных копий сервисов."
+				description="Показывает webhook INFO-бота и Support_bot, маршрутизацию служебных сообщений и расписание резервных копий сервисов."
 				risk="medium"
 				riskText="Группа должна быть супергруппой с включёнными Topics. Если ID группы или нужного топика указан неверно, соответствующие сообщения не отправятся. INFO-бот и SUPPORT-бот должны быть добавлены в группу, а токены должны быть настроены на сервере."
 			/>
@@ -935,50 +913,92 @@ const AdminTelegramBot: NextPage = () => {
 					<>
 						<div className={styles.statusGrid}>
 							<div className={styles.statusItem}>
-								<p className={styles.statusLabel}>Токен INFO-бот</p>
+								<p className={styles.statusLabel}>
+									INFO-бот: приём обновлений — токен
+								</p>
 								<span
 									className={`${styles.badge} ${
-										settings.telegramBotTokenConfigured
+										identityInfoSettings?.infoTelegramBotTokenConfigured
 											? styles.badgeOk
 											: styles.badgeWarning
 									}`}
 								>
-									{settings.telegramBotTokenConfigured
-										? 'Настроен'
-										: 'Не настроен'}
-								</span>
-							</div>
-							<div className={styles.statusItem}>
-								<p className={styles.statusLabel}>Username INFO-бот</p>
-								<span
-									className={`${styles.badge} ${
-										settings.telegramBotUsernameConfigured
-											? styles.badgeOk
-											: styles.badgeWarning
-									}`}
-								>
-									{settings.telegramBotUsernameConfigured
-										? 'Настроен'
-										: 'Не настроен'}
-								</span>
-							</div>
-							<div className={styles.statusItem}>
-								<p className={styles.statusLabel}>Токен Auth_bot</p>
-								<span
-									className={`${styles.badge} ${
-										identityAuthSettings?.authTelegramBotTokenConfigured
-											? styles.badgeOk
-											: styles.badgeWarning
-									}`}
-								>
-									{isIdentityAuthSettingsLoading
+									{isIdentityInfoSettingsLoading
 										? 'Загрузка...'
-										: isIdentityAuthSettingsError
-											? 'Недоступен'
-											: identityAuthSettings?.authTelegramBotTokenConfigured
+										: isIdentityInfoSettingsError
+											? 'Проверить не удалось'
+											: identityInfoSettings?.infoTelegramBotTokenConfigured ===
+												  true
 												? 'Настроен'
-												: 'Не настроен'}
+												: identityInfoSettings?.infoTelegramBotTokenConfigured ===
+													  false
+													? 'Не настроен'
+													: '—'}
 								</span>
+							</div>
+							<div className={styles.statusItem}>
+								<p className={styles.statusLabel}>
+									INFO-бот: приём обновлений — username
+								</p>
+								<span
+									className={`${styles.badge} ${
+										identityInfoSettings?.infoTelegramBotUsernameConfigured
+											? styles.badgeOk
+											: styles.badgeWarning
+									}`}
+								>
+									{isIdentityInfoSettingsLoading
+										? 'Загрузка...'
+										: isIdentityInfoSettingsError
+											? 'Проверить не удалось'
+											: identityInfoSettings?.infoTelegramBotUsernameConfigured ===
+												  true
+												? 'Настроен'
+												: identityInfoSettings?.infoTelegramBotUsernameConfigured ===
+													  false
+													? 'Не настроен'
+													: '—'}
+								</span>
+							</div>
+							<div className={styles.statusItem}>
+								<p className={styles.statusLabel}>
+									Служебные уведомления — токен
+								</p>
+								<span
+									className={`${styles.badge} ${settings.telegramBotTokenConfigured ? styles.badgeOk : styles.badgeWarning}`}
+								>
+									{settings.telegramBotTokenConfigured === true
+										? 'Настроен'
+										: settings.telegramBotTokenConfigured === false
+											? 'Не настроен'
+											: '—'}
+								</span>
+								<p className={styles.hint}>
+									Operations: конфигурация служебных уведомлений
+								</p>
+							</div>
+							<div className={styles.statusItem}>
+								<p className={styles.statusLabel}>
+									Служебные уведомления — username
+								</p>
+								<span
+									className={`${styles.badge} ${settings.telegramBotUsernameConfigured ? styles.badgeOk : styles.badgeWarning}`}
+								>
+									{settings.telegramBotUsernameConfigured === true
+										? 'Настроен'
+										: settings.telegramBotUsernameConfigured === false
+											? 'Не настроен'
+											: '—'}
+								</span>
+								<p className={styles.hint}>
+									Operations: конфигурация служебных уведомлений
+								</p>
+							</div>
+							<div className={styles.statusItem}>
+								<p className={styles.statusLabel}>Auth_bot</p>
+								<p className={styles.hint}>
+									Не используется в текущей версии
+								</p>
 							</div>
 							<div className={styles.statusItem}>
 								<p className={styles.statusLabel}>Токен SUPPORT-бот</p>
@@ -993,27 +1013,11 @@ const AdminTelegramBot: NextPage = () => {
 										? 'Загрузка...'
 										: isSupportWebhookStatusError
 											? 'Support недоступен'
-											: supportWebhookStatus?.configured
+											: supportWebhookStatus?.configured === true
 												? 'Настроен'
-												: 'Не настроен'}
-								</span>
-							</div>
-							<div className={styles.statusItem}>
-								<p className={styles.statusLabel}>Username Auth_bot</p>
-								<span
-									className={`${styles.badge} ${
-										identityAuthSettings?.authTelegramBotUsernameConfigured
-											? styles.badgeOk
-											: styles.badgeWarning
-									}`}
-								>
-									{isIdentityAuthSettingsLoading
-										? 'Загрузка...'
-										: isIdentityAuthSettingsError
-											? 'Недоступен'
-											: identityAuthSettings?.authTelegramBotUsernameConfigured
-												? 'Настроен'
-												: 'Не настроен'}
+												: supportWebhookStatus?.configured === false
+													? 'Не настроен'
+													: '—'}
 								</span>
 							</div>
 							<div className={styles.statusItem}>
@@ -1082,17 +1086,6 @@ const AdminTelegramBot: NextPage = () => {
 								>
 									INFO-бот
 								</button>
-								<button
-									type="button"
-									className={styles.actionBtn}
-									onClick={() => handleReinstallWebhook('auth')}
-									disabled={
-										isWebhookActionPending ||
-										!identityAuthSettings?.authTelegramBotTokenConfigured
-									}
-								>
-									Auth_bot
-								</button>
 								<span className={styles.devOnlyAction}>
 									<button
 										type="button"
@@ -1136,9 +1129,8 @@ const AdminTelegramBot: NextPage = () => {
 									onClick={handleRefreshWebhookStatuses}
 									disabled={
 										isSupportWebhookStatusFetching ||
-										isIdentityWebhookStatusFetching ||
 										isIdentityInfoWebhookStatusFetching ||
-										isIdentityAuthSettingsFetching
+										isIdentityInfoSettingsFetching
 									}
 								>
 									Обновить
@@ -1150,10 +1142,7 @@ const AdminTelegramBot: NextPage = () => {
 									const status = statusByBot.get(bot)
 									const pendingCount = status?.pendingUpdateCount ?? null
 									const isIdentityUnavailable =
-										(bot === 'auth' &&
-											(isIdentityAuthSettingsError ||
-												isIdentityWebhookStatusError)) ||
-										(bot === 'info' && isIdentityInfoWebhookStatusError)
+										bot === 'info' && isIdentityInfoWebhookStatusError
 									const isSupportUnavailable =
 										bot === 'support' && isSupportWebhookStatusError
 									const hasProblem = Boolean(
@@ -1169,11 +1158,9 @@ const AdminTelegramBot: NextPage = () => {
 											<div className={styles.webhookStatusTitleRow}>
 												<p className={styles.statusValue}>
 													{status?.title ??
-														(bot === 'auth'
-															? 'Auth_bot'
-															: bot === 'support'
-																? 'SUPPORT-бот'
-																: 'INFO-бот')}
+														(bot === 'support'
+															? 'SUPPORT-бот'
+															: 'INFO-бот')}
 												</p>
 												<span
 													className={`${styles.badge} ${
@@ -1207,13 +1194,17 @@ const AdminTelegramBot: NextPage = () => {
 											</p>
 											<p className={styles.webhookStatusLine}>
 												URL:{' '}
-												{status?.error
+												{isIdentityUnavailable ||
+												isSupportUnavailable ||
+												status?.error
 													? 'проверить не удалось'
-													: status?.webhookMatchesExpected
-														? 'актуальный'
-														: status?.webhookUrl
-															? 'отличается'
-															: 'не установлен'}
+													: !status
+														? '—'
+														: status.webhookMatchesExpected
+															? 'актуальный'
+															: status?.webhookUrl
+																? 'отличается'
+																: 'не установлен'}
 											</p>
 											{status &&
 												!status.error &&
@@ -1258,7 +1249,7 @@ const AdminTelegramBot: NextPage = () => {
 														? 'Support Service недоступен'
 														: 'Identity Service недоступен'}
 												</p>
-											) : !isBotTokenConfigured(bot) ? (
+											) : isBotTokenConfigured(bot) === false ? (
 												<p className={styles.webhookStatusError}>
 													Токен не настроен
 												</p>
@@ -1432,8 +1423,8 @@ const AdminTelegramBot: NextPage = () => {
 									{settings.crmCustomersDatabaseBackupTimeLabel}, CRM Sales
 									— в {settings.crmSalesDatabaseBackupTimeLabel}. Базовое
 									время {settings.databaseBackupTimeLabel} задаёт
-									расписание, но все файлы приходят отдельно в топик
-									Backups.
+									расписание, резервные копии сохраняются в приватном S3, а
+									уведомления о результате приходят в топик Backups.
 								</p>
 							</div>
 							<button
@@ -1587,7 +1578,6 @@ const AdminTelegramBot: NextPage = () => {
 								{settings.campaignsDatabaseBackupDelayMinutes}
 								{', '}
 								{settings.reportingDatabaseBackupDelayMinutes}
-								{', '}
 								{', '}
 								{settings.billingDatabaseBackupDelayMinutes}
 								{', '}

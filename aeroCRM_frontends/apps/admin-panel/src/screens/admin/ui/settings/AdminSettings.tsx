@@ -2,6 +2,9 @@
 
 import { useAdminDirtyGuard } from '@/screens/admin/model/navigation/AdminNavigationGuard'
 
+import { ADMIN_PAGES } from '@/shared/config/pages/admin.config'
+import Link from '@/shared/lib/navigation/ZoneLink'
+
 import AdminNavigation from '@/screens/admin/ui/common/admin-navigation/AdminNavigation'
 import AdminSectionHeading from '@/screens/admin/ui/common/admin-section-heading/AdminSectionHeading'
 import AdminTooltip from '@/screens/admin/ui/common/admin-tooltip/AdminTooltip'
@@ -32,20 +35,6 @@ const MANUAL_TASKS: Array<{
 	description: string
 	buttonLabel: string
 }> = [
-	{
-		id: 'paymentCleanup',
-		title: 'Очистка зависших платежей',
-		description:
-			'Запускает внеплановую очистку старых платежей со статусом ожидания.',
-		buttonLabel: 'Запустить'
-	},
-	{
-		id: 'subscriptionExpiryCheck',
-		title: 'Проверка истёкших подписок',
-		description:
-			'Внепланово деактивирует подписки, срок действия которых уже истёк.',
-		buttonLabel: 'Запустить'
-	},
 	{
 		id: 'verificationChallengeCleanup',
 		title: 'Очистка verification challenges',
@@ -437,13 +426,20 @@ const AdminSettings: NextPage = () => {
 
 			<AdminSectionHeading
 				title="Ручной запуск задач"
-				description="Позволяет вне расписания запустить системные задачи обслуживания: очистку платежей, проверку подписок и удаление устаревших challenge-записей."
+				description="Позволяет вне расписания удалить устаревшие challenge-записи для подтверждения email и телефона."
 				risk="high"
-				riskText="Запускай только когда понимаешь цель задачи: действие влияет на реальные платежи, подписки или записи подтверждения."
+				riskText="Запускай только когда понимаешь цель задачи: действие удаляет устаревшие записи подтверждения."
 				text="Ручной запуск задач"
 			/>
 
 			<div className={styles.section}>
+				<p className={styles.fieldHint}>
+					Подписки относятся к рабочим пространствам. Управление доступно в{' '}
+					<Link href={ADMIN_PAGES.FINANCE_SUBSCRIPTIONS}>
+						разделе подписок
+					</Link>
+					.
+				</p>
 				<div className={styles.taskList}>
 					{MANUAL_TASKS.map(task => {
 						const result = manualTaskResults[task.id]

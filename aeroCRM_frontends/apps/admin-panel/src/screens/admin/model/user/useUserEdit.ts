@@ -1,7 +1,7 @@
 import { IUserEditInput } from '@/entities/user'
 import { userService as UserService } from '@/entities/user'
 import { useAuthStore } from '@/entities/user'
-import { errorCatch } from '@/shared/api'
+import { adminUserOverviewService } from './user-overview-admin.api'
 import {
 	useMutation,
 	useQuery,
@@ -11,59 +11,6 @@ import axios from 'axios'
 import { useEffect } from 'react'
 import { SubmitHandler } from 'react-hook-form'
 import toast from 'react-hot-toast'
-
-const AUTO_RENEWAL_QUERY_KEY = 'get-user-auto-renewal'
-
-export type AdminAutoRenewalAction =
-	| 'pause'
-	| 'resume'
-	| 'revoke'
-	| 'reconcile'
-	| 'resumeTechnical'
-
-export type AdminAutoRenewalActionInput =
-	| {
-			action: 'pause' | 'resume' | 'revoke' | 'resumeTechnical'
-			reason: string
-	  }
-	| {
-			action: 'reconcile'
-	  }
-
-const AUTO_RENEWAL_ACTION_COPY: Record<
-	AdminAutoRenewalAction,
-	{
-		fallbackSuccess: string
-		fallbackError: string
-		toastId: string
-	}
-> = {
-	pause: {
-		fallbackSuccess: 'Автопродление приостановлено',
-		fallbackError: 'Не удалось приостановить автопродление',
-		toastId: 'admin-user-auto-renewal-pause'
-	},
-	resume: {
-		fallbackSuccess: 'Автопродление возобновлено',
-		fallbackError: 'Не удалось возобновить автопродление',
-		toastId: 'admin-user-auto-renewal-resume'
-	},
-	revoke: {
-		fallbackSuccess: 'Отзыв согласия зафиксирован',
-		fallbackError: 'Не удалось зафиксировать отзыв согласия',
-		toastId: 'admin-user-auto-renewal-revoke'
-	},
-	reconcile: {
-		fallbackSuccess: 'Состояние автопродления сверено',
-		fallbackError: 'Не удалось сверить состояние автопродления',
-		toastId: 'dev-user-auto-renewal-reconcile'
-	},
-	resumeTechnical: {
-		fallbackSuccess: 'Техническая пауза снята',
-		fallbackError: 'Не удалось снять техническую паузу',
-		toastId: 'dev-user-auto-renewal-resume-technical'
-	}
-}
 
 export const useUserEdit = (params: { id: string }) => {
 	const auth = useAuthStore(state => state.auth)
@@ -99,19 +46,7 @@ export const useUserEdit = (params: { id: string }) => {
 
 	const { data: overview, isLoading: isOverviewLoading } = useQuery({
 		queryKey: ['get-user-overview', userId],
-		queryFn: () => UserService.fetchUserOverview(userId),
-		select: ({ data }) => data,
-		enabled: auth && !!userId && Boolean(data)
-	})
-
-	const {
-		data: autoRenewal,
-		isLoading: isAutoRenewalLoading,
-		isError: isAutoRenewalError
-	} = useQuery({
-		queryKey: [AUTO_RENEWAL_QUERY_KEY, userId],
-		queryFn: () => UserService.fetchAdminUserAutoRenewal(userId),
-		select: ({ data }) => data,
+		queryFn: () => adminUserOverviewService.get(userId),
 		enabled: auth && !!userId && Boolean(data)
 	})
 
@@ -215,67 +150,6 @@ export const useUserEdit = (params: { id: string }) => {
 		await invalidateAvatarQueries()
 	}
 
-	const {
-		isPending: isAutoRenewalUpdating,
-		variables: autoRenewalActionInput,
-		mutateAsync: manageAutoRenewalAsync
-	} = useMutation({
-		mutationKey: ['manage-user-auto-renewal', userId],
-		mutationFn: (input: AdminAutoRenewalActionInput) => {
-			switch (input.action) {
-				case 'pause':
-					return UserService.pauseAdminUserAutoRenewal(
-						userId,
-						input.reason
-					)
-				case 'resume':
-					return UserService.resumeAdminUserAutoRenewal(
-						userId,
-						input.reason
-					)
-				case 'revoke':
-					return UserService.revokeAdminUserAutoRenewal(
-						userId,
-						input.reason
-					)
-				case 'reconcile':
-					return UserService.reconcileAdminUserAutoRenewal(userId)
-				case 'resumeTechnical':
-					return UserService.resumeTechnicalAdminUserAutoRenewal(
-						userId,
-						input.reason
-					)
-			}
-		},
-		onMutate(input) {
-			const copy = AUTO_RENEWAL_ACTION_COPY[input.action]
-			toast.loading('Пожалуйста, подождите', { id: copy.toastId })
-
-			return { toastId: copy.toastId }
-		},
-		onSuccess({ data: response }, input, context) {
-			const copy = AUTO_RENEWAL_ACTION_COPY[input.action]
-			toast.success(response.message || copy.fallbackSuccess, {
-				id: context.toastId
-			})
-			void queryClient.invalidateQueries({
-				queryKey: [AUTO_RENEWAL_QUERY_KEY, userId]
-			})
-			void queryClient.invalidateQueries({
-				queryKey: ['get-user-overview', userId]
-			})
-			void queryClient.invalidateQueries({
-				queryKey: ['admin-event-log']
-			})
-		},
-		onError(error, input, context) {
-			const copy = AUTO_RENEWAL_ACTION_COPY[input.action]
-			toast.error(errorCatch(error) || copy.fallbackError, {
-				id: context?.toastId ?? copy.toastId
-			})
-		}
-	})
-
 	const onSubmit: SubmitHandler<IUserEditInput> = async data => {
 		await mutateAsync(data)
 	}
@@ -287,12 +161,6 @@ export const useUserEdit = (params: { id: string }) => {
 		data,
 		overview,
 		isOverviewLoading,
-		autoRenewal,
-		isAutoRenewalLoading,
-		isAutoRenewalError,
-		isAutoRenewalUpdating,
-		autoRenewalUpdatingAction: autoRenewalActionInput?.action,
-		manageAutoRenewal: manageAutoRenewalAsync,
 		isSaving: isPending,
 		isActivationUpdating,
 		toggleActivation: toggleActivationAsync,
