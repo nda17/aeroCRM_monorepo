@@ -1,7 +1,7 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { request } from 'node:https';
-import { isIP } from 'node:net';
+import { isIP, type LookupFunction } from 'node:net';
 
 type BotResponse<T> = { ok: boolean; result?: T; error_code?: number; description?: string; parameters?: { retry_after?: number } };
 type BusinessConnection = {
@@ -21,6 +21,11 @@ export class TelegramTransportError extends Error {
 		super(`Telegram ${kind.toLowerCase()}`);
 	}
 }
+
+export const telegramApiProxyLookup = (proxyIp: string): LookupFunction => (_hostname, options, callback) => {
+	if (options.all) callback(null, [{ address: proxyIp, family: 4 }]);
+	else callback(null, proxyIp, 4);
+};
 
 @Injectable()
 export class TelegramBusinessBot {
@@ -65,7 +70,7 @@ export class TelegramBusinessBot {
 			const req = request(url, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json', 'content-length': payload.length },
-				lookup: (_host, _options, callback) => callback(null, this.proxyIp, 4),
+				lookup: telegramApiProxyLookup(this.proxyIp),
 				timeout: 10_000,
 				rejectUnauthorized: true
 			}, response => {
