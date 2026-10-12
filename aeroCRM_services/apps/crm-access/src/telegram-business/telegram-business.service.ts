@@ -8,6 +8,7 @@ import {
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { Prisma, type TelegramChannel, type TelegramConnectSession } from '@prisma/crm-access-client';
 import { CrmAuthorizationService } from '../authorization/crm-authorization.service';
+import { directoryName } from '../directory/directory.service';
 import { collaborationSignal } from '../directory/directory.util';
 import { CrmAccessPrismaService } from '../prisma/crm-access-prisma.service';
 import { command, semanticHash } from '../team/team.util';
@@ -198,7 +199,8 @@ export class TelegramBusinessService {
 			if (!channel || !dialog || channel.status !== 'ACTIVE' || !channel.canReply || !dialog.lastInboundAt || dialog.lastInboundAt.getTime() + 24 * 60 * 60_000 <= Date.now())
 				throw new ForbiddenException('Telegram reply is unavailable');
 			const profile = await tx.crmDirectoryEntry.findUnique({ where: { workspaceId_subject: { workspaceId: actor.workspaceId, subject: actor.subject } } });
-			const name = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ') || 'Сотрудник';
+			const fallbackName = `Сотрудник · ${actor.subject}`;
+			const name = directoryName(profile, fallbackName).trim().slice(0, 302) || fallbackName;
 			const message = await tx.telegramMessage.create({ data: { workspaceId: actor.workspaceId, channelId: channel.id, dialogId: dialog.id,
 				providerChatId: dialog.providerChatId, direction: 'OUTBOUND', origin: 'CRM', contentKind: 'TEXT', authorName: name,
 				actorSubject: actor.subject, actorMembershipId: actor.membershipId, text, deliveryStatus: 'QUEUED' } });

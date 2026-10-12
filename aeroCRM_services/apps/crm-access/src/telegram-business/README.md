@@ -27,7 +27,7 @@
 | GET | `C/telegram/commands/:commandId?workspaceId` | Текущее delivery state только исходному actor и membership. |
 | POST | `/api/v1/telegram-bot/business-webhook` | Только Telegram webhook, без JWT; single secret header и durable inbox. |
 
-`MessengerEntry` содержит `kind`, `author`, `internal` или `telegram`, текст/время, статус и право ответа. Внешний автор имеет `kind=TELEGRAM_USER` или `TELEGRAM_ACCOUNT` и `subject=null`; CRM outbound сохраняет настоящего сотрудника и membership. `Channel.lastInboundAt` и `lastOutboundAt` относятся только к текущему поколению подключения: это свидетельства реального входящего клиента и успешной Telegram receipt на CRM ответ.
+`MessengerEntry` содержит `kind`, `author`, `internal` или `telegram`, текст/время, статус и право ответа. Внешний автор имеет `kind=TELEGRAM_USER` или `TELEGRAM_ACCOUNT` и `subject=null`; CRM outbound сохраняет настоящего сотрудника, membership и снимок имени из справочника (ФИО, затем email, затем `Сотрудник · subject`). `Channel.lastInboundAt` и `lastOutboundAt` относятся только к текущему поколению подключения: это свидетельства реального входящего клиента и успешной Telegram receipt на CRM ответ.
 
 ## Конфигурация
 
