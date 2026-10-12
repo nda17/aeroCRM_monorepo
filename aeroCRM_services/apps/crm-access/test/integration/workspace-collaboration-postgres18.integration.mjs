@@ -597,16 +597,27 @@ try {
 		makeCommand({ throughSequence: 0 })
 	);
 	assert.equal(rebound.throughSequence, 0);
+	const replacementMembershipNotifications = await chat.notifications(
+		'Bearer local-test',
+		{
+			workspaceId,
+			page: 1,
+			pageSize: 10,
+			unreadOnly: true
+		}
+	);
 	assert.equal(
-		(
-			await chat.notifications('Bearer local-test', {
-				workspaceId,
-				page: 1,
-				pageSize: 10,
-				unreadOnly: true
-			})
-		).unreadCount,
-		1
+		replacementMembershipNotifications.unreadCount,
+		3,
+		'a replacement membership starts with an unread combined cursor and sees both room messages plus the Telegram inbound'
+	);
+	assert.deepEqual(
+		new Set(replacementMembershipNotifications.items.map(item => item.messageId)),
+		new Set([
+			roomMessage.item.id,
+			concurrentInternal.item.id,
+			externalProjection.telegramMessage.id
+		])
 	);
 	await prisma.crmWorkspaceMember.update({
 		where: { workspaceId_subject: { workspaceId, subject: peerSubject } },
