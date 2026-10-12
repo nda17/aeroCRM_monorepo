@@ -2,7 +2,7 @@ import { UserList } from '@/screens/admin'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-	title: 'User list',
+	title: 'Пользователи',
 	description: 'Admin panel page'
 }
 

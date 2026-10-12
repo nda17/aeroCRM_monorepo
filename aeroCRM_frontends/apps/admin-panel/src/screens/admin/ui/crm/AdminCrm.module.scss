@@ -13,23 +13,23 @@
 }
 
 .summaryCard {
-	@apply flex min-h-[132px] flex-col gap-2 rounded-xl border border-[#e8ddf5] bg-gradient-to-br from-white to-[#faf7ff] p-5;
+	@apply flex min-h-[132px] flex-col gap-2 rounded-xl border border-[color:var(--admin-border)] bg-[var(--admin-surface)] p-5;
 }
 
 .eyebrow {
-	@apply text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[#997eaf];
+	@apply text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[color:var(--admin-muted)];
 }
 
 .summaryValue {
-	@apply text-[1.45rem] font-bold text-[#57266f];
+	@apply text-[1.45rem] font-bold text-[color:var(--admin-text)];
 }
 
 .summaryHint {
-	@apply mt-auto text-[0.8rem] leading-[1.45] text-[#796987];
+	@apply mt-auto text-[0.8rem] leading-[1.45] text-[color:var(--admin-muted)];
 }
 
 .section {
-	@apply mx-auto mb-6 flex w-full min-w-0 flex-col gap-4 rounded-xl border border-[#e0d6f0] bg-white p-5;
+	@apply mx-auto mb-6 flex w-full min-w-0 flex-col gap-4 rounded-xl border border-[color:var(--admin-border)] bg-[var(--admin-surface)] p-5;
 
 	@media (max-width: 480px) {
 		@apply gap-[14px] rounded-[10px] p-3;
@@ -50,19 +50,19 @@
 }
 
 .sectionTitle {
-	@apply text-[0.95rem] font-semibold text-[#1a1a1a];
+	@apply text-[0.95rem] font-semibold text-[color:var(--admin-text)];
 }
 
 .sectionHint {
-	@apply mt-[2px] text-[0.8rem] leading-[1.45] text-[#8f829a];
+	@apply mt-[2px] text-[0.8rem] leading-[1.45] text-[color:var(--admin-muted)];
 }
 
 .providerSelect {
-	@apply w-fit max-w-full appearance-none rounded-lg border border-[#d7c4ee] bg-white px-3 py-2 pr-8 text-sm text-[#57266f];
+	@apply w-fit max-w-full appearance-none rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-surface)] px-3 py-2 pr-8 text-sm text-[color:var(--admin-text)];
 }
 
 .providerOperation {
-	@apply flex min-w-0 flex-col gap-1.5 break-all rounded-lg border border-[#efe8fb] bg-[#faf8ff] p-3 text-sm text-[#493854];
+	@apply flex min-w-0 flex-col gap-1.5 break-all rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-3 text-sm text-[color:var(--admin-text)];
 }
 
 .providerPager {
@@ -74,14 +74,14 @@
 }
 
 .inlineCode {
-	@apply rounded bg-[#f1ebf7] px-1 py-0.5 text-[0.75rem] text-[#6b2d8f];
+	@apply rounded bg-[var(--admin-wash)] px-1 py-0.5 text-[0.75rem] text-[color:var(--admin-accent)];
 }
 
 .refreshButton {
-	@apply shrink-0 cursor-pointer rounded-lg border border-[#d7c4ee] bg-white px-[18px] py-[9px] text-sm font-semibold text-[#6b2d8f] transition-[opacity,transform,border-color] duration-200;
+	@apply shrink-0 cursor-pointer rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-surface)] px-[18px] py-[9px] text-sm font-semibold text-[color:var(--admin-accent)] transition-[opacity,transform,border-color] duration-200;
 
 	&:hover {
-		@apply -translate-y-px border-[#c21b84] opacity-90;
+		@apply -translate-y-px border-[color:var(--admin-accent)] opacity-90;
 	}
 
 	&:disabled {
@@ -94,7 +94,7 @@
 }
 
 .catalogMeta {
-	@apply flex flex-wrap gap-x-4 gap-y-2 rounded-lg border border-[#efe8fb] bg-[#fcfaff] px-4 py-3 text-[0.8rem] text-[#6f5a87];
+	@apply flex flex-wrap gap-x-4 gap-y-2 rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-wash)] px-4 py-3 text-[0.8rem] text-[color:var(--admin-muted)];
 }
 
 .templateGrid {
@@ -110,7 +110,7 @@
 }
 
 .templateCard {
-	@apply flex min-h-[210px] flex-col gap-3 rounded-xl border border-[#efe8fb] bg-[#faf8ff] p-4;
+	@apply flex min-h-[210px] flex-col gap-3 rounded-xl border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-4;
 }
 
 .templateHeader {
@@ -118,19 +118,19 @@
 }
 
 .templateName {
-	@apply text-[0.92rem] font-semibold text-[#27202c];
+	@apply text-[0.92rem] font-semibold text-[color:var(--admin-text)];
 }
 
 .templateKey {
-	@apply mt-1 block text-[0.7rem] text-[#9c83ad];
+	@apply mt-1 block text-[0.7rem] text-[color:var(--admin-muted)];
 }
 
 .blankBadge {
-	@apply shrink-0 rounded-full bg-[#eee6f7] px-[10px] py-1 text-[0.68rem] font-semibold text-[#69467d];
+	@apply shrink-0 rounded-full bg-[var(--admin-wash)] px-[10px] py-1 text-[0.68rem] font-semibold text-[color:var(--admin-text)];
 }
 
 .templateDescription {
-	@apply text-[0.8rem] leading-[1.45] text-[#75697c];
+	@apply text-[0.8rem] leading-[1.45] text-[color:var(--admin-muted)];
 }
 
 .stageList {
@@ -142,31 +142,31 @@
 }
 
 .stage_open {
-	@apply bg-[#eee8fa] text-[#674780];
+	@apply bg-[var(--admin-wash)] text-[color:var(--admin-text)];
 }
 
 .stage_won {
-	@apply bg-[#e7f8ee] text-[#168044];
+	@apply bg-[var(--admin-success-soft)] text-[color:var(--admin-success)];
 }
 
 .stage_lost {
-	@apply bg-[#ffe9ed] text-[#b72c45];
+	@apply bg-[var(--admin-danger-soft)] text-[color:var(--admin-danger)];
 }
 
 .errorState {
-	@apply rounded-xl border border-[#f3d6dc] bg-[#fff8f9] p-5 text-center;
+	@apply rounded-xl border border-[color:var(--admin-danger-border)] bg-[var(--admin-danger-soft)] p-5 text-center;
 }
 
 .errorTitle {
-	@apply text-sm font-semibold text-[#a52b42];
+	@apply text-sm font-semibold text-[color:var(--admin-danger)];
 }
 
 .errorText {
-	@apply mx-auto mt-2 max-w-[620px] text-[0.8rem] leading-[1.5] text-[#8c6670];
+	@apply mx-auto mt-2 max-w-[620px] text-[0.8rem] leading-[1.5] text-[color:var(--admin-muted)];
 }
 
 .staleState {
-	@apply rounded-lg border border-[#f1dfb8] bg-[#fffaf0] px-4 py-3 text-[0.78rem] leading-[1.5] text-[#856422];
+	@apply rounded-lg border border-[color:var(--admin-warning-border)] bg-[var(--admin-warning-soft)] px-4 py-3 text-[0.78rem] leading-[1.5] text-[color:var(--admin-warning)];
 }
 
 .pricingSkeleton {
@@ -177,15 +177,15 @@
 	@apply grid grid-cols-2 gap-3;
 
 	> div {
-		@apply rounded-lg border border-[#efe8fb] bg-[#faf8ff] p-3;
+		@apply rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-3;
 	}
 
 	dt {
-		@apply text-[0.76rem] leading-[1.45] text-[#796e80];
+		@apply text-[0.76rem] leading-[1.45] text-[color:var(--admin-muted)];
 	}
 
 	dd {
-		@apply mt-1 text-base font-semibold text-[#57266f];
+		@apply mt-1 text-base font-semibold text-[color:var(--admin-text)];
 	}
 
 	@media (max-width: 760px) {
@@ -194,7 +194,7 @@
 }
 
 .pricingEditor {
-	@apply flex flex-col gap-4 border-t border-[#e8e0ef] pt-4;
+	@apply flex flex-col gap-4 border-t border-[color:var(--admin-border)] pt-4;
 
 	form {
 		@apply flex flex-col gap-4;
@@ -210,17 +210,17 @@
 }
 
 .pricingField {
-	@apply flex flex-col gap-1.5 text-[0.76rem] font-medium text-[#6f6278];
+	@apply flex flex-col gap-1.5 text-[0.76rem] font-medium text-[color:var(--admin-muted)];
 
 	input {
-		@apply h-[42px] min-w-0 rounded-lg border border-[#ddd2e8] bg-white px-3 text-sm text-[#51405d] outline-none transition-colors;
+		@apply h-[42px] min-w-0 rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-surface)] px-3 text-sm text-[color:var(--admin-text)] outline-none transition-colors;
 
 		&:focus-visible {
-			@apply border-[#8b44b6] ring-2 ring-[#8b44b6]/20;
+			@apply border-[color:var(--admin-accent)] ring-2 ring-[var(--admin-focus)];
 		}
 
 		&:disabled {
-			@apply cursor-not-allowed bg-[#f7f4fa] text-[#766a7d];
+			@apply cursor-not-allowed bg-[var(--admin-wash)] text-[color:var(--admin-muted)];
 		}
 	}
 }
@@ -230,7 +230,7 @@
 }
 
 .saveButton {
-	@apply min-h-[42px] cursor-pointer rounded-lg bg-[#6b2d8f] px-5 py-2 text-sm font-semibold text-white transition-opacity;
+	@apply min-h-[42px] cursor-pointer rounded-lg bg-[var(--admin-accent)] px-5 py-2 text-sm font-semibold text-[color:var(--admin-on-accent)] transition-opacity;
 
 	&:hover {
 		@apply opacity-90;
@@ -250,11 +250,11 @@
 }
 
 .accessNote {
-	@apply rounded-lg border border-[#e8e0ef] bg-[#faf9fb] px-4 py-3 text-[0.76rem] leading-[1.5] text-[#796e80];
+	@apply rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-wash)] px-4 py-3 text-[0.76rem] leading-[1.5] text-[color:var(--admin-muted)];
 }
 
 .releaseNote {
-	@apply mx-auto mb-6 flex w-full min-w-0 flex-col gap-2 rounded-xl border border-[#ddd0ed] bg-[#f5effb] p-4 text-sm leading-relaxed text-[#655171];
+	@apply mx-auto mb-6 flex w-full min-w-0 flex-col gap-2 rounded-xl border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-4 text-sm leading-relaxed text-[color:var(--admin-muted)];
 }
 
 .providerSelect {

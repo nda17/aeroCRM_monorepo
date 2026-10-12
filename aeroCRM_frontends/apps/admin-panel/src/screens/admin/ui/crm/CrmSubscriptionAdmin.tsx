@@ -1,6 +1,11 @@
 'use client'
 
 import {
+	useAdminDirtyGuard,
+	useAdminNavigationGuard
+} from '@/screens/admin/model/navigation/AdminNavigationGuard'
+
+import {
 	UserRole,
 	useAuthStore,
 	useUser,
@@ -152,6 +157,7 @@ function SubscriptionManager({
 	actorLabel: string
 }) {
 	const queryClient = useQueryClient()
+	const navigationGuard = useAdminNavigationGuard()
 	const online = useSyncExternalStore(
 		subscribeOnline,
 		getOnline,
@@ -253,6 +259,16 @@ function SubscriptionManager({
 		networkMode: 'always'
 	})
 	const busy = mutation.isPending || checking
+	useAdminDirtyGuard({
+		label: 'Начисление дней подписки',
+		dirty: days !== '7' || Boolean(reason),
+		pending: busy || Boolean(pending && recovery.storageError),
+		recoverable: Boolean(pending && !recovery.storageError),
+		onDiscard: () => {
+			setDays('7')
+			setReason('')
+		}
+	})
 	const grantLocked =
 		!!pending || recovery.storageError || forbidden || busy
 	const locked = grantLocked || seatsLocked
@@ -506,12 +522,14 @@ function SubscriptionManager({
 	}
 	const chooseOwner = (subject: string, label: string) => {
 		if (busy) return
-		setOwner({ subject, label })
-		setPage(1)
-		setWorkspaceId(null)
-		setSearch('')
-		setSearchDraft('')
-		setConfirmation(null)
+		navigationGuard.confirmNavigation(() => {
+			setOwner({ subject, label })
+			setPage(1)
+			setWorkspaceId(null)
+			setSearch('')
+			setSearchDraft('')
+			setConfirmation(null)
+		})
 	}
 	return (
 		<div className={styles.content}>
@@ -528,11 +546,13 @@ function SubscriptionManager({
 					type="button"
 					className={common.refreshButton}
 					disabled={busy || !owner}
-					onClick={() => {
-						setOwner(null)
-						setPage(1)
-						setWorkspaceId(null)
-					}}
+					onClick={() =>
+						navigationGuard.confirmNavigation(() => {
+							setOwner(null)
+							setPage(1)
+							setWorkspaceId(null)
+						})
+					}
 				>
 					Все владельцы
 				</button>
@@ -715,10 +735,13 @@ function SubscriptionManager({
 								aria-pressed={workspaceId === item.workspaceId}
 								disabled={busy}
 								onClick={() => {
-									setWorkspaceId(item.workspaceId)
-									setHistoryPage(1)
-									setConfirmation(null)
-									setReason('')
+									if (item.workspaceId === workspaceId) return
+									navigationGuard.confirmNavigation(() => {
+										setWorkspaceId(item.workspaceId)
+										setHistoryPage(1)
+										setConfirmation(null)
+										setReason('')
+									})
 								}}
 							>
 								<strong>

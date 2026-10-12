@@ -1,5 +1,7 @@
 'use client'
 
+import { useAdminDirtyGuard } from '@/screens/admin/model/navigation/AdminNavigationGuard'
+
 import AdminNavigation from '@/screens/admin/ui/common/admin-navigation/AdminNavigation'
 import AdminSectionHeading from '@/screens/admin/ui/common/admin-section-heading/AdminSectionHeading'
 import AdminTooltip from '@/screens/admin/ui/common/admin-tooltip/AdminTooltip'
@@ -110,10 +112,16 @@ const AdminSettings: NextPage = () => {
 	})
 
 	const [bannerText, setBannerText] = useState('')
+	const [bannerBaseline, setBannerBaseline] = useState('')
 
 	useEffect(() => {
-		if (settings) setBannerText(settings.bannerText)
-	}, [settings])
+		if (settings) {
+			setBannerText(current =>
+				current === bannerBaseline ? settings.bannerText : current
+			)
+			setBannerBaseline(settings.bannerText)
+		}
+	}, [settings, bannerBaseline])
 
 	const siteSettingsMutation = useMutation({
 		mutationFn: siteSettingsService.update,
@@ -166,6 +174,15 @@ const AdminSettings: NextPage = () => {
 	const activeManualTaskId = manualTaskMutation.isPending
 		? manualTaskMutation.variables
 		: null
+	useAdminDirtyGuard({
+		label: 'Текст баннера',
+		dirty: bannerText !== bannerBaseline,
+		pending:
+			siteSettingsMutation.isPending ||
+			authSettingsMutation.isPending ||
+			manualTaskMutation.isPending,
+		onDiscard: () => setBannerText(bannerBaseline)
+	})
 
 	const runManualTaskWithToast = (taskId: ManualAdminTaskId) => {
 		const task = MANUAL_TASKS.find(item => item.id === taskId)

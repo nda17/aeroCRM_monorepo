@@ -7,7 +7,7 @@
 .card,
 .historyCard,
 .detailCard {
-	@apply mx-auto mb-6 flex w-full flex-col gap-5 rounded-xl border border-[#e0d6f0] bg-white p-5;
+	@apply mx-auto mb-6 flex w-full flex-col gap-5 rounded-xl border border-[color:var(--admin-border)] bg-[var(--admin-surface)] p-5;
 
 	@media (max-width: 480px) {
 		@apply gap-[14px] rounded-[10px] p-3;
@@ -19,28 +19,28 @@
 }
 
 .label {
-	@apply text-[0.9rem] font-semibold text-[#1a1a1a];
+	@apply text-[0.9rem] font-semibold text-[color:var(--admin-text)];
 }
 
 .hint {
-	@apply mt-[2px] text-[0.8rem] leading-[1.4] text-[#777];
+	@apply mt-[2px] text-[0.8rem] leading-[1.4] text-[color:var(--admin-muted)];
 }
 
 .input,
 .textarea,
 .select {
-	@apply w-full rounded-lg border border-[#e0d6f0] bg-[#f8f5ff] px-[14px] py-[10px] text-[0.9rem] text-[#1a1a1a] outline-none transition-[border-color] duration-200;
+	@apply w-full rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-wash)] px-[14px] py-[10px] text-[0.9rem] text-[color:var(--admin-text)] outline-none transition-[border-color] duration-200;
 }
 
 .input:focus,
 .textarea:focus,
 .select:focus {
-	@apply border-[#c4a8e8];
+	@apply border-[color:var(--admin-border)];
 }
 
 .input::placeholder,
 .textarea::placeholder {
-	@apply text-[#bbb];
+	@apply text-[color:var(--admin-muted)];
 }
 
 .textarea {
@@ -48,7 +48,7 @@
 }
 
 .counter {
-	@apply text-right text-[0.78rem] text-[#999];
+	@apply text-right text-[0.78rem] text-[color:var(--admin-muted)];
 }
 
 .audienceOptions {
@@ -60,7 +60,7 @@
 }
 
 .channelBlock {
-	@apply flex flex-col gap-3 rounded-xl border border-[#efe8fb] bg-[#fcfaff] p-4;
+	@apply flex flex-col gap-3 rounded-xl border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-4;
 }
 
 .channelOptions {
@@ -72,15 +72,15 @@
 }
 
 .optionBtn {
-	@apply cursor-pointer rounded-lg border border-[#d7c4ee] bg-white px-4 py-[10px] text-sm font-semibold text-[#6b2d8f] transition-[opacity,border-color,background,color] duration-200;
+	@apply cursor-pointer rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-surface)] px-4 py-[10px] text-sm font-semibold text-[color:var(--admin-accent)] transition-[opacity,border-color,background,color] duration-200;
 }
 
 .optionBtn:hover {
-	@apply border-[#c21b84] opacity-90;
+	@apply border-[color:var(--admin-accent)] opacity-90;
 }
 
 .optionBtnActive {
-	@apply border-[#6b2d8f] bg-[#6b2d8f] text-white;
+	@apply border-[color:var(--admin-accent)] bg-[var(--admin-accent)] text-[color:var(--admin-on-accent)];
 }
 
 .sendBtn,
@@ -91,7 +91,7 @@
 }
 
 .sendBtn {
-	@apply self-start border-none bg-[#6b2d8f] px-6 text-white;
+	@apply self-start border-none bg-[var(--admin-accent)] px-6 text-[color:var(--admin-on-accent)];
 }
 
 .sendBtn:hover,
@@ -109,27 +109,27 @@
 }
 
 .secondaryBtn {
-	@apply border border-[#d7c4ee] bg-white text-[#6b2d8f];
+	@apply border border-[color:var(--admin-border)] bg-[var(--admin-surface)] text-[color:var(--admin-accent)];
 }
 
 .cancelBtn {
-	@apply border border-[#dc2626] bg-white text-[#dc2626];
+	@apply border border-[color:var(--admin-danger-border)] bg-[var(--admin-surface)] text-[color:var(--admin-danger)];
 }
 
 .retryBtn {
-	@apply border border-[#6b2d8f] bg-[#6b2d8f] text-white;
+	@apply border border-[color:var(--admin-accent)] bg-[var(--admin-accent)] text-[color:var(--admin-on-accent)];
 }
 
 .resultTitle {
-	@apply text-base font-semibold text-[#1a1a1a];
+	@apply text-base font-semibold text-[color:var(--admin-text)];
 }
 
 .resultLabel {
-	@apply text-[0.75rem] text-[#777];
+	@apply text-[0.75rem] text-[color:var(--admin-muted)];
 }
 
 .resultValue {
-	@apply break-words text-[0.95rem] font-semibold text-[#1a1a1a];
+	@apply break-words text-[0.95rem] font-semibold text-[color:var(--admin-text)];
 }
 
 .historyHeader,
@@ -144,7 +144,7 @@
 }
 
 .historyStatus {
-	@apply shrink-0 rounded-lg border border-[#efe8fb] bg-[#f8f5ff] px-[10px] py-[6px] text-[0.78rem] text-[#777];
+	@apply shrink-0 rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-wash)] px-[10px] py-[6px] text-[0.78rem] text-[color:var(--admin-muted)];
 }
 
 .historyList,
@@ -154,7 +154,7 @@
 }
 
 .historyItem {
-	@apply grid grid-cols-3 gap-3 rounded-lg border border-[#efe8fb] bg-[#f8f5ff] p-3 transition-[border-color,box-shadow] duration-200;
+	@apply grid grid-cols-3 gap-3 rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-3 transition-[border-color,box-shadow] duration-200;
 
 	@media (max-width: 760px) {
 		@apply grid-cols-2;
@@ -172,7 +172,7 @@
 }
 
 .selectedHistoryItem {
-	@apply border-[#a875c8] shadow-[0_0_0_1px_rgba(107,45,143,0.12)];
+	@apply border-[color:var(--admin-accent)] shadow-[0_0_0_1px_rgba(107,45,143,0.12)];
 }
 
 .historyActions {
@@ -180,19 +180,19 @@
 }
 
 .historyEmpty {
-	@apply rounded-lg border border-[#efe8fb] bg-[#f8f5ff] p-4 text-sm text-[#777];
+	@apply rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-4 text-sm text-[color:var(--admin-muted)];
 }
 
 .errorState {
-	@apply flex flex-col items-start gap-2 rounded-lg border border-[#fecaca] bg-[#fef2f2] p-4;
+	@apply flex flex-col items-start gap-2 rounded-lg border border-[color:var(--admin-danger-border)] bg-[var(--admin-danger-soft)] p-4;
 }
 
 .errorTitle {
-	@apply text-sm font-semibold text-[#b91c1c];
+	@apply text-sm font-semibold text-[color:var(--admin-danger)];
 }
 
 .errorMessage {
-	@apply text-sm leading-[1.45] text-[#7f1d1d];
+	@apply text-sm leading-[1.45] text-[color:var(--admin-danger)];
 }
 
 .detailGrid {
@@ -208,18 +208,18 @@
 }
 
 .detailGrid > div {
-	@apply rounded-lg border border-[#efe8fb] bg-[#f8f5ff] p-3;
+	@apply rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-3;
 }
 
 .messageBox,
 .snapshotBox,
 .deliverySection,
 .retryPanel {
-	@apply flex flex-col gap-3 rounded-xl border border-[#efe8fb] bg-[#fcfaff] p-4;
+	@apply flex flex-col gap-3 rounded-xl border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-4;
 }
 
 .messageBox p {
-	@apply whitespace-pre-wrap break-words text-sm leading-relaxed text-[#1a1a1a];
+	@apply whitespace-pre-wrap break-words text-sm leading-relaxed text-[color:var(--admin-text)];
 }
 
 .snapshotItem {
@@ -227,7 +227,7 @@
 }
 
 .filterField {
-	@apply flex min-w-[180px] flex-col gap-[6px] text-[0.8rem] font-semibold text-[#555];
+	@apply flex min-w-[180px] flex-col gap-[6px] text-[0.8rem] font-semibold text-[color:var(--admin-muted)];
 
 	@media (max-width: 520px) {
 		@apply w-full;
@@ -235,11 +235,11 @@
 }
 
 .select {
-	@apply cursor-pointer bg-white pr-10;
+	@apply cursor-pointer bg-[var(--admin-surface)] pr-10;
 }
 
 .deliveryItem {
-	@apply flex flex-col gap-3 rounded-lg border border-[#e0d6f0] bg-white p-3;
+	@apply flex flex-col gap-3 rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-surface)] p-3;
 }
 
 .deliveryMeta {
@@ -255,7 +255,7 @@
 }
 
 .deliveryFailure {
-	@apply flex flex-col gap-1 rounded-lg border border-[#fecaca] bg-[#fef2f2] p-3 text-sm text-[#7f1d1d];
+	@apply flex flex-col gap-1 rounded-lg border border-[color:var(--admin-danger-border)] bg-[var(--admin-danger-soft)] p-3 text-sm text-[color:var(--admin-danger)];
 }
 
 .deliveryFailure span {
@@ -267,7 +267,7 @@
 }
 
 .retryItem {
-	@apply flex items-center justify-between gap-3 rounded-lg border border-[#e0d6f0] bg-white p-3 text-sm text-[#1a1a1a];
+	@apply flex items-center justify-between gap-3 rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-surface)] p-3 text-sm text-[color:var(--admin-text)];
 
 	@media (max-width: 520px) {
 		@apply flex-col items-stretch;
@@ -275,7 +275,7 @@
 }
 
 .lockedPanel {
-	@apply relative overflow-visible rounded-lg border border-[#e0d6f0] bg-white;
+	@apply relative overflow-visible rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-surface)];
 }
 
 .lockedContent {
@@ -283,11 +283,11 @@
 }
 
 .lockedOverlay {
-	@apply absolute inset-0 z-20 flex items-center justify-center gap-2 rounded-lg bg-white/30;
+	@apply absolute inset-0 z-20 flex items-center justify-center gap-2 rounded-lg bg-[var(--admin-overlay)];
 }
 
 .lockedBadge {
-	@apply rounded-full border border-[#d7c4ee] bg-white px-4 py-2 text-sm font-semibold text-[#6b2d8f] shadow-sm;
+	@apply rounded-full border border-[color:var(--admin-border)] bg-[var(--admin-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--admin-accent)] shadow-none;
 }
 
 .select {

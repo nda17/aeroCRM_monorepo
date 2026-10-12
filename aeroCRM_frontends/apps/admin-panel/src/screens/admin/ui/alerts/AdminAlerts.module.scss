@@ -5,7 +5,7 @@
 }
 
 .card {
-	@apply w-full min-w-0 rounded-layout border border-gray-300 bg-white shadow-sm p-5 mb-6 flex flex-col gap-5;
+	@apply w-full min-w-0 rounded-layout border border-gray-300 bg-[var(--admin-surface)] shadow-none p-5 mb-6 flex flex-col gap-5;
 
 	@media (max-width: 480px) {
 		@apply p-3 gap-4;
@@ -13,7 +13,7 @@
 }
 
 .filters {
-	@apply w-full rounded-layout border border-gray-300 bg-white shadow-sm p-4 mb-4 flex flex-col gap-3;
+	@apply w-full rounded-layout border border-gray-300 bg-[var(--admin-surface)] shadow-none p-4 mb-4 flex flex-col gap-3;
 }
 
 .filter-grid {
@@ -29,7 +29,7 @@
 }
 
 .filter-input {
-	@apply w-full border border-gray-300 rounded-md bg-white px-3 py-2 text-sm text-gray-700 outline-none transition-colors focus:border-primary;
+	@apply w-full border border-gray-300 rounded-md bg-[var(--admin-surface)] px-3 py-2 text-sm text-gray-700 outline-none transition-colors focus:border-primary;
 }
 
 .filter-actions {
@@ -37,11 +37,11 @@
 }
 
 .filter-apply {
-	@apply rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-80;
+	@apply rounded-md bg-primary px-4 py-2 text-sm font-semibold text-[color:var(--admin-on-accent)] transition-opacity hover:opacity-80;
 }
 
 .filter-reset {
-	@apply rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-300 hover:bg-opacity-20;
+	@apply rounded-md border border-gray-300 bg-[var(--admin-surface)] px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-300 hover:bg-opacity-20;
 }
 
 .skeletonRow {
@@ -49,7 +49,7 @@
 }
 
 .list-section {
-	@apply w-full rounded-layout border border-gray-300 bg-white shadow-sm overflow-hidden mb-6;
+	@apply w-full rounded-layout border border-gray-300 bg-[var(--admin-surface)] shadow-none overflow-hidden mb-6;
 }
 
 .list-meta {

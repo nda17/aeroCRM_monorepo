@@ -25,6 +25,8 @@ import {
 	useQueryClient
 } from '@tanstack/react-query'
 import { FormEvent, useEffect, useRef, useState } from 'react'
+import { isAxiosError } from 'axios'
+import { useAdminDirtyGuard } from '@/screens/admin/model/navigation/AdminNavigationGuard'
 import toast from 'react-hot-toast'
 import styles from './AdminMailings.module.scss'
 
@@ -187,8 +189,20 @@ const AdminMailings = () => {
 	const pendingCreateRef = useRef<{
 		fingerprint: string
 		idempotencyKey: string
+		payload: CampaignInput
 	} | null>(null)
-	const pendingRetryKeysRef = useRef(new Map<string, string>())
+	const pendingRetriesRef = useRef(
+		new Map<
+			string,
+			{ delivery: CampaignDelivery; idempotencyKey: string }
+		>()
+	)
+	const [savedDraft, setSavedDraft] = useState<CampaignInput>({
+		subject: '',
+		message: '',
+		audience: 'ACTIVE_SUBSCRIPTION',
+		channel: 'EMAIL'
+	})
 
 	const campaigns = useQuery({
 		queryKey: ['admin-campaigns', page, CAMPAIGN_LIMIT],
@@ -284,8 +298,9 @@ const AdminMailings = () => {
 			payload: CampaignInput
 			idempotencyKey: string
 		}) => campaignsService.createCampaign(payload, idempotencyKey),
-		onSuccess: async campaign => {
+		onSuccess: async (campaign, { payload }) => {
 			pendingCreateRef.current = null
+			setSavedDraft(payload)
 			setPage(1)
 			setSelectedCampaignId(campaign.id)
 			setDeliveryPage(1)
@@ -328,7 +343,7 @@ const AdminMailings = () => {
 				idempotencyKey
 			),
 		onSuccess: async delivery => {
-			pendingRetryKeysRef.current.delete(delivery.id)
+			pendingRetriesRef.current.delete(delivery.id)
 			await Promise.all([
 				queryClient.invalidateQueries({
 					queryKey: ['admin-campaigns']
@@ -345,6 +360,26 @@ const AdminMailings = () => {
 
 	const trimmedSubject = subject.trim()
 	const trimmedMessage = message.trim()
+	useAdminDirtyGuard({
+		label: 'Рассылка',
+		dirty:
+			trimmedSubject !== savedDraft.subject ||
+			trimmedMessage !== savedDraft.message ||
+			audience !== savedDraft.audience ||
+			channel !== savedDraft.channel,
+		pending:
+			createMutation.isPending ||
+			cancelMutation.isPending ||
+			retryMutation.isPending ||
+			Boolean(pendingCreateRef.current) ||
+			pendingRetriesRef.current.size > 0,
+		onDiscard: () => {
+			setSubject(savedDraft.subject)
+			setMessage(savedDraft.message)
+			setAudience(savedDraft.audience)
+			setChannel(savedDraft.channel)
+		}
+	})
 	const totalPages = campaigns.data?.totalPages || 1
 	const pages = Array.from({ length: totalPages }, (_, index) => index + 1)
 	const deliveryTotalPages = deliveries.data?.totalPages || 1
@@ -377,7 +412,7 @@ const AdminMailings = () => {
 	const startCampaign = async () => {
 		if (createMutation.isPending) return
 
-		const payload: CampaignInput = {
+		const payload: CampaignInput = pendingCreateRef.current?.payload ?? {
 			subject: trimmedSubject,
 			message: trimmedMessage,
 			audience,
@@ -390,7 +425,7 @@ const AdminMailings = () => {
 				? pending.idempotencyKey
 				: window.crypto.randomUUID()
 
-		pendingCreateRef.current = { fingerprint, idempotencyKey }
+		pendingCreateRef.current = { fingerprint, idempotencyKey, payload }
 		setConfirmOpened(false)
 		toast.loading('Пожалуйста, подождите', { id: TOAST_IDS.create })
 
@@ -407,6 +442,12 @@ const AdminMailings = () => {
 				id: TOAST_IDS.create
 			})
 		} catch (error) {
+			if (
+				!pending &&
+				isAxiosError(error) &&
+				[400, 401, 403, 404, 422].includes(error.response?.status ?? 0)
+			)
+				pendingCreateRef.current = null
 			toast.error(
 				getCampaignErrorMessage(error, 'Не удалось создать кампанию'),
 				{ id: TOAST_IDS.create }
@@ -437,20 +478,23 @@ const AdminMailings = () => {
 	}
 
 	const retryDelivery = async (delivery: CampaignDelivery) => {
+		const retained = pendingRetriesRef.current.get(delivery.id)
 		if (
 			!isDev ||
 			retryMutation.isPending ||
-			delivery.status !== 'FAILED'
+			(delivery.status !== 'FAILED' && !retained)
 		) {
 			return
 		}
 
 		const idempotencyKey =
-			pendingRetryKeysRef.current.get(delivery.id) ??
-			window.crypto.randomUUID()
+			retained?.idempotencyKey ?? window.crypto.randomUUID()
 		const toastId = `admin-campaign-delivery-retry-${delivery.id}`
 
-		pendingRetryKeysRef.current.set(delivery.id, idempotencyKey)
+		pendingRetriesRef.current.set(delivery.id, {
+			delivery,
+			idempotencyKey
+		})
 		setRetryingDeliveryId(delivery.id)
 		toast.loading('Пожалуйста, подождите', { id: toastId })
 
@@ -462,6 +506,15 @@ const AdminMailings = () => {
 			})
 			toast.success('Доставка поставлена на повтор', { id: toastId })
 		} catch (error) {
+			if (
+				isAxiosError(error) &&
+				(error.response?.status === 409 ||
+					(!retained &&
+						[400, 401, 403, 404, 422].includes(
+							error.response?.status ?? 0
+						)))
+			)
+				pendingRetriesRef.current.delete(delivery.id)
 			toast.error(
 				getCampaignErrorMessage(error, 'Не удалось повторить доставку'),
 				{ id: toastId }
@@ -587,6 +640,7 @@ const AdminMailings = () => {
 							id="campaign-subject"
 							className={styles.input}
 							value={subject}
+							disabled={Boolean(pendingCreateRef.current)}
 							onChange={event => setSubject(event.target.value)}
 							maxLength={120}
 						/>
@@ -601,6 +655,7 @@ const AdminMailings = () => {
 									type="button"
 									className={`${styles.optionBtn} ${channel === value ? styles.optionBtnActive : ''}`}
 									onClick={() => setChannel(value)}
+									disabled={Boolean(pendingCreateRef.current)}
 								>
 									{CHANNEL_LABELS[value]}
 								</button>
@@ -615,6 +670,7 @@ const AdminMailings = () => {
 							id="campaign-message"
 							className={styles.textarea}
 							value={message}
+							disabled={Boolean(pendingCreateRef.current)}
 							onChange={event => setMessage(event.target.value)}
 							maxLength={5000}
 							rows={9}
@@ -628,6 +684,7 @@ const AdminMailings = () => {
 								type="button"
 								className={`${styles.optionBtn} ${audience === value ? styles.optionBtnActive : ''}`}
 								onClick={() => setAudience(value)}
+								disabled={Boolean(pendingCreateRef.current)}
 							>
 								{value === 'ACTIVE_SUBSCRIPTION'
 									? 'Оплаченная CRM'
@@ -636,6 +693,12 @@ const AdminMailings = () => {
 						))}
 					</div>
 					<p className={styles.hint}>{AUDIENCE_LABELS[audience]}</p>
+					{pendingCreateRef.current && !createMutation.isPending && (
+						<p className={styles.errorMessage} role="alert">
+							Результат запуска пока не подтверждён. Повтор использует
+							прежний запрос и тот же список параметров.
+						</p>
+					)}
 					<button
 						type="submit"
 						className={styles.sendBtn}
@@ -643,10 +706,39 @@ const AdminMailings = () => {
 					>
 						{createMutation.isPending
 							? 'Создаём...'
-							: 'Запустить кампанию'}
+							: pendingCreateRef.current
+								? 'Проверить повтором той же команды'
+								: 'Запустить кампанию'}
 					</button>
 				</form>
 			) : null}
+
+			{pendingRetriesRef.current.size > 0 && (
+				<div className={styles.errorState} role="status">
+					<p className={styles.errorTitle}>
+						Результат повтора доставки пока не подтверждён
+					</p>
+					<p className={styles.errorMessage}>
+						Проверка использует ту же попытку и не создаёт дополнительную
+						отправку. Она доступна и после смены статуса доставки.
+					</p>
+					{Array.from(pendingRetriesRef.current.values()).map(
+						({ delivery }) => (
+							<button
+								key={delivery.id}
+								type="button"
+								className={styles.secondaryBtn}
+								disabled={!isDev || retryMutation.isPending}
+								onClick={() => void retryDelivery(delivery)}
+							>
+								{retryingDeliveryId === delivery.id
+									? 'Проверяем…'
+									: `Проверить повтор доставки (${CHANNEL_LABELS[delivery.channel]})`}
+							</button>
+						)
+					)}
+				</div>
+			)}
 
 			<div className={styles.historyCard}>
 				<div className={styles.historyHeader}>

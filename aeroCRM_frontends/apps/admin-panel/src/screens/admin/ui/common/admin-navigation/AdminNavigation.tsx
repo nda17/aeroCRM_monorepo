@@ -1,80 +1,52 @@
 'use client'
 
-import AdminNavItem from '@/screens/admin/ui/common/admin-navigation/AdminNavItem'
-import styles from '@/screens/admin/ui/common/admin-navigation/AdminNavigation.module.scss'
-import {
-	adminNavGroups,
-	isAdminNavItemActive
-} from '@/screens/admin/ui/common/admin-navigation/data/admin-navigation.data'
-import { useUser } from '@/entities/user'
-import { UserRole } from '@/entities/user'
-import clsx from 'clsx'
-import { NextPage } from 'next'
-import Link from '@/shared/lib/navigation/ZoneLink'
-import { usePathname } from 'next/navigation'
-import toast from 'react-hot-toast'
+import AdminNavItem from './AdminNavItem'
+import styles from './AdminNavigation.module.scss'
+import { adminNavGroups } from './data/admin-navigation.data'
+import { UserRole, useUser } from '@/entities/user'
 
-const AdminNavigation: NextPage = () => {
+interface AdminNavigationProps {
+	shell?: boolean
+	onNavigate?: () => void
+}
+
+// Existing screens still mount this component. The frame owns the visible
+// navigation so each page keeps its current structure without duplicate menus.
+export default function AdminNavigation({
+	shell = false,
+	onNavigate
+}: AdminNavigationProps) {
 	const { user } = useUser()
-	const pathname = usePathname()
+	if (!shell) return null
+
 	const groups = adminNavGroups
 		.map(group => ({
 			...group,
 			items: group.items.filter(
-				item => !item.devOnly || user?.rights?.includes(UserRole.DEV)
+				item => !item.devOnly || user.rights?.includes(UserRole.DEV)
 			)
 		}))
 		.filter(group => group.items.length > 0)
-	const activeGroup =
-		groups.find(group =>
-			group.items.some(item => isAdminNavItemActive(pathname, item))
-		) ?? groups[0]
 
 	return (
 		<nav
 			className={styles.navigation}
-			aria-label="Навигация администратора"
+			aria-label="Разделы администрирования"
 		>
-			<p className={styles.caption}>aeroCRM · Администрирование</p>
-			<ul className={styles.groups} aria-label="Разделы панели">
-				{groups.map(group => (
-					<li key={group.id}>
-						<Link
-							href={group.items[0].link}
-							className={clsx(
-								styles.groupLink,
-								group.id === activeGroup?.id && styles.groupActive
-							)}
-							aria-current={
-								group.id === activeGroup?.id ? 'location' : undefined
-							}
-							onClick={() =>
-								toast(group.title, {
-									id: 'admin-navigation',
-									duration: 1800
-								})
-							}
-						>
-							{group.title}
-						</Link>
-					</li>
-				))}
-			</ul>
-			{activeGroup && (
-				<div className={styles.currentGroup}>
-					<p className={styles.description}>{activeGroup.description}</p>
-					<ul
-						className={styles['nav-list']}
-						aria-label={activeGroup.title}
-					>
-						{activeGroup.items.map(item => (
-							<AdminNavItem key={item.link} item={item} />
+			{groups.map(group => (
+				<div className={styles.group} key={group.id}>
+					<p className={styles.groupTitle}>{group.title}</p>
+					<ul className={styles.navList}>
+						{group.items.map(item => (
+							<AdminNavItem
+								key={item.link}
+								item={item}
+								onNavigate={onNavigate}
+							/>
 						))}
 					</ul>
 				</div>
-			)}
+			))}
 		</nav>
 	)
 }
-
-export default AdminNavigation

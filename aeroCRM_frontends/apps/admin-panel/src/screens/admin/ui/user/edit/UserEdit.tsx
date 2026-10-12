@@ -41,6 +41,8 @@ import { NextPage } from 'next'
 import Link from '@/shared/lib/navigation/ZoneLink'
 import { useEffect, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
+import { useAdminDirtyGuard } from '@/screens/admin/model/navigation/AdminNavigationGuard'
+import { useZoneRouter } from '@/shared/lib/navigation/useZoneRouter'
 
 const FIELD_STYLE = { marginBottom: 0 }
 
@@ -828,14 +830,27 @@ const UserEdit: NextPage<IParamsUrl> = ({ params }) => {
 		useState<AdminAutoRenewalAction | null>(null)
 	const [autoRenewalReason, setAutoRenewalReason] = useState('')
 	const { user: currentUser } = useUser()
+	const router = useZoneRouter()
 	const {
 		handleSubmit,
 		register,
-		formState: { errors },
+		formState: { errors, isDirty, dirtyFields },
 		reset,
 		control,
 		watch
-	} = useForm<UserEditForm>({ mode: 'onChange' })
+	} = useForm<UserEditForm>({
+		mode: 'onChange',
+		defaultValues: {
+			avatarPreview: '',
+			email: '',
+			name: '',
+			phone: '',
+			password: '',
+			isAdmin: false,
+			isDev: false,
+			isPhoneVerified: false
+		}
+	})
 
 	const {
 		isLoading,
@@ -851,10 +866,23 @@ const UserEdit: NextPage<IParamsUrl> = ({ params }) => {
 		onSubmit,
 		isSaving,
 		isActivationUpdating,
+		isAvatarUpdating,
 		toggleActivation,
 		uploadAvatar,
 		deleteAvatar
 	} = useUserEdit(params)
+	const profileGuard = useAdminDirtyGuard({
+		label: 'Профиль пользователя',
+		dirty:
+			isDirty &&
+			Object.keys(dirtyFields).some(key => key !== 'avatarPreview'),
+		pending:
+			isSaving ||
+			isActivationUpdating ||
+			isAutoRenewalUpdating ||
+			isAvatarUpdating,
+		onDiscard: () => reset()
+	})
 
 	const loginMethodLabels: Record<UserLoginMethod, string> = {
 		EMAIL: 'Email',
@@ -931,13 +959,16 @@ const UserEdit: NextPage<IParamsUrl> = ({ params }) => {
 	const hasPhoneValue = Boolean(
 		(watch('phone') ?? data?.phone ?? '').trim()
 	)
-	const handleUserSubmit = (formValues: UserEditForm) => {
+	const handleUserSubmit = async (formValues: UserEditForm) => {
 		const values = { ...formValues }
 		delete values.avatarPreview
 
-		return onSubmit(
+		await onSubmit(
 			canManageDevRole ? values : { ...values, isDev: undefined }
 		)
+		reset({ ...formValues, password: '' })
+		profileGuard.markClean()
+		router.push(ADMIN_PAGES.USER_LIST)
 	}
 	const handleDeleteAvatar = () => deleteAvatar()
 	const autoRenewalDialog = autoRenewalDialogAction

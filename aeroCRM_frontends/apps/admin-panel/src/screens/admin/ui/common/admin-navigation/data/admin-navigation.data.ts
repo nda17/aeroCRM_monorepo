@@ -10,7 +10,7 @@ export const adminNavGroups: IAdminNavGroup[] = [
 		title: 'Обзор',
 		description: 'Показатели платформы и события, требующие внимания.',
 		items: [
-			{ title: 'Статистика', link: ADMIN_PAGES.HOME },
+			{ title: 'Обзор', link: ADMIN_PAGES.HOME },
 			{ title: 'Предупреждения', link: ADMIN_PAGES.ALERTS }
 		]
 	},
@@ -24,7 +24,7 @@ export const adminNavGroups: IAdminNavGroup[] = [
 				link: ADMIN_PAGES.USER_LIST,
 				option: ADMIN_PAGES.USER
 			},
-			{ title: 'aeroCRM', link: ADMIN_PAGES.CRM }
+			{ title: 'Шаблоны процессов', link: ADMIN_PAGES.CRM }
 		]
 	},
 	{
@@ -33,10 +33,10 @@ export const adminNavGroups: IAdminNavGroup[] = [
 		description: 'Платежи и тарифы aeroCRM.',
 		items: [
 			{
-				title: 'Подписки и платежи CRM',
+				title: 'Подписки и платежи',
 				link: ADMIN_PAGES.FINANCE_SUBSCRIPTIONS
 			},
-			{ title: 'Тарифы CRM', link: ADMIN_PAGES.FINANCE_PRICING }
+			{ title: 'Тарифы', link: ADMIN_PAGES.FINANCE_PRICING }
 		]
 	},
 	{

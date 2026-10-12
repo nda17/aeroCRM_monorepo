@@ -7,34 +7,28 @@
 }
 
 .devOnlyNotice {
-	@apply min-w-0 mx-auto mb-4 flex w-full items-center justify-end gap-2 rounded-lg border border-[#e0d6f0] bg-[#fbf8ff] px-4 py-3 text-sm font-semibold text-[#7b3fa0];
+	@apply min-w-0 mx-auto mb-4 flex w-full items-center justify-end gap-2 rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-wash)] px-4 py-3 text-sm font-semibold text-[color:var(--admin-accent)];
 }
 
 .pageTab {
-	@apply px-4 py-[7px] rounded-lg border border-[#e0d6f0] bg-white text-[#888] text-sm font-medium cursor-pointer transition-all duration-150;
+	@apply px-4 py-[7px] rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-surface)] text-[color:var(--admin-muted)] text-sm font-medium cursor-pointer transition-all duration-150;
 
 	&:hover {
-		@apply border-[#c4a8e8] text-[#7b3fa0];
+		@apply border-[color:var(--admin-border)] text-[color:var(--admin-accent)];
 	}
 }
 
 .pageTabActive {
-	@apply text-white;
-	background: linear-gradient(
-		87.12deg,
-		#470b58 1.98%,
-		#c21b84 50.27%,
-		#fa595e 74.42%,
-		#f8bd31 98.56%
-	);
+	@apply text-[color:var(--admin-on-accent)];
+	background: var(--admin-accent);
 
 	&:hover {
-		@apply text-white;
+		@apply text-[color:var(--admin-on-accent)];
 	}
 }
 
 .section {
-	@apply flex flex-col gap-4 bg-white border border-[#e0d6f0] rounded-xl p-5 min-w-0 mx-auto w-full mb-6;
+	@apply flex flex-col gap-4 bg-[var(--admin-surface)] border border-[color:var(--admin-border)] rounded-xl p-5 min-w-0 mx-auto w-full mb-6;
 
 	@media (max-width: 480px) {
 		@apply p-3 rounded-[10px] gap-[14px];
@@ -46,15 +40,15 @@
 }
 
 .fieldLabel {
-	@apply text-[0.9rem] font-semibold text-[#1a1a1a];
+	@apply text-[0.9rem] font-semibold text-[color:var(--admin-text)];
 }
 
 .dirtyBadge {
-	@apply text-xs px-2 py-[2px] rounded-[20px] bg-[#fff8e1] border border-[#f5c842] text-[#b45309] font-medium;
+	@apply text-xs px-2 py-[2px] rounded-[20px] bg-[var(--admin-warning-soft)] border border-[color:var(--admin-warning-border)] text-[color:var(--admin-warning)] font-medium;
 }
 
 .loading {
-	@apply text-[#bbb] text-[0.9rem] text-center py-10;
+	@apply text-[color:var(--admin-muted)] text-[0.9rem] text-center py-10;
 }
 
 .btnRow {
@@ -62,14 +56,8 @@
 }
 
 .saveBtn {
-	@apply rounded-lg border-none text-white text-sm font-semibold cursor-pointer transition-opacity duration-200 py-[9px] px-[22px];
-	background: linear-gradient(
-		87.12deg,
-		#470b58 1.98%,
-		#c21b84 50.27%,
-		#fa595e 74.42%,
-		#f8bd31 98.56%
-	);
+	@apply rounded-lg border-none text-[color:var(--admin-on-accent)] text-sm font-semibold cursor-pointer transition-opacity duration-200 py-[9px] px-[22px];
+	background: var(--admin-accent);
 
 	&:hover {
 		@apply opacity-90;
@@ -80,9 +68,9 @@
 }
 
 .resetBtn {
-	@apply rounded-lg border border-[#c4a8e8] bg-transparent text-[#7b3fa0] text-sm font-semibold cursor-pointer transition-[background] duration-150 py-[9px] px-[22px];
+	@apply rounded-lg border border-[color:var(--admin-border)] bg-transparent text-[color:var(--admin-accent)] text-sm font-semibold cursor-pointer transition-[background] duration-150 py-[9px] px-[22px];
 
 	&:hover {
-		@apply bg-[#f3eeff];
+		@apply bg-[var(--admin-wash)];
 	}
 }

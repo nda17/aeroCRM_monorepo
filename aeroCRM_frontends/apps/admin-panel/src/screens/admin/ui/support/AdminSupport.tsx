@@ -1,5 +1,7 @@
 'use client'
 
+import { useAdminDirtyGuard } from '@/screens/admin/model/navigation/AdminNavigationGuard'
+
 import { useAuthStore, useUser, UserRole } from '@/entities/user'
 import {
 	adminSupportApi,
@@ -100,6 +102,7 @@ function SupportWorkspace({
 				busy: boolean
 				error?: string
 				conflict?: boolean
+				rejected?: boolean
 			}
 		>()
 	)
@@ -436,6 +439,7 @@ function SupportWorkspace({
 		}
 		pending.busy = true
 		pending.error = undefined
+		pending.rejected = false
 		render()
 		try {
 			await adminSupportApi.status(actor, id, pending.command)
@@ -448,6 +452,9 @@ function SupportWorkspace({
 			pending.error = errorMessage(error)
 			pending.conflict =
 				error instanceof SupportAdminError && error.status === 409
+			pending.rejected =
+				error instanceof SupportAdminError &&
+				[400, 403, 404].includes(error.status ?? 0)
 			setViewError(pending.error)
 		} finally {
 			pending.busy = false
@@ -510,6 +517,29 @@ function SupportWorkspace({
 	const statusCommand = selected
 		? statuses.current.get(selected)
 		: undefined
+	useAdminDirtyGuard({
+		label: 'Ответ в поддержку',
+		dirty: Array.from(drafts.current.values()).some(
+			item => Boolean(item.text.trim()) || item.files.length > 0
+		),
+		pending:
+			Array.from(drafts.current.values()).some(
+				item =>
+					Boolean(item.pending) ||
+					item.busy ||
+					item.files.some(file => file.state === 'uploading')
+			) ||
+			Array.from(statuses.current.values()).some(
+				item => item.busy || (!item.conflict && !item.rejected)
+			),
+		onDiscard: () => {
+			drafts.current.forEach(item =>
+				item.files.forEach(file => URL.revokeObjectURL(file.preview))
+			)
+			drafts.current.clear()
+			render()
+		}
+	})
 	const historyPanel = useRef<HTMLDivElement>(null)
 	useEffect(() => {
 		const panel = historyPanel.current

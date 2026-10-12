@@ -3,19 +3,19 @@
 }
 
 .helpBtn {
-	@apply flex h-5 w-5 items-center justify-center rounded-full border border-[#c4a8e8] bg-white text-[12px] font-bold leading-none text-[#7b3fa0] transition-colors duration-150;
+	@apply flex h-5 w-5 items-center justify-center rounded-full border border-[color:var(--admin-border)] bg-[var(--admin-surface)] text-[12px] font-bold leading-none text-[color:var(--admin-accent)] transition-colors duration-150;
 
 	&:hover,
 	&:focus-visible {
-		@apply border-[#c21b84] text-[#c21b84] outline-none;
+		@apply border-[color:var(--admin-accent)] text-[color:var(--admin-accent)] outline-none;
 	}
 }
 
 .tooltip {
-	@apply absolute left-1/2 top-[calc(100%+8px)] z-30 flex w-[320px] -translate-x-1/2 flex-col gap-2 rounded-lg border border-[#e0d6f0] bg-white p-4 text-left shadow-[0_16px_36px_rgba(71,11,88,0.16)];
+	@apply absolute left-1/2 top-[calc(100%+8px)] z-30 flex w-[320px] -translate-x-1/2 flex-col gap-2 rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-surface)] p-4 text-left shadow-[0_16px_36px_rgba(71,11,88,0.16)];
 
 	&::before {
-		@apply absolute left-1/2 top-[-6px] h-3 w-3 -translate-x-1/2 rotate-45 border-l border-t border-[#e0d6f0] bg-white content-[''];
+		@apply absolute left-1/2 top-[-6px] h-3 w-3 -translate-x-1/2 rotate-45 border-l border-t border-[color:var(--admin-border)] bg-[var(--admin-surface)] content-[''];
 	}
 
 	@media (max-width: 640px) {
@@ -28,12 +28,12 @@
 }
 
 .tooltipTitle {
-	@apply text-sm font-semibold text-[#1a1a1a];
+	@apply text-sm font-semibold text-[color:var(--admin-text)];
 }
 
 .tooltipText,
 .tooltipRisk {
-	@apply text-xs leading-[1.45] text-[#5f5268];
+	@apply text-xs leading-[1.45] text-[color:var(--admin-muted)];
 }
 
 .riskBadge {
@@ -41,13 +41,13 @@
 }
 
 .risk-low {
-	@apply border border-[#a7f3d0] bg-[#ecfdf5] text-[#047857];
+	@apply border border-[color:var(--admin-success-border)] bg-[var(--admin-success-soft)] text-[color:var(--admin-success)];
 }
 
 .risk-medium {
-	@apply border border-[#fde68a] bg-[#fffbeb] text-[#b45309];
+	@apply border border-[color:var(--admin-warning-border)] bg-[var(--admin-warning-soft)] text-[color:var(--admin-warning)];
 }
 
 .risk-high {
-	@apply border border-[#fecaca] bg-[#fef2f2] text-[#b91c1c];
+	@apply border border-[color:var(--admin-danger-border)] bg-[var(--admin-danger-soft)] text-[color:var(--admin-danger)];
 }

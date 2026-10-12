@@ -10,6 +10,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { NextPage } from 'next'
 import dynamic from 'next/dynamic'
 import { useState } from 'react'
+import {
+	useAdminDirtyGuard,
+	useAdminNavigationGuard
+} from '@/screens/admin/model/navigation/AdminNavigationGuard'
 import toast from 'react-hot-toast'
 import HomeContentEditor, {
 	type HomeContentEditorArea
@@ -61,6 +65,16 @@ const AdminContentSettings: NextPage = () => {
 	})
 
 	const [isSaving, setIsSaving] = useState(false)
+	const navigationGuard = useAdminNavigationGuard()
+	useAdminDirtyGuard({
+		label: 'Юридические документы',
+		dirty: Object.entries(drafts).some(
+			([slug, value]) =>
+				value !== (pages?.find(page => page.slug === slug)?.content ?? '')
+		),
+		pending: isSaving,
+		onDiscard: () => setDrafts({})
+	})
 
 	const save = (slug: Slug) => {
 		setIsSaving(true)
@@ -260,7 +274,12 @@ const AdminContentSettings: NextPage = () => {
 					<button
 						key={area.key}
 						className={`${styles.pageTab} ${activeArea === area.key ? styles.pageTabActive : ''}`}
-						onClick={() => setActiveArea(area.key)}
+						onClick={() => {
+							if (area.key !== activeArea)
+								navigationGuard.confirmNavigation(() =>
+									setActiveArea(area.key)
+								)
+						}}
 					>
 						{area.label}
 					</button>

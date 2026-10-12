@@ -2,7 +2,7 @@ import { Admin } from '@/screens/admin'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-	title: 'Admin panel',
+	title: 'Обзор',
 	description: 'Admin panel page'
 }
 

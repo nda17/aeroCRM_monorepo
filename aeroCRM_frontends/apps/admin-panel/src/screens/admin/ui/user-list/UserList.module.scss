@@ -4,7 +4,7 @@
 	@apply relative flex w-full min-w-0 flex-col;
 
 	.list-section {
-		@apply w-full rounded-layout border border-gray-300 bg-white shadow-sm overflow-hidden;
+		@apply w-full rounded-layout border border-gray-300 bg-[var(--admin-surface)] shadow-none overflow-hidden;
 	}
 
 	.list-meta {
@@ -20,7 +20,7 @@
 	}
 
 	.filters {
-		@apply w-full rounded-layout border border-gray-300 bg-white shadow-sm p-4 mb-4 flex flex-col gap-3;
+		@apply w-full rounded-layout border border-gray-300 bg-[var(--admin-surface)] shadow-none p-4 mb-4 flex flex-col gap-3;
 	}
 
 	.filter-grid {
@@ -36,7 +36,7 @@
 	}
 
 	.filter-input {
-		@apply w-full border border-gray-300 rounded-md bg-white px-3 py-2 text-sm text-gray-700 outline-none transition-colors focus:border-primary;
+		@apply w-full border border-gray-300 rounded-md bg-[var(--admin-surface)] px-3 py-2 text-sm text-gray-700 outline-none transition-colors focus:border-primary;
 	}
 
 	.filter-actions {
@@ -44,11 +44,11 @@
 	}
 
 	.filter-apply {
-		@apply rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-80;
+		@apply rounded-md bg-primary px-4 py-2 text-sm font-semibold text-[color:var(--admin-on-accent)] transition-opacity hover:opacity-80;
 	}
 
 	.filter-reset {
-		@apply rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-300 hover:bg-opacity-20;
+		@apply rounded-md border border-gray-300 bg-[var(--admin-surface)] px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-300 hover:bg-opacity-20;
 	}
 
 	.loading-meta-block {
@@ -148,11 +148,11 @@
 	}
 
 	.deleted-badge {
-		@apply inline-flex items-center rounded-full bg-red-100 px-2 py-1 text-[0.75rem] font-semibold text-red-700;
+		@apply inline-flex items-center rounded-full bg-red-100 px-2 py-1 text-[0.75rem] font-semibold text-[color:var(--admin-danger)];
 	}
 
 	.deleted-date {
-		@apply text-xs font-medium text-red-700;
+		@apply text-xs font-medium text-[color:var(--admin-danger)];
 	}
 
 	.user-card-body {
@@ -175,11 +175,11 @@
 		@apply w-full min-w-[75rem] border-collapse;
 
 		thead tr {
-			@apply bg-white;
+			@apply bg-[var(--admin-surface)];
 		}
 
 		th {
-			@apply px-4 py-3 text-left text-sm font-semibold text-red-700 border-b border-gray-300 whitespace-nowrap;
+			@apply px-4 py-3 text-left text-xs font-medium text-[color:var(--admin-muted)] border-b border-gray-300 whitespace-nowrap;
 		}
 
 		td {
@@ -240,7 +240,7 @@
 	}
 
 	.method-badge-empty {
-		@apply bg-red-100 text-red-700;
+		@apply bg-red-100 text-[color:var(--admin-danger)];
 	}
 
 	.roles-list {
@@ -315,20 +315,20 @@
 		}
 
 		button {
-			@apply rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-600;
+			@apply rounded-md border border-gray-300 bg-[var(--admin-surface)] px-3 py-2 text-xs font-semibold text-gray-600;
 		}
 	}
 
 	.locked-deleted-overlay {
-		@apply absolute inset-0 z-20 flex items-center justify-center gap-2 rounded-layout bg-white/30 px-4;
+		@apply absolute inset-0 z-20 flex items-center justify-center gap-2 rounded-layout bg-[var(--admin-overlay)] px-4;
 	}
 
 	.locked-deleted-badge {
-		@apply rounded-full border border-[#d7c4ee] bg-white px-4 py-2 text-center text-sm font-semibold text-[#6b2d8f] shadow-sm;
+		@apply rounded-full border border-[color:var(--admin-border)] bg-[var(--admin-surface)] px-4 py-2 text-center text-sm font-semibold text-[color:var(--admin-accent)] shadow-none;
 	}
 
 	.empty-state {
-		@apply w-full rounded-layout border border-dashed border-gray-300 bg-white px-5 py-10 text-center;
+		@apply w-full rounded-layout border border-dashed border-gray-300 bg-[var(--admin-surface)] px-5 py-10 text-center;
 	}
 
 	@media (max-width: 640px) {

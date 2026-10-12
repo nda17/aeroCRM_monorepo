@@ -280,17 +280,17 @@ const UserList: NextPage = () => {
 			)}
 			<Heading text="Панель администратора" />
 			<AdminNavigation />
-			<AdminHeader
-				handleSearch={handleSearch}
-				searchTerm={searchTerm}
-				handleClear={handleClear}
-			/>
 			<AdminSectionHeading
 				text="Список пользователей"
 				title="Управление пользователями"
 				description="Список аккаунтов с контактами, способами входа, ролями и действиями администратора."
 				risk="high"
 				riskText="Soft delete деактивирует аккаунт и отключает доступ, но сохраняет данные. Восстановить запись может только DEV, при этом аккаунт не активируется автоматически."
+			/>
+			<AdminHeader
+				handleSearch={handleSearch}
+				searchTerm={searchTerm}
+				handleClear={handleClear}
 			/>
 			<form className={styles.filters} onSubmit={applyFilters}>
 				<div className={styles['filter-grid']}>

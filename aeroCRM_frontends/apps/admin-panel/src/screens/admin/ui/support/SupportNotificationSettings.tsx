@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useAdminDirtyGuard } from '@/screens/admin/model/navigation/AdminNavigationGuard'
 import {
 	adminSupportApi,
 	SupportAdminError,
@@ -32,6 +33,19 @@ export default function SupportNotificationSettings({
 	const [busy, setBusy] = useState(false)
 	const [error, setError] = useState('')
 	const [conflict, setConflict] = useState(false)
+	const [baseline, setBaseline] = useState(initial)
+	useAdminDirtyGuard({
+		label: 'Уведомления поддержки',
+		dirty:
+			isDev &&
+			(JSON.stringify(draft) !== JSON.stringify(baseline) ||
+				emails !== baseline.staffEmails.join('\n')),
+		pending: busy || Boolean(pending && !conflict),
+		onDiscard: () => {
+			setDraft(baseline)
+			setEmails(baseline.staffEmails.join('\n'))
+		}
+	})
 	const save = async () => {
 		if (!isDev || !sessionReady || busy || conflict || !current()) return
 		try {
@@ -70,6 +84,7 @@ export default function SupportNotificationSettings({
 			const result = await adminSupportApi.saveSettings(actor, command)
 			if (!current()) return
 			setDraft(result)
+			setBaseline(result)
 			setEmails(result.staffEmails.join('\n'))
 			setPending(null)
 			onSaved()
@@ -98,6 +113,7 @@ export default function SupportNotificationSettings({
 			const fresh = await adminSupportApi.settings(actor)
 			if (!current()) return
 			setDraft(fresh)
+			setBaseline(fresh)
 			setEmails(fresh.staffEmails.join('\n'))
 			setPending(null)
 			setConflict(false)

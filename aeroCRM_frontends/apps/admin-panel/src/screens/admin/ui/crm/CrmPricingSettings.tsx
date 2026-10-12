@@ -1,5 +1,7 @@
 'use client'
 
+import { useAdminDirtyGuard } from '@/screens/admin/model/navigation/AdminNavigationGuard'
+
 import { UserRole, useAuthStore, useUser } from '@/entities/user'
 import {
 	adminCrmService,
@@ -245,10 +247,18 @@ function PricingEditor({
 	const serverChanged = settings.version !== baseline.version
 	const locked =
 		!canEdit || !!pending || mutation.isPending || forbidden || conflict
+	useAdminDirtyGuard({
+		label: 'Тарифы CRM',
+		dirty:
+			JSON.stringify(draft) !==
+			JSON.stringify(createCrmPricingDraft(baseline)),
+		pending: mutation.isPending || Boolean(pending && !conflict),
+		onDiscard: () => setDraft(createCrmPricingDraft(baseline))
+	})
 	const canSave =
 		canSubmit &&
 		!mutation.isPending &&
-		!forbidden &&
+		(!forbidden || Boolean(pending)) &&
 		!conflict &&
 		(Boolean(pending) || (!serverChanged && dirty))
 
@@ -267,6 +277,7 @@ function PricingEditor({
 			)
 			setPending(command)
 			const updated = await mutation.mutateAsync(command)
+			setForbidden(false)
 			setPending(null)
 			setBaseline(updated)
 			setDraft(createCrmPricingDraft(updated))
@@ -353,8 +364,9 @@ function PricingEditor({
 
 			{forbidden ? (
 				<p className={styles.staleState} role="alert">
-					Сервер не подтвердил право на изменение. Войдите с действующим
-					доступом ADMIN или DEV и повторно откройте настройки.
+					Сервер не подтвердил право на изменение. Восстановите доступ
+					ADMIN или DEV в другой вкладке и нажмите «Повторить сохранение».
+					Эта вкладка сохраняет прежнюю попытку и её значения.
 				</p>
 			) : conflict || (serverChanged && !pending) ? (
 				<div className={styles.staleState} role="alert">

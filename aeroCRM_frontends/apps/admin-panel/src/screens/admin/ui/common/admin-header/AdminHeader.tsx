@@ -11,6 +11,7 @@ const AdminHeader: NextPage<IAdminHeader> = ({
 	return (
 		<div className={styles.header}>
 			<SearchField
+				placeholder="Поиск пользователей"
 				searchTerm={searchTerm}
 				handleSearch={handleSearch}
 				handleClear={handleClear}

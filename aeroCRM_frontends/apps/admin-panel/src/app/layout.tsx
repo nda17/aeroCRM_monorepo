@@ -2,6 +2,7 @@ import { brandUnbounded } from '@/app/config/fonts'
 import PlatformProviders from '@/app/providers/PlatformProviders'
 import AdminFrame from './_ui/AdminFrame'
 import '@/app/styles/globals.scss'
+import './admin-theme.scss'
 import { EnumTokens } from '@/shared/api/token-names'
 import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
@@ -14,7 +15,13 @@ export const metadata: Metadata = {
 		template: '%s — aeroCRM'
 	},
 	robots: { index: false, follow: false, nocache: true },
-	icons: { icon: [{ url: '/icon.svg', type: 'image/svg+xml' }, { url: '/favicon.ico' }], apple: '/apple-icon.png' }
+	icons: {
+		icon: [
+			{ url: '/icon.svg', type: 'image/svg+xml' },
+			{ url: '/favicon.ico' }
+		],
+		apple: '/apple-icon.png'
+	}
 }
 
 export default function AdminRootLayout({ children }: PropsWithChildren) {

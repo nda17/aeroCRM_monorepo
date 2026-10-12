@@ -1,5 +1,4 @@
 import { IUserEditInput } from '@/entities/user'
-import { ADMIN_PAGES } from '@/shared/config/pages/admin.config'
 import { userService as UserService } from '@/entities/user'
 import { useAuthStore } from '@/entities/user'
 import { errorCatch } from '@/shared/api'
@@ -9,7 +8,6 @@ import {
 	useQueryClient
 } from '@tanstack/react-query'
 import axios from 'axios'
-import { useZoneRouter as useRouter } from '@/shared/lib/navigation/useZoneRouter'
 import { useEffect } from 'react'
 import { SubmitHandler } from 'react-hook-form'
 import toast from 'react-hot-toast'
@@ -69,7 +67,6 @@ const AUTO_RENEWAL_ACTION_COPY: Record<
 
 export const useUserEdit = (params: { id: string }) => {
 	const auth = useAuthStore(state => state.auth)
-	const router = useRouter()
 	const userId = params.id
 	const queryClient = useQueryClient()
 	const setAvatarDetailCache = (avatarPath: string | null) =>
@@ -145,7 +142,6 @@ export const useUserEdit = (params: { id: string }) => {
 				queryKey: ['get-user-overview', userId]
 			})
 			void queryClient.invalidateQueries({ queryKey: ['get-user-list'] })
-			router.push(ADMIN_PAGES.USER_LIST)
 		},
 		onError(error) {
 			if (axios.isAxiosError(error)) {
@@ -193,16 +189,18 @@ export const useUserEdit = (params: { id: string }) => {
 		}
 	})
 
-	const { mutateAsync: uploadAvatarAsync } = useMutation({
-		mutationKey: ['upload-user-avatar', userId],
-		mutationFn: (file: File) =>
-			UserService.uploadAdminUserAvatar(userId, file)
-	})
+	const { mutateAsync: uploadAvatarAsync, isPending: isAvatarUploading } =
+		useMutation({
+			mutationKey: ['upload-user-avatar', userId],
+			mutationFn: (file: File) =>
+				UserService.uploadAdminUserAvatar(userId, file)
+		})
 
-	const { mutateAsync: deleteAvatarAsync } = useMutation({
-		mutationKey: ['delete-user-avatar', userId],
-		mutationFn: () => UserService.deleteAdminUserAvatar(userId)
-	})
+	const { mutateAsync: deleteAvatarAsync, isPending: isAvatarDeleting } =
+		useMutation({
+			mutationKey: ['delete-user-avatar', userId],
+			mutationFn: () => UserService.deleteAdminUserAvatar(userId)
+		})
 
 	const uploadAvatar = async (file: File) => {
 		const avatarPath = await uploadAvatarAsync(file)
@@ -283,6 +281,7 @@ export const useUserEdit = (params: { id: string }) => {
 	}
 
 	return {
+		isAvatarUpdating: isAvatarUploading || isAvatarDeleting,
 		onSubmit,
 		isLoading,
 		data,

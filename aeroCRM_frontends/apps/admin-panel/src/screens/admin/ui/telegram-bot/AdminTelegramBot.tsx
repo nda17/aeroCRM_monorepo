@@ -1,5 +1,7 @@
 'use client'
 
+import { useAdminDirtyGuard } from '@/screens/admin/model/navigation/AdminNavigationGuard'
+
 import { UserRole, useAuthStore, useUser } from '@/entities/user'
 import { errorCatch } from '@/shared/api'
 import {
@@ -841,6 +843,52 @@ const AdminTelegramBot: NextPage = () => {
 			supportThreadId.trim() !==
 				(supportRoutingSettings.supportThreadId?.toString() ?? ''))
 	)
+	useAdminDirtyGuard({
+		label: 'Настройки Telegram',
+		dirty:
+			isTelegramRoutingChanged ||
+			isSupportRoutingChanged ||
+			Boolean(settings && backupTime !== settings.databaseBackupTime) ||
+			Boolean(
+				dailySummarySettings &&
+				(dailySummaryDestinationChatId !==
+					(dailySummarySettings.destinationChatId ?? '') ||
+					dailySummaryThreadId !==
+						(dailySummarySettings.messageThreadId?.toString() ?? '') ||
+					summaryTime !== dailySummarySettings.scheduleTime)
+			),
+		pending:
+			mutation.isPending ||
+			supportRoutingMutation.isPending ||
+			dailySummaryMutation.isPending ||
+			webhookMutation.isPending,
+		onDiscard: () => {
+			isTelegramRoutingDraftDirty.current = false
+			isSupportRoutingDraftDirty.current = false
+			isDailySummaryDraftDirty.current = false
+			isBackupScheduleDraftDirty.current = false
+			if (settings) {
+				setChatId(settings.dailySummaryChatId)
+				setTopicIds(getTelegramTopicInputs(settings))
+				setBackupTime(settings.databaseBackupTime)
+			}
+			if (supportRoutingSettings) {
+				setSupportChatId(supportRoutingSettings.adminChatId)
+				setSupportThreadId(
+					supportRoutingSettings.supportThreadId?.toString() ?? ''
+				)
+			}
+			if (dailySummarySettings) {
+				setDailySummaryDestinationChatId(
+					dailySummarySettings.destinationChatId ?? ''
+				)
+				setDailySummaryThreadId(
+					dailySummarySettings.messageThreadId?.toString() ?? ''
+				)
+				setSummaryTime(dailySummarySettings.scheduleTime)
+			}
+		}
+	})
 	const webhookStatusItems = [
 		...(supportWebhookStatus ? [supportWebhookStatus] : []),
 		...(identityWebhookStatus ? [identityWebhookStatus] : []),

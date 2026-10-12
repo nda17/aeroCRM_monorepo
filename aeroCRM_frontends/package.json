@@ -10,13 +10,13 @@
 		"start": "pnpm --filter @aerocrm/landing start",
 		"lint": "pnpm -r run lint && eslint packages/web/src",
 		"typecheck": "pnpm -r run typecheck",
-		"test": "pnpm --filter @aerocrm/crm test",
+		"test": "pnpm --filter @aerocrm/crm test && pnpm --filter @aerocrm/admin-panel test",
 		"format": "prettier --write --no-error-on-unmatched-pattern \"apps/{landing,admin-panel}/src/**/*.{ts,tsx,scss}\" \"packages/*/src/**/*.{ts,tsx,scss}\" \"*.{js,mjs,ts,json}\" && pnpm --filter @aerocrm/crm format",
 		"prepare": "husky",
 		"dev:landing": "pnpm --filter @aerocrm/landing dev",
 		"dev:admin-panel": "pnpm --filter @aerocrm/admin-panel dev",
 		"dev:crm": "pnpm --filter @aerocrm/crm dev",
-		"build:frontends": "pnpm -r --filter './apps/{landing,crm,admin-panel}' build",
+		"build:frontends": "pnpm --filter @aerocrm/admin-panel test && pnpm -r --filter './apps/{landing,crm,admin-panel}' build",
 		"typecheck:frontends": "pnpm -r --filter './apps/{landing,crm,admin-panel}' typecheck"
 	},
 	"lint-staged": {

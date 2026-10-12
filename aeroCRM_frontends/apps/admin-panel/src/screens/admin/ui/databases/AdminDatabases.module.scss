@@ -9,21 +9,21 @@
 }
 
 .sectionTabs {
-	@apply mb-5 grid grid-cols-2 gap-1 rounded-xl border border-[#e0d6f0] bg-[#f5f0fc] p-1 sm:grid-cols-4;
+	@apply mb-5 grid grid-cols-2 gap-1 rounded-xl border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-1 sm:grid-cols-4;
 }
 
 .sectionTab {
-	@apply min-h-11 min-w-0 rounded-lg px-2 py-3 text-sm font-semibold text-[#6b6075] transition-colors hover:bg-white/60;
+	@apply min-h-11 min-w-0 rounded-lg px-2 py-3 text-sm font-semibold text-[color:var(--admin-muted)] transition-colors hover:bg-[var(--admin-wash)];
 }
 
 .sectionTab[aria-selected='true'] {
-	@apply bg-white text-[#703b96] shadow-sm;
+	@apply bg-[var(--admin-surface)] text-[color:var(--admin-accent)] shadow-none;
 }
 
 .sectionTab:focus-visible,
 .sectionPanel:focus-visible,
 .technicalDetails > summary:focus-visible {
-	@apply outline-none ring-2 ring-[#9158b5] ring-offset-2;
+	@apply outline-none ring-2 ring-[var(--admin-focus)] ring-offset-2;
 }
 
 .sectionPanel,
@@ -41,15 +41,15 @@
 }
 
 .panelTitle {
-	@apply text-lg font-semibold text-[#1a1a1a];
+	@apply text-lg font-semibold text-[color:var(--admin-text)];
 }
 
 .summaryCount {
-	@apply shrink-0 rounded-full bg-[#f3eeff] px-3 py-1 text-xs font-semibold text-[#703b96];
+	@apply shrink-0 rounded-full bg-[var(--admin-wash)] px-3 py-1 text-xs font-semibold text-[color:var(--admin-accent)];
 }
 
 .activeBackups {
-	@apply flex flex-col gap-2 rounded-lg border border-[#e0d6f0] bg-[#faf8ff] p-3;
+	@apply flex flex-col gap-2 rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-3;
 }
 
 .activeBackupLinks {
@@ -61,19 +61,19 @@
 }
 
 .scheduleList > li {
-	@apply grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[#efe8fb] py-3 text-sm text-[#505a67] last:border-b-0;
+	@apply grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[color:var(--admin-border)] py-3 text-sm text-[color:var(--admin-text)] last:border-b-0;
 }
 
 .scheduleTime {
-	@apply font-semibold tabular-nums text-[#1a1a1a];
+	@apply font-semibold tabular-nums text-[color:var(--admin-text)];
 }
 
 .technicalDetails {
-	@apply min-w-0 rounded-xl border border-[#e0d6f0] bg-[#fcfaff] p-3;
+	@apply min-w-0 rounded-xl border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-3;
 }
 
 .technicalDetails > summary {
-	@apply cursor-pointer text-sm font-semibold leading-relaxed text-[#6b2d8f];
+	@apply cursor-pointer text-sm font-semibold leading-relaxed text-[color:var(--admin-accent)];
 }
 
 .technicalDetails[open] > summary {
@@ -81,11 +81,11 @@
 }
 
 .restoreAvailability {
-	@apply rounded-xl border border-[#e0d6f0] bg-[#f8f5ff] p-4 text-sm leading-relaxed text-[#5d456c];
+	@apply rounded-xl border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-4 text-sm leading-relaxed text-[color:var(--admin-text)];
 }
 
 .card {
-	@apply mx-auto mb-6 flex w-full min-w-0 flex-col gap-5 rounded-xl border border-[#e0d6f0] bg-white p-5;
+	@apply mx-auto mb-6 flex w-full min-w-0 flex-col gap-5 rounded-xl border border-[color:var(--admin-border)] bg-[var(--admin-surface)] p-5;
 
 	@media (max-width: 480px) {
 		@apply gap-[14px] rounded-[10px] p-3;
@@ -93,7 +93,7 @@
 }
 
 .backupPanel {
-	@apply flex flex-col gap-3 rounded-xl border border-[#efe8fb] bg-[#fcfaff] p-4;
+	@apply flex flex-col gap-3 rounded-xl border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-4;
 }
 
 .backupHeader {
@@ -117,15 +117,15 @@
 }
 
 .statusItem {
-	@apply flex min-h-[76px] flex-col items-start justify-between gap-2 rounded-xl border border-[#efe8fb] bg-[#faf8ff] p-4;
+	@apply flex min-h-[76px] flex-col items-start justify-between gap-2 rounded-xl border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-4;
 }
 
 .statusLabel {
-	@apply text-[0.78rem] font-semibold text-[#777];
+	@apply text-[0.78rem] font-semibold text-[color:var(--admin-muted)];
 }
 
 .statusValue {
-	@apply text-[0.9rem] font-semibold text-[#1a1a1a];
+	@apply text-[0.9rem] font-semibold text-[color:var(--admin-text)];
 }
 
 .badge {
@@ -133,35 +133,35 @@
 }
 
 .badgeOk {
-	@apply bg-[#e7f8ee] text-[#168044];
+	@apply bg-[var(--admin-success-soft)] text-[color:var(--admin-success)];
 }
 
 .badgeProgress {
-	@apply bg-[#eee6f8] text-[#6b2d8f];
+	@apply bg-[var(--admin-wash)] text-[color:var(--admin-accent)];
 }
 
 .badgeError {
-	@apply bg-[#fdebec] text-[#a92d46];
+	@apply bg-[var(--admin-danger-soft)] text-[color:var(--admin-danger)];
 }
 
 .badgeNeutral {
-	@apply bg-[#eceff3] text-[#505a67];
+	@apply bg-[var(--admin-wash)] text-[color:var(--admin-text)];
 }
 
 .label {
-	@apply text-[0.9rem] font-semibold text-[#1a1a1a];
+	@apply text-[0.9rem] font-semibold text-[color:var(--admin-text)];
 }
 
 .hint {
-	@apply mt-[2px] text-[0.8rem] leading-[1.4] text-[#777];
+	@apply mt-[2px] text-[0.8rem] leading-[1.4] text-[color:var(--admin-muted)];
 }
 
 .actionBtn {
-	@apply cursor-pointer rounded-lg border border-[#e0d6f0] bg-[#f3eeff] px-4 py-[10px] text-sm font-semibold text-[#7b3fa0] transition-colors duration-200;
+	@apply cursor-pointer rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-wash)] px-4 py-[10px] text-sm font-semibold text-[color:var(--admin-accent)] transition-colors duration-200;
 }
 
 .actionBtn:hover {
-	@apply bg-[#e0d6f0];
+	@apply bg-[var(--admin-accent-soft)];
 }
 
 .actionBtn:disabled {
@@ -179,7 +179,7 @@
 .restoreContractGrid > div,
 .restoreManifestList > div,
 .exactBindingGrid > div {
-	@apply min-w-0 rounded-lg border border-[#efe8fb] bg-[#faf8ff] p-3;
+	@apply min-w-0 rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-3;
 }
 
 .restoreManifestList {
@@ -191,11 +191,11 @@
 }
 
 .hashValue {
-	@apply mt-1 block break-all font-mono text-[0.72rem] leading-relaxed text-[#505a67];
+	@apply mt-1 block break-all font-mono text-[0.72rem] leading-relaxed text-[color:var(--admin-text)];
 }
 
 .restoreApproval {
-	@apply flex flex-col gap-3 rounded-lg border border-[#c4a8e8] bg-[#f8f5ff] px-4 py-3 text-sm leading-relaxed text-[#4d2765];
+	@apply flex flex-col gap-3 rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-wash)] px-4 py-3 text-sm leading-relaxed text-[color:var(--admin-text)];
 }
 
 .exactBindingGrid {
@@ -207,7 +207,7 @@
 }
 
 .restoreMutationPanel {
-	@apply flex flex-col gap-4 rounded-xl border border-[#efe8fb] bg-[#fcfaff] p-4;
+	@apply flex flex-col gap-4 rounded-xl border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-4;
 }
 
 .permitGrid {
@@ -228,38 +228,38 @@
 }
 
 .pendingPermit {
-	@apply flex flex-col gap-3 rounded-lg border border-[#d7c4ee] bg-white p-3;
+	@apply flex flex-col gap-3 rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-surface)] p-3;
 }
 
 .restoreLookupPanel {
-	@apply flex flex-col gap-3 rounded-xl border border-[#e0d6f0] bg-white p-4;
+	@apply flex flex-col gap-3 rounded-xl border border-[color:var(--admin-border)] bg-[var(--admin-surface)] p-4;
 }
 
 .fieldLabel,
 .fileInputLabel {
-	@apply flex min-w-0 flex-col gap-[6px] text-[0.9rem] font-semibold text-[#1a1a1a];
+	@apply flex min-w-0 flex-col gap-[6px] text-[0.9rem] font-semibold text-[color:var(--admin-text)];
 }
 
 .fileInputLabel input {
-	@apply box-border h-11 w-full rounded-lg border border-[#e0d6f0] bg-[#f8f5ff] px-[6px] py-[5px] text-[0.85rem] text-[#777];
+	@apply box-border h-11 w-full rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-wash)] px-[6px] py-[5px] text-[0.85rem] text-[color:var(--admin-muted)];
 }
 
 .input {
-	@apply box-border h-11 w-full rounded-lg border border-[#e0d6f0] bg-[#f8f5ff] px-[14px] py-[10px] text-[0.9rem] text-[#1a1a1a] outline-none transition-[border-color] duration-200;
+	@apply box-border h-11 w-full rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-wash)] px-[14px] py-[10px] text-[0.9rem] text-[color:var(--admin-text)] outline-none transition-[border-color] duration-200;
 }
 
 .select {
-	@apply box-border h-11 w-full appearance-none rounded-lg border border-[#e0d6f0] bg-[#f8f5ff] bg-no-repeat py-[10px] pl-[14px] pr-11 text-[0.9rem] text-[#1a1a1a] outline-none transition-[border-color] duration-200;
+	@apply box-border h-11 w-full appearance-none rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-wash)] bg-no-repeat py-[10px] pl-[14px] pr-11 text-[0.9rem] text-[color:var(--admin-text)] outline-none transition-[border-color] duration-200;
 	@include select.chevron;
 }
 
 .input:focus,
 .select:focus {
-	@apply border-[#c4a8e8];
+	@apply border-[color:var(--admin-border)];
 }
 
 .input::placeholder {
-	@apply text-[#bbb];
+	@apply text-[color:var(--admin-muted)];
 }
 
 .input:disabled,
@@ -269,7 +269,7 @@
 }
 
 .dangerBtn {
-	@apply min-h-11 w-full cursor-pointer rounded-lg border-none bg-[#b42318] px-5 py-[10px] text-sm font-semibold text-white transition-opacity duration-200;
+	@apply min-h-11 w-full cursor-pointer rounded-lg border-none bg-[var(--admin-danger)] px-5 py-[10px] text-sm font-semibold text-[color:var(--admin-on-accent)] transition-opacity duration-200;
 }
 
 .dangerBtn:hover {
@@ -281,7 +281,7 @@
 }
 
 .restoreStatus {
-	@apply flex flex-col gap-4 rounded-xl border border-[#e0d6f0] bg-[#faf8ff] p-4;
+	@apply flex flex-col gap-4 rounded-xl border border-[color:var(--admin-border)] bg-[var(--admin-wash)] p-4;
 }
 
 .restoreStatusHeader {
@@ -297,7 +297,7 @@
 }
 
 .restoreStatusGrid > div {
-	@apply min-w-0 rounded-lg border border-[#efe8fb] bg-white p-3;
+	@apply min-w-0 rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-surface)] p-3;
 }
 
 .restoreStatusGrid .statusValue {
@@ -305,11 +305,11 @@
 }
 
 .restoreError {
-	@apply rounded-lg border border-[#f1b9bd] bg-[#fff1f2] px-4 py-3 text-sm leading-relaxed text-[#a92d46];
+	@apply rounded-lg border border-[color:var(--admin-danger-border)] bg-[var(--admin-danger-soft)] px-4 py-3 text-sm leading-relaxed text-[color:var(--admin-danger)];
 }
 
 .recoveryWarning {
-	@apply rounded-lg border-2 border-[#b42318] bg-[#fff1f0] px-4 py-3 text-sm leading-relaxed text-[#8f1d14];
+	@apply rounded-lg border-2 border-[color:var(--admin-danger-border)] bg-[var(--admin-danger-soft)] px-4 py-3 text-sm leading-relaxed text-[color:var(--admin-danger)];
 }
 
 .recoveryPanel {
@@ -317,7 +317,7 @@
 }
 
 .recoveryResolved {
-	@apply rounded-lg border-2 border-[#168044] bg-[#eefaf3] px-4 py-3 text-sm leading-relaxed text-[#126a39];
+	@apply rounded-lg border-2 border-[color:var(--admin-success-border)] bg-[var(--admin-success-soft)] px-4 py-3 text-sm leading-relaxed text-[color:var(--admin-success)];
 }
 
 .receiptGrid {
@@ -329,16 +329,16 @@
 }
 
 .receiptGrid > div {
-	@apply min-w-0 rounded-lg border border-[#efe8fb] bg-white p-3;
+	@apply min-w-0 rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-surface)] p-3;
 }
 
 .recoveryActionCard,
 .resolutionReceipt {
-	@apply flex flex-col gap-3 rounded-lg border border-[#d7c4ee] bg-white p-4;
+	@apply flex flex-col gap-3 rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-surface)] p-4;
 }
 
 .recoveryMetaGrid {
-	@apply grid grid-cols-3 gap-3 text-xs text-[#505a67];
+	@apply grid grid-cols-3 gap-3 text-xs text-[color:var(--admin-text)];
 
 	@media (max-width: 760px) {
 		@apply grid-cols-1;
@@ -354,11 +354,11 @@
 }
 
 .secondaryBtn {
-	@apply self-start cursor-pointer rounded-lg border border-[#d7c4ee] bg-white px-4 py-[9px] text-sm font-semibold text-[#6b2d8f] transition-colors duration-200;
+	@apply self-start cursor-pointer rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-surface)] px-4 py-[9px] text-sm font-semibold text-[color:var(--admin-accent)] transition-colors duration-200;
 }
 
 .secondaryBtn:hover {
-	@apply bg-[#f3eeff];
+	@apply bg-[var(--admin-wash)];
 }
 
 .secondaryBtn:disabled {
@@ -382,19 +382,19 @@
 }
 
 .historyTableWrap {
-	@apply w-full overflow-x-auto rounded-xl border border-[#efe8fb];
+	@apply w-full overflow-x-auto rounded-xl border border-[color:var(--admin-border)];
 }
 
 .historyTable {
-	@apply w-full min-w-[820px] border-collapse bg-white text-left text-sm;
+	@apply w-full min-w-[820px] border-collapse bg-[var(--admin-surface)] text-left text-sm;
 }
 
 .historyTable th {
-	@apply border-b border-[#e0d6f0] bg-[#faf8ff] px-3 py-3 text-xs font-semibold uppercase tracking-wide text-[#777];
+	@apply border-b border-[color:var(--admin-border)] bg-[var(--admin-wash)] px-3 py-3 text-xs font-semibold uppercase tracking-wide text-[color:var(--admin-muted)];
 }
 
 .historyTable td {
-	@apply border-b border-[#efe8fb] px-3 py-3 align-middle text-[#1a1a1a];
+	@apply border-b border-[color:var(--admin-border)] px-3 py-3 align-middle text-[color:var(--admin-text)];
 }
 
 .historyTable tbody tr:last-child td {
@@ -402,7 +402,7 @@
 }
 
 .empty {
-	@apply py-4 text-center text-sm text-[#777];
+	@apply py-4 text-center text-sm text-[color:var(--admin-muted)];
 }
 
 .lockedCard {
@@ -414,9 +414,9 @@
 }
 
 .lockedOverlay {
-	@apply absolute inset-0 z-20 flex items-center justify-center gap-2 rounded-xl bg-white/30;
+	@apply absolute inset-0 z-20 flex items-center justify-center gap-2 rounded-xl bg-[var(--admin-overlay)];
 }
 
 .lockedBadge {
-	@apply rounded-full border border-[#d7c4ee] bg-white px-4 py-2 text-sm font-semibold text-[#6b2d8f] shadow-sm;
+	@apply rounded-full border border-[color:var(--admin-border)] bg-[var(--admin-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--admin-accent)] shadow-none;
 }

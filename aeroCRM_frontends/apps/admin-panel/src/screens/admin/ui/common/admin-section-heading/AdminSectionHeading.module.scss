@@ -1,11 +1,10 @@
 .heading {
-	@apply relative mb-[1.1rem] flex w-full items-center justify-center gap-2;
+	@apply relative mb-6 flex w-full items-center justify-start gap-3;
 }
 
 .title {
-	@apply select-none text-center text-[1.05rem] font-semibold transition-all;
-
-	&:hover {
-		@apply text-gray-700;
-	}
+	font-size: clamp(24px, 2.5vw, 30px);
+	font-weight: 600;
+	line-height: 1.25;
+	color: var(--admin-text);
 }

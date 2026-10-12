@@ -25,6 +25,7 @@ import {
 } from '@tanstack/react-query'
 import { useZoneRouter as useRouter } from '@/shared/lib/navigation/useZoneRouter'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useAdminDirtyGuard } from '@/screens/admin/model/navigation/AdminNavigationGuard'
 import toast from 'react-hot-toast'
 import styles from './HomeContentEditor.module.scss'
 
@@ -41,6 +42,23 @@ const ICON_OPTIONS: Array<{
 	{ value: 'vk', label: 'VK Ретаргетинг' },
 	{ value: 'roistat', label: 'Roistat' }
 ]
+
+const HOME_SECTIONS = [
+	{ id: 'home-hero', title: 'Первый экран' },
+	{ id: 'home-problem', title: 'Блок с проблемой' },
+	{ id: 'home-integrations', title: 'Интеграции' },
+	{ id: 'home-businesses', title: 'Для каких бизнесов' },
+	{ id: 'home-cases', title: 'Кейсы' },
+	{ id: 'home-lead-path', title: 'Путь заявки' },
+	{ id: 'home-customization', title: 'Блок кастомизации' },
+	{ id: 'home-start', title: 'Начало работы' },
+	{ id: 'home-intermediate-cta', title: 'Промежуточные CTA' },
+	{ id: 'home-account', title: 'Личный кабинет' },
+	{ id: 'home-trust', title: 'Доверие и безопасность' },
+	{ id: 'home-pricing', title: 'Тарифы на лендинге' },
+	{ id: 'home-faq', title: 'Вопросы и ответы' },
+	{ id: 'home-final-cta', title: 'Финальный призыв к действию' }
+] as const
 
 const SITEMAP_CHANGE_FREQUENCY_OPTIONS: Array<{
 	value: HomePageSitemapChangeFrequency
@@ -534,6 +552,9 @@ const HomeContentEditor = ({
 		useState<HomePageContent>(defaultContent)
 	const [showFactoryResetConfirm, setShowFactoryResetConfirm] =
 		useState(false)
+	const draftDirty = useRef(false)
+	draftDirty.current =
+		JSON.stringify(draft) !== JSON.stringify(persistedContent)
 
 	const { data, isLoading } = useQuery({
 		queryKey: ['home-page-content'],
@@ -542,7 +563,7 @@ const HomeContentEditor = ({
 	})
 
 	useEffect(() => {
-		if (data?.content) {
+		if (data?.content && !draftDirty.current) {
 			setDraft(data.content)
 			setPersistedContent(data.content)
 		}
@@ -570,6 +591,12 @@ const HomeContentEditor = ({
 	const isDirty =
 		JSON.stringify(draft) !== JSON.stringify(persistedContent)
 	const isSaving = structuredMutation.isPending || rawMutation.isPending
+	useAdminDirtyGuard({
+		label: meta.title,
+		dirty: isDirty,
+		pending: isSaving,
+		onDiscard: () => setDraft(persistedContent)
+	})
 
 	const save = () => {
 		if (isRawArea && !canEditRawCode) {
@@ -1450,7 +1477,20 @@ const HomeContentEditor = ({
 
 			{isHomeArea && (
 				<>
-					<section className={styles.panel}>
+					<nav
+						className={styles.homeIndex}
+						aria-label="Секции главной страницы"
+					>
+						<p className={styles.homeIndexTitle}>К разделу</p>
+						<div className={styles.homeIndexLinks}>
+							{HOME_SECTIONS.map(section => (
+								<a key={section.id} href={`#${section.id}`}>
+									{section.title}
+								</a>
+							))}
+						</div>
+					</nav>
+					<section id="home-hero" tabIndex={-1} className={styles.panel}>
 						<SectionTitle
 							title="Первый экран"
 							description="Главный заголовок, процент, подзаголовок и CTA-кнопка в самом верху главной страницы."
@@ -1586,7 +1626,11 @@ const HomeContentEditor = ({
 						</button>
 					</section>
 
-					<section className={styles.panel}>
+					<section
+						id="home-problem"
+						tabIndex={-1}
+						className={styles.panel}
+					>
 						<div className={styles.panelHeader}>
 							<SectionTitle
 								title="Блок с проблемой"
@@ -1697,7 +1741,11 @@ const HomeContentEditor = ({
 						</button>
 					</section>
 
-					<section className={styles.panel}>
+					<section
+						id="home-integrations"
+						tabIndex={-1}
+						className={styles.panel}
+					>
 						<div className={styles.panelHeader}>
 							<SectionTitle
 								title="Интеграции"
@@ -1854,7 +1902,11 @@ const HomeContentEditor = ({
 						</button>
 					</section>
 
-					<section className={styles.panel}>
+					<section
+						id="home-businesses"
+						tabIndex={-1}
+						className={styles.panel}
+					>
 						<div className={styles.panelHeader}>
 							<SectionTitle
 								title="Для каких бизнесов"
@@ -1980,7 +2032,7 @@ const HomeContentEditor = ({
 						</button>
 					</section>
 
-					<section className={styles.panel}>
+					<section id="home-cases" tabIndex={-1} className={styles.panel}>
 						<div className={styles.panelHeader}>
 							<SectionTitle
 								title="Кейсы"
@@ -2122,7 +2174,11 @@ const HomeContentEditor = ({
 						</button>
 					</section>
 
-					<section className={styles.panel}>
+					<section
+						id="home-lead-path"
+						tabIndex={-1}
+						className={styles.panel}
+					>
 						<div className={styles.panelHeader}>
 							<SectionTitle
 								title="Путь заявки"
@@ -2251,7 +2307,11 @@ const HomeContentEditor = ({
 						</button>
 					</section>
 
-					<section className={styles.panel}>
+					<section
+						id="home-customization"
+						tabIndex={-1}
+						className={styles.panel}
+					>
 						<div className={styles.panelHeader}>
 							<SectionTitle
 								title="Блок кастомизации"
@@ -2462,7 +2522,7 @@ const HomeContentEditor = ({
 						/>
 					</section>
 
-					<section className={styles.panel}>
+					<section id="home-start" tabIndex={-1} className={styles.panel}>
 						<div className={styles.panelHeader}>
 							<SectionTitle
 								title="Начало работы"
@@ -2568,7 +2628,11 @@ const HomeContentEditor = ({
 						</button>
 					</section>
 
-					<section className={styles.panel}>
+					<section
+						id="home-intermediate-cta"
+						tabIndex={-1}
+						className={styles.panel}
+					>
 						<div className={styles.panelHeader}>
 							<SectionTitle
 								title="Промежуточные CTA"
@@ -2651,7 +2715,11 @@ const HomeContentEditor = ({
 						</div>
 					</section>
 
-					<section className={styles.panel}>
+					<section
+						id="home-account"
+						tabIndex={-1}
+						className={styles.panel}
+					>
 						<div className={styles.panelHeader}>
 							<SectionTitle
 								title="Личный кабинет"
@@ -2868,7 +2936,7 @@ const HomeContentEditor = ({
 						</button>
 					</section>
 
-					<section className={styles.panel}>
+					<section id="home-trust" tabIndex={-1} className={styles.panel}>
 						<div className={styles.panelHeader}>
 							<SectionTitle
 								title="Доверие и безопасность"
@@ -2994,7 +3062,11 @@ const HomeContentEditor = ({
 						</button>
 					</section>
 
-					<section className={styles.panel}>
+					<section
+						id="home-pricing"
+						tabIndex={-1}
+						className={styles.panel}
+					>
 						<div className={styles.panelHeader}>
 							<div>
 								<SectionTitle
@@ -3090,7 +3162,7 @@ const HomeContentEditor = ({
 						</div>
 					</section>
 
-					<section className={styles.panel}>
+					<section id="home-faq" tabIndex={-1} className={styles.panel}>
 						<div className={styles.panelHeader}>
 							<SectionTitle
 								title="Вопросы и ответы"
@@ -3231,7 +3303,11 @@ const HomeContentEditor = ({
 						</button>
 					</section>
 
-					<section className={styles.panel}>
+					<section
+						id="home-final-cta"
+						tabIndex={-1}
+						className={styles.panel}
+					>
 						<div className={styles.panelHeader}>
 							<SectionTitle
 								title="Финальный призыв к действию"

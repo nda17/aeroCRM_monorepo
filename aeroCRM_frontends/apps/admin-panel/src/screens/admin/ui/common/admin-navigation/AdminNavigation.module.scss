@@ -1,43 +1,69 @@
 .navigation {
-	@apply mb-7 w-full min-w-0 overflow-hidden rounded-2xl border border-[#e8ddf5] bg-white shadow-sm;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 3px 12px 16px;
 }
 
-.caption {
-	@apply px-4 pt-4 text-xs font-semibold uppercase tracking-wide text-[#796987];
+.group + .group {
+	margin-top: 13px;
 }
 
-.groups {
-	@apply grid grid-cols-3 gap-2 p-3 xl:grid-cols-6;
-
-	@media (max-width: 540px) {
-		@apply grid-cols-2 gap-1.5 p-2;
-	}
+.groupTitle {
+	margin: 0 0 3px;
+	padding: 0 12px;
+	color: #8f929d;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
 }
 
-.groupLink {
-	@apply flex h-full min-h-[44px] items-center justify-center rounded-xl px-3 py-2 text-center text-sm font-semibold leading-snug text-[#655171] transition-colors hover:bg-[#f5eefb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b44b6] focus-visible:ring-inset;
-}
-
-.groupActive {
-	@apply bg-[#f0e5fa] text-[#57266f] hover:bg-[#f0e5fa];
-}
-
-.currentGroup {
-	@apply border-t border-[#efe8f6] bg-[#fdfbff] px-4 py-3;
-}
-
-.description {
-	@apply mb-2 text-xs leading-relaxed text-[#796987];
-}
-
-.nav-list {
-	@apply flex min-w-0 flex-wrap gap-2;
+.navList {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
 }
 
 .itemLink {
-	@apply inline-flex min-h-[44px] items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold leading-snug text-[#6b527c] transition-colors hover:bg-[#eee5f7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b44b6] focus-visible:ring-offset-2;
+	display: flex;
+	align-items: center;
+	gap: 11px;
+	min-height: 37px;
+	padding: 7px 12px;
+	border-radius: 8px;
+	color: #c7c9d1;
+	font-size: 13px;
+	font-weight: 500;
+	line-height: 1.25;
+	text-decoration: none;
+	transition:
+		background 0.15s,
+		color 0.15s;
+	svg {
+		flex: 0 0 18px;
+	}
+	&:hover {
+		background: #343741;
+		color: #fff;
+	}
+	&:focus-visible {
+		outline: 2px solid #a587e4;
+		outline-offset: -2px;
+	}
 }
 
 .active {
-	@apply bg-[#6b2d8f] text-white shadow-sm hover:bg-[#6b2d8f];
+	background: #473c63;
+	color: #fff;
+	font-weight: 700;
+	&:hover {
+		background: #51436f;
+	}
+	svg {
+		color: #c7b0ff;
+	}
 }

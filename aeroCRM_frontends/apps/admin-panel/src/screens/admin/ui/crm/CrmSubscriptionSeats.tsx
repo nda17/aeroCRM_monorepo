@@ -1,5 +1,7 @@
 'use client'
 
+import { useAdminDirtyGuard } from '@/screens/admin/model/navigation/AdminNavigationGuard'
+
 import {
 	adminCrmSubscriptionsService,
 	bindCrmAdminSeatsActor,
@@ -83,6 +85,12 @@ export default function CrmSubscriptionSeats({
 	const pending = recovery.pending
 	const target = pending?.workspaceId ?? workspaceId
 	const locked = !!pending || recovery.storageError || busy || forbidden
+	useAdminDirtyGuard({
+		label: 'Количество мест подписки',
+		dirty: false,
+		pending: busy || Boolean(pending && recovery.storageError),
+		recoverable: Boolean(pending && !recovery.storageError)
+	})
 	const mounted = useRef(true)
 	const inFlight = useRef(false)
 	useEffect(() => {
@@ -473,6 +481,16 @@ function SeatsForm({
 		String(context.subscription.entitlement.seatLimit ?? '')
 	)
 	const [reason, setReason] = useState('')
+	useAdminDirtyGuard({
+		label: 'Количество мест подписки',
+		dirty:
+			total !== String(context.subscription.entitlement.seatLimit ?? '') ||
+			Boolean(reason),
+		onDiscard: () => {
+			setTotal(String(context.subscription.entitlement.seatLimit ?? ''))
+			setReason('')
+		}
+	})
 	const seatsHintId = useId()
 	const value = Number(total)
 	const seatsError =

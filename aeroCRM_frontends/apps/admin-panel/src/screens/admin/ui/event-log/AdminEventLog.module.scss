@@ -5,7 +5,7 @@
 }
 
 .card {
-	@apply w-full rounded-layout border border-gray-300 bg-white shadow-sm p-5 mb-6;
+	@apply w-full rounded-layout border border-gray-300 bg-[var(--admin-surface)] shadow-none p-5 mb-6;
 }
 
 .skeletonRow {
@@ -13,11 +13,11 @@
 }
 
 .listSection {
-	@apply w-full rounded-layout border border-gray-300 bg-white shadow-sm overflow-hidden mb-6;
+	@apply w-full rounded-layout border border-gray-300 bg-[var(--admin-surface)] shadow-none overflow-hidden mb-6;
 }
 
 .filterBar {
-	@apply w-full rounded-layout border border-gray-300 bg-white shadow-sm px-5 py-4 mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between;
+	@apply w-full rounded-layout border border-gray-300 bg-[var(--admin-surface)] shadow-none px-5 py-4 mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between;
 }
 
 .filterTitle {
@@ -32,12 +32,12 @@
 	@apply inline-flex items-center justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors;
 
 	&:hover {
-		@apply bg-gray-300 bg-opacity-20 text-red-700;
+		@apply bg-gray-300 bg-opacity-20 text-[color:var(--admin-danger)];
 	}
 }
 
 .filters {
-	@apply w-full rounded-layout border border-gray-300 bg-white shadow-sm p-4 mb-4 flex flex-col gap-3;
+	@apply w-full rounded-layout border border-gray-300 bg-[var(--admin-surface)] shadow-none p-4 mb-4 flex flex-col gap-3;
 }
 
 .filterGrid {
@@ -53,7 +53,7 @@
 }
 
 .filterInput {
-	@apply w-full border border-gray-300 rounded-md bg-white px-3 py-2 text-sm text-gray-700 outline-none transition-colors focus:border-primary;
+	@apply w-full border border-gray-300 rounded-md bg-[var(--admin-surface)] px-3 py-2 text-sm text-gray-700 outline-none transition-colors focus:border-primary;
 }
 
 .filterActions {
@@ -61,11 +61,11 @@
 }
 
 .filterApply {
-	@apply rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-80;
+	@apply rounded-md bg-primary px-4 py-2 text-sm font-semibold text-[color:var(--admin-on-accent)] transition-opacity hover:opacity-80;
 }
 
 .filterReset {
-	@apply rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-300 hover:bg-opacity-20;
+	@apply rounded-md border border-gray-300 bg-[var(--admin-surface)] px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-300 hover:bg-opacity-20;
 }
 
 .listMeta {
@@ -125,10 +125,10 @@
 }
 
 .userLink {
-	@apply text-red-600 font-semibold transition-colors break-words;
+	@apply text-[color:var(--admin-danger)] font-semibold transition-colors break-words;
 
 	&:hover {
-		@apply text-red-700;
+		@apply text-[color:var(--admin-danger)];
 	}
 }
 
