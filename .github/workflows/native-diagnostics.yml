@@ -12,6 +12,7 @@ permissions:
 jobs:
   crm-intake-native:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -131,6 +132,7 @@ jobs:
             set +e
             gdb -q -nx --batch --return-child-result \
               -ex 'set pagination off' \
+              -ex 'set disable-randomization off' \
               -ex 'set print frame-arguments none' \
               -ex run \
               -ex 'thread apply all bt 12' \
@@ -146,7 +148,7 @@ jobs:
             fi
           }
           probe='const {PrismaClient}=await import("@prisma/crm-intake-client"); const url=process.env.CRM_INTAKE_TEST_DATABASE_URL; const clients=Array.from({length:2},()=>new PrismaClient({datasources:{db:{url}}})); try { await Promise.all(clients.map(client=>client.$queryRawUnsafe("SELECT 1"))); } finally { await Promise.all(clients.map(client=>client.$disconnect())); }'
-          for attempt in {1..10}; do
+          for attempt in {1..100}; do
             trace "startup-${attempt}" --input-type=module -e "$probe"
           done
           for scenario in intake csv; do
