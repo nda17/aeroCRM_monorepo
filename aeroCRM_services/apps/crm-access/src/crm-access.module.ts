@@ -81,6 +81,7 @@ import { TelegramBusinessService } from './telegram-business/telegram-business.s
 import { TelegramBusinessWebhook } from './telegram-business/telegram-business.webhook';
 import { TelegramBusinessBot } from './telegram-business/telegram-business.bot';
 import { TelegramBusinessWorker } from './telegram-business/telegram-business.worker';
+import { TelegramRetentionService } from './telegram-business/telegram-retention.service';
 
 const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 
@@ -130,6 +131,7 @@ const role = parseCrmAccessRole(process.env.CRM_ACCESS_PROCESS_ROLE);
 		TelegramBusinessWebhook,
 		TelegramBusinessBot,
 		TelegramBusinessWorker,
+		TelegramRetentionService,
 		ChatAttachmentsService,
 		ChatObjects,
 		ChatUploadScopeGuard,

@@ -1,4 +1,5 @@
 import { MailConfig, mailRole } from '../mail/mail.config';
+import { MailWorker } from '../mail/mail.worker';
 import {
 	Injectable,
 	Optional,
@@ -14,7 +15,8 @@ const DATABASE_SERVICE_NAME = 'crm-customers-service';
 export class CrmCustomersHealthService {
 	constructor(
 		private readonly prisma: CrmCustomersPrismaService,
-		@Optional() private readonly mailConfig?: MailConfig
+		@Optional() private readonly mailConfig?: MailConfig,
+		@Optional() private readonly mailWorker?: MailWorker
 	) {}
 
 	liveness() {
@@ -37,12 +39,12 @@ export class CrmCustomersHealthService {
 			await this.prisma.$queryRaw`SELECT 1`;
 			void this.mailConfig?.enabled;
 			await this.prisma
-				.$queryRaw`SELECT m.id,g.id,f.id,l.id,a.id,c.command_id,s.send_id,d.id FROM crm_customers.mail_mailboxes m CROSS JOIN crm_customers.mail_mailbox_grants g CROSS JOIN crm_customers.mail_folders f CROSS JOIN crm_customers.mail_contact_links l CROSS JOIN crm_customers.mail_attachments a CROSS JOIN crm_customers.mail_commands c CROSS JOIN crm_customers.mail_send_attachments s CROSS JOIN crm_customers.mail_audit d LIMIT 0`;
+				.$queryRaw`SELECT m.id,g.id,f.id,l.id,a.id,c.command_id,c.request_hash_key_id,s.send_id,d.id FROM crm_customers.mail_mailboxes m CROSS JOIN crm_customers.mail_mailbox_grants g CROSS JOIN crm_customers.mail_folders f CROSS JOIN crm_customers.mail_contact_links l CROSS JOIN crm_customers.mail_attachments a CROSS JOIN crm_customers.mail_commands c CROSS JOIN crm_customers.mail_send_attachments s CROSS JOIN crm_customers.mail_audit d LIMIT 0`;
 
 			await this.prisma
 				.$queryRaw`SELECT id, workspace_id, transport, encrypted_secret, generation FROM crm_customers.mail_connections LIMIT 0`;
 			await this.prisma
-				.$queryRaw`SELECT id, workspace_id, state, dispatch_admitted_at, mime_hash FROM crm_customers.mail_send_intents LIMIT 0`;
+				.$queryRaw`SELECT id, workspace_id, state, dispatch_admitted_at, mime_hash, request_hash_key_id FROM crm_customers.mail_send_intents LIMIT 0`;
 			await this.prisma
 				.$queryRaw`SELECT id, workspace_id, state, lease_version, lease_until FROM crm_customers.mail_jobs LIMIT 0`;
 			await this.prisma
@@ -51,7 +53,9 @@ export class CrmCustomersHealthService {
 				.$queryRaw`SELECT id, workspace_id, actor_subject, entity, source_key, file_digest, rows, expires_at, commit_command_id, request_hash, result, created_at FROM crm_customers.import_previews LIMIT 0`;
 			await this.prisma
 				.$queryRaw`SELECT id, workspace_id, source_key, entity, external_id, payload_hash, company_id, contact_id, created_at FROM crm_customers.import_bindings LIMIT 0`;
-			const importTriggers = await this.prisma.$queryRaw<Array<{ table_name: string; trigger_name: string }>>`
+			const importTriggers = await this.prisma.$queryRaw<
+				Array<{ table_name: string; trigger_name: string }>
+			>`
 				SELECT c.relname AS table_name, t.tgname AS trigger_name
 				FROM pg_catalog.pg_trigger t
 				JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
@@ -60,7 +64,8 @@ export class CrmCustomersHealthService {
 				  AND c.relname IN ('import_previews', 'import_bindings')
 				  AND t.tgname IN ('guard_workspace_closure', 'import_preview_immutable', 'import_binding_immutable')
 				  AND t.tgenabled = 'O'`;
-			if (importTriggers.length !== 4) throw new Error('Import guards are unavailable');
+			if (importTriggers.length !== 4)
+				throw new Error('Import guards are unavailable');
 			await this.prisma
 				.$queryRaw`SELECT operation_id, workspace_id, workflow_id, actor_subject, payload_hash, state, contact_id, result, committed_at FROM crm_customers.intake_operation_slots LIMIT 0`;
 			await this.prisma
@@ -92,7 +97,8 @@ export class CrmCustomersHealthService {
 		return {
 			status: 'ready',
 			service: SERVICE_NAME,
-			revision: process.env.APP_REVISION || 'unknown'
+			revision: process.env.APP_REVISION || 'unknown',
+			...(this.mailWorker ? { background: this.mailWorker.progress() } : {})
 		};
 	}
 }

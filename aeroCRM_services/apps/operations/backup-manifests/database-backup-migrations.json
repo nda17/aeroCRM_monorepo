@@ -110,7 +110,7 @@
 			]
 		},
 		"crm-access": {
-			"manifestSha256": "f8eb00aae9f6fe215a20c0be1e68f86e5dedf3afc80f3f14abe30263bfc3fe1b",
+			"manifestSha256": "2c6cac5cf7fd9b5d43c98b2990a7f48b6bc6951562ad9ac96333e7db5683defd",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -151,6 +151,10 @@
 				{
 					"name": "20261012010000_telegram_business_messenger",
 					"checksum": "b2c08ea9c44ce25a2759dc7bc43763c930b06c459ca5428d498d5e9c4e124b26"
+				},
+				{
+					"name": "20261014000000_technical_retention",
+					"checksum": "714bd76f92e704f2aa9363522185768020763f5356c6665f1178a95850bfcc75"
 				}
 			]
 		},
@@ -176,7 +180,7 @@
 			]
 		},
 		"crm-customers": {
-			"manifestSha256": "fcf29c7a7237e44f4cae7b7e36913026e871d61456c1a924c31287c27443d736",
+			"manifestSha256": "085b28ab12fddbf1e2af5f710471f3232db1dee813f8c0e8842d1b747bbe38a3",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -209,6 +213,10 @@
 				{
 					"name": "20261005010000_mail_live_notifications",
 					"checksum": "77f9df9231f3793440c473bbcf084d69fa2cc61ebc8bb8634115a3ab5683eea1"
+				},
+				{
+					"name": "20261014000000_mail_keyring",
+					"checksum": "b33dbe784170e67c730739aaf5f20a05ef80f28f609e9ca687bcfa775eb921f4"
 				}
 			]
 		},

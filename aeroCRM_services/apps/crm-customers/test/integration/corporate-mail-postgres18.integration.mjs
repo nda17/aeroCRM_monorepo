@@ -35,7 +35,9 @@ assert.notEqual(local(runtimeUrl), "remote", "mail fixture must be local");
 assert.equal(local(runtimeUrl), local(migrationUrl));
 
 const { PrismaClient } = await import("@prisma/crm-customers-client");
-const { MailConfig } = await import("../../dist/src/mail/mail.config.js");
+const { MailConfig, canonicalMailJson, digest } = await import(
+  "../../dist/src/mail/mail.config.js"
+);
 const { MailService } = await import("../../dist/src/mail/mail.service.js");
 const { MailWorker } = await import("../../dist/src/mail/mail.worker.js");
 const { MailAuthorityRevokedException } = await import("../../dist/src/mail/mail-authorization.client.js");
@@ -59,6 +61,7 @@ try {
 const listener = new pg.Client({ connectionString: runtimeUrl });
 const workspaceId = randomUUID();
 const otherWorkspaceId = randomUUID();
+const keyringWorkspaceId = randomUUID();
 const subject = "corporate-mail-pg18-fixture";
 const membershipId = randomUUID();
 const ids = Object.fromEntries(
@@ -120,6 +123,16 @@ try {
   );
   assert.equal(role.name, runtimeRole);
   assert.equal(role.restricted, true);
+  const keyringAcl = await runtime.$queryRawUnsafe(
+    `SELECT has_function_privilege(current_user, 'crm_customers.rewrap_mail_credential(uuid,integer,text,text,text)', 'EXECUTE') AS runtime_can_rewrap, has_function_privilege('crm_customers_keyring_backup', 'crm_customers.rewrap_mail_credential(uuid,integer,text,text,text)', 'EXECUTE') AS backup_can_rewrap, has_table_privilege(current_user, 'crm_customers.mail_commands', 'UPDATE') AS runtime_can_edit_receipts`,
+  );
+  assert.deepEqual(keyringAcl, [
+    {
+      runtime_can_rewrap: true,
+      backup_can_rewrap: false,
+      runtime_can_edit_receipts: false,
+    },
+  ]);
 
   const guardedTables = [
     "mail_connections",
@@ -318,10 +331,11 @@ try {
     },
   });
 
+  const legacyConfig = new MailConfig();
   const mail = new MailService(
     runtime,
     { workflow: async (id) => authorities.get(id) ?? commandAuthority },
-    new MailConfig(),
+    legacyConfig,
     {},
     {},
   );
@@ -330,12 +344,14 @@ try {
   let secondMembershipAuthority;
   const idempotentCommandId = randomUUID();
   const response = { schemaVersion: 1, workspaceId, item: { state: "QUEUED" } };
+  const legacyCommandBody = { fixture: "legacy-keyring-replay", intentId: ids.intent };
+  const legacyCommandHash = mail.hash(commandAuthority, "SEND", legacyCommandBody);
   const runCommand = () =>
     mail.command(
       commandAuthority,
       { workspaceId, commandId: idempotentCommandId },
       "SEND",
-      "d".repeat(64),
+      legacyCommandHash,
       async () => response,
     );
   const repeated = await Promise.all(Array.from({ length: 6 }, runCommand));
@@ -352,6 +368,346 @@ try {
     }),
     1,
   );
+
+  assert.equal(
+    (
+      await runtime.mailCommand.findUniqueOrThrow({
+        where: { commandId: idempotentCommandId },
+      })
+    ).requestHashKeyId,
+    null,
+    "legacy HMAC receipts retain a NULL key id",
+  );
+
+  // Keyring readers retain the legacy key while writing new command receipts
+  // with the selected key. All credentials and operations stay in this fixture.
+  const rotationEnvNames = [
+    "CRM_MAIL_CREDENTIAL_KEYRING",
+    "CRM_MAIL_CREDENTIAL_ACTIVE_KEY_ID",
+    "CRM_MAIL_HMAC_KEYRING",
+    "CRM_MAIL_HMAC_ACTIVE_KEY_ID",
+    "CRM_MAIL_KEY_ROTATION_ENABLED",
+  ];
+  const previousRotationEnv = Object.fromEntries(
+    rotationEnvNames.map((name) => [name, process.env[name]]),
+  );
+  const legacyKey = Buffer.from(process.env.CRM_MAIL_CREDENTIAL_KEY, "base64");
+  const activeCredentialKey = Buffer.alloc(32, 0x43);
+  const activeHmacKey = Buffer.alloc(32, 0x44);
+  const activeCredentialId = "credential-v2";
+  const activeHmacId = "hmac-v2";
+  let rotatingConfig;
+  let rotatingMail;
+  let rotatedConnection;
+  let reauthConnectionId;
+  try {
+    process.env.CRM_MAIL_CREDENTIAL_KEYRING = JSON.stringify({
+      [process.env.CRM_MAIL_CREDENTIAL_KEY_ID]: legacyKey.toString("base64"),
+      [activeCredentialId]: activeCredentialKey.toString("base64"),
+    });
+    process.env.CRM_MAIL_CREDENTIAL_ACTIVE_KEY_ID = activeCredentialId;
+    process.env.CRM_MAIL_HMAC_KEYRING = JSON.stringify({
+      [process.env.CRM_MAIL_CREDENTIAL_KEY_ID]: legacyKey.toString("base64"),
+      [activeHmacId]: activeHmacKey.toString("base64"),
+    });
+    process.env.CRM_MAIL_HMAC_ACTIVE_KEY_ID = activeHmacId;
+    process.env.CRM_MAIL_KEY_ROTATION_ENABLED = "true";
+    rotatingConfig = new MailConfig();
+    rotatingMail = new MailService(
+      runtime,
+      { workflow: async (id) => authorities.get(id) ?? commandAuthority },
+      rotatingConfig,
+      {},
+      {},
+    );
+
+    const rotatedCommandId = randomUUID();
+    const rotatedCommandBody = { fixture: "active-keyring-replay", intentId: ids.intent };
+    const activeCommandHash = rotatingMail.hash(
+      commandAuthority,
+      "SEND",
+      rotatedCommandBody,
+    );
+    const executeActiveCommand = () =>
+      rotatingMail.command(
+        commandAuthority,
+        { workspaceId, commandId: rotatedCommandId },
+        "SEND",
+        activeCommandHash,
+        async () => ({ schemaVersion: 1, item: { state: "QUEUED" } }),
+      );
+
+    assert.deepEqual(await executeActiveCommand(), await executeActiveCommand());
+    const activeReceipt = await runtime.mailCommand.findUniqueOrThrow({
+      where: { commandId: rotatedCommandId },
+    });
+    assert.equal(activeReceipt.requestHashKeyId, activeHmacId);
+    assert.equal(activeReceipt.requestHash, activeCommandHash.value);
+
+    const otherActorAuthority = {
+      ...commandAuthority,
+      customer: { ...commandAuthority.customer, subject: "independent-fixture-actor" },
+    };
+    authorities.set(workspaceId, otherActorAuthority);
+    let otherActorWriteCalls = 0;
+    try {
+      await assert.rejects(
+        () =>
+          rotatingMail.command(
+            otherActorAuthority,
+            { workspaceId, commandId: rotatedCommandId },
+            "SEND",
+            rotatingMail.hash(otherActorAuthority, "SEND", rotatedCommandBody),
+            async () => {
+              otherActorWriteCalls++;
+              return { schemaVersion: 1, item: { state: "QUEUED" } };
+            },
+          ),
+        (error) => error?.response?.code === "crm_mail_idempotency_conflict",
+      );
+    } finally {
+      authorities.set(workspaceId, commandAuthority);
+    }
+    assert.equal(otherActorWriteCalls, 0, "a different actor cannot replay the active receipt");
+
+    let replayWriteCalls = 0;
+    const replayLegacyReceipt = () =>
+      rotatingMail.command(
+        commandAuthority,
+        { workspaceId, commandId: idempotentCommandId },
+        "SEND",
+        rotatingMail.hash(commandAuthority, "SEND", legacyCommandBody),
+        async () => {
+          replayWriteCalls++;
+          throw new Error("legacy receipt was not replayed");
+        },
+      );
+    for (const replay of await Promise.all(
+      Array.from({ length: 3 }, replayLegacyReceipt),
+    ))
+      assert.deepEqual(replay, response);
+    assert.equal(replayWriteCalls, 0);
+    assert.equal(
+      await runtime.mailAudit.count({ where: { commandId: idempotentCommandId } }),
+      1,
+      "legacy receipt replay does not append audit records",
+    );
+
+    for (const receipt of [
+      { commandId: idempotentCommandId, expectedKeyId: null },
+      { commandId: rotatedCommandId, expectedKeyId: activeHmacId },
+    ]) {
+      const row = await runtime.mailCommand.findUniqueOrThrow({
+        where: { commandId: receipt.commandId },
+      });
+      assert.equal(row.requestHashKeyId, receipt.expectedKeyId);
+      await assert.rejects(
+        () =>
+          migrator.mailCommand.update({
+            where: { commandId: receipt.commandId },
+            data: {
+              requestHash: "f".repeat(64),
+              requestHashKeyId: activeHmacId,
+            },
+          }),
+        /mail_append_only/,
+      );
+    }
+
+    const keyringMembershipId = randomUUID();
+    const rotatedConnectionId = randomUUID();
+    reauthConnectionId = randomUUID();
+    const transport = { imap: { host: "imap.example.invalid" }, smtp: {} };
+    const principal = "keyring-fixture@example.org";
+    const aad = legacyConfig.aad(
+      keyringWorkspaceId,
+      rotatedConnectionId,
+      principal,
+      1,
+      digest(canonicalMailJson(transport)),
+    );
+    const oldCiphertext = legacyConfig.encrypt(
+      { password: "synthetic-keyring-secret" },
+      aad,
+    );
+    await migrator.workspaceClosureFence.upsert({
+      where: { workspaceId: keyringWorkspaceId },
+      create: { workspaceId: keyringWorkspaceId },
+      update: { fencedAt: null },
+    });
+    await runtime.mailConnection.create({
+      data: {
+        id: rotatedConnectionId,
+        workspaceId: keyringWorkspaceId,
+        delegatedSubject: subject,
+        delegatedMembershipId: keyringMembershipId,
+        provider: "IMAP_SMTP",
+        transport,
+        authMode: "PASSWORD",
+        credentialPrincipal: principal,
+        keyId: process.env.CRM_MAIL_CREDENTIAL_KEY_ID,
+        encryptedSecret: oldCiphertext,
+        state: "ACTIVE",
+      },
+    });
+    await runtime.mailConnection.create({
+      data: {
+        id: reauthConnectionId,
+        workspaceId: keyringWorkspaceId,
+        delegatedSubject: subject,
+        delegatedMembershipId: keyringMembershipId,
+        provider: "IMAP_SMTP",
+        transport,
+        authMode: "PASSWORD",
+        credentialPrincipal: "reauth-fixture@example.org",
+        keyId: process.env.CRM_MAIL_CREDENTIAL_KEY_ID,
+        encryptedSecret: null,
+        state: "REAUTH_REQUIRED",
+      },
+    });
+
+    const invalidDirectCiphertext = rotatingConfig.encrypt(
+      { password: "forged" },
+      aad,
+    );
+    await assert.rejects(
+      () =>
+        runtime.mailConnection.update({
+          where: { id: rotatedConnectionId },
+          data: {
+            keyId: activeCredentialId,
+            version: { increment: 1 },
+          },
+        }),
+      /mail_connection_binding_immutable/,
+      "runtime cannot change key_id directly",
+    );
+    await assert.rejects(
+      () =>
+        runtime.mailConnection.update({
+          where: { id: rotatedConnectionId },
+          data: {
+            encryptedSecret: invalidDirectCiphertext,
+            version: { increment: 1 },
+          },
+        }),
+      /mail_connection_binding_immutable/,
+      "runtime cannot directly replace ciphertext while retaining key_id",
+    );
+    assert.equal(
+      (
+        await runtime.mailConnection.findUniqueOrThrow({
+          where: { id: rotatedConnectionId },
+        })
+      ).encryptedSecret,
+      oldCiphertext,
+      "runtime cannot directly replace the encrypted credential",
+    );
+
+    await migrator.workspaceClosureFence.update({
+      where: { workspaceId: keyringWorkspaceId },
+      data: {
+        closureId: randomUUID(),
+        generation: 1n,
+        ownerSubject: subject,
+        requestedAt: new Date(),
+        fencedAt: new Date(),
+      },
+    });
+    await assert.rejects(
+      () =>
+        runtime.mailConnection.update({
+          where: { id: rotatedConnectionId },
+          data: { state: "REAUTH_REQUIRED", version: { increment: 1 } },
+        }),
+      /crm_workspace_closed|CRM_WORKSPACE_CLOSED/,
+    );
+
+    const priorRole = process.env.CRM_CUSTOMERS_PROCESS_ROLE;
+    process.env.CRM_CUSTOMERS_PROCESS_ROLE = "mail-sync";
+    try {
+      const rotatingWorker = new MailWorker(rotatingMail);
+      await rotatingWorker.rotateCredentials();
+    } finally {
+      if (priorRole === undefined) delete process.env.CRM_CUSTOMERS_PROCESS_ROLE;
+      else process.env.CRM_CUSTOMERS_PROCESS_ROLE = priorRole;
+    }
+    rotatedConnection = await runtime.mailConnection.findUniqueOrThrow({
+      where: { id: rotatedConnectionId },
+    });
+    assert.equal(rotatedConnection.keyId, activeCredentialId);
+    assert.notEqual(rotatedConnection.encryptedSecret, oldCiphertext);
+    assert.equal(rotatedConnection.version, 2);
+    assert.deepEqual(
+      rotatingConfig.decrypt(rotatedConnection.encryptedSecret, aad),
+      { password: "synthetic-keyring-secret" },
+    );
+    assert.equal(
+      (
+        await runtime.mailConnection.findUniqueOrThrow({
+          where: { id: reauthConnectionId },
+        })
+      ).encryptedSecret,
+      null,
+      "rotation never restores a REAUTH_REQUIRED connection with no secret",
+    );
+
+    const replacement = rotatingConfig.encrypt(
+      { password: "synthetic-keyring-secret" },
+      aad,
+    );
+    const [staleVersion] = await runtime.$queryRaw`
+      SELECT crm_customers.rewrap_mail_credential(
+        ${rotatedConnectionId}::uuid, ${1}::integer,
+        ${rotatedConnection.encryptedSecret}::text, ${replacement}::text,
+        ${activeCredentialId}::text
+      ) AS changed`;
+    assert.equal(staleVersion.changed, false, "stale version loses the CAS race");
+    const [staleCiphertext] = await runtime.$queryRaw`
+      SELECT crm_customers.rewrap_mail_credential(
+        ${rotatedConnectionId}::uuid, ${rotatedConnection.version}::integer,
+        ${oldCiphertext}::text, ${replacement}::text, ${activeCredentialId}::text
+      ) AS changed`;
+    assert.equal(
+      staleCiphertext.changed,
+      false,
+      "old ciphertext loses the CAS race after a reconnect or prior rotation",
+    );
+
+    const reauthAad = rotatingConfig.aad(
+      keyringWorkspaceId,
+      reauthConnectionId,
+      "reauth-fixture@example.org",
+      1,
+      digest(canonicalMailJson(transport)),
+    );
+    const pretendOldSecret = legacyConfig.encrypt({ password: "synthetic" }, reauthAad);
+    const pretendNewSecret = rotatingConfig.encrypt({ password: "synthetic" }, reauthAad);
+    const [reauthAttempt] = await runtime.$queryRaw`
+      SELECT crm_customers.rewrap_mail_credential(
+        ${reauthConnectionId}::uuid, ${1}::integer,
+        ${pretendOldSecret}::text, ${pretendNewSecret}::text,
+        ${activeCredentialId}::text
+      ) AS changed`;
+    assert.equal(
+      reauthAttempt.changed,
+      false,
+      "REAUTH_REQUIRED with NULL secret cannot be resurrected by the routine",
+    );
+    assert.equal(
+      (
+        await runtime.mailConnection.findUniqueOrThrow({
+          where: { id: reauthConnectionId },
+        })
+      ).encryptedSecret,
+      null,
+    );
+  } finally {
+    for (const name of rotationEnvNames) {
+      if (previousRotationEnv[name] === undefined) delete process.env[name];
+      else process.env[name] = previousRotationEnv[name];
+    }
+  }
 
   // Exercise actual SEND writes against both supported reply source types.
   // The imported message must already be linked to this contact.

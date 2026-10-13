@@ -47,7 +47,7 @@ for (const name of acl.types) {
   sql.push(`GRANT USAGE ON TYPE ${ident(schema)}.${ident(name)} TO ${ident(runtime)}, ${ident(backup)};`);
 }
 for (const signature of acl.routineExecute || []) {
-  if (!/^[a-z_]+\((?:uuid|text(?:\[\])?)?\)$/.test(signature)) throw new Error('Unsupported routine ACL');
+  if (!/^[a-z_]+\((?:(?:uuid|integer|text|text\[\])(?:, ?(?:uuid|integer|text|text\[\]))*)?\)$/.test(signature)) throw new Error('Unsupported routine ACL');
   sql.push(`GRANT EXECUTE ON FUNCTION ${ident(schema)}.${signature} TO ${ident(runtime)};`);
 }
 sql.push('COMMIT;');

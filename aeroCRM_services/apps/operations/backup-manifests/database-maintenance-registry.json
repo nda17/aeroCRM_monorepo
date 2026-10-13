@@ -890,7 +890,7 @@
 			"migrationRole": "aerocrm_crm_access_migration",
 			"runtimeRole": "aerocrm_crm_access_runtime",
 			"backupRole": "aerocrm_crm_access_backup",
-			"aclSha256": "961c30c49f9c6d38bf0e2196f0fdd879165986d0e01d4389c99a65bb577435f9",
+			"aclSha256": "f5c9423859b8441b429acb4548ac81b6306427737551638034151b74468d29a3",
 			"acl": {
 				"version": 1,
 				"service": "crm-access",
@@ -1085,11 +1085,19 @@
 					"provision_workspace_collaboration",
 					"signal_workspace_collaboration",
 					"guard_chat_attachment",
-					"project_workspace_messenger_internal"
+					"project_workspace_messenger_internal",
+					"guard_workspace_retention",
+					"guard_telegram_retention",
+					"retire_telegram_technical_data",
+					"claim_closed_chat_attachments",
+					"complete_closed_chat_attachment"
 				],
 				"routineExecute": [
 					"is_valid_custom_role_permissions(text[])",
-					"assert_workspace_open(uuid)"
+					"assert_workspace_open(uuid)",
+					"retire_telegram_technical_data()",
+					"claim_closed_chat_attachments()",
+					"complete_closed_chat_attachment(uuid, uuid, integer)"
 				]
 			}
 		},
@@ -1237,7 +1245,7 @@
 			"migrationRole": "aerocrm_crm_customers_migration",
 			"runtimeRole": "aerocrm_crm_customers_runtime",
 			"backupRole": "aerocrm_crm_customers_backup",
-			"aclSha256": "f3e9b881ae1ab6192c0895ee96ba9f6f3312eda397bd863406e34ec16f920db5",
+			"aclSha256": "fd1593255e139c861ec5c80f59376c877a94f7eee10292eaedcc776b4db251a4",
 			"acl": {
 				"version": 1,
 				"service": "crm-customers",
@@ -1366,10 +1374,12 @@
 					"guard_workspace_business_write",
 					"mail_write_guard",
 					"import_preview_immutable",
-					"import_binding_immutable"
+					"import_binding_immutable",
+					"rewrap_mail_credential"
 				],
 				"routineExecute": [
-					"assert_workspace_open(uuid)"
+					"assert_workspace_open(uuid)",
+					"rewrap_mail_credential(uuid,integer,text,text,text)"
 				]
 			}
 		},

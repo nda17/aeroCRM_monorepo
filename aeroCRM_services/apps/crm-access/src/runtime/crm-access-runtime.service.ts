@@ -1,14 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+export function parseCrmAccessRetentionFlag(
+	value: string | undefined
+): boolean {
+	if (value === undefined || value === '' || value === 'false') return false;
+	if (value === 'true') return true;
+	throw new Error('CRM_ACCESS_RETENTION_ENABLED must be true or false');
+}
+
 export type CrmAccessRole =
 	| 'api'
 	| 'worker'
 	| 'outbox-publisher'
 	| 'telegram-worker';
-export function parseCrmAccessRole(
-	value: string | undefined
-): CrmAccessRole {
+export function parseCrmAccessRole(value: string | undefined): CrmAccessRole {
 	const role = value?.trim() || 'api';
 	if (!['api', 'worker', 'outbox-publisher', 'telegram-worker'].includes(role))
 		throw new Error('CRM_ACCESS_PROCESS_ROLE is invalid');
@@ -18,14 +24,15 @@ export function parseCrmAccessPort(
 	value: string | undefined,
 	role: CrmAccessRole = 'api'
 ): number {
-	const expected = { api: 5300, worker: 5301, 'outbox-publisher': 5302, 'telegram-worker': 5303 }[
-		role
-	];
+	const expected = {
+		api: 5300,
+		worker: 5301,
+		'outbox-publisher': 5302,
+		'telegram-worker': 5303
+	}[role];
 	const port = value?.trim() ? Number(value) : expected;
 	if (!Number.isInteger(port) || port !== expected) {
-		throw new Error(
-			`CRM_ACCESS_PORT must be the canonical port ${expected}`
-		);
+		throw new Error(`CRM_ACCESS_PORT must be the canonical port ${expected}`);
 	}
 	return port;
 }
@@ -38,8 +45,12 @@ export class CrmAccessRuntimeService {
 	readonly publisherEnabled: boolean;
 	readonly rabbitEnabled: boolean;
 	readonly telegramWorkerEnabled: boolean;
+	readonly retentionEnabled: boolean;
 
 	constructor(config: ConfigService) {
+		this.retentionEnabled = parseCrmAccessRetentionFlag(
+			config.get<string>('CRM_ACCESS_RETENTION_ENABLED')
+		);
 		this.role = parseCrmAccessRole(
 			config.get<string>('CRM_ACCESS_PROCESS_ROLE')
 		);

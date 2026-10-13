@@ -1,5 +1,6 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import { CrmCustomersPrismaService } from '../prisma/crm-customers-prisma.service';
+jest.mock('../mail/mail.body', () => ({ prepareMailBody: jest.fn() }));
 import { CrmCustomersHealthService } from './crm-customers-health.service';
 
 describe('CrmCustomersHealthService', () => {
@@ -44,6 +45,32 @@ describe('CrmCustomersHealthService', () => {
 			status: 'ready',
 			service: 'crm-customers'
 		});
+	});
+
+	it('keeps database readiness healthy when the optional mail worker reports provider failures', async () => {
+		const worker = {
+			progress: jest.fn().mockReturnValue({
+				role: 'mail-sync',
+				enabled: true,
+				lastErrorCode: 'MAIL_PROVIDER_UNAVAILABLE',
+				consecutiveFailures: 3,
+				totalFailures: 3
+			})
+		};
+		const service = new CrmCustomersHealthService(
+			createPrisma(),
+			undefined,
+			worker as never
+		);
+
+		await expect(service.readiness()).resolves.toMatchObject({
+			status: 'ready',
+			background: {
+				lastErrorCode: 'MAIL_PROVIDER_UNAVAILABLE',
+				consecutiveFailures: 3
+			}
+		});
+		expect(worker.progress).toHaveBeenCalledTimes(1);
 	});
 
 	it('fails readiness for another service database', async () => {

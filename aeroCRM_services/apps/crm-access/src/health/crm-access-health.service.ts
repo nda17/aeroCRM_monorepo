@@ -1,14 +1,22 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+	Injectable,
+	Optional,
+	ServiceUnavailableException
+} from '@nestjs/common';
 import { CrmAccessPrismaService } from '../prisma/crm-access-prisma.service';
 import { CrmTeamRabbitService } from '../team/team-rabbit.service';
 import { CrmTeamOutboxService } from '../team/team-outbox.service';
+import { TelegramRetentionService } from '../telegram-business/telegram-retention.service';
+import { ChatAttachmentsService } from '../workspace-chat/chat-attachments.service';
 
 @Injectable()
 export class CrmAccessHealthService {
 	constructor(
 		private readonly prisma: CrmAccessPrismaService,
 		private readonly rabbit: CrmTeamRabbitService,
-		private readonly outbox: CrmTeamOutboxService
+		private readonly outbox: CrmTeamOutboxService,
+		@Optional() private readonly retention?: TelegramRetentionService,
+		@Optional() private readonly attachments?: ChatAttachmentsService
 	) {}
 
 	liveness() {
@@ -87,20 +95,38 @@ export class CrmAccessHealthService {
 				 (c.relname='crm_workspace_access' AND t.tgname='provision_workspace_collaboration'))`;
 			if (!collaboration?.enabled)
 				throw new Error('Workspace collaboration schema is not ready');
-			await this.prisma.$queryRaw`SELECT s.last_sequence,e.sequence,r.through_sequence,c.last_inbound_at,c.last_outbound_at,m.delivery_status,i.raw_body,d.dispatch_admitted_at
+			await this.prisma
+				.$queryRaw`SELECT s.last_sequence,e.sequence,r.through_sequence,c.last_inbound_at,c.last_outbound_at,m.delivery_status,i.raw_body,i.payload_purged_at,n.payload_purged_at,d.dispatch_admitted_at
 				FROM crm_access.workspace_messenger_streams s
 				FULL JOIN crm_access.workspace_messenger_entries e ON false
 				FULL JOIN crm_access.workspace_messenger_read_cursors r ON false
 				FULL JOIN crm_access.telegram_channels c ON false
 				FULL JOIN crm_access.telegram_messages m ON false
 				FULL JOIN crm_access.telegram_webhook_inbox i ON false
+				FULL JOIN crm_access.telegram_connect_sessions n ON false
 				FULL JOIN crm_access.telegram_deliveries d ON false LIMIT 0`;
-			const [messengerProjection] = await this.prisma.$queryRaw<{ enabled: boolean }[]>`
+			const [messengerProjection] = await this.prisma.$queryRaw<
+				{ enabled: boolean }[]
+			>`
 				SELECT count(*) = 1 AS enabled FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
 				JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='crm_access'
 				AND c.relname='crm_chat_messages' AND t.tgname='workspace_messenger_internal_projection' AND t.tgenabled IN ('O','A')`;
 			if (!messengerProjection?.enabled)
 				throw new Error('Workspace Messenger projection is not ready');
+			const [retentionContract] = await this.prisma.$queryRaw<
+				{ enabled: boolean }[]
+			>`
+				SELECT has_function_privilege(current_user,'crm_access.retire_telegram_technical_data()','EXECUTE')
+				 AND has_function_privilege(current_user,'crm_access.claim_closed_chat_attachments()','EXECUTE')
+				 AND has_function_privilege(current_user,'crm_access.complete_closed_chat_attachment(uuid,uuid,integer)','EXECUTE')
+				 AND (SELECT count(*)=5 FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+				  WHERE n.nspname='crm_access' AND t.tgenabled IN ('O','A') AND (
+				   (c.relname IN ('telegram_connect_sessions','telegram_deliveries','telegram_messages','crm_chat_attachments')
+				    AND t.tgname='workspace_closure_business_guard' AND t.tgfoid='crm_access.guard_workspace_retention()'::regprocedure)
+				   OR (c.relname='telegram_webhook_inbox' AND t.tgname='telegram_retention_guard'
+				    AND t.tgfoid='crm_access.guard_telegram_retention()'::regprocedure))) AS enabled`;
+			if (!retentionContract?.enabled)
+				throw new Error('CRM technical retention schema is not ready');
 			const [customRoleContract] = await this.prisma.$queryRaw<
 				{ allowed: boolean }[]
 			>`SELECT crm_access.is_valid_custom_role_permissions(ARRAY['sales:read']::text[]) AS allowed`;
@@ -110,6 +136,10 @@ export class CrmAccessHealthService {
 				throw new Error('CRM team runtime is not ready');
 			return {
 				...this.status('ready'),
+				background: {
+					telegramRetention: this.retention?.progress() ?? null,
+					chatAttachments: this.attachments?.progress() ?? null
+				},
 				database: {
 					serviceName: identity.serviceName,
 					databaseId: identity.databaseId,
@@ -118,9 +148,7 @@ export class CrmAccessHealthService {
 				}
 			};
 		} catch {
-			throw new ServiceUnavailableException(
-				'CRM Access database is not ready'
-			);
+			throw new ServiceUnavailableException('CRM Access database is not ready');
 		}
 	}
 

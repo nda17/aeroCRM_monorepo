@@ -156,7 +156,7 @@ export function databaseMaintenanceAclSql(target: DatabaseMaintenanceTarget): st
 	for (const type of acl.types)
 		sql.push(`REVOKE ALL ON TYPE ${s}.${sqlIdentifier(type)} FROM PUBLIC, ${r}, ${b}; GRANT USAGE ON TYPE ${s}.${sqlIdentifier(type)} TO ${r}, ${b};`);
 	for (const signature of acl.routineExecute ?? []) {
-		if (!/^[a-z_]+\((?:(?:text(?:\[\])?)|uuid)?\)$/.test(signature))
+		if (!/^[a-z_]+\((?:(?:uuid|integer|text|text\[\])(?:, ?(?:uuid|integer|text|text\[\]))*)?\)$/.test(signature))
 			throw new Error('Invalid maintenance function grant');
 		sql.push(`GRANT EXECUTE ON FUNCTION ${s}.${signature} TO ${r};`);
 	}
@@ -180,8 +180,8 @@ export function databaseMaintenanceAclSql(target: DatabaseMaintenanceTarget): st
 		permitted:=CASE WHEN role_name=${sqlLiteral(backup)} THEN privilege='SELECT' ELSE coalesce((expected->'sequences'->obj.relname)?privilege,false) END;
 		IF has_sequence_privilege(role_name,obj.oid,privilege) IS DISTINCT FROM permitted OR has_sequence_privilege(role_name,obj.oid,privilege||' WITH GRANT OPTION')
 		THEN RAISE EXCEPTION 'Unexpected maintenance sequence privilege'; END IF; END LOOP; END LOOP;
-		FOR obj IN SELECT p.oid,p.proname||'('||oidvectortypes(p.proargtypes)||')' AS signature FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname=${sqlLiteral(schema)} LOOP
-		permitted:=role_name=${sqlLiteral(runtime)} AND coalesce((expected->'routineExecute')?obj.signature,false);
+		FOR obj IN SELECT p.oid,p.proname||'('||replace(oidvectortypes(p.proargtypes),' ','')||')' AS signature FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname=${sqlLiteral(schema)} LOOP
+		permitted:=role_name=${sqlLiteral(runtime)} AND coalesce((replace(expected->>'routineExecute',' ',''))::jsonb ? obj.signature,false);
 		IF has_function_privilege(role_name,obj.oid,'EXECUTE') IS DISTINCT FROM permitted OR has_function_privilege(role_name,obj.oid,'EXECUTE WITH GRANT OPTION')
 		THEN RAISE EXCEPTION 'Unexpected maintenance function privilege'; END IF; END LOOP; END LOOP;
 		END $verify$;`, 'COMMIT;');

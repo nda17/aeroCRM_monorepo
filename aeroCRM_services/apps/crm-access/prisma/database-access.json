@@ -192,10 +192,18 @@
     "provision_workspace_collaboration",
     "signal_workspace_collaboration",
     "guard_chat_attachment",
-    "project_workspace_messenger_internal"
+    "project_workspace_messenger_internal",
+    "guard_workspace_retention",
+    "guard_telegram_retention",
+    "retire_telegram_technical_data",
+    "claim_closed_chat_attachments",
+    "complete_closed_chat_attachment"
   ],
   "routineExecute": [
     "is_valid_custom_role_permissions(text[])",
-    "assert_workspace_open(uuid)"
+    "assert_workspace_open(uuid)",
+    "retire_telegram_technical_data()",
+    "claim_closed_chat_attachments()",
+    "complete_closed_chat_attachment(uuid, uuid, integer)"
   ]
 }

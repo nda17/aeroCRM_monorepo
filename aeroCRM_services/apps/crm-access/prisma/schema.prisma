@@ -567,6 +567,7 @@ model TelegramConnectSession {
   state             String   @default("WAITING_TELEGRAM") @db.VarChar(24)
   version           Int      @default(1)
   expiresAt         DateTime @map("expires_at")
+  payloadPurgedAt   DateTime? @map("payload_purged_at")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
@@ -671,6 +672,7 @@ model TelegramWebhookInbox {
   payloadHash  String   @map("payload_hash") @db.Char(64)
   rawBody      String   @map("raw_body") @db.Text
   payload      Json
+  payloadPurgedAt DateTime? @map("payload_purged_at")
   state        String   @default("PENDING") @db.VarChar(16)
   attempts     Int      @default(0)
   nextRunAt    DateTime @default(now()) @map("next_run_at")

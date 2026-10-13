@@ -126,9 +126,11 @@
     "guard_workspace_business_write",
     "mail_write_guard",
     "import_preview_immutable",
-    "import_binding_immutable"
+    "import_binding_immutable",
+    "rewrap_mail_credential"
   ],
   "routineExecute": [
-    "assert_workspace_open(uuid)"
+    "assert_workspace_open(uuid)",
+    "rewrap_mail_credential(uuid,integer,text,text,text)"
   ]
 }

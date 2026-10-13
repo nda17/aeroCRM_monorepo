@@ -415,6 +415,7 @@ model MailSendIntent {
   membershipId              String               @map("membership_id") @db.Uuid
   commandId                 String               @map("command_id") @db.Uuid
   requestHash               String               @map("request_hash") @db.VarChar(64)
+  requestHashKeyId String? @map("request_hash_key_id") @db.VarChar(80)
   mailboxGeneration         Int                  @map("mailbox_generation")
   to                        Json
   cc                        Json
@@ -486,6 +487,7 @@ model MailCommand {
   workspaceId  String   @map("workspace_id") @db.Uuid
   actorSubject String   @map("actor_subject") @db.VarChar(256)
   requestHash  String   @map("request_hash") @db.VarChar(64)
+  requestHashKeyId String? @map("request_hash_key_id") @db.VarChar(80)
   response     Json
   createdAt    DateTime @default(now()) @map("created_at")
 

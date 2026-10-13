@@ -23,6 +23,7 @@ import {
 } from './mail-authorization.client';
 import {
 	MailConfig,
+	MailRequestHash,
 	MAIL_LIMITS,
 	digest,
 	canonicalMailJson
@@ -300,7 +301,7 @@ export class MailService {
 	}
 
 	hash(a: MailAuthority, operation: string, body: unknown) {
-		return this.config.keyedDigest([
+		return this.config.requestHash([
 			a.customer.subject,
 			a.membershipId,
 			a.customer.workspaceId,
@@ -311,7 +312,7 @@ export class MailService {
 	async receipt(
 		a: MailAuthority,
 		commandId: string,
-		hash: string,
+		hash: MailRequestHash,
 		tx: MailTx = this.prisma
 	): Promise<Prisma.JsonValue | null> {
 		const old = await tx.mailCommand.findUnique({ where: { commandId } });
@@ -319,7 +320,7 @@ export class MailService {
 		if (
 			old.workspaceId !== a.customer.workspaceId ||
 			old.actorSubject !== a.customer.subject ||
-			old.requestHash !== hash
+			old.requestHash !== hash.candidates.get(old.requestHashKeyId ?? null)
 		)
 			throw new ConflictException({ code: 'crm_mail_idempotency_conflict' });
 		return old.response;
@@ -328,7 +329,7 @@ export class MailService {
 		a: MailAuthority,
 		dto: { workspaceId: string; commandId: string },
 		operation: string,
-		hash: string,
+		hash: MailRequestHash,
 		write: (tx: MailTx) => Promise<unknown>
 	) {
 		if (dto.workspaceId !== a.customer.workspaceId)
@@ -356,7 +357,8 @@ export class MailService {
 					commandId: dto.commandId,
 					workspaceId: dto.workspaceId,
 					actorSubject: a.customer.subject,
-					requestHash: hash,
+					requestHash: hash.value,
+					requestHashKeyId: hash.keyId,
 					response: response as Prisma.InputJsonValue
 				}
 			});
@@ -993,7 +995,7 @@ export class MailService {
 				createdAt: row.createdAt.toISOString()
 			})
 		).toString('base64url');
-		return `${payload}.${this.config.keyedDigest(payload)}`;
+		return this.config.signCursor(payload);
 	}
 	parseCursor(
 		a: MailAuthority,
@@ -1003,9 +1005,7 @@ export class MailService {
 		if (!value) return null;
 		try {
 			if (value.length > 2048) throw new Error();
-			const [payload, hash, ...extra] = value.split('.');
-			if (extra.length || this.config.keyedDigest(payload) !== hash)
-				throw new Error();
+			const payload = this.config.openCursor(value);
 			const v = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
 			if (
 				v.workspaceId !== a.customer.workspaceId ||
@@ -2108,7 +2108,8 @@ export class MailService {
 						actorSubject: a.customer.subject,
 						membershipId: a.membershipId,
 						commandId: dto.commandId,
-						requestHash: this.hash(a, 'SEND', dto),
+						requestHash: this.hash(a, 'SEND', dto).value,
+						requestHashKeyId: this.config.hmacKeyId,
 						mailboxGeneration: m.generation,
 						to: dto.to as unknown as Prisma.InputJsonValue,
 						cc: dto.cc as unknown as Prisma.InputJsonValue,

@@ -1,7 +1,7 @@
 name: aeroCRM CI
 on:
   push:
-    branches: [dev_0.1.0/feature/standalone-crm, dev_0.2.0/feature/selective-backend-release, dev_0.3.0/feature/draft-protection-and-corporate-mail, dev_0.4.0/feature/crm-file-imports, dev_0.5.0/feature/planner-customization, dev_0.5.1/fix/mail-deliverability, dev_0.6.0/feature/crm-ux-unification, dev_0.6.1/fix/rabbitmq-cold-start, dev_0.7.0/feature/workspace-collaboration, dev_0.8.0/feature/meeting3-workflows, dev_0.8.1/fix/runtime-storage, dev_0.10.0/feature/shared-inbox-workflow, dev_0.11.0/feature/telegram-business-messenger, dev_0.13.0/feature/technical-debt-release, prod_0.1.0]
+    branches: ['dev_*.*.*/**', prod_0.1.0]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -29,6 +29,7 @@ jobs:
         working-directory: aeroCRM_frontends
         run: |
           pnpm install --frozen-lockfile
+          pnpm --filter @aerocrm/crm lint
           pnpm --filter @aerocrm/crm test
           pnpm --filter @aerocrm/admin-panel test
           pnpm typecheck:frontends
@@ -418,9 +419,9 @@ jobs:
           import fs from 'node:fs';
           const manifest = JSON.parse(fs.readFileSync('aeroCRM_services/apps/crm-access/prisma/database-access.json', 'utf8'));
           if (manifest.version !== 1 || manifest.service !== 'crm-access' ||
-              JSON.stringify(manifest.routineExecute) !== JSON.stringify(['is_valid_custom_role_permissions(text[])','assert_workspace_open(uuid)']) ||
+              !['is_valid_custom_role_permissions(text[])','assert_workspace_open(uuid)'].every(signature => manifest.routineExecute.includes(signature)) ||
               manifest.routineExecute.some(signature => {
-                const match = /^([A-Za-z_][A-Za-z0-9_]*)\((uuid|text|text\[\])\)$/.exec(signature);
+                const match = /^([A-Za-z_][A-Za-z0-9_]*)\((?:(?:uuid|integer|text|text\[\])(?:, ?(?:uuid|integer|text|text\[\]))*)?\)$/.exec(signature);
                 return !match || !manifest.routines.includes(match[1]);
               })) throw new Error('CRM Access executable routine manifest mismatch');
           NODE
@@ -646,7 +647,7 @@ jobs:
           }
           for (const name of manifest.types) sql.push(`GRANT USAGE ON TYPE crm_access.${ident(name)} TO aerocrm_crm_access_runtime, aerocrm_crm_access_backup;`);
           for (const signature of manifest.routineExecute) {
-            if (!/^[a-z_]+\((?:uuid|text\[\])\)$/.test(signature)) throw new Error('Invalid routine signature');
+            if (!/^[a-z_]+\((?:(?:uuid|integer|text|text\[\])(?:, ?(?:uuid|integer|text|text\[\]))*)?\)$/.test(signature)) throw new Error('Invalid routine signature');
             sql.push(`GRANT EXECUTE ON FUNCTION crm_access.${signature} TO aerocrm_crm_access_runtime;`);
           }
           sql.push('COMMIT;');

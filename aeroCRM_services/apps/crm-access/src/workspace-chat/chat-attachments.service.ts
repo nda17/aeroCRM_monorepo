@@ -3,6 +3,7 @@ import {
 	ConflictException,
 	ForbiddenException,
 	Injectable,
+	Logger,
 	NotFoundException,
 	OnModuleDestroy,
 	OnModuleInit,
@@ -12,6 +13,7 @@ import { Prisma, type CrmChatAttachment } from '@prisma/crm-access-client';
 import { createHash, randomUUID } from 'node:crypto';
 import { CrmAccessPrismaService } from '../prisma/crm-access-prisma.service';
 import { CrmAuthorizationService } from '../authorization/crm-authorization.service';
+import { parseCrmAccessRetentionFlag } from '../runtime/crm-access-runtime.service';
 import {
 	command,
 	serializable,
@@ -26,6 +28,22 @@ import {
 } from './chat.objects';
 
 type Actor = TeamAuthority & { membershipId: string };
+type SweepCounts = {
+	candidates: number;
+	deleted: number;
+	closedCandidates: number;
+	closedDeleted: number;
+	orphanDeleted: number;
+	failures: number;
+};
+type ClosedAttachment = {
+	id: string;
+	workspaceId: string;
+	conversationId: string;
+	privateObjectKey: string;
+	version: number;
+	leaseOwner: string;
+};
 export const attachmentDto = (row: CrmChatAttachment) => ({
 	id: row.id,
 	conversationId: row.conversationId,
@@ -45,8 +63,18 @@ export const attachedDto = (row: CrmChatAttachment) => ({
 });
 @Injectable()
 export class ChatAttachmentsService implements OnModuleInit, OnModuleDestroy {
+	private readonly logger = new Logger(ChatAttachmentsService.name);
+	private readonly closedRetentionEnabled = parseCrmAccessRetentionFlag(
+		process.env.CRM_ACCESS_RETENTION_ENABLED
+	);
 	private timer?: ReturnType<typeof setInterval>;
 	private running = false;
+	private lastAttemptAt: string | null = null;
+	private lastSuccessAt: string | null = null;
+	private lastErrorCode: string | null = null;
+	private consecutiveFailures = 0;
+	private passes = 0;
+	private lastResult: SweepCounts | null = null;
 	private cursor?: string;
 	constructor(
 		private readonly prisma: CrmAccessPrismaService,
@@ -66,6 +94,21 @@ export class ChatAttachmentsService implements OnModuleInit, OnModuleDestroy {
 	}
 	onModuleDestroy() {
 		if (this.timer) clearInterval(this.timer);
+	}
+	progress() {
+		return {
+			enabled:
+				(process.env.CRM_ACCESS_PROCESS_ROLE || 'api') === 'api' &&
+				this.objects.available,
+			closedRetentionEnabled: this.closedRetentionEnabled,
+			running: this.running,
+			lastAttemptAt: this.lastAttemptAt,
+			lastSuccessAt: this.lastSuccessAt,
+			lastErrorCode: this.lastErrorCode,
+			consecutiveFailures: this.consecutiveFailures,
+			passes: this.passes,
+			lastResult: this.lastResult && { ...this.lastResult }
+		};
 	}
 	async actor(
 		token: string | undefined,
@@ -471,6 +514,15 @@ export class ChatAttachmentsService implements OnModuleInit, OnModuleDestroy {
 	async sweep() {
 		if (this.running || !this.objects.available) return;
 		this.running = true;
+		this.lastAttemptAt = new Date().toISOString();
+		const counts: SweepCounts = {
+			candidates: 0,
+			deleted: 0,
+			closedCandidates: 0,
+			closedDeleted: 0,
+			orphanDeleted: 0,
+			failures: 0
+		};
 		try {
 			const rows = await this.prisma.$queryRaw<
 				{ id: string; workspaceId: string }[]
@@ -481,6 +533,7 @@ export class ChatAttachmentsService implements OnModuleInit, OnModuleDestroy {
    AND (a.lease_until IS NULL OR a.lease_until <= now())
    AND NOT EXISTS (SELECT 1 FROM crm_access.workspace_closure_fences f WHERE f.workspace_id=a.workspace_id AND f.fenced_at IS NOT NULL)
  ORDER BY a.expires_at,a.id LIMIT 100`;
+			counts.candidates = rows.length;
 
 			for (const candidate of rows) {
 				const leaseOwner = randomUUID();
@@ -510,6 +563,7 @@ export class ChatAttachmentsService implements OnModuleInit, OnModuleDestroy {
 						});
 					});
 				} catch {
+					counts.failures++;
 					continue;
 				}
 				if (!row) continue;
@@ -520,7 +574,7 @@ export class ChatAttachmentsService implements OnModuleInit, OnModuleDestroy {
 						row.conversationId
 					);
 					await this.objects.remove(row.privateObjectKey);
-					await this.prisma.crmChatAttachment.updateMany({
+					const changed = await this.prisma.crmChatAttachment.updateMany({
 						where: {
 							id: row.id,
 							state: 'DELETING',
@@ -534,8 +588,36 @@ export class ChatAttachmentsService implements OnModuleInit, OnModuleDestroy {
 							leaseUntil: null
 						}
 					});
+					counts.deleted += changed.count;
 				} catch {
 					/* Retained DELETING metadata retries after its lease. */
+					counts.failures++;
+				}
+			}
+			if (this.closedRetentionEnabled) {
+				const closed = await this.prisma.$queryRaw<ClosedAttachment[]>`
+					SELECT id,workspace_id AS "workspaceId",conversation_id AS "conversationId",
+					private_object_key AS "privateObjectKey",version,lease_owner AS "leaseOwner"
+					FROM crm_access.claim_closed_chat_attachments()`;
+				counts.closedCandidates = closed.length;
+				for (const row of closed) {
+					try {
+						this.objects.assertKey(
+							row.privateObjectKey,
+							row.workspaceId,
+							row.conversationId
+						);
+						await this.objects.remove(row.privateObjectKey);
+						const [result] = await this.prisma.$queryRaw<
+							{ completed: boolean }[]
+						>`
+							SELECT crm_access.complete_closed_chat_attachment(${row.id}::uuid,${row.leaseOwner}::uuid,${row.version}::integer) AS completed`;
+						if (result?.completed) counts.closedDeleted++;
+						else counts.failures++;
+					} catch {
+						// An S3 failure or lost lease leaves durable DELETING metadata.
+						counts.failures++;
+					}
 				}
 			}
 			const page = await this.objects.candidates(this.cursor);
@@ -557,9 +639,27 @@ export class ChatAttachmentsService implements OnModuleInit, OnModuleDestroy {
 						continue;
 					}
 					await this.objects.remove(item.key);
+					counts.orphanDeleted++;
 				}
 			}
+			this.passes++;
+			if (counts.failures === 0) {
+				this.lastSuccessAt = new Date().toISOString();
+				this.lastErrorCode = null;
+				this.consecutiveFailures = 0;
+			} else {
+				this.lastErrorCode = 'CHAT_ATTACHMENT_SWEEP_PARTIAL';
+				this.consecutiveFailures++;
+				this.logger.warn(this.lastErrorCode);
+			}
+		} catch (error) {
+			counts.failures++;
+			this.lastErrorCode = 'CHAT_ATTACHMENT_SWEEP_FAILED';
+			this.consecutiveFailures++;
+			this.logger.warn(this.lastErrorCode);
+			throw error;
 		} finally {
+			this.lastResult = counts;
 			this.running = false;
 		}
 	}

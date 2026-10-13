@@ -161,6 +161,27 @@ on:
         description: SHA-256 of private VPS migrations/crm-sales.env; required only for reminder FK migration
         type: string
         required: false
+      crm_reliability_phase:
+        description: Scoped reliability release phase; prepare applies DDL, activate enables reviewed gates
+        type: string
+        required: false
+      crm_reliability_env_before_hash:
+        description: Approved aggregate backend env hash before this reliability phase
+        type: string
+        required: false
+      crm_reliability_env_bundle_hash:
+        description: SHA-256 of the phase-specific canonical private reliability env bundle
+        type: string
+        required: false
+      crm_reliability_migration:
+        description: Apply reviewed Access and Customers reliability migrations during prepare
+        type: boolean
+        default: false
+        required: false
+      crm_reliability_migration_env_hash:
+        description: SHA-256 of sorted private Access and Customers migration env file hashes
+        type: string
+        required: false
       crm_intake_notifications_migration:
         description: Backend target only; apply the reviewed CRM Intake inbox notification ID default migration before switching images
         type: boolean
@@ -369,6 +390,11 @@ jobs:
           SALES_COMMERCE_MIGRATION_HASH: ${{ inputs.crm_sales_commerce_migration_env_hash }}
           SALES_REMINDER_FK_MIGRATION: ${{ inputs.crm_sales_reminder_fk_migration && 'true' || 'false' }}
           SALES_REMINDER_FK_MIGRATION_HASH: ${{ inputs.crm_sales_reminder_fk_migration_env_hash }}
+          RELIABILITY_PHASE: ${{ inputs.crm_reliability_phase }}
+          RELIABILITY_ENV_BEFORE_HASH: ${{ inputs.crm_reliability_env_before_hash }}
+          RELIABILITY_ENV_BUNDLE_HASH: ${{ inputs.crm_reliability_env_bundle_hash }}
+          RELIABILITY_MIGRATION: ${{ inputs.crm_reliability_migration && 'true' || 'false' }}
+          RELIABILITY_MIGRATION_HASH: ${{ inputs.crm_reliability_migration_env_hash }}
           INTAKE_NOTIFICATIONS_MIGRATION: ${{ inputs.crm_intake_notifications_migration && 'true' || 'false' }}
           INTAKE_NOTIFICATIONS_MIGRATION_HASH: ${{ inputs.crm_intake_notifications_migration_env_hash }}
           MAIL_MIGRATION: ${{ inputs.crm_corporate_mail_migration && 'true' || 'false' }}
@@ -418,6 +444,31 @@ jobs:
           [[ "$GITHUB_REF" == refs/heads/prod_0.1.0 ]]
           read -r conclusion head_sha branch workflow_path <<< "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '[.conclusion,.head_sha,.head_branch,.path] | join(" ")')"
           [[ "$conclusion" == success && "$head_sha" == "$SHA" && "$branch" == prod_0.1.0 && "$workflow_path" == .github/workflows/ci.yml ]]
+          if [[ -n "$RELIABILITY_PHASE" ]]; then
+            [[ "$TARGET" == backend && "$CUTOVER" == false && "$CLOSURE_ENABLE" == false &&
+              "$MAIL_ENV_INSTALL" == false ]]
+            [[ "$RELIABILITY_PHASE" == prepare || "$RELIABILITY_PHASE" == activate ]]
+            [[ "$RELIABILITY_ENV_BEFORE_HASH" =~ ^[a-f0-9]{64}$ &&
+              "$RELIABILITY_ENV_BUNDLE_HASH" =~ ^[a-f0-9]{64}$ &&
+              "$RELIABILITY_ENV_BEFORE_HASH" != "$BACK_HASH" ]]
+            [[ "$BILLING_MIGRATION" == false && "$CUSTOM_ROLES_MIGRATION" == false &&
+              "$SALES_COMMERCE_MIGRATION" == false && "$SALES_REMINDER_FK_MIGRATION" == false &&
+              "$INTAKE_NOTIFICATIONS_MIGRATION" == false && "$MAIL_MIGRATION" == false &&
+              "$FILE_IMPORTS_MIGRATION" == false && "$PLANNER_MIGRATION" == false &&
+              "$UX_MIGRATION" == false && "$COLLABORATION_MIGRATION" == false &&
+              "$MEETING3_MIGRATION" == false && "$TELEGRAM_MIGRATION" == false &&
+              "$CLOSURE_MIGRATION" == false && "$IDENTITY_ACL_REPAIR" == false &&
+              "$MAIL_ENV_INSTALL" == false && "$STORAGE_INSTALL" == false &&
+              "$CHAT_ENV_INSTALL" == false && "$TELEGRAM_ENV_INSTALL" == false ]]
+            if [[ "$RELIABILITY_PHASE" == prepare ]]; then
+              [[ "$RELIABILITY_MIGRATION" == true && "$RELIABILITY_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
+            else
+              [[ "$RELIABILITY_MIGRATION" == false && -z "$RELIABILITY_MIGRATION_HASH" ]]
+            fi
+          else
+            [[ -z "$RELIABILITY_ENV_BEFORE_HASH" && -z "$RELIABILITY_ENV_BUNDLE_HASH" &&
+              "$RELIABILITY_MIGRATION" == false && -z "$RELIABILITY_MIGRATION_HASH" ]]
+          fi
           if [[ "$CUTOVER" == true ]]; then
             [[ "$TARGET" == backend ]]
             [[ "$STAGED_HASH" =~ ^[a-f0-9]{64}$ ]]
@@ -654,6 +705,9 @@ jobs:
           node --check infra/scripts/backend-release-state.mjs
           node --check infra/scripts/backend-release-transaction.mjs
           node --check infra/scripts/backend-mail-env.mjs
+          node --check infra/scripts/backend-reliability-env.mjs
+          node --check infra/scripts/crm-reliability-migration.mjs
+          node infra/scripts/crm-reliability-migration.mjs --policy-self-test
           bash -n infra/scripts/release.sh
           bash infra/scripts/release.sh --policy-self-test
           bash -n infra/scripts/aerocrm-nginx-release.sh
@@ -735,6 +789,15 @@ jobs:
           set -euo pipefail
           umask 077
           node infra/scripts/backend-mail-env.mjs --stage "$RUNNER_TEMP/crm-customers-mail-env.json" "$MAIL_ENV_BUNDLE_HASH"
+      - name: Stage reviewed private reliability env bundle
+        if: inputs.crm_reliability_phase != ''
+        env:
+          CRM_RELIABILITY_ENV_BUNDLE: ${{ inputs.crm_reliability_phase == 'prepare' && secrets.CRM_RELIABILITY_PREPARE_ENV_BUNDLE || secrets.CRM_RELIABILITY_ACTIVATE_ENV_BUNDLE }}
+          RELIABILITY_ENV_BUNDLE_HASH: ${{ inputs.crm_reliability_env_bundle_hash }}
+        run: |
+          set -euo pipefail
+          umask 077
+          node infra/scripts/backend-reliability-env.mjs --stage "$RUNNER_TEMP/crm-reliability-env.json" "$RELIABILITY_ENV_BUNDLE_HASH"
       - name: Download exact CI frontend artifacts
         if: matrix.role == 'frontend'
         env:
@@ -754,7 +817,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ inputs.ci_run_id }}
           SHA: ${{ needs.verify.outputs.sha }}
-          REQUIRE_UNIFORM: ${{ (inputs.billing_capacity_migration || inputs.crm_custom_roles_migration || inputs.crm_sales_commerce_migration || inputs.crm_sales_reminder_fk_migration || inputs.crm_intake_notifications_migration || inputs.crm_corporate_mail_migration || inputs.crm_file_imports_migration || inputs.crm_planner_customization_migration || inputs.crm_ux_unification_migration || inputs.crm_workspace_collaboration_migration || inputs.crm_meeting3_migration || inputs.crm_telegram_business_migration || inputs.workspace_closure_migration || inputs.workspace_closure_identity_acl_repair || inputs.workspace_closure_enable || inputs.crm_contracts_cutover) && 'true' || 'false' }}
+          REQUIRE_UNIFORM: ${{ (inputs.billing_capacity_migration || inputs.crm_custom_roles_migration || inputs.crm_sales_commerce_migration || inputs.crm_sales_reminder_fk_migration || inputs.crm_reliability_phase != '' || inputs.crm_intake_notifications_migration || inputs.crm_corporate_mail_migration || inputs.crm_file_imports_migration || inputs.crm_planner_customization_migration || inputs.crm_ux_unification_migration || inputs.crm_workspace_collaboration_migration || inputs.crm_meeting3_migration || inputs.crm_telegram_business_migration || inputs.workspace_closure_migration || inputs.workspace_closure_identity_acl_repair || inputs.workspace_closure_enable || inputs.crm_contracts_cutover) && 'true' || 'false' }}
         run: |
           set -euo pipefail
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name backend-manifest --dir manifest
@@ -785,6 +848,11 @@ jobs:
           SALES_COMMERCE_MIGRATION_HASH: ${{ inputs.crm_sales_commerce_migration_env_hash }}
           SALES_REMINDER_FK_MIGRATION: ${{ inputs.crm_sales_reminder_fk_migration && 'true' || 'false' }}
           SALES_REMINDER_FK_MIGRATION_HASH: ${{ inputs.crm_sales_reminder_fk_migration_env_hash }}
+          RELIABILITY_PHASE: ${{ inputs.crm_reliability_phase }}
+          RELIABILITY_ENV_BEFORE_HASH: ${{ inputs.crm_reliability_env_before_hash }}
+          RELIABILITY_ENV_BUNDLE_HASH: ${{ inputs.crm_reliability_env_bundle_hash }}
+          RELIABILITY_MIGRATION: ${{ inputs.crm_reliability_migration && 'true' || 'false' }}
+          RELIABILITY_MIGRATION_HASH: ${{ inputs.crm_reliability_migration_env_hash }}
           INTAKE_NOTIFICATIONS_MIGRATION: ${{ inputs.crm_intake_notifications_migration && 'true' || 'false' }}
           INTAKE_NOTIFICATIONS_MIGRATION_HASH: ${{ inputs.crm_intake_notifications_migration_env_hash }}
           MAIL_MIGRATION: ${{ inputs.crm_corporate_mail_migration && 'true' || 'false' }}
@@ -843,7 +911,7 @@ jobs:
           [[ "$hash" =~ ^[a-f0-9]{64}$ && "$port" =~ ^[0-9]{1,5}$ ]]
           chmod 600 ~/.ssh/release_key
           dest="$user@$host"
-          stage="/opt/aerocrm/releases/staging/$SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          stage="/opt/aerocrm/releases/staging/$SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-${RELIABILITY_PHASE:-ordinary}"
           if [ "$ROLE" = backend ] && { [ "$CUTOVER" = true ] || [ "$CLOSURE_ENABLE" = true ]; }; then
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" \
               "bash -c 'set -euo pipefail; if test -e /opt/aerocrm/releases/backend-state.json; then echo Historical cutover/enable is forbidden after canonical backend state adoption >&2; exit 1; fi'"
@@ -872,6 +940,9 @@ jobs:
             fi
             if [ "$TELEGRAM_ENV_INSTALL" = true ]; then
               scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes "$RUNNER_TEMP/crm-access-telegram-business-env.json" "$dest:$stage/crm-access-telegram-business-env.json"
+            fi
+            if [ -n "$RELIABILITY_PHASE" ]; then
+              scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes "$RUNNER_TEMP/crm-reliability-env.json" "$dest:$stage/crm-reliability-env.json"
             fi
             if [ "$CUTOVER" = true ] || [ "$CLOSURE_ENABLE" = true ]; then
               ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" \
@@ -952,6 +1023,9 @@ jobs:
             if [ "$TELEGRAM_ENV_INSTALL" = true ]; then
               manifest_env="$manifest_env CRM_TELEGRAM_BUSINESS_ENV_INSTALL='true' CRM_TELEGRAM_BUSINESS_ENV_BEFORE_HASH='$TELEGRAM_ENV_BEFORE_HASH' CRM_TELEGRAM_BUSINESS_ENV_BUNDLE_HASH='$TELEGRAM_ENV_BUNDLE_HASH'"
             fi
+            if [ -n "$RELIABILITY_PHASE" ]; then
+              manifest_env="$manifest_env CRM_RELIABILITY_ENV_INSTALL='true' CRM_RELIABILITY_PHASE='$RELIABILITY_PHASE' CRM_RELIABILITY_ENV_BEFORE_HASH='$RELIABILITY_ENV_BEFORE_HASH' CRM_RELIABILITY_ENV_BUNDLE_HASH='$RELIABILITY_ENV_BUNDLE_HASH'"
+            fi
             if [[ "$UX_MIGRATION" == true ]]; then
               node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --crm-ux-unification")
             fi
@@ -964,8 +1038,11 @@ jobs:
             if [[ "$TELEGRAM_MIGRATION" == true ]]; then
               node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --telegram-business")
             fi
+            if [[ "$RELIABILITY_MIGRATION" == true || -n "$RELIABILITY_PHASE" ]]; then
+              node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --crm-reliability")
+            fi
             if [ "$CLOSURE_ENABLE" = true ]; then manifest_env=; fi
-            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && $manifest_env REVIEWED_INFRA_DIR='$stage' '$stage/scripts/release.sh' '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH' '$INTAKE_NOTIFICATIONS_MIGRATION' '$INTAKE_NOTIFICATIONS_MIGRATION_HASH' '$CLOSURE_MIGRATION' '$CLOSURE_MIGRATION_HASH' '$IDENTITY_ACL_REPAIR' '$IDENTITY_ENV_HASH' '$MAIL_MIGRATION' '$MAIL_MIGRATION_HASH' '$FILE_IMPORTS_MIGRATION' '$FILE_IMPORTS_MIGRATION_HASH' '$PLANNER_MIGRATION' '$PLANNER_MIGRATION_HASH' '$UX_MIGRATION' '$UX_MIGRATION_HASH' '$COLLABORATION_MIGRATION' '$COLLABORATION_MIGRATION_HASH' '$MEETING3_MIGRATION' '$MEETING3_MIGRATION_HASH' '$TELEGRAM_MIGRATION' '$TELEGRAM_MIGRATION_HASH' '$SALES_REMINDER_FK_MIGRATION' '$SALES_REMINDER_FK_MIGRATION_HASH'"
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && $manifest_env REVIEWED_INFRA_DIR='$stage' '$stage/scripts/release.sh' '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH' '$INTAKE_NOTIFICATIONS_MIGRATION' '$INTAKE_NOTIFICATIONS_MIGRATION_HASH' '$CLOSURE_MIGRATION' '$CLOSURE_MIGRATION_HASH' '$IDENTITY_ACL_REPAIR' '$IDENTITY_ENV_HASH' '$MAIL_MIGRATION' '$MAIL_MIGRATION_HASH' '$FILE_IMPORTS_MIGRATION' '$FILE_IMPORTS_MIGRATION_HASH' '$PLANNER_MIGRATION' '$PLANNER_MIGRATION_HASH' '$UX_MIGRATION' '$UX_MIGRATION_HASH' '$COLLABORATION_MIGRATION' '$COLLABORATION_MIGRATION_HASH' '$MEETING3_MIGRATION' '$MEETING3_MIGRATION_HASH' '$TELEGRAM_MIGRATION' '$TELEGRAM_MIGRATION_HASH' '$SALES_REMINDER_FK_MIGRATION' '$SALES_REMINDER_FK_MIGRATION_HASH' '$RELIABILITY_MIGRATION' '$RELIABILITY_MIGRATION_HASH'"
           else
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash'"
           fi
@@ -981,3 +1058,6 @@ jobs:
       - name: Remove runner private runtime storage bundles
         if: always() && inputs.runtime_storage_install
         run: rm -f "$RUNNER_TEMP/runtime-storage-env.json" "$RUNNER_TEMP/storage-manifest.json"
+      - name: Remove runner private reliability bundle
+        if: always() && inputs.crm_reliability_phase != ''
+        run: rm -f "$RUNNER_TEMP/crm-reliability-env.json"

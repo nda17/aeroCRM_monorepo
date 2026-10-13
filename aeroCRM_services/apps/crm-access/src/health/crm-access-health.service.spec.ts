@@ -32,7 +32,9 @@ describe("CrmAccessHealthService", () => {
         .mockImplementation(async (parts: TemplateStringsArray) =>
           parts.join("").includes("is_valid_custom_role_permissions")
             ? [{ allowed: true }]
-            : parts.join("").includes("count(*) = 13") ||
+            : parts.join("").includes("claim_closed_chat_attachments")
+              ? [{ enabled: true }]
+              : parts.join("").includes("count(*) = 13") ||
                 parts
                   .join("")
                   .includes("workspace_messenger_internal_projection")
@@ -54,6 +56,33 @@ describe("CrmAccessHealthService", () => {
         databaseId: identity.databaseId,
       },
     });
+  });
+
+  it("fails readiness closed when the retention routines or guards are unavailable", async () => {
+    const health = createHealth({
+      crmWorkspaceMember: { findFirst: jest.fn().mockResolvedValue(null) },
+      $queryRaw: jest
+        .fn()
+        .mockImplementation(async (parts: TemplateStringsArray) => {
+          const sql = parts.join("");
+          if (sql.includes("claim_closed_chat_attachments"))
+            return [{ enabled: false }];
+          if (sql.includes("is_valid_custom_role_permissions"))
+            return [{ allowed: true }];
+          if (
+            sql.includes("count(*) = 13") ||
+            sql.includes("workspace_messenger_internal_projection")
+          )
+            return [{ enabled: true }];
+          return [{ "?column?": 1 }];
+        }),
+      serviceIdentity: { findUnique: jest.fn().mockResolvedValue(identity) },
+      crmWorkspaceAccess: { findFirst: jest.fn().mockResolvedValue(null) },
+    } as never);
+
+    await expect(health.readiness()).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 
   it("fails readiness closed for a missing or foreign database identity", async () => {

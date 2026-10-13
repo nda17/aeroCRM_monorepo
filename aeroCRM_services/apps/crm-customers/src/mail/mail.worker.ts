@@ -3,6 +3,7 @@ import {
 	NotFoundException,
 	UnauthorizedException,
 	Injectable,
+	Logger,
 	OnModuleDestroy,
 	OnModuleInit
 } from '@nestjs/common';
@@ -26,7 +27,12 @@ import {
 	MailAuthority,
 	MailAuthorityRevokedException
 } from './mail-authorization.client';
-import { mailRole, digest, MAIL_LIMITS } from './mail.config';
+import {
+	mailRole,
+	digest,
+	canonicalMailJson,
+	MAIL_LIMITS
+} from './mail.config';
 import {
 	boundedBytes,
 	safeMailFilename,
@@ -67,6 +73,29 @@ export function flattenMailParts(
 }
 @Injectable()
 export class MailWorker implements OnModuleInit, OnModuleDestroy {
+	private readonly logger = new Logger(MailWorker.name);
+	private lastStartedAt: Date | null = null;
+	private lastSuccessAt: Date | null = null;
+	private lastFailureAt: Date | null = null;
+	private lastErrorCode: string | null = null;
+	private consecutiveFailures = 0;
+	private totalFailures = 0;
+	private lastErrorLogAt = 0;
+	private inspectionDue = 0;
+	private rotationDue = 0;
+	private rotationCursor: string | undefined;
+	private rotating = false;
+	private oldestDueAt: Date | null = null;
+	private backlogInspectedAt: Date | null = null;
+	private cleanupSuccessAt: Date | null = null;
+	private cleanupFailures = 0;
+	private rotation = {
+		scanned: 0,
+		rewrapped: 0,
+		skipped: 0,
+		failures: 0,
+		lastSuccessAt: null as Date | null
+	};
 	private timer: NodeJS.Timeout | undefined;
 	private stopping = false;
 	private active = 0;
@@ -76,6 +105,49 @@ export class MailWorker implements OnModuleInit, OnModuleDestroy {
 	private readonly owner = randomUUID();
 	private readonly role = mailRole();
 	constructor(private readonly mail: MailService) {}
+	progress() {
+		return {
+			role: this.role,
+			enabled:
+				this.mail.config.enabled &&
+				(this.role === 'mail-sync'
+					? this.mail.config.syncEnabled
+					: this.role === 'mail-send' && this.mail.config.sendEnabled),
+			active: this.active,
+			lastStartedAt: this.lastStartedAt?.toISOString() ?? null,
+			lastSuccessAt: this.lastSuccessAt?.toISOString() ?? null,
+			lastFailureAt: this.lastFailureAt?.toISOString() ?? null,
+			lastErrorCode: this.lastErrorCode,
+			consecutiveFailures: this.consecutiveFailures,
+			totalFailures: this.totalFailures,
+			oldestDueAt: this.oldestDueAt?.toISOString() ?? null,
+			oldestDueAgeSeconds: this.oldestDueAt
+				? Math.max(
+						0,
+						Math.floor((Date.now() - this.oldestDueAt.getTime()) / 1000)
+					)
+				: null,
+			backlogInspectedAt: this.backlogInspectedAt?.toISOString() ?? null,
+			cleanup: {
+				lastSuccessAt: this.cleanupSuccessAt?.toISOString() ?? null,
+				failures: this.cleanupFailures
+			},
+			rotation: {
+				...this.rotation,
+				enabled: this.mail.config.rotationEnabled,
+				lastSuccessAt: this.rotation.lastSuccessAt?.toISOString() ?? null
+			}
+		};
+	}
+	private recordFailure(code: string) {
+		this.lastFailureAt = new Date();
+		this.lastErrorCode = code;
+		this.totalFailures++;
+		if (Date.now() - this.lastErrorLogAt >= 30_000) {
+			this.lastErrorLogAt = Date.now();
+			this.logger.error(code);
+		}
+	}
 	onModuleInit() {
 		if (
 			this.role === 'api' ||
@@ -160,6 +232,7 @@ export class MailWorker implements OnModuleInit, OnModuleDestroy {
 	async tick() {
 		if (this.stopping || this.ticking || this.active >= 2) return;
 		this.ticking = true;
+		this.lastStartedAt = new Date();
 		try {
 			await this.recover();
 			if (
@@ -168,18 +241,120 @@ export class MailWorker implements OnModuleInit, OnModuleDestroy {
 				Date.now() > this.cleanupDue
 			) {
 				this.cleanupDue = Date.now() + 60000;
-				await this.cleanup().catch(() => undefined);
+				try {
+					await this.cleanup();
+					this.cleanupSuccessAt = new Date();
+				} catch {
+					this.cleanupFailures++;
+					this.recordFailure('MAIL_BACKGROUND_CLEANUP_FAILED');
+				}
+			}
+			if (
+				this.role === 'mail-sync' &&
+				this.mail.config.rotationEnabled &&
+				Date.now() >= this.rotationDue
+			) {
+				this.rotationDue = Date.now() + 60_000;
+				await this.rotateCredentials();
+			}
+			if (Date.now() >= this.inspectionDue) {
+				this.inspectionDue = Date.now() + 60_000;
+				try {
+					const rows = await this.mail.prisma.$queryRaw<
+						Array<{ dueAt: Date }>
+					>(Prisma.sql`
+ SELECT j.due_at AS "dueAt" FROM crm_customers.mail_jobs j
+ JOIN crm_customers.mail_mailboxes m ON (m.workspace_id,m.id)=(j.workspace_id,j.mailbox_id)
+ WHERE j.state='QUEUED' AND j.due_at<=clock_timestamp() AND m.enabled AND j.generation=m.generation
+ AND ${this.role === 'mail-send' ? Prisma.sql`j.kind='SEND'` : Prisma.sql`j.kind<>'SEND'`}
+ AND NOT EXISTS(SELECT 1 FROM crm_customers.workspace_closure_fences f WHERE f.workspace_id=j.workspace_id AND f.fenced_at IS NOT NULL)
+ ORDER BY j.due_at,j.id LIMIT 1`);
+					this.oldestDueAt = rows[0]?.dueAt ?? null;
+					this.backlogInspectedAt = new Date();
+				} catch {
+					this.recordFailure('MAIL_BACKGROUND_INSPECTION_FAILED');
+				}
 			}
 			while (!this.stopping && this.active < 2) {
 				const job = await this.claim();
 				if (!job) break;
 				this.active++;
-				void this.run(job).finally(() => {
-					this.active--;
-				});
+				void this.run(job)
+					.catch(() => this.recordFailure('MAIL_BACKGROUND_JOB_FAILED'))
+					.finally(() => {
+						this.active--;
+					});
 			}
+			this.lastSuccessAt = new Date();
+			this.consecutiveFailures = 0;
+		} catch {
+			this.consecutiveFailures++;
+			this.recordFailure('MAIL_BACKGROUND_TICK_FAILED');
 		} finally {
 			this.ticking = false;
+		}
+	}
+	async rotateCredentials() {
+		if (
+			!this.mail.config.rotationEnabled ||
+			this.role !== 'mail-sync' ||
+			this.rotating
+		)
+			return;
+		this.rotating = true;
+		try {
+			const rows = await this.mail.prisma.mailConnection.findMany({
+				where: {
+					state: 'ACTIVE',
+					encryptedSecret: { not: null },
+					keyId: { not: this.mail.config.keyId },
+					...(this.rotationCursor ? { id: { gt: this.rotationCursor } } : {})
+				},
+				orderBy: { id: 'asc' },
+				take: 20
+			});
+			// Advance past unreadable rows too; one damaged batch must not starve later connections.
+			this.rotationCursor =
+				rows.length === 20 ? rows[rows.length - 1].id : undefined;
+			let failed = false;
+			for (const row of rows) {
+				this.rotation.scanned++;
+				try {
+					const aad = this.mail.config.aad(
+						row.workspaceId,
+						row.id,
+						row.credentialPrincipal,
+						row.generation,
+						digest(canonicalMailJson(row.transport))
+					);
+					const plaintext = this.mail.config.decrypt(row.encryptedSecret!, aad);
+					const replacement = this.mail.config.encrypt(plaintext, aad);
+					// Verify authenticated readback before the compare-and-swap database transition.
+					if (
+						canonicalMailJson(this.mail.config.decrypt(replacement, aad)) !==
+						canonicalMailJson(plaintext)
+					)
+						throw new Error();
+					const result = await this.mail.prisma.$transaction(async (tx) => {
+						await tx.$executeRaw`SET LOCAL lock_timeout='2s'`;
+						return tx.$queryRaw<
+							Array<{ changed: boolean }>
+						>`SELECT crm_customers.rewrap_mail_credential(${row.id}::uuid,${row.version}::integer,${row.encryptedSecret}::text,${replacement}::text,${this.mail.config.keyId}::text) AS changed`;
+					});
+					if (result[0]?.changed) this.rotation.rewrapped++;
+					else this.rotation.skipped++;
+				} catch {
+					failed = true;
+					this.rotation.failures++;
+					this.recordFailure('MAIL_CREDENTIAL_REWRAP_FAILED');
+				}
+			}
+			if (!failed) this.rotation.lastSuccessAt = new Date();
+		} catch {
+			this.rotation.failures++;
+			this.recordFailure('MAIL_CREDENTIAL_REWRAP_SCAN_FAILED');
+		} finally {
+			this.rotating = false;
 		}
 	}
 	async cleanup() {
