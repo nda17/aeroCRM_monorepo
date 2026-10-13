@@ -11,8 +11,10 @@ const required = (name) => {
 const runtimeUrl = required("CRM_CUSTOMERS_TEST_DATABASE_URL");
 const migrationUrl = required("CRM_CUSTOMERS_TEST_MIGRATION_DATABASE_URL");
 const runtimeRole = required("CRM_CUSTOMERS_TEST_RUNTIME_ROLE");
+const backupRole = required("CRM_CUSTOMERS_TEST_BACKUP_ROLE");
 assert.equal(process.env.CRM_MAIL_INTEGRATION_ALLOW_MUTATION, "true");
 assert.match(runtimeRole, /^[a-z][a-z0-9_]{0,62}$/);
+assert.match(backupRole, /^[a-z][a-z0-9_]{0,62}$/);
 // Keep a synthetic local key and placeholder object-store settings so CI needs
 // no mail secrets or external storage; this script never dispatches SMTP or calls S3.
 process.env.CRM_MAIL_ENABLED = "true";
@@ -123,9 +125,10 @@ try {
   );
   assert.equal(role.name, runtimeRole);
   assert.equal(role.restricted, true);
-  const keyringAcl = await runtime.$queryRawUnsafe(
-    `SELECT has_function_privilege(current_user, 'crm_customers.rewrap_mail_credential(uuid,integer,text,text,text)', 'EXECUTE') AS runtime_can_rewrap, has_function_privilege('crm_customers_keyring_backup', 'crm_customers.rewrap_mail_credential(uuid,integer,text,text,text)', 'EXECUTE') AS backup_can_rewrap, has_table_privilege(current_user, 'crm_customers.mail_commands', 'UPDATE') AS runtime_can_edit_receipts`,
-  );
+  const keyringAcl = await runtime.$queryRaw`
+    SELECT has_function_privilege(current_user, 'crm_customers.rewrap_mail_credential(uuid,integer,text,text,text)', 'EXECUTE') AS runtime_can_rewrap,
+      has_function_privilege(${backupRole}::name, 'crm_customers.rewrap_mail_credential(uuid,integer,text,text,text)', 'EXECUTE') AS backup_can_rewrap,
+      has_table_privilege(current_user, 'crm_customers.mail_commands', 'UPDATE') AS runtime_can_edit_receipts`;
   assert.deepEqual(keyringAcl, [
     {
       runtime_can_rewrap: true,

@@ -1,5 +1,6 @@
 import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import type { MailAuthority } from "./mail-authorization.client";
+jest.mock("./mail.body", () => ({ prepareMailBody: jest.fn() }));
 import { MailService } from "./mail.service";
 
 const workspaceId = "11111111-1111-4111-8111-111111111111";
@@ -154,7 +155,11 @@ describe("mailbox access follows the current membership and explicit grants", ()
         enabled: true,
         keyId: "test-key",
         key: Buffer.alloc(32),
-        keyedDigest: () => "same-hash",
+        requestHash: () => ({
+          value: "same-hash",
+          keyId: null,
+          candidates: new Map([[null, "same-hash"]]),
+        }),
       } as never,
       { probe } as never,
       {} as never,
