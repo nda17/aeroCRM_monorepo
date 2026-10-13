@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import { constants } from 'node:fs';
 import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { setTimeout as delay } from 'node:timers/promises';
 
 // Runs in the reviewed Operations image. It never starts Nest, queues, workers,
 // or a public API. The same bootstrap is used for synthetic CI and real S3
@@ -88,6 +89,85 @@ async function schemaBoundaryChecks() {
 	try { await assert.rejects(execute(target.database, guard), /only its owned schema and empty public schema/); }
 	finally { await execute(target.database, 'DROP SCHEMA maintenance_foreign_fixture;'); }
 	await execute(target.database, guard);
+}
+async function heldSession(target, user = connection.user, password = connection.password) {
+	const child = spawn('psql', ['-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '--no-password',
+		'-h', connection.host, '-p', String(connection.port), '-U', user, '-d', target.database], {
+		env: { ...process.env, PGPASSWORD: password }, stdio: ['pipe', 'pipe', 'pipe']
+	});
+	const closed = new Promise(resolve => child.once('close', resolve));
+	child.stderr.resume();
+	await new Promise((resolve, reject) => {
+		const timer = setTimeout(() => { child.kill('SIGTERM'); reject(new Error('Fixture session did not become ready')); }, 5000);
+		child.stdout.on('data', chunk => { if (String(chunk).includes('fixture-session-ready')) { clearTimeout(timer); resolve(); } });
+		child.once('error', error => { clearTimeout(timer); reject(error); });
+		child.once('close', () => { clearTimeout(timer); reject(new Error('Fixture session closed too early')); });
+		child.stdin.write("SELECT 'fixture-session-ready';\n");
+	});
+	return async () => { child.stdin.end(); await closed; };
+}
+async function quiescenceChecks() {
+	const target = registry.get('identity');
+	let close = await heldSession(target);
+	try {
+		let finished = false;
+		const waiting = service().assertQuiescent(target, randomUUID()).then(() => { finished = true; });
+		await delay(200);
+		assert.equal(finished, false, 'A live foreign admin client must block admission');
+		await close();
+		await waiting;
+	} finally { await close(); }
+	close = await heldSession(target);
+	try {
+		await assert.rejects(service().assertQuiescent(target, randomUUID()), error => {
+			assert.match(error.message, /did not quiesce within 5 seconds/);
+			assert.match(error.message, /"backendType":"client backend"/);
+			assert.match(error.message, /"count":1/);
+			assert.ok(!error.message.includes('fixture-session-ready') && !error.message.includes(connection.user));
+			return true;
+		});
+	} finally { await close(); }
+	close = await heldSession(target, target.runtimeRole, fixturePassword);
+	try {
+		await service().assertQuiescent(target, null); // normal writers are allowed before fencing
+		let finished = false;
+		const waiting = service().assertQuiescent(target, randomUUID()).then(() => { finished = true; });
+		await delay(200);
+		assert.equal(finished, false, 'A live runtime client must block fenced admission');
+		await close();
+		await waiting;
+	} finally { await close(); }
+	// Deterministically observe a real autovacuum worker, rather than mocking a
+	// pg_stat_activity row. Cancellation is restricted to this fixture table;
+	// production maintenance never terminates a background/foreign backend.
+	await execute('postgres', "ALTER SYSTEM SET autovacuum_naptime='1s';");
+	await query('postgres', 'SELECT pg_reload_conf();');
+	try {
+		await execute(target.database, `SET ROLE ${identifier(target.migrationRole)};
+		CREATE TABLE identity.maintenance_quiescence_fixture (id integer, payload text)
+		WITH (autovacuum_vacuum_threshold=0,autovacuum_vacuum_scale_factor=0,
+		autovacuum_vacuum_cost_delay=20,autovacuum_vacuum_cost_limit=1,
+		autovacuum_analyze_threshold=1000000000);
+		INSERT INTO identity.maintenance_quiescence_fixture SELECT n,repeat('x',1000) FROM generate_series(1,5000) n;
+		DELETE FROM identity.maintenance_quiescence_fixture WHERE id%2=0;`);
+		const matching = "datname=current_database() AND backend_type='autovacuum worker' AND query LIKE 'autovacuum:%maintenance_quiescence_fixture%'";
+		let pid = null;
+		for (let attempt = 0; attempt < 200 && !pid; attempt++) {
+			pid = await query(target.database, `SELECT pid::text FROM pg_stat_activity WHERE ${matching} LIMIT 1;`);
+			if (!pid) await delay(100);
+		}
+		assert.match(pid || '', /^\d+$/, 'Expected a real fixture autovacuum worker');
+		let finished = false;
+		const waiting = service().assertQuiescent(target, randomUUID()).then(() => { finished = true; });
+		await delay(200);
+		assert.equal(finished, false, 'Background worker must drain before destructive admission');
+		assert.equal(await query(target.database, `SELECT pg_cancel_backend(pid)::text FROM pg_stat_activity WHERE ${matching} AND pid=${pid};`), 'true');
+		await waiting;
+	} finally {
+		await execute(target.database, 'DROP TABLE IF EXISTS identity.maintenance_quiescence_fixture;');
+		await execute('postgres', 'ALTER SYSTEM RESET autovacuum_naptime;');
+		await query('postgres', 'SELECT pg_reload_conf();');
+	}
 }
 function base(target, operationId, cluster) {
 	return { target, operationId, expectedClusterSystemIdentifier: cluster };
@@ -264,6 +344,7 @@ try {
 		await syntheticStorage();
 		await seedMeaningfulRows();
 		await schemaBoundaryChecks();
+		await quiescenceChecks();
 	}
 	const results = [];
 	const backups = new Map();
@@ -317,7 +398,8 @@ try {
 	}
 	process.stdout.write(`${JSON.stringify({ schemaVersion: 1, source, revision, clusterSystemIdentifier: cluster,
 		targets: results, interruptedRollbackChecks: source === 'synthetic' ? 5 : 0,
-		commitBoundaryChecked: source === 'synthetic', schemaBoundaryChecked: source === 'synthetic' })}\n`);
+		commitBoundaryChecked: source === 'synthetic', schemaBoundaryChecked: source === 'synthetic',
+		quiescenceChecked: source === 'synthetic' })}\n`);
 } catch (error) {
 	if (source !== 'real-s3') throw error;
 	// Restore errors can include a rejected business row. Real-data rehearsal

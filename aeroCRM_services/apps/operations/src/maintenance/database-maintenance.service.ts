@@ -4,6 +4,8 @@ import { constants } from 'node:fs';
 import { chmod, copyFile, lstat, mkdtemp, open, rm, stat, statfs } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { performance } from 'node:perf_hooks';
+import { setTimeout as delay } from 'node:timers/promises';
 import { DatabaseRestoreArtifactValidatorService } from '../restore/database-restore-artifact-validator.service';
 import { DatabaseRestoreProcessService } from '../restore/database-restore-process.service';
 import type { DatabaseRestoreConnection } from '../restore/database-restore-target-registry.service';
@@ -424,10 +426,33 @@ export class DatabaseMaintenanceService {
 		IF EXISTS (SELECT 1 FROM pg_roles WHERE rolcanlogin AND rolname NOT IN (${roles},'aerocrm_cluster_admin') AND has_database_privilege(oid,current_database(),'CONNECT'))
 		THEN RAISE EXCEPTION 'Unexpected database writer principal'; END IF;
 		IF EXISTS (SELECT 1 FROM pg_prepared_xacts WHERE database=current_database()) THEN RAISE EXCEPTION 'Restore target has prepared transactions'; END IF;
-		IF EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid()
-		${operationId ? '' : `AND usename NOT IN (${roles})`}) THEN RAISE EXCEPTION 'Restore target has unexpected active sessions'; END IF;
 		${operationId ? this.generationCheck(target, operationId) : ''}
 		END $boundary$;`, this.abort.signal);
+		await this.assertQuiescent(target, operationId);
+	}
+	private async assertQuiescent(target: DatabaseMaintenanceTarget, operationId: string | null): Promise<void> {
+		const roles = this.roleNames(target).map(literal).join(',');
+		const deadline = performance.now() + 5000;
+		for (;;) {
+			// Each query has a fresh connection/statistics snapshot. A completed
+			// psql process can precede server-side backend cleanup; autovacuum and
+			// parallel workers also appear here. Wait for them, never kill or
+			// silently exclude unfamiliar writers/background workers.
+			const sessions = JSON.parse(await this.process.query(this.connection(target),
+				`SELECT coalesce(json_agg(json_build_object('backendType',backend_type,'state',coalesce(state,'unknown'),'count',sessions)
+				ORDER BY backend_type,state)::text,'[]') FROM (
+				SELECT backend_type,state,count(*) AS sessions FROM pg_stat_activity
+				WHERE datname=current_database() AND pid<>pg_backend_pid()
+				${operationId ? '' : `AND (usename IS NULL OR usename NOT IN (${roles}))`}
+				GROUP BY backend_type,state) pending;`, this.abort.signal)) as Array<{ backendType: string; state: string; count: number }>;
+			if (!sessions.length) return;
+			if (performance.now() >= deadline) {
+				// Only server-owned categories and counts: never query text,
+				// principal names, client addresses, or business rows.
+				throw new Error(`Restore target did not quiesce within 5 seconds: ${JSON.stringify(sessions)}`);
+			}
+			await delay(100, undefined, { signal: this.abort.signal });
+		}
 	}
 	private async fence(target: DatabaseMaintenanceTarget, operationId: string): Promise<void> {
 		const connection = this.connection(target);
