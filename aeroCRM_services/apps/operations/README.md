@@ -168,6 +168,8 @@ Backup сначала сохраняет exclusive admission в host ledger и �
 - `DATABASE_MAINTENANCE_ADMIN_URL`: приватный URL
   `postgresql://aerocrm_cluster_admin:<secret>@127.0.0.1:<port>/postgres`.
   Разрешён только loopback; порт может отличаться для изолированного PG18.
+  `backup` требует порт 5432, совпадающий с service backup URL; `restore`
+  и rehearsal готовых S3 объектов допускают отдельный порт clone.
   Не передавать URL в аргументах процесса или логах.
 - `DATABASE_MAINTENANCE_LEDGER_DIR`: постоянный host bind mount `0700`,
   доступный UID 1001. Не размещать в PostgreSQL data directory, `/tmp`,
@@ -235,6 +237,33 @@ Rehearsal проводится для всех 12 целей на **другом
 фактического ledger внутри dump; после новой миграции Sales нужен новый dump.
 Текущий scheduler автоматически выполняет эту проверку перед подписью и
 публикацией новых backup, независимо от maintenance CLI.
+
+Исполняемая all12 rehearsal находится в
+`test/integration/database-maintenance-all-targets-postgres18.integration.mjs`.
+Она запускается Node из Operations image с рабочим каталогом `/app`, PG18
+client и readonly `<apps>/<target>/prisma`. Обязательные переменные:
+`APP_REVISION`, `DATABASE_MAINTENANCE_TEST_ADMIN_URL` для disposable cluster,
+`DATABASE_MAINTENANCE_TEST_APPS_DIR` для каталога всех сервисов. Bootstrap
+отвергает уже существующие service DB/roles, применяет настоящие миграции
+через bundled Prisma и закрывает временный migration-only TEMP grant.
+
+По умолчанию `DATABASE_MAINTENANCE_TEST_SOURCE=synthetic`: генерируются
+одноразовые Ed25519 ключи и локальное объектное хранилище; S3 и внешние
+провайдеры не используются. Проверяются exact content hashes/row counts
+всех таблиц, Identity/Notification/Operations fixture rows, подпись/target/SHA,
+повторы, CAS, rollback после FENCED/SAFETY_SAVED/реального DROP и новая
+runtime-запись после LOGIN до terminal receipt. Fault injection находится
+только в integration script; production CLI не имеет такого режима.
+
+Для rehearsal реальных backup используется `DATABASE_MAINTENANCE_TEST_SOURCE=real-s3`,
+обычный S3 env и встроенный production keyring. Дополнительно обязательны
+`DATABASE_MAINTENANCE_TEST_LEDGER_DIR` (постоянный private host bind) и
+`DATABASE_MAINTENANCE_TEST_JOBS_FILE` (private JSON `0600`):
+`{"schemaVersion":1,"sourceClusterSystemIdentifier":"...","targets":{"identity":"<backup UUID>","...":"..."}}`.
+Нужны ровно все 12 целей; source system identifier должен отличаться от
+clone. Реальный режим не создаёт fixture rows и не инъецирует сбои, выполняет
+все 12 restore с admission/replay проверками, сохраняет receipts и выводит
+только итоговые технические hashes. Бизнес-строки и секреты не логируются.
 
 ## Проверка
 

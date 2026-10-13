@@ -67,6 +67,31 @@ export class DatabaseMaintenanceRegistry {
 	}
 }
 
+export function databaseMaintenanceSchemaBoundarySql(target: DatabaseMaintenanceTarget): string {
+	const schema = sqlLiteral(target.schema);
+	const publicObjects = ['pg_class.relnamespace', 'pg_proc.pronamespace', 'pg_type.typnamespace',
+		'pg_collation.collnamespace', 'pg_conversion.connamespace', 'pg_operator.oprnamespace',
+		'pg_opclass.opcnamespace', 'pg_opfamily.opfnamespace', 'pg_ts_config.cfgnamespace',
+		'pg_ts_dict.dictnamespace', 'pg_ts_parser.prsnamespace', 'pg_ts_template.tmplnamespace']
+		.map(item => {
+			const [table, column] = item.split('.');
+			return `EXISTS (SELECT 1 FROM pg_catalog.${table} WHERE ${column}=(SELECT oid FROM pg_namespace WHERE nspname='public'))`;
+		}).join(' OR ');
+	return `DO $schema_boundary$ BEGIN
+	IF (SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname=${schema})
+	IS DISTINCT FROM ${sqlLiteral(target.migrationRole)} THEN RAISE EXCEPTION 'Maintenance schema owner differs'; END IF;
+	IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname NOT IN (${schema},'public','information_schema')
+	AND nspname !~ '^pg_') OR ${publicObjects}
+	THEN RAISE EXCEPTION 'Maintenance requires only its owned schema and empty public schema'; END IF;
+	IF EXISTS (SELECT 1 FROM pg_depend d
+	CROSS JOIN LATERAL pg_identify_object(d.refclassid,d.refobjid,d.refobjsubid) referenced
+	CROSS JOIN LATERAL pg_identify_object(d.classid,d.objid,d.objsubid) dependent
+	WHERE referenced.schema=${schema} AND dependent.schema IS NOT NULL
+	AND dependent.schema<>${schema} AND dependent.schema !~ '^pg_toast')
+	THEN RAISE EXCEPTION 'Maintenance schema has external dependent objects'; END IF;
+	END $schema_boundary$;`;
+}
+
 // The same explicit service-owned grants used by release admission. No blanket
 // runtime grants and no synthetic service_identity for Notification Delivery.
 export function databaseMaintenanceAclSql(target: DatabaseMaintenanceTarget): string {

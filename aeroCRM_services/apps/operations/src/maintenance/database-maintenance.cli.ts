@@ -12,15 +12,17 @@ async function main(): Promise<void> {
 	process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
+export function databaseMaintenanceSafeError(error: unknown): string {
+	// Driver errors may contain connection strings or rejected business rows.
+	const message = error instanceof Error ? error.message : 'Database maintenance failed';
+	return /(?:PostgreSQL command failed|(?:^|\s)(?:ERROR|FATAL|PANIC|DETAIL|CONTEXT|STATEMENT):|pg_(?:dump|restore):|psql:|postgres(?:ql)?:\/\/|password|secret|token|credential)/i.test(message)
+		? 'Database maintenance failed; inspect the private receipt ledger'
+		: message.replace(/[\r\n]/g, ' ').slice(0, 400);
+}
+
 if (require.main === module) {
 	void main().catch(error => {
-		// Driver errors may contain connection strings or source rows. Persist
-		// progress in the private receipt ledger and expose only bounded errors.
-		const message = error instanceof Error ? error.message : 'Database maintenance failed';
-		const safe = /(?:PostgreSQL command failed|postgres(?:ql)?:\/\/|password|secret|token|credential)/i.test(message)
-			? 'Database maintenance failed; inspect the private receipt ledger'
-			: message.replace(/[\r\n]/g, ' ').slice(0, 400);
-		process.stderr.write(`${JSON.stringify({ error: safe })}\n`);
+		process.stderr.write(`${JSON.stringify({ error: databaseMaintenanceSafeError(error) })}\n`);
 		process.exitCode = 1;
 	});
 }

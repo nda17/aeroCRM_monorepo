@@ -30,6 +30,7 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm --filter @aerocrm/crm test
+          pnpm --filter @aerocrm/admin-panel test
           pnpm typecheck:frontends
           pnpm build:frontends
   contract-migrations:
@@ -1189,8 +1190,62 @@ jobs:
           node --check .github/scripts/backend-images.mjs
           node --test .github/scripts/*.test.mjs
           node aeroCRM_services/apps/operations/scripts/database-backup-migration-manifests.mjs --check
+  database-maintenance-postgres18:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: aerocrm_cluster_admin
+          POSTGRES_PASSWORD: maintenance-fixture-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aerocrm_cluster_admin -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+          cache: pnpm
+          cache-dependency-path: aeroCRM_services/apps/operations/pnpm-lock.yaml
+      - name: Verify all Operations units and types
+        working-directory: aeroCRM_services/apps/operations
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm prisma:generate
+          pnpm typecheck
+          pnpm lint
+          pnpm test
+      - name: Build the exact Operations runtime image
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          docker build --platform linux/amd64 --provenance=false --sbom=false \
+            --file aeroCRM_services/apps/operations/Dockerfile \
+            --build-arg APP_REVISION="$SHA" --tag "aerocrm/operations:$SHA" \
+            aeroCRM_services/apps/operations
+      - name: Rehearse all twelve databases, restore boundaries, and rollback
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          docker run --rm --network host --user 1001:1001 --entrypoint node \
+            --env APP_REVISION="$SHA" \
+            --env DATABASE_MAINTENANCE_TEST_ADMIN_URL='postgresql://aerocrm_cluster_admin:maintenance-fixture-only@127.0.0.1:5432/postgres' \
+            --env DATABASE_MAINTENANCE_TEST_APPS_DIR=/source/aeroCRM_services/apps \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/aeroCRM_services/apps,dst=/source/aeroCRM_services/apps,readonly" \
+            "aerocrm/operations:$SHA" \
+            /source/aeroCRM_services/apps/operations/test/integration/database-maintenance-all-targets-postgres18.integration.mjs
   backend-plan:
-    needs: [frontends, contract-migrations, billing-capacity-postgres18, crm-custom-roles-postgres18, crm-access-team-postgres18, crm-sales-commerce-postgres18, crm-intake-notifications-postgres18, workspace-closure-postgres18, workspace-closure-unit, corporate-mail-unit, gateway-telegram-business-unit, backend-release-contracts]
+    needs: [frontends, contract-migrations, billing-capacity-postgres18, crm-custom-roles-postgres18, crm-access-team-postgres18, crm-sales-commerce-postgres18, crm-intake-notifications-postgres18, workspace-closure-postgres18, workspace-closure-unit, corporate-mail-unit, gateway-telegram-business-unit, backend-release-contracts, database-maintenance-postgres18]
     if: github.ref == 'refs/heads/prod_0.1.0' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     outputs:
@@ -1285,7 +1340,7 @@ jobs:
           retention-days: 90
           if-no-files-found: error
   frontend-images:
-    needs: [frontends, contract-migrations, billing-capacity-postgres18, crm-custom-roles-postgres18, crm-access-team-postgres18, crm-sales-commerce-postgres18, crm-intake-notifications-postgres18, workspace-closure-postgres18, workspace-closure-unit, corporate-mail-unit, gateway-telegram-business-unit, backend-release-contracts]
+    needs: [frontends, contract-migrations, billing-capacity-postgres18, crm-custom-roles-postgres18, crm-access-team-postgres18, crm-sales-commerce-postgres18, crm-intake-notifications-postgres18, workspace-closure-postgres18, workspace-closure-unit, corporate-mail-unit, gateway-telegram-business-unit, backend-release-contracts, database-maintenance-postgres18]
     if: github.ref == 'refs/heads/prod_0.1.0' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:

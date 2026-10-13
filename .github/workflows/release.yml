@@ -47,14 +47,6 @@ on:
       crm_sales_commerce_migration_env_hash:
         description: SHA-256 of the private VPS migrations/crm-sales.env file; required only for the CRM Sales commerce migration
         required: false
-      crm_sales_reminder_fk_migration:
-        description: Backend target only; apply reviewed CRM Sales reminder delivery foreign keys before switching images
-        type: boolean
-        default: false
-        required: true
-      crm_sales_reminder_fk_migration_env_hash:
-        description: SHA-256 of private VPS migrations/crm-sales.env; required only for reminder FK migration
-        required: false
       crm_intake_notifications_migration:
         description: Backend target only; apply the reviewed CRM Intake inbox notification ID default migration before switching images
         type: boolean

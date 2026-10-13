@@ -1,0 +1,120 @@
+name: Service-owned database maintenance real-S3 rehearsal
+
+on:
+  workflow_dispatch:
+    inputs:
+      operations_revision:
+        description: Exact deployed Operations image source SHA
+        type: string
+        required: true
+      infra_sha:
+        description: Exact deployed reviewed infra commit SHA
+        type: string
+        required: true
+      ci_run_id:
+        description: Green CI run recorded in canonical backend state
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: aerocrm-database-maintenance
+  cancel-in-progress: false
+
+jobs:
+  rehearsal:
+    if: github.ref == 'refs/heads/prod_0.1.0'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: nda17/aeroCRM_infra
+          ref: ${{ inputs.infra_sha }}
+          ssh-key: ${{ secrets.INFRA_DEPLOY_KEY }}
+          path: infra
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+      - name: Validate exact release, source, infra, and CI identities
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INFRA_SHA: ${{ inputs.infra_sha }}
+          OPERATIONS_REVISION: ${{ inputs.operations_revision }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$INFRA_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$OPERATIONS_REVISION" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$CI_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$(git -C infra rev-parse HEAD)" == "$INFRA_SHA" ]]
+          git merge-base --is-ancestor "$OPERATIONS_REVISION" "$GITHUB_SHA"
+          node --check infra/scripts/database-maintenance-release.mjs
+          node --check infra/scripts/database-maintenance-rehearsal.mjs
+          node infra/scripts/database-maintenance-release.mjs --policy-self-test
+          node infra/scripts/database-maintenance-rehearsal.mjs --policy-self-test
+          bash -n infra/scripts/ensure-cutover-node.sh
+          read -r status conclusion head_sha branch workflow_path <<< "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID" --jq '[.status,.conclusion,.head_sha,.head_branch,.path] | join(" ")')"
+          [[ "$status" == completed && "$conclusion" == success && "$head_sha" == "$GITHUB_SHA" && "$branch" == prod_0.1.0 && "$workflow_path" == .github/workflows/ci.yml ]]
+      - name: Archive reviewed exact-revision migration and rehearsal sources
+        env:
+          OPERATIONS_REVISION: ${{ inputs.operations_revision }}
+        run: |
+          set -euo pipefail
+          umask 077
+          git archive "$OPERATIONS_REVISION" aeroCRM_services/apps | gzip -1 > "$RUNNER_TEMP/maintenance-source.tar.gz"
+          tar -xOzf "$RUNNER_TEMP/maintenance-source.tar.gz" \
+            aeroCRM_services/apps/operations/test/integration/database-maintenance-all-targets-postgres18.integration.mjs > /dev/null
+      - name: Back up reviewed production writers and rehearse isolated PostgreSQL 18
+        env:
+          BACK_HOST: ${{ secrets.BACKEND_SSH_HOST }}
+          BACK_USER: ${{ secrets.BACKEND_SSH_USER }}
+          BACK_PORT: ${{ secrets.BACKEND_SSH_PORT }}
+          BACK_KEY: ${{ secrets.BACKEND_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          INFRA_SHA: ${{ inputs.infra_sha }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+          OPERATIONS_REVISION: ${{ inputs.operations_revision }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$BACK_PORT" =~ ^[0-9]+$ ]]
+          mkdir -p ~/.ssh
+          printf '%s\n' "$BACK_KEY" > ~/.ssh/release_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/release_key ~/.ssh/known_hosts
+          dest="$BACK_USER@$BACK_HOST"
+          stage="/opt/aerocrm/releases/staging/maintenance-rehearsal-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh_opts=(-i ~/.ssh/release_key -p "$BACK_PORT" -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          scp_opts=(-i ~/.ssh/release_key -P "$BACK_PORT" -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          ssh "${ssh_opts[@]}" "$dest" "umask 077; mkdir -p '$stage/scripts' '$stage/source'"
+          scp "${scp_opts[@]}" infra/scripts/database-maintenance-release.mjs \
+            infra/scripts/database-maintenance-rehearsal.mjs infra/scripts/backend-release-state.mjs \
+            infra/scripts/ensure-cutover-node.sh "$dest:$stage/scripts/"
+          scp "${scp_opts[@]}" "$RUNNER_TEMP/maintenance-source.tar.gz" "$dest:$stage/source.tar.gz"
+          ssh "${ssh_opts[@]}" "$dest" "tar -xzf '$stage/source.tar.gz' -C '$stage/source' && chmod -R a+rX '$stage/source'"
+          node_bin=$(ssh "${ssh_opts[@]}" "$dest" \
+            "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --database-maintenance-rehearsal")
+          [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
+          ssh "${ssh_opts[@]}" "$dest" \
+            "cd /opt/aerocrm && DATABASE_MAINTENANCE_ACTOR='github:${GITHUB_REPOSITORY}/${GITHUB_ACTOR}/${GITHUB_RUN_ID}' '$node_bin' '$stage/scripts/database-maintenance-rehearsal.mjs' --rehearse '$stage' '$INFRA_SHA' '$CI_RUN_ID' '$OPERATIONS_REVISION'" \
+            > "$RUNNER_TEMP/maintenance-rehearsal-summary.json"
+          jq -e '.schemaVersion == 1 and (.targets | length) == 12 and all(.targets[]; .phase == "COMMITTED")' \
+            "$RUNNER_TEMP/maintenance-rehearsal-summary.json" > /dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: database-maintenance-real-s3-rehearsal
+          path: ${{ runner.temp }}/maintenance-rehearsal-summary.json
+          retention-days: 90
+          if-no-files-found: error
+      - name: Remove temporary SSH key and source archive
+        if: always()
+        run: rm -f ~/.ssh/release_key "$RUNNER_TEMP/maintenance-source.tar.gz" "$RUNNER_TEMP/maintenance-rehearsal-summary.json"

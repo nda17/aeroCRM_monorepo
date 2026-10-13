@@ -16,7 +16,7 @@ import {
 	type DatabaseMaintenanceBinding, type DatabaseMaintenanceState
 } from './database-maintenance.ledger';
 import {
-	DatabaseMaintenanceRegistry, databaseMaintenanceAclSql, maintenanceHash,
+	DatabaseMaintenanceRegistry, databaseMaintenanceAclSql, databaseMaintenanceSchemaBoundarySql, maintenanceHash,
 	sqlIdentifier as ident, sqlLiteral as literal, type DatabaseMaintenanceTarget
 } from './database-maintenance.registry';
 
@@ -150,6 +150,9 @@ export class DatabaseMaintenanceService {
 		try {
 			this.assertActor();
 			if (request.action === 'backup') {
+				// Service backup URLs are constrained to loopback:5432. Do not
+				// attest a different admin cluster when a rehearsal uses another port.
+				if (this.admin.port !== 5432) throw new Error('Backup admin must use the same loopback port as service backup roles');
 				const ledger = this.ledger(cluster, request.operationId!);
 				await ledger.initialize();
 				// A durable, single-use claim survives a lost CLI response or a
@@ -401,6 +404,7 @@ export class DatabaseMaintenanceService {
 	}
 	private async assertBoundary(target: DatabaseMaintenanceTarget, operationId: string | null, allowedGeneration?: string): Promise<void> {
 		const roles = this.roleNames(target).map(literal).join(',');
+		await this.process.executeSql(this.connection(target), databaseMaintenanceSchemaBoundarySql(target), this.abort.signal);
 		await this.process.executeSql(this.connection(target), `DO $boundary$ DECLARE item record; BEGIN
 		IF current_database()<>${literal(target.database)} THEN RAISE EXCEPTION 'Unexpected restore database'; END IF;
 		IF EXISTS (SELECT 1 FROM pg_db_role_setting s JOIN pg_database d ON d.oid=s.setdatabase

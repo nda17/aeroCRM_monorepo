@@ -1,0 +1,175 @@
+name: Service-owned database maintenance
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Inventory, inspect, backup, restore, rollback, or status
+        type: choice
+        options: [inventory, inspect, backup, restore, rollback, status]
+        required: true
+      target:
+        description: Exact service owner; empty only for inventory
+        type: string
+        required: false
+      operation_id:
+        description: UUIDv4 for this maintenance operation; empty only for inventory
+        type: string
+        required: false
+      backup_job_id:
+        description: Signed private S3 backup job UUIDv4 for inspect or restore
+        type: string
+        required: false
+      expected_artifact_sha256:
+        description: Artifact digest returned by inspect; required for restore
+        type: string
+        required: false
+      expected_state_revision:
+        description: Durable receipt revision; 0 for first restore
+        type: string
+        required: false
+      expected_cluster_system_identifier:
+        description: Exact PostgreSQL system identifier for backup, restore, rollback, or status
+        type: string
+        required: false
+      confirmation:
+        description: Exact RESTORE <target> or ROLLBACK <target> for write actions
+        type: string
+        required: false
+      operations_revision:
+        description: Exact deployed Operations image source SHA
+        type: string
+        required: true
+      infra_sha:
+        description: Exact deployed reviewed infra commit SHA
+        type: string
+        required: true
+      ci_run_id:
+        description: Green backend CI run recorded in canonical backend state
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: aerocrm-database-maintenance
+  cancel-in-progress: false
+
+jobs:
+  maintenance:
+    if: github.ref == 'refs/heads/prod_0.1.0'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: nda17/aeroCRM_infra
+          ref: ${{ inputs.infra_sha }}
+          ssh-key: ${{ secrets.INFRA_DEPLOY_KEY }}
+          path: infra
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+      - name: Validate reviewed image, infra, and CI identities
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INFRA_SHA: ${{ inputs.infra_sha }}
+          OPERATIONS_REVISION: ${{ inputs.operations_revision }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$INFRA_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$OPERATIONS_REVISION" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$CI_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$(git -C infra rev-parse HEAD)" == "$INFRA_SHA" ]]
+          node --check infra/scripts/database-maintenance-release.mjs
+          node infra/scripts/database-maintenance-release.mjs --policy-self-test
+          bash -n infra/scripts/ensure-cutover-node.sh
+          read -r status conclusion head_sha branch workflow_path <<< "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID" --jq '[.status,.conclusion,.head_sha,.head_branch,.path] | join(" ")')"
+          [[ "$status" == completed && "$conclusion" == success && "$head_sha" == "$GITHUB_SHA" && "$branch" == prod_0.1.0 && "$workflow_path" == .github/workflows/ci.yml ]]
+      - name: Build exact private maintenance request
+        env:
+          ACTION: ${{ inputs.action }}
+          TARGET: ${{ inputs.target }}
+          OPERATION_ID: ${{ inputs.operation_id }}
+          BACKUP_JOB_ID: ${{ inputs.backup_job_id }}
+          ARTIFACT_SHA256: ${{ inputs.expected_artifact_sha256 }}
+          STATE_REVISION: ${{ inputs.expected_state_revision }}
+          CLUSTER_ID: ${{ inputs.expected_cluster_system_identifier }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          OPERATIONS_REVISION: ${{ inputs.operations_revision }}
+        run: |
+          set -euo pipefail
+          umask 077
+          node --input-type=module > "$RUNNER_TEMP/maintenance-request.json" <<'NODE'
+          import assert from 'node:assert/strict';
+          const env = process.env;
+          const action = env.ACTION;
+          const request = { schemaVersion: 1, action, expectedRevision: env.OPERATIONS_REVISION };
+          if (action !== 'inventory') {
+            request.operationId = env.OPERATION_ID;
+            request.target = env.TARGET;
+          }
+          if (['backup', 'restore', 'rollback', 'status'].includes(action))
+            request.expectedClusterSystemIdentifier = env.CLUSTER_ID;
+          if (['inspect', 'restore'].includes(action)) request.backupJobId = env.BACKUP_JOB_ID;
+          if (action === 'restore') request.expectedArtifactSha256 = env.ARTIFACT_SHA256;
+          if (['restore', 'rollback'].includes(action)) {
+            assert(/^\d+$/.test(env.STATE_REVISION));
+            request.expectedStateRevision = Number(env.STATE_REVISION);
+            request.confirmation = env.CONFIRMATION;
+          }
+          const used = new Set(['ACTION', 'OPERATIONS_REVISION']);
+          if (action !== 'inventory') for (const key of ['TARGET', 'OPERATION_ID']) used.add(key);
+          if (['backup', 'restore', 'rollback', 'status'].includes(action)) used.add('CLUSTER_ID');
+          if (['inspect', 'restore'].includes(action)) used.add('BACKUP_JOB_ID');
+          if (action === 'restore') used.add('ARTIFACT_SHA256');
+          if (['restore', 'rollback'].includes(action)) for (const key of ['STATE_REVISION', 'CONFIRMATION']) used.add(key);
+          for (const key of ['TARGET', 'OPERATION_ID', 'BACKUP_JOB_ID', 'ARTIFACT_SHA256',
+            'STATE_REVISION', 'CLUSTER_ID', 'CONFIRMATION'])
+            assert(used.has(key) || !env[key], `Unexpected maintenance input: ${key}`);
+          process.stdout.write(JSON.stringify(request) + '\n');
+          NODE
+          chmod 600 "$RUNNER_TEMP/maintenance-request.json"
+      - name: Run canonical host maintenance controller
+        env:
+          BACK_HOST: ${{ secrets.BACKEND_SSH_HOST }}
+          BACK_USER: ${{ secrets.BACKEND_SSH_USER }}
+          BACK_PORT: ${{ secrets.BACKEND_SSH_PORT }}
+          BACK_KEY: ${{ secrets.BACKEND_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          INFRA_SHA: ${{ inputs.infra_sha }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$BACK_PORT" =~ ^[0-9]+$ ]]
+          mkdir -p ~/.ssh
+          printf '%s\n' "$BACK_KEY" > ~/.ssh/release_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/release_key ~/.ssh/known_hosts
+          dest="$BACK_USER@$BACK_HOST"
+          stage="/opt/aerocrm/releases/staging/maintenance-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh_opts=(-i ~/.ssh/release_key -p "$BACK_PORT" -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          scp_opts=(-i ~/.ssh/release_key -P "$BACK_PORT" -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          ssh "${ssh_opts[@]}" "$dest" \
+            "umask 077; mkdir -p '$stage/scripts'"
+          scp "${scp_opts[@]}" \
+            infra/scripts/database-maintenance-release.mjs infra/scripts/backend-release-state.mjs \
+            infra/scripts/ensure-cutover-node.sh "$dest:$stage/scripts/"
+          scp "${scp_opts[@]}" \
+            "$RUNNER_TEMP/maintenance-request.json" "$dest:$stage/request.json"
+          node_bin=$(ssh "${ssh_opts[@]}" "$dest" \
+            "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --database-maintenance")
+          [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
+          ssh "${ssh_opts[@]}" "$dest" \
+            "cd /opt/aerocrm && DATABASE_MAINTENANCE_ACTOR='github:${GITHUB_REPOSITORY}/${GITHUB_ACTOR}/${GITHUB_RUN_ID}' '$node_bin' '$stage/scripts/database-maintenance-release.mjs' --request '$stage/request.json' '$INFRA_SHA' '$CI_RUN_ID'"
+      - name: Remove temporary SSH key and request
+        if: always()
+        run: rm -f ~/.ssh/release_key "$RUNNER_TEMP/maintenance-request.json"
