@@ -4,7 +4,6 @@ import {
 	ForbiddenException,
 	Injectable,
 	NotFoundException,
-	ServiceUnavailableException,
 	UnauthorizedException
 } from '@nestjs/common';
 import {
@@ -40,6 +39,7 @@ import {
 } from '../integrations/owner-clients.service';
 import { IdentityPrismaService } from '../prisma/identity-prisma.service';
 import { VerificationTransportService } from '../transports/verification-transport.service';
+import { parseAuditAdminOverview, parseBillingAdminOverview } from './admin-overview';
 import { EmailVerificationService } from '../auth/email-verification.service';
 import { WorkspaceProvisioningService } from '../workspaces/workspace-provisioning.service';
 import {
@@ -455,40 +455,18 @@ export class UsersService {
 
 	async adminOverview(id: string) {
 		await this.adminGet(id);
-		const [billingValue, auditValue] = await Promise.all([
-			this.owners.billingOverview(id),
-			this.owners.adminOverview(id)
+		const [billing, audit] = await Promise.allSettled([
+			this.owners.billingOverview(id).then(value => parseBillingAdminOverview(value, id)),
+			this.owners.adminOverview(id).then(parseAuditAdminOverview)
 		]);
-		const billing = this.remoteRecord(billingValue, 'Billing');
-		const audit = this.remoteRecord(auditValue, 'Operations');
-		const counts = this.remoteRecord(billing.paymentCounts, 'Billing');
-		const pending = this.remoteCount(counts.PENDING, 'Billing');
-		const succeeded = this.remoteCount(counts.SUCCEEDED, 'Billing');
-		const cancelled = this.remoteCount(counts.CANCELLED, 'Billing');
-		this.remoteCount(counts.EXPIRED, 'Billing');
-		if (!Array.isArray(billing.latestPayments)) {
-			throw new ServiceUnavailableException(
-				'Billing returned invalid admin overview'
-			);
-		}
-		if (!this.isNullableRecord(billing.subscription)) {
-			throw new ServiceUnavailableException(
-				'Billing returned invalid admin overview'
-			);
-		}
-		if (!Array.isArray(audit.latest)) {
-			throw new ServiceUnavailableException(
-				'Operations returned invalid admin overview'
-			);
-		}
 		return {
-			subscription: billing.subscription,
-			payments: {
-				total: pending + succeeded + cancelled,
-				counts,
-				latest: billing.latestPayments
-			},
-			activity: { latest: audit.latest }
+			schemaVersion: 2 as const,
+			subscriptions: billing.status === 'fulfilled' ? billing.value.subscriptions
+				: { status: 'UNAVAILABLE' as const, items: null },
+			payments: billing.status === 'fulfilled' ? billing.value.payments
+				: { status: 'UNAVAILABLE' as const, total: null, counts: null, latest: null },
+			activity: audit.status === 'fulfilled' ? audit.value
+				: { status: 'UNAVAILABLE' as const, latest: null }
 		};
 	}
 
@@ -1130,36 +1108,4 @@ export class UsersService {
 		return date;
 	}
 
-	private remoteRecord(
-		value: unknown,
-		owner: string
-	): Record<string, any> {
-		if (!this.isRecord(value)) {
-			throw new ServiceUnavailableException(
-				`${owner} returned invalid admin overview`
-			);
-		}
-		return value;
-	}
-
-	private remoteCount(value: unknown, owner: string): number {
-		if (!Number.isSafeInteger(value) || Number(value) < 0) {
-			throw new ServiceUnavailableException(
-				`${owner} returned invalid admin overview`
-			);
-		}
-		return Number(value);
-	}
-
-	private isRecord(value: unknown): value is Record<string, any> {
-		return (
-			Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-		);
-	}
-
-	private isNullableRecord(
-		value: unknown
-	): value is Record<string, any> | null {
-		return value === null || this.isRecord(value);
-	}
 }

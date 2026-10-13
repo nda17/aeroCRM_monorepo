@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { PrismaClient } = require('@prisma/billing-client');
 const { CrmCommerceService } = require('../../dist/src/domain/crm-commerce.service.js');
+const { InternalCommandsService } = require('../../dist/src/domain/internal-commands.service.js');
 const { crmCommerceRequestHash } = require('../../dist/src/domain/crm-commerce.helpers.js');
 
 assert.equal(process.env.BILLING_INTEGRATION_ALLOW_MUTATION, 'true');
@@ -301,8 +302,63 @@ try {
 	assert.equal(after.capacityCommandId, checkoutCommand.commandId);
 	assert.deepEqual(after.capacityFence, before.capacityFence);
 
+	phase = 'admin-overview-owned-trials-paid-period-and-bigint';
+	const trialWorkspace = randomUUID();
+	const foreignWorkspace = randomUUID();
+	const emptyWorkspace = randomUUID();
+	const futureTrialEnd = new Date(Date.now() + 86400000 * 10);
+	const entitlementData = targetWorkspace => ({
+		workspaceId: targetWorkspace, activatedByUserId: actorSubject,
+		planCode: 'TRIAL', seatLimit: 5, effectiveFrom: new Date(Date.now() - 86400000),
+		effectiveUntil: futureTrialEnd, trialStartedAt: new Date(Date.now() - 86400000),
+		provisioningCommandId: randomUUID(), provisioningCommandType: 'CI_FIXTURE',
+		aggregateVersion: 9007199254740993n, sourceSequence: 9007199254740994n
+	});
+	await prisma.crmEntitlement.createMany({ data: [workspaceId, trialWorkspace, foreignWorkspace].map(entitlementData) });
+	await prisma.crmCommerceAccount.createMany({ data: [
+		{ workspaceId: foreignWorkspace, ownerSubject: `another-${randomUUID()}` },
+		{ workspaceId: emptyWorkspace, ownerSubject: actorSubject }
+	] });
+	await prisma.crmOrder.create({ data: invalidOrder({
+		status: 'UNKNOWN', capacityCommandId: checkoutCommand.commandId,
+		capacityFence: checkoutCommand.capacityFence
+	}) });
+	// A future paid period must not replace the currently effective one.
+	const futureOrder = await prisma.crmOrder.create({ data: invalidOrder({
+		status: 'SUCCEEDED', succeededAt: new Date(), capacityCommandId: checkoutCommand.commandId,
+		capacityFence: checkoutCommand.capacityFence
+	}) });
+	await prisma.crmPaidPeriod.create({ data: {
+		id: randomUUID(), workspaceId, orderId: futureOrder.id, version: 1, cycle: 'MONTHLY',
+		totalSeats: 2, originalSeats: 2, priceSnapshot: snapshot,
+		startsAt: new Date(Date.now() + 86400000 * 35),
+		expiresAt: new Date(Date.now() + 86400000 * 65),
+		originalExpiresAt: new Date(Date.now() + 86400000 * 65),
+		graceUntil: new Date(Date.now() + 86400000 * 68)
+	} });
+	const overview = await new InternalCommandsService(prisma).getAdminUserOverview(actorSubject);
+	assert.equal(overview.schemaVersion, 1);
+	assert.deepEqual(overview.workspaces.map(item => item.workspaceId), [workspaceId, trialWorkspace, emptyWorkspace].sort());
+	const paidOverview = overview.workspaces.find(item => item.workspaceId === workspaceId).entitlement;
+	assert.equal(paidOverview.planCode, 'PAID');
+	assert.equal(paidOverview.seatLimit, 3);
+	assert.equal(paidOverview.effectiveUntil, changedPeriod.expiresAt.toISOString());
+	assert.equal(paidOverview.aggregateVersion, '9007199254740993');
+	assert.equal(paidOverview.sourceSequence, '9007199254740994');
+	assert.equal(overview.workspaces.find(item => item.workspaceId === trialWorkspace).entitlement.planCode, 'TRIAL');
+	assert.equal(overview.workspaces.find(item => item.workspaceId === emptyWorkspace).entitlement, null);
+	assert.deepEqual(overview.paymentCounts, { PENDING: 0, SUCCEEDED: 2, CANCELLED: 0, EXPIRED: 0, UNKNOWN: 1 });
+	assert.equal(overview.latestPayments.length, 3);
+	assert.ok(overview.latestPayments.every(payment => payment.workspaceId === workspaceId && payment.amountMinor === '99000'));
+	const wire = JSON.stringify(overview);
+	assert.ok(!wire.includes('provisioningCommandId') && !wire.includes('customerEmail'));
+	const emptyOverview = await new InternalCommandsService(prisma).getAdminUserOverview(`absent-${randomUUID()}`);
+	assert.deepEqual(emptyOverview.workspaces, []);
+	assert.deepEqual(emptyOverview.latestPayments, []);
+	assert.ok(Object.values(emptyOverview.paymentCounts).every(count => count === 0));
+
 	console.log(
-		'PASS aeroCRM Billing PostgreSQL18: deferred capacity FKs, checkout replay, durable provider outbox, seat change, wrong-owner/workspace rollback and immutable bindings'
+		'PASS aeroCRM Billing PostgreSQL18: deferred capacity FKs, checkout replay, durable provider outbox, seat change, wrong-owner/workspace rollback, immutable bindings and multi-workspace admin overview'
 	);
 } catch (error) {
 	console.error(

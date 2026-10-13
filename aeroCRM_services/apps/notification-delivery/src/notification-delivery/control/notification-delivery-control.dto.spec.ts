@@ -11,7 +11,7 @@ describe('Notification delivery control DTOs', () => {
 		const dto = plainToInstance(NotificationDeliveryFailuresQueryDto, {
 			page: '2',
 			limit: '10000',
-			integration: 'payment-email',
+			integration: 'crm-invitation-email',
 			category: 'RATE_LIMIT',
 			status: 'RETRYING'
 		});
@@ -22,7 +22,10 @@ describe('Notification delivery control DTOs', () => {
 	});
 
 	it('accepts the newly owned Telegram notification consumers', async () => {
-		for (const integration of ['payment-telegram', 'limit-telegram']) {
+		for (const integration of [
+			'crm-task-reminder-telegram',
+			'crm-intake-sla-telegram'
+		]) {
 			const dto = plainToInstance(NotificationDeliveryFailuresQueryDto, {
 				integration
 			});
@@ -39,7 +42,7 @@ describe('Notification delivery control DTOs', () => {
 
 		const errors = await validate(dto);
 
-		expect(errors.map(error => error.property)).toEqual(
+		expect(errors.map((error) => error.property)).toEqual(
 			expect.arrayContaining(['limit', 'integration'])
 		);
 	});
@@ -52,7 +55,7 @@ describe('Notification delivery control DTOs', () => {
 
 		const errors = await validate(dto);
 
-		expect(errors.map(error => error.property)).toEqual(
+		expect(errors.map((error) => error.property)).toEqual(
 			expect.arrayContaining(['actorId', 'comment'])
 		);
 	});

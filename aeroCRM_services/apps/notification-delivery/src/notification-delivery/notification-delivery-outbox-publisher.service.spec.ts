@@ -39,27 +39,20 @@ describe('NotificationDeliveryOutboxPublisherService', () => {
 		messageId: '11111111-1111-4111-8111-111111111111',
 		deduplicationKey: 'retry-1',
 		exchange: NotificationDeliveryExchange.EVENTS,
-		eventType: 'payment.succeeded.v1',
-		routingKey: 'manual.payment-email',
+		eventType: 'notification.subscription-expiry.email.requested.v1',
+		routingKey: 'manual.subscription-expiry-email',
 		payload: {
 			schemaVersion: 1,
-			eventType: 'payment.succeeded.v1',
-			payment: {
-				id: 'payment-1',
-				yookassaId: 'yookassa-1',
-				amount: '1000',
-				plan: 'EASY',
-				billingPeriod: 'MONTHLY',
-				succeededAt: '2026-07-25T00:00:00.000Z'
+			eventType: 'notification.subscription-expiry.email.requested.v1',
+			reference: {
+				type: 'subscription-expiry-reminder',
+				id: 'subscription-reminder-1'
 			},
-			user: {
-				id: 'user-1',
-				name: null,
-				email: 'owner@example.com',
-				phone: null
-			},
-			subscription: {
-				expiresAt: '2026-08-25T00:00:00.000Z'
+			destination: { email: 'owner@example.com' },
+			content: {
+				daysBeforeExpiry: 7,
+				planLabel: 'EASY',
+				expiresAtLabel: '2026-08-25'
 			}
 		},
 		headers: { 'x-correlation-id': 'correlation-1' },
@@ -83,7 +76,7 @@ describe('NotificationDeliveryOutboxPublisherService', () => {
 
 		expect(rabbitMq.publishOutboxMessage).toHaveBeenCalledWith(
 			'aerocrm.events',
-			'manual.payment-email',
+			'manual.subscription-expiry-email',
 			event.payload,
 			expect.objectContaining({
 				messageId: event.messageId,
@@ -133,7 +126,7 @@ describe('NotificationDeliveryOutboxPublisherService', () => {
 		const deadLetterEvent = {
 			...event,
 			exchange: NotificationDeliveryExchange.DEAD_LETTER,
-			routingKey: 'payment-email.dead-letter',
+			routingKey: 'subscription-expiry-email.dead-letter',
 			payload: { malformed: 'payload preserved for inspection' }
 		};
 
@@ -141,7 +134,7 @@ describe('NotificationDeliveryOutboxPublisherService', () => {
 
 		expect(rabbitMq.publishOutboxMessage).toHaveBeenCalledWith(
 			'aerocrm.dead-letter',
-			'payment-email.dead-letter',
+			'subscription-expiry-email.dead-letter',
 			deadLetterEvent.payload,
 			expect.objectContaining({
 				messageId: event.messageId,
@@ -161,7 +154,7 @@ describe('NotificationDeliveryOutboxPublisherService', () => {
 				schemaVersion: 1,
 				eventType: 'notification.telegram.destination-unavailable.v1',
 				sourceEventId: event.messageId,
-				sourceKind: 'limit-telegram',
+				sourceKind: 'subscription-expiry-telegram',
 				destination: { telegramChatId: '12345' },
 				normalizedCode: 'TELEGRAM_CHAT_NOT_FOUND',
 				occurredAt: '2026-07-28T10:00:00.000Z'
@@ -400,7 +393,7 @@ describe('NotificationDeliveryOutboxPublisherService', () => {
 			}
 		};
 		const prisma = {
-			$transaction: jest.fn(async callback => callback(transaction))
+			$transaction: jest.fn(async (callback) => callback(transaction))
 		} as unknown as NotificationDeliveryPrismaService;
 		const service = new NotificationDeliveryOutboxPublisherService(
 			prisma,
@@ -426,15 +419,11 @@ describe('NotificationDeliveryOutboxPublisherService', () => {
 		const claimBatch = jest
 			.spyOn(service as any, 'claimBatch')
 			.mockResolvedValue([]);
-		jest
-			.spyOn(service as any, 'schedule')
-			.mockImplementation(() => undefined);
+		jest.spyOn(service as any, 'schedule').mockImplementation(() => undefined);
 
 		await (service as any).poll();
 
 		expect(claimBatch).toHaveBeenCalledTimes(1);
-		expect((service as any).lastSuccessfulPollAt).toEqual(
-			expect.any(Date)
-		);
+		expect((service as any).lastSuccessfulPollAt).toEqual(expect.any(Date));
 	});
 });

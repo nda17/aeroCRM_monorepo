@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
+import type { DatabaseBackupProvenanceTarget } from '../maintenance/database-backup.contract';
 import {
 	DATABASE_RESTORE_SHA256_PATTERN,
 	DATABASE_RESTORE_TARGETS,
@@ -24,7 +25,7 @@ export interface DatabaseRestoreMigrationManifestEntry {
 }
 
 export interface DatabaseRestoreTargetMigrationManifest {
-	target: DatabaseRestoreTarget;
+	target: DatabaseBackupProvenanceTarget;
 	manifestSha256: string;
 	migrations: ReadonlyArray<DatabaseRestoreMigrationManifestEntry>;
 }
@@ -156,16 +157,16 @@ export const parseDatabaseRestoreMigrationManifests = (
 @Injectable()
 export class DatabaseRestoreMigrationManifestService {
 	get(
-		target: DatabaseRestoreTarget
+		target: DatabaseBackupProvenanceTarget
 	): DatabaseRestoreTargetMigrationManifest {
 		throw new Error(`Database restore migration manifest for ${target} is unsupported`);
 	}
 
-	sha256(target: DatabaseRestoreTarget): string {
+	sha256(target: DatabaseBackupProvenanceTarget): string {
 		return this.get(target).manifestSha256;
 	}
 
-	assertBinding(target: DatabaseRestoreTarget, value: string): void {
+	assertBinding(target: DatabaseBackupProvenanceTarget, value: string): void {
 		if (value !== this.sha256(target)) {
 			throw new Error(
 				`Migration manifest binding for ${target} does not match this Operations revision`
@@ -174,7 +175,7 @@ export class DatabaseRestoreMigrationManifestService {
 	}
 
 	assertDumpLedger(
-		target: DatabaseRestoreTarget,
+		target: DatabaseBackupProvenanceTarget,
 		schema: string,
 		output: string
 	): void {
@@ -182,7 +183,7 @@ export class DatabaseRestoreMigrationManifestService {
 	}
 
 	assertDatabaseLedger(
-		target: DatabaseRestoreTarget,
+		target: DatabaseBackupProvenanceTarget,
 		output: string
 	): void {
 		let value: unknown;
@@ -338,7 +339,7 @@ export class DatabaseRestoreMigrationManifestService {
 	}
 
 	private assertLedger(
-		target: DatabaseRestoreTarget,
+		target: DatabaseBackupProvenanceTarget,
 		rows: ReadonlyArray<MigrationLedgerRow>
 	): void {
 		const successful = new Map<string, string>();

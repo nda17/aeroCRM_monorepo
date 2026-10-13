@@ -110,13 +110,7 @@ export async function serializable<T>(run: () => Promise<T>): Promise<T> {
 		try {
 			return await run();
 		} catch (error) {
-			if (
-				!error ||
-				typeof error !== 'object' ||
-				!('code' in error) ||
-				error.code !== 'P2034'
-			)
-				throw error;
+			if (!retryableTransaction(error)) throw error;
 			if (attempt === 2)
 				conflict(
 					'Операция одновременно изменялась. Обновите данные и повторите'
@@ -124,4 +118,19 @@ export async function serializable<T>(run: () => Promise<T>): Promise<T> {
 		}
 	}
 	return conflict();
+}
+
+function retryableTransaction(error: unknown): boolean {
+	if (!error || typeof error !== 'object' || !('code' in error))
+		return false;
+	if (error.code === 'P2034') return true;
+	// Raw workspace-fence statements retain PostgreSQL's SQLSTATE in P2010.
+	if (error.code !== 'P2010' || !('meta' in error)) return false;
+	const meta = error.meta;
+	return (
+		!!meta &&
+		typeof meta === 'object' &&
+		'code' in meta &&
+		(meta.code === '40001' || meta.code === '40P01')
+	);
 }

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:20-alpine AS base
+FROM node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2 AS base
 WORKDIR /app
 ENV HUSKY=0 NEXT_TELEMETRY_DISABLED=1
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
@@ -38,7 +38,7 @@ RUN --network=none set -eu; \
     pnpm --filter "./apps/${FRONTEND_APP}" build; \
     mkdir -p "apps/${FRONTEND_APP}/public"
 
-FROM node:20-alpine AS runner
+FROM node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2 AS runner
 WORKDIR /app
 ARG FRONTEND_APP
 ARG APP_REVISION

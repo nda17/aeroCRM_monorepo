@@ -7,28 +7,54 @@ export type AdminOverviewPaymentStatus =
 	| 'CANCELLED'
 	| 'EXPIRED'
 	| 'UNKNOWN'
+
+export type AdminOverviewAvailability = 'AVAILABLE' | 'UNAVAILABLE'
+
+export interface BillingAdminEntitlementDto {
+	workspaceId: string
+	productCode: string
+	planCode: string
+	status: string
+	seatLimit: number | null
+	graceUntil: string | null
+	trialStartedAt: string | null
+	effectiveFrom: string
+	effectiveUntil: string
+	aggregateVersion: string
+	sourceSequence: string
+}
+
+export interface BillingAdminPaymentDto {
+	id: string
+	workspaceId: string
+	providerPaymentId: string | null
+	status: AdminOverviewPaymentStatus
+	amountMinor: string
+	kind: string
+	cycle: string | null
+	createdAt: string
+	updatedAt: string
+}
+
 export interface AdminUserOverview {
-	subscription: {
-		workspaceId: string
-		planCode: string
-		status: string
-		seatLimit: number
-		effectiveUntil: string | null
-	} | null
-	payments: {
-		counts: Record<AdminOverviewPaymentStatus, number>
-		latest: Array<{
-			id: string
-			providerPaymentId: string | null
-			status: AdminOverviewPaymentStatus
-			amountMinor: string
-			kind: string
-			cycle: string | null
-			createdAt: string
-			updatedAt: string
-		}>
+	schemaVersion: 2
+	subscriptions: {
+		status: AdminOverviewAvailability
+		items: Array<{
+			workspaceId: string
+			entitlement: BillingAdminEntitlementDto | null
+		}> | null
 	}
-	activity: { latest: IAdminUserOverviewActivity[] }
+	payments: {
+		status: AdminOverviewAvailability
+		total: number | null
+		counts: Record<AdminOverviewPaymentStatus, number> | null
+		latest: BillingAdminPaymentDto[] | null
+	}
+	activity: {
+		status: AdminOverviewAvailability
+		latest: IAdminUserOverviewActivity[] | null
+	}
 }
 export const adminUserOverviewService = {
 	async get(userId: string): Promise<AdminUserOverview> {

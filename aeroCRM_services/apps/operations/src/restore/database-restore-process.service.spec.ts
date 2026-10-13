@@ -160,6 +160,40 @@ describe('DatabaseRestoreProcessService command plans', () => {
 		);
 	});
 
+	it('omits the schema TOC entry when restoring into the pre-created schema', async () => {
+		const toc = [
+			'; Archive created at 2026-10-13',
+			'1; 0 0 SCHEMA - operations aerocrm_operations_migration',
+			'2; 1259 16384 TABLE operations users aerocrm_operations_migration'
+		].join('\n');
+		let selectedToc = '';
+		command.mockImplementation(async (_executable: string, args: string[]) => {
+			if (args[0] === '--list') return { stdout: toc };
+			const listArgument = args.indexOf('--use-list');
+			if (listArgument !== -1) {
+				selectedToc = await readFile(args[listArgument + 1], 'utf8');
+			}
+			return { stdout: '' };
+		});
+
+		await service.restoreSchema(
+			connection,
+			target,
+			'/restore/source.dump',
+			undefined,
+			true
+		);
+
+		expect(selectedToc).toContain('TABLE operations users');
+		expect(selectedToc).not.toContain('SCHEMA - operations');
+		expect(command).toHaveBeenCalledWith(
+			'pg_restore',
+			expect.arrayContaining(['--use-list']),
+			connection.password,
+			expect.objectContaining({ signal: undefined })
+		);
+	});
+
 	it('executes an exact SQL plan through the admin connection', async () => {
 		await service.executeSql(connection, 'SELECT 1;');
 

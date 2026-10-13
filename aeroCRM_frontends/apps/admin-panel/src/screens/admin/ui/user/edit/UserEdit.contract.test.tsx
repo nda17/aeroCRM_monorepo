@@ -100,11 +100,34 @@ const user = {
 	createdAt: '2026-10-01T10:00:00.000Z',
 	updatedAt: '2026-10-12T10:00:00.000Z'
 }
+const timestamp = '2026-10-12T09:00:00.000Z'
 const overview = {
-	// Legacy person-level subscription is deliberately absent. The tenant
-	// subscription lives in the workspace route and must not be inferred here.
-	subscription: null,
+	schemaVersion: 2,
+	subscriptions: {
+		status: 'AVAILABLE',
+		items: [
+			{
+				workspaceId: 'workspace-one',
+				entitlement: {
+					workspaceId: 'workspace-one',
+					productCode: 'CRM',
+					planCode: 'TRIAL',
+					status: 'ACTIVE',
+					seatLimit: 3,
+					graceUntil: null,
+					trialStartedAt: timestamp,
+					effectiveFrom: timestamp,
+					effectiveUntil: '2026-10-22T09:00:00.000Z',
+					aggregateVersion: '2',
+					sourceSequence: '4'
+				}
+			},
+			{ workspaceId: 'workspace-two', entitlement: null }
+		]
+	},
 	payments: {
+		status: 'AVAILABLE',
+		total: 6,
 		counts: {
 			PENDING: 1,
 			SUCCEEDED: 2,
@@ -115,17 +138,19 @@ const overview = {
 		latest: [
 			{
 				id: 'payment-1',
+				workspaceId: 'workspace-one',
 				providerPaymentId: null,
 				status: 'UNKNOWN',
 				amountMinor: '9007199254740993123',
 				kind: 'SUBSCRIPTION',
 				cycle: 'MONTH',
-				createdAt: '2026-10-12T09:00:00.000Z',
+				createdAt: timestamp,
 				updatedAt: '2026-10-12T09:01:00.000Z'
 			}
 		]
 	},
 	activity: {
+		status: 'AVAILABLE',
 		latest: [
 			{
 				id: 'event-1',
@@ -173,14 +198,14 @@ afterEach(() => {
 })
 
 describe('UserEdit admin overview contract', () => {
-	it('keeps profile and activity, preserves workspace subscription navigation, and avoids retired auto-renewal requests', async () => {
+	it('shows each workspace, profile and activity while avoiding retired auto-renewal requests', async () => {
 		renderUserEdit()
 
 		expect(await screen.findByText('Ирина Операторова')).toBeTruthy()
 		expect(await screen.findByText('Оператор проверил профиль клиента')).toBeTruthy()
-		expect(screen.getByText('Смотрите подписки рабочих пространств')).toBeTruthy()
-		expect(screen.getAllByText('Нет данных').length).toBeGreaterThan(0)
-		expect(screen.queryByText('Нет подписки')).toBeNull()
+		expect(screen.getByText('Пространство workspace-one')).toBeTruthy()
+		expect(screen.getByText('Пространство workspace-two')).toBeTruthy()
+		expect(screen.getByText('Подписка ещё не выдана.')).toBeTruthy()
 
 		const subscriptionsLink = screen.getByRole('link', {
 			name: 'Все подписки'
@@ -205,5 +230,29 @@ describe('UserEdit admin overview contract', () => {
 		expect(mocks.revokeAdminUserAutoRenewal).not.toHaveBeenCalled()
 		expect(mocks.reconcileAdminUserAutoRenewal).not.toHaveBeenCalled()
 		expect(mocks.resumeTechnicalAdminUserAutoRenewal).not.toHaveBeenCalled()
+	})
+
+	it('renders section outages as unavailable instead of showing empty or zero data', async () => {
+		mocks.getOverviewApi.mockResolvedValue({
+			data: {
+				schemaVersion: 2,
+				subscriptions: { status: 'UNAVAILABLE', items: null },
+				payments: {
+					status: 'UNAVAILABLE',
+					total: null,
+					counts: null,
+					latest: null
+				},
+				activity: { status: 'UNAVAILABLE', latest: null }
+			}
+		})
+
+		renderUserEdit()
+
+		expect(await screen.findByText('Подписки сейчас недоступны.')).toBeTruthy()
+		expect(screen.getByText('Платежи сейчас недоступны.')).toBeTruthy()
+		expect(screen.getByText('История действий сейчас недоступна.')).toBeTruthy()
+		expect(screen.queryByText('Всего: 0')).toBeNull()
+		expect(screen.queryByText('Подписок рабочих пространств пока нет.')).toBeNull()
 	})
 })

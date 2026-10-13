@@ -11,6 +11,7 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
+import { Transform } from 'node:stream';
 import type { DatabaseBackupTarget } from '../scheduled-jobs/scheduled-jobs.types';
 
 @Injectable()
@@ -52,6 +53,16 @@ export class DatabaseBackupS3Service {
 		return `database-backups/${target}/${jobId}/${fileName}`;
 	}
 
+	async assertJobAbsent(target: DatabaseBackupTarget, jobId: string): Promise<void> {
+		const { client, bucket } = this.configured();
+		const key = this.key(target, jobId, 'manifest.json');
+		const result = await client.send(new ListObjectsV2Command({
+			Bucket: bucket, Prefix: key.slice(0, -'manifest.json'.length), MaxKeys: 1
+		}));
+		if ((result.Contents?.length ?? 0) > 0 || result.IsTruncated)
+			throw new Error('Backup job already has S3 objects and cannot be overwritten');
+	}
+
 	async putFile(key: string, path: string, contentType: string): Promise<void> {
 		const { client, bucket } = this.configured();
 		const file = await stat(path);
@@ -66,11 +77,20 @@ export class DatabaseBackupS3Service {
 		}).done();
 	}
 
-	async downloadToFile(key: string, path: string): Promise<void> {
+	async downloadToFile(key: string, path: string, maxBytes = Number.MAX_SAFE_INTEGER): Promise<void> {
 		const { client, bucket } = this.configured();
 		const object = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
 		if (!object.Body) throw new Error('Backup object has no body');
-		await pipeline(object.Body as Readable, createWriteStream(path, { flags: 'wx', mode: 0o600 }));
+		if (object.ContentLength !== undefined && object.ContentLength > maxBytes) {
+			(object.Body as Readable).destroy();
+			throw new Error('Backup object exceeds the permitted size');
+		}
+		let bytes = 0;
+		const bounded = new Transform({ transform(chunk: Buffer, _encoding, callback) {
+			bytes += chunk.length;
+			callback(bytes > maxBytes ? new Error('Backup object exceeds the permitted size') : null, chunk);
+		} });
+		await pipeline(object.Body as Readable, bounded, createWriteStream(path, { flags: 'wx', mode: 0o600 }));
 	}
 
 	async pruneAfterSuccess(target: DatabaseBackupTarget, keepJobId: string): Promise<void> {

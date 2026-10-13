@@ -1,4 +1,5 @@
 import {
+	DEFAULT_NOTIFICATION_DELIVERY_KINDS,
 	SUPPORT_NOTIFICATION_EVENT_TYPES,
 	SUPPORT_NOTIFICATION_KINDS,
 	SupportNotificationKind
@@ -24,30 +25,23 @@ import type { ConsumeMessage } from 'amqplib';
 describe('NotificationDeliveryWorkerService', () => {
 	const eventId = '11111111-1111-4111-8111-111111111111';
 
-	const createPaymentMessage = (
-		routingKey = 'payment.succeeded.v1'
+	const createSubscriptionExpiryMessage = (
+		routingKey = 'notification.subscription-expiry.email.requested.v1'
 	): ConsumeMessage =>
 		({
 			content: Buffer.from(
 				JSON.stringify({
 					schemaVersion: 1,
-					eventType: 'payment.succeeded.v1',
-					payment: {
-						id: 'payment-1',
-						yookassaId: 'yookassa-1',
-						amount: '1000',
-						plan: 'EASY',
-						billingPeriod: 'MONTHLY',
-						succeededAt: '2026-07-27T10:00:00.000Z'
+					eventType: 'notification.subscription-expiry.email.requested.v1',
+					reference: {
+						type: 'subscription-expiry-reminder',
+						id: 'subscription-reminder-1'
 					},
-					user: {
-						id: 'user-1',
-						name: null,
-						email: 'owner@example.com',
-						phone: null
-					},
-					subscription: {
-						expiresAt: '2026-08-27T10:00:00.000Z'
+					destination: { email: 'owner@example.com' },
+					content: {
+						daysBeforeExpiry: 7,
+						planLabel: 'EASY',
+						expiresAtLabel: '2026-08-27'
 					}
 				})
 			),
@@ -57,7 +51,7 @@ describe('NotificationDeliveryWorkerService', () => {
 			},
 			properties: {
 				messageId: eventId,
-				type: 'payment.succeeded.v1',
+				type: 'notification.subscription-expiry.email.requested.v1',
 				headers: {}
 			}
 		}) as ConsumeMessage;
@@ -66,88 +60,27 @@ describe('NotificationDeliveryWorkerService', () => {
 		({
 			content: Buffer.from(
 				JSON.stringify({
-					schemaVersion: 2,
-					eventType: 'lead.integration.requested.v2',
-					integration: 'telegram',
-					source: 'widget',
-					entity: { id: 'widget-1', name: 'Колесо' },
-					lead: {
-						id: 'lead-1',
-						createdAt: '2026-07-27T10:00:00.000Z'
-					},
-					destination: { telegramChatId: '12345' }
-				})
-			),
-			fields: {
-				exchange: 'aerocrm.events',
-				routingKey: 'lead.integration.telegram.v2'
-			},
-			properties: {
-				messageId: eventId,
-				type: 'lead.integration.requested.v2',
-				headers: {}
-			}
-		}) as ConsumeMessage;
-
-	const createLimitTelegramMessage = (): ConsumeMessage =>
-		({
-			content: Buffer.from(
-				JSON.stringify({
-					schemaVersion: 2,
-					eventType: 'lead.limit.reached.telegram.v2',
-					entity: {
-						id: 'widget-1',
-						name: 'Колесо',
-						type: 'widget'
-					},
-					limit: 10,
-					destination: { telegramChatId: '12345' }
-				})
-			),
-			fields: {
-				exchange: 'aerocrm.events',
-				routingKey: 'lead.limit.reached.telegram.v2'
-			},
-			properties: {
-				messageId: eventId,
-				type: 'lead.limit.reached.telegram.v2',
-				headers: {}
-			}
-		}) as ConsumeMessage;
-
-	const createPaymentTelegramMessage = (): ConsumeMessage =>
-		({
-			content: Buffer.from(
-				JSON.stringify({
 					schemaVersion: 1,
-					eventType: 'payment.notification.telegram.requested.v1',
-					payment: {
-						id: 'payment-1',
-						yookassaId: 'yookassa-1',
-						amount: '1000',
-						plan: 'EASY',
-						billingPeriod: 'MONTHLY',
-						succeededAt: '2026-07-27T10:00:00.000Z'
+					eventType: 'notification.subscription-expiry.telegram.requested.v1',
+					reference: {
+						type: 'subscription-expiry-reminder',
+						id: 'subscription-reminder-1'
 					},
-					user: {
-						id: 'user-1',
-						name: null,
-						email: null,
-						phone: null
-					},
-					destination: {
-						telegramChatId: '-1001234567890',
-						messageThreadId: 42
+					destination: { telegramChatId: '12345' },
+					content: {
+						daysBeforeExpiry: 7,
+						planLabel: 'EASY',
+						expiresAtLabel: '2026-08-27'
 					}
 				})
 			),
 			fields: {
 				exchange: 'aerocrm.events',
-				routingKey: 'payment.notification.telegram.requested.v1'
+				routingKey: 'notification.subscription-expiry.telegram.requested.v1'
 			},
 			properties: {
 				messageId: eventId,
-				type: 'payment.notification.telegram.requested.v1',
+				type: 'notification.subscription-expiry.telegram.requested.v1',
 				headers: {}
 			}
 		}) as ConsumeMessage;
@@ -234,13 +167,11 @@ describe('NotificationDeliveryWorkerService', () => {
 			notificationDeliveryOutboxEvent: {
 				createMany: jest.fn().mockResolvedValue({ count: 1 })
 			},
-			$transaction: jest.fn(callback => callback(transaction))
+			$transaction: jest.fn((callback) => callback(transaction))
 		} as unknown as NotificationDeliveryPrismaService;
 		const configService = {
 			get: jest.fn((name: string) =>
-				name === 'NOTIFICATION_DELIVERY_KINDS'
-					? configuredKinds
-					: undefined
+				name === 'NOTIFICATION_DELIVERY_KINDS' ? configuredKinds : undefined
 			)
 		} as unknown as ConfigService;
 		const metadata = new NotificationDeliveryMessageMetadataService();
@@ -305,11 +236,10 @@ describe('NotificationDeliveryWorkerService', () => {
 
 	it.each(SUPPORT_NOTIFICATION_KINDS)(
 		'commits a %s outcome with its claimed receipt before ACK',
-		async kind => {
+		async (kind) => {
 			const { service, transaction, rabbitMq } = createService(kind);
 			await (service as any).handle(kind, createSupportMessage(kind));
-			const create =
-				transaction.notificationDeliveryOutboxEvent.createMany;
+			const create = transaction.notificationDeliveryOutboxEvent.createMany;
 			expect(create).toHaveBeenCalledWith({
 				data: [
 					expect.objectContaining({
@@ -370,9 +300,8 @@ describe('NotificationDeliveryWorkerService', () => {
 	});
 	it.each(SUPPORT_NOTIFICATION_KINDS)(
 		'retries %s through its independent durable route',
-		async kind => {
-			const { service, adapter, transaction, rabbitMq } =
-				createService(kind);
+		async (kind) => {
+			const { service, adapter, transaction, rabbitMq } = createService(kind);
 			(adapter.deliver as jest.Mock).mockRejectedValue(
 				Object.assign(new Error('context unavailable'), {
 					code: 'ETIMEDOUT'
@@ -396,9 +325,7 @@ describe('NotificationDeliveryWorkerService', () => {
 	it('deduplicates a support delivery using eventId plus consumer before the adapter', async () => {
 		const { service, adapter, prisma, transaction, rabbitMq } =
 			createService('support-team-email');
-		(
-			prisma.notificationDeliveryReceipt.create as jest.Mock
-		).mockRejectedValue(
+		(prisma.notificationDeliveryReceipt.create as jest.Mock).mockRejectedValue(
 			new Prisma.PrismaClientKnownRequestError('duplicate', {
 				code: 'P2002',
 				clientVersion: '5.22.0'
@@ -413,9 +340,7 @@ describe('NotificationDeliveryWorkerService', () => {
 			'support-team-email',
 			createSupportMessage('support-team-email')
 		);
-		expect(
-			prisma.notificationDeliveryReceipt.findUnique
-		).toHaveBeenCalledWith({
+		expect(prisma.notificationDeliveryReceipt.findUnique).toHaveBeenCalledWith({
 			where: {
 				eventId_consumer: { eventId, consumer: 'support-team-email' }
 			}
@@ -432,11 +357,10 @@ describe('NotificationDeliveryWorkerService', () => {
 	});
 
 	const createInvitationMessage = (): ConsumeMessage => {
-		const message = createPaymentMessage(
+		const message = createSubscriptionExpiryMessage(
 			'notification.crm.invitation.email.requested.v1'
 		);
-		message.properties.type =
-			'notification.crm.invitation.email.requested.v1';
+		message.properties.type = 'notification.crm.invitation.email.requested.v1';
 		message.content = Buffer.from(
 			JSON.stringify({
 				schemaVersion: 1,
@@ -461,8 +385,7 @@ describe('NotificationDeliveryWorkerService', () => {
 	const createReminderMessage = (): ConsumeMessage => {
 		const message = createInvitationMessage();
 		const payload = JSON.parse(message.content.toString());
-		payload.eventType =
-			'notification.crm.task-reminder.email.requested.v1';
+		payload.eventType = 'notification.crm.task-reminder.email.requested.v1';
 		payload.reference.type = 'crm-task-reminder';
 		delete payload.destination;
 		delete payload.content;
@@ -503,8 +426,7 @@ describe('NotificationDeliveryWorkerService', () => {
 			})
 		);
 		const outbox =
-			transaction.notificationDeliveryOutboxEvent.create.mock.calls[0][0]
-				.data;
+			transaction.notificationDeliveryOutboxEvent.create.mock.calls[0][0].data;
 		expect(outbox).toMatchObject({
 			messageId: eventId,
 			exchange: 'EVENTS',
@@ -529,7 +451,7 @@ describe('NotificationDeliveryWorkerService', () => {
 	});
 	it.each(['claim', 'outbox'])(
 		'does not ACK an uncommitted quiet-hours defer after %s failure',
-		async failure => {
+		async (failure) => {
 			const { service, rabbitMq, adapter, transaction } = createService(
 				'crm-task-reminder-email'
 			);
@@ -538,9 +460,9 @@ describe('NotificationDeliveryWorkerService', () => {
 				retryAt: new Date(Date.now() + 3600_000).toISOString()
 			});
 			if (failure === 'claim')
-				transaction.notificationDeliveryReceipt.updateMany.mockResolvedValue(
-					{ count: 0 }
-				);
+				transaction.notificationDeliveryReceipt.updateMany.mockResolvedValue({
+					count: 0
+				});
 			else
 				transaction.notificationDeliveryOutboxEvent.create.mockRejectedValue(
 					new Error('commit unavailable')
@@ -584,13 +506,9 @@ describe('NotificationDeliveryWorkerService', () => {
 	});
 	it('reports actual opted-in consumer kinds rather than configuration alone', async () => {
 		const { service } = createService('crm-task-reminder-email');
-		expect(service.isReadyForKinds(['crm-task-reminder-email'])).toBe(
-			false
-		);
+		expect(service.isReadyForKinds(['crm-task-reminder-email'])).toBe(false);
 		await service.onModuleInit();
-		expect(service.isReadyForKinds(['crm-task-reminder-email'])).toBe(
-			true
-		);
+		expect(service.isReadyForKinds(['crm-task-reminder-email'])).toBe(true);
 		expect(
 			service.isReadyForKinds([
 				'crm-task-reminder-email',
@@ -601,7 +519,7 @@ describe('NotificationDeliveryWorkerService', () => {
 
 	it.each(['INVITATION_EXPIRED', 'INVITATION_UNAVAILABLE'])(
 		'records %s as a terminal skip, not provider delivery, before ack',
-		async reason => {
+		async (reason) => {
 			const { service, rabbitMq, adapter, transaction } = createService(
 				'crm-invitation-email'
 			);
@@ -660,9 +578,7 @@ describe('NotificationDeliveryWorkerService', () => {
 			expect(
 				transaction.notificationDeliveryReceipt.updateMany.mock
 					.invocationCallOrder[0]
-			).toBeLessThan(
-				jest.mocked(rabbitMq.ack).mock.invocationCallOrder[0]
-			);
+			).toBeLessThan(jest.mocked(rabbitMq.ack).mock.invocationCallOrder[0]);
 		}
 	);
 	it('never acknowledges or closes a failure when the terminal skip CAS is lost', async () => {
@@ -690,14 +606,12 @@ describe('NotificationDeliveryWorkerService', () => {
 		const { service, rabbitMq, adapter, prisma } = createService(
 			'crm-invitation-email'
 		);
-		jest
-			.mocked(prisma.notificationDeliveryReceipt.create)
-			.mockRejectedValue(
-				new Prisma.PrismaClientKnownRequestError('duplicate', {
-					code: 'P2002',
-					clientVersion: '5.22.0'
-				})
-			);
+		jest.mocked(prisma.notificationDeliveryReceipt.create).mockRejectedValue(
+			new Prisma.PrismaClientKnownRequestError('duplicate', {
+				code: 'P2002',
+				clientVersion: '5.22.0'
+			})
+		);
 		jest
 			.mocked(prisma.notificationDeliveryReceipt.findUnique)
 			.mockResolvedValue({
@@ -801,62 +715,44 @@ describe('NotificationDeliveryWorkerService', () => {
 
 		await service.onModuleInit();
 
-		expect(rabbitMq.consume).toHaveBeenCalledTimes(11);
-		expect(rabbitMq.consumeDeadLetter).toHaveBeenCalledTimes(11);
+		expect(rabbitMq.consume).toHaveBeenCalledTimes(
+			DEFAULT_NOTIFICATION_DELIVERY_KINDS.length
+		);
+		expect(rabbitMq.consumeDeadLetter).toHaveBeenCalledTimes(
+			DEFAULT_NOTIFICATION_DELIVERY_KINDS.length
+		);
 		expect(
-			(rabbitMq.consume as jest.Mock).mock.calls.map(call => call[0])
-		).toEqual([
-			'email',
-			'telegram',
-			'payment-email',
-			'payment-telegram',
-			'limit-email',
-			'limit-telegram',
-			'campaign-email',
-			'campaign-telegram',
-			'daily-summary-delivery-telegram',
-			'subscription-expiry-email',
-			'subscription-expiry-telegram'
-		]);
-		expect(heartbeat.setConsumerKinds).toHaveBeenCalledWith([
-			'email',
-			'telegram',
-			'payment-email',
-			'payment-telegram',
-			'limit-email',
-			'limit-telegram',
-			'campaign-email',
-			'campaign-telegram',
-			'daily-summary-delivery-telegram',
-			'subscription-expiry-email',
-			'subscription-expiry-telegram'
-		]);
+			(rabbitMq.consume as jest.Mock).mock.calls.map((call) => call[0])
+		).toEqual(DEFAULT_NOTIFICATION_DELIVERY_KINDS);
+		expect(heartbeat.setConsumerKinds).toHaveBeenCalledWith(
+			DEFAULT_NOTIFICATION_DELIVERY_KINDS
+		);
 	});
 
 	it('subscribes only to the configured deduplicated subset', async () => {
 		const { service, rabbitMq, heartbeat } = createService(
-			'payment-telegram, limit-telegram,payment-telegram'
+			'crm-task-reminder-telegram, crm-intake-sla-telegram,crm-task-reminder-telegram'
 		);
 
 		await service.onModuleInit();
 
 		expect(
-			(rabbitMq.consume as jest.Mock).mock.calls.map(call => call[0])
-		).toEqual(['payment-telegram', 'limit-telegram']);
+			(rabbitMq.consume as jest.Mock).mock.calls.map((call) => call[0])
+		).toEqual(['crm-task-reminder-telegram', 'crm-intake-sla-telegram']);
 		expect(
 			(rabbitMq.consumeDeadLetter as jest.Mock).mock.calls.map(
-				call => call[0]
+				(call) => call[0]
 			)
-		).toEqual(['payment-telegram', 'limit-telegram']);
+		).toEqual(['crm-task-reminder-telegram', 'crm-intake-sla-telegram']);
 		expect(heartbeat.setConsumerKinds).toHaveBeenCalledWith([
-			'payment-telegram',
-			'limit-telegram'
+			'crm-task-reminder-telegram',
+			'crm-intake-sla-telegram'
 		]);
 	});
 
 	it.each(['', ' , '])(
 		'rejects an explicitly empty consumer allowlist %p',
-		async configuredKinds => {
+		async (configuredKinds) => {
 			const { service, rabbitMq } = createService(configuredKinds);
 
 			await expect(service.onModuleInit()).rejects.toThrow(
@@ -867,9 +763,7 @@ describe('NotificationDeliveryWorkerService', () => {
 	);
 
 	it('rejects unknown consumer kinds before subscribing', async () => {
-		const { service, rabbitMq } = createService(
-			'email,legacy-payment-telegram'
-		);
+		const { service, rabbitMq } = createService('legacy-payment-telegram');
 
 		await expect(service.onModuleInit()).rejects.toThrow(
 			'NOTIFICATION_DELIVERY_KINDS contains unsupported kinds: legacy-payment-telegram'
@@ -878,24 +772,24 @@ describe('NotificationDeliveryWorkerService', () => {
 	});
 
 	it('marks a successful provider delivery before acknowledging', async () => {
-		const { service, rabbitMq, adapter, prisma, transaction } =
-			createService();
+		const { service, rabbitMq, adapter, prisma, transaction } = createService();
 
-		await (service as any).handle('payment-email', createPaymentMessage());
+		await (service as any).handle(
+			'subscription-expiry-email',
+			createSubscriptionExpiryMessage()
+		);
 
 		expect(adapter.deliver).toHaveBeenCalledTimes(1);
-		expect(prisma.notificationDeliveryReceipt.create).toHaveBeenCalledWith(
-			{
-				data: expect.objectContaining({
-					eventId,
-					consumer: 'payment-email',
-					status: NotificationDeliveryReceiptStatus.PROCESSING,
-					lockedBy: expect.any(String),
-					lockToken: expect.any(String),
-					leaseExpiresAt: expect.any(Date)
-				})
-			}
-		);
+		expect(prisma.notificationDeliveryReceipt.create).toHaveBeenCalledWith({
+			data: expect.objectContaining({
+				eventId,
+				consumer: 'subscription-expiry-email',
+				status: NotificationDeliveryReceiptStatus.PROCESSING,
+				lockedBy: expect.any(String),
+				lockToken: expect.any(String),
+				leaseExpiresAt: expect.any(Date)
+			})
+		});
 		expect(
 			transaction.notificationDeliveryReceipt.updateMany
 		).toHaveBeenCalledWith(
@@ -917,7 +811,10 @@ describe('NotificationDeliveryWorkerService', () => {
 			transaction.notificationDeliveryReceipt.updateMany as jest.Mock
 		).mockResolvedValueOnce({ count: 0 });
 
-		await (service as any).handle('payment-email', createPaymentMessage());
+		await (service as any).handle(
+			'subscription-expiry-email',
+			createSubscriptionExpiryMessage()
+		);
 
 		expect(adapter.deliver).toHaveBeenCalledTimes(1);
 		expect(rabbitMq.ack).not.toHaveBeenCalled();
@@ -926,7 +823,7 @@ describe('NotificationDeliveryWorkerService', () => {
 
 	it('schedules active-claim recovery before acknowledging the delivery', async () => {
 		const { service, rabbitMq, adapter, prisma } = createService();
-		const message = createPaymentMessage();
+		const message = createSubscriptionExpiryMessage();
 		const activeLockToken = '22222222-2222-4222-8222-222222222222';
 		(
 			prisma.notificationDeliveryReceipt.create as jest.Mock
@@ -944,7 +841,7 @@ describe('NotificationDeliveryWorkerService', () => {
 			leaseExpiresAt: new Date(Date.now() + 60_000)
 		});
 
-		await (service as any).handle('payment-email', message);
+		await (service as any).handle('subscription-expiry-email', message);
 
 		expect(adapter.deliver).not.toHaveBeenCalled();
 		expect(
@@ -952,8 +849,8 @@ describe('NotificationDeliveryWorkerService', () => {
 		).toHaveBeenCalledWith({
 			data: [
 				expect.objectContaining({
-					deduplicationKey: `notification:${eventId}:payment-email:claim:${activeLockToken}`,
-					routingKey: 'manual.payment-email',
+					deduplicationKey: `notification:${eventId}:subscription-expiry-email:claim:${activeLockToken}`,
+					routingKey: 'manual.subscription-expiry-email',
 					availableAt: expect.any(Date)
 				})
 			],
@@ -962,9 +859,7 @@ describe('NotificationDeliveryWorkerService', () => {
 		expect(
 			(prisma.notificationDeliveryOutboxEvent.createMany as jest.Mock).mock
 				.invocationCallOrder[0]
-		).toBeLessThan(
-			(rabbitMq.ack as jest.Mock).mock.invocationCallOrder[0]
-		);
+		).toBeLessThan((rabbitMq.ack as jest.Mock).mock.invocationCallOrder[0]);
 		expect(rabbitMq.nack).not.toHaveBeenCalled();
 	});
 
@@ -989,7 +884,10 @@ describe('NotificationDeliveryWorkerService', () => {
 			prisma.notificationDeliveryOutboxEvent.createMany as jest.Mock
 		).mockRejectedValueOnce(new Error('outbox unavailable'));
 
-		await (service as any).handle('payment-email', createPaymentMessage());
+		await (service as any).handle(
+			'subscription-expiry-email',
+			createSubscriptionExpiryMessage()
+		);
 
 		expect(adapter.deliver).not.toHaveBeenCalled();
 		expect(rabbitMq.ack).not.toHaveBeenCalled();
@@ -998,7 +896,7 @@ describe('NotificationDeliveryWorkerService', () => {
 
 	it('acknowledges a stale retry token without calling the provider', async () => {
 		const { service, rabbitMq, adapter, prisma } = createService();
-		const message = createPaymentMessage();
+		const message = createSubscriptionExpiryMessage();
 		message.properties.headers = {
 			'x-retry-attempt': 1,
 			'x-delivery-token': '33333333-3333-4333-8333-333333333333'
@@ -1020,7 +918,7 @@ describe('NotificationDeliveryWorkerService', () => {
 			retryAvailableAt: new Date(Date.now() - 1_000)
 		});
 
-		await (service as any).handle('payment-email', message);
+		await (service as any).handle('subscription-expiry-email', message);
 
 		expect(adapter.deliver).not.toHaveBeenCalled();
 		expect(rabbitMq.ack).toHaveBeenCalledTimes(1);
@@ -1082,15 +980,17 @@ describe('NotificationDeliveryWorkerService', () => {
 	});
 
 	it('persists retry state and a manual-route outbox event atomically', async () => {
-		const { service, rabbitMq, adapter, prisma, transaction } =
-			createService();
+		const { service, rabbitMq, adapter, prisma, transaction } = createService();
 		(adapter.deliver as jest.Mock).mockRejectedValue(
 			Object.assign(new Error('SMTP unavailable'), {
 				code: 'ECONNECTION'
 			})
 		);
 
-		await (service as any).handle('payment-email', createPaymentMessage());
+		await (service as any).handle(
+			'subscription-expiry-email',
+			createSubscriptionExpiryMessage()
+		);
 
 		expect(prisma.$transaction).toHaveBeenCalledTimes(1);
 		expect(
@@ -1110,7 +1010,7 @@ describe('NotificationDeliveryWorkerService', () => {
 			data: expect.objectContaining({
 				messageId: eventId,
 				exchange: NotificationDeliveryExchange.EVENTS,
-				routingKey: 'manual.payment-email',
+				routingKey: 'manual.subscription-expiry-email',
 				headers: expect.objectContaining({
 					'x-retry-attempt': 1,
 					'x-delivery-token': expect.any(String)
@@ -1131,14 +1031,15 @@ describe('NotificationDeliveryWorkerService', () => {
 			new Error('transaction unavailable')
 		);
 
-		await (service as any).handle('payment-email', createPaymentMessage());
+		await (service as any).handle(
+			'subscription-expiry-email',
+			createSubscriptionExpiryMessage()
+		);
 
-		expect(
-			prisma.notificationDeliveryReceipt.deleteMany
-		).toHaveBeenCalledWith({
+		expect(prisma.notificationDeliveryReceipt.deleteMany).toHaveBeenCalledWith({
 			where: expect.objectContaining({
 				eventId,
-				consumer: 'payment-email',
+				consumer: 'subscription-expiry-email',
 				status: NotificationDeliveryReceiptStatus.PROCESSING,
 				lockToken: expect.any(String)
 			})
@@ -1149,7 +1050,7 @@ describe('NotificationDeliveryWorkerService', () => {
 
 	it('dead-letters a recognized transient failure after its retry budget is exhausted', async () => {
 		const { service, rabbitMq, adapter, transaction } = createService();
-		const message = createPaymentMessage();
+		const message = createSubscriptionExpiryMessage();
 		message.properties.headers = {
 			'x-retry-attempt': 3,
 			'x-first-failed-at': new Date().toISOString()
@@ -1160,7 +1061,7 @@ describe('NotificationDeliveryWorkerService', () => {
 			})
 		);
 
-		await (service as any).handle('payment-email', message);
+		await (service as any).handle('subscription-expiry-email', message);
 
 		expect(
 			transaction.notificationDeliveryReceipt.updateMany
@@ -1171,9 +1072,7 @@ describe('NotificationDeliveryWorkerService', () => {
 				})
 			})
 		);
-		expect(
-			transaction.notificationDeliveryFailure.upsert
-		).toHaveBeenCalledWith(
+		expect(transaction.notificationDeliveryFailure.upsert).toHaveBeenCalledWith(
 			expect.objectContaining({
 				create: expect.objectContaining({
 					attempts: 4,
@@ -1191,7 +1090,7 @@ describe('NotificationDeliveryWorkerService', () => {
 
 	it('dead-letters a transient failure after the automatic retry window expires', async () => {
 		const { service, rabbitMq, adapter, transaction } = createService();
-		const message = createPaymentMessage();
+		const message = createSubscriptionExpiryMessage();
 		message.properties.headers = {
 			'x-retry-attempt': 0,
 			'x-first-failed-at': new Date(
@@ -1204,11 +1103,9 @@ describe('NotificationDeliveryWorkerService', () => {
 			})
 		);
 
-		await (service as any).handle('payment-email', message);
+		await (service as any).handle('subscription-expiry-email', message);
 
-		expect(
-			transaction.notificationDeliveryFailure.upsert
-		).toHaveBeenCalledWith(
+		expect(transaction.notificationDeliveryFailure.upsert).toHaveBeenCalledWith(
 			expect.objectContaining({
 				create: expect.objectContaining({
 					attempts: 1,
@@ -1223,15 +1120,17 @@ describe('NotificationDeliveryWorkerService', () => {
 	});
 
 	it('persists terminal failure, receipt and DLQ outbox in one transaction', async () => {
-		const { service, rabbitMq, adapter, prisma, transaction } =
-			createService();
+		const { service, rabbitMq, adapter, prisma, transaction } = createService();
 		(adapter.deliver as jest.Mock).mockRejectedValue(
 			Object.assign(new Error('Invalid envelope'), {
 				code: 'EENVELOPE'
 			})
 		);
 
-		await (service as any).handle('payment-email', createPaymentMessage());
+		await (service as any).handle(
+			'subscription-expiry-email',
+			createSubscriptionExpiryMessage()
+		);
 
 		expect(prisma.$transaction).toHaveBeenCalledTimes(1);
 		expect(
@@ -1251,7 +1150,7 @@ describe('NotificationDeliveryWorkerService', () => {
 		).toHaveBeenCalledWith({
 			data: expect.objectContaining({
 				exchange: NotificationDeliveryExchange.DEAD_LETTER,
-				routingKey: 'payment-email.dead-letter'
+				routingKey: 'subscription-expiry-email.dead-letter'
 			})
 		});
 		expect(rabbitMq.ack).toHaveBeenCalledTimes(1);
@@ -1301,8 +1200,7 @@ describe('NotificationDeliveryWorkerService', () => {
 	});
 
 	it('persists a destination-unavailable outcome atomically with a terminal Telegram failure', async () => {
-		const { service, rabbitMq, adapter, prisma, transaction } =
-			createService();
+		const { service, rabbitMq, adapter, prisma, transaction } = createService();
 		(adapter.deliver as jest.Mock).mockRejectedValue(
 			Object.assign(new Error('Telegram destination failed'), {
 				httpStatus: 400,
@@ -1310,7 +1208,10 @@ describe('NotificationDeliveryWorkerService', () => {
 			})
 		);
 
-		await (service as any).handle('telegram', createTelegramMessage());
+		await (service as any).handle(
+			'subscription-expiry-telegram',
+			createTelegramMessage()
+		);
 
 		expect(prisma.$transaction).toHaveBeenCalledTimes(1);
 		expect(
@@ -1327,7 +1228,7 @@ describe('NotificationDeliveryWorkerService', () => {
 		).toHaveBeenCalledWith({
 			data: expect.objectContaining({
 				exchange: NotificationDeliveryExchange.DEAD_LETTER,
-				routingKey: 'telegram.dead-letter'
+				routingKey: 'subscription-expiry-telegram.dead-letter'
 			})
 		});
 		expect(
@@ -1336,7 +1237,7 @@ describe('NotificationDeliveryWorkerService', () => {
 			data: [
 				expect.objectContaining({
 					messageId: expect.any(String),
-					deduplicationKey: `notification:${eventId}:telegram:telegram-destination-unavailable:v1`,
+					deduplicationKey: `notification:${eventId}:subscription-expiry-telegram:telegram-destination-unavailable:v1`,
 					exchange: NotificationDeliveryExchange.EVENTS,
 					eventType: 'notification.telegram.destination-unavailable.v1',
 					routingKey: 'notification.telegram.destination-unavailable.v1',
@@ -1344,7 +1245,7 @@ describe('NotificationDeliveryWorkerService', () => {
 						schemaVersion: 1,
 						eventType: 'notification.telegram.destination-unavailable.v1',
 						sourceEventId: eventId,
-						sourceKind: 'telegram',
+						sourceKind: 'subscription-expiry-telegram',
 						destination: { telegramChatId: '12345' },
 						normalizedCode: 'TELEGRAM_CHAT_NOT_FOUND',
 						occurredAt: expect.any(String)
@@ -1371,8 +1272,8 @@ describe('NotificationDeliveryWorkerService', () => {
 		);
 
 		await (service as any).handle(
-			'limit-telegram',
-			createLimitTelegramMessage()
+			'subscription-expiry-telegram',
+			createTelegramMessage()
 		);
 
 		expect(
@@ -1380,10 +1281,10 @@ describe('NotificationDeliveryWorkerService', () => {
 		).toHaveBeenCalledWith({
 			data: [
 				expect.objectContaining({
-					deduplicationKey: `notification:${eventId}:limit-telegram:telegram-destination-unavailable:v1`,
+					deduplicationKey: `notification:${eventId}:subscription-expiry-telegram:telegram-destination-unavailable:v1`,
 					payload: expect.objectContaining({
 						sourceEventId: eventId,
-						sourceKind: 'limit-telegram',
+						sourceKind: 'subscription-expiry-telegram',
 						destination: { telegramChatId: '12345' },
 						normalizedCode: 'TELEGRAM_BOT_BLOCKED'
 					})
@@ -1402,41 +1303,17 @@ describe('NotificationDeliveryWorkerService', () => {
 			})
 		);
 
-		await (service as any).handle('telegram', createTelegramMessage());
+		await (service as any).handle(
+			'subscription-expiry-telegram',
+			createTelegramMessage()
+		);
 
 		expect(
 			transaction.notificationDeliveryOutboxEvent.create
 		).toHaveBeenCalledWith({
 			data: expect.objectContaining({
 				exchange: NotificationDeliveryExchange.EVENTS,
-				routingKey: 'manual.telegram'
-			})
-		});
-		expect(
-			transaction.notificationDeliveryOutboxEvent.createMany
-		).not.toHaveBeenCalled();
-	});
-
-	it('does not create a public-channel outcome for payment Telegram destination failures', async () => {
-		const { service, adapter, transaction } = createService();
-		(adapter.deliver as jest.Mock).mockRejectedValue(
-			Object.assign(new Error('Telegram destination failed'), {
-				httpStatus: 400,
-				description: 'Bad Request: chat not found'
-			})
-		);
-
-		await (service as any).handle(
-			'payment-telegram',
-			createPaymentTelegramMessage()
-		);
-
-		expect(
-			transaction.notificationDeliveryOutboxEvent.create
-		).toHaveBeenCalledWith({
-			data: expect.objectContaining({
-				exchange: NotificationDeliveryExchange.DEAD_LETTER,
-				routingKey: 'payment-telegram.dead-letter'
+				routingKey: 'manual.subscription-expiry-telegram'
 			})
 		});
 		expect(
@@ -1446,7 +1323,9 @@ describe('NotificationDeliveryWorkerService', () => {
 
 	it('acks a DLQ message only after its canonical failure is persisted', async () => {
 		const { service, rabbitMq, transaction } = createService();
-		const message = createPaymentMessage('payment-email.dead-letter');
+		const message = createSubscriptionExpiryMessage(
+			'subscription-expiry-email.dead-letter'
+		);
 		message.fields.exchange = 'aerocrm.dead-letter';
 		message.properties.headers = {
 			'x-retry-attempt': 2,
@@ -1457,15 +1336,16 @@ describe('NotificationDeliveryWorkerService', () => {
 			'x-classification-version': 1
 		};
 
-		await (service as any).collectDeadLetter('payment-email', message);
+		await (service as any).collectDeadLetter(
+			'subscription-expiry-email',
+			message
+		);
 
-		expect(
-			transaction.notificationDeliveryFailure.upsert
-		).toHaveBeenCalledWith(
+		expect(transaction.notificationDeliveryFailure.upsert).toHaveBeenCalledWith(
 			expect.objectContaining({
 				create: expect.objectContaining({
 					eventId,
-					consumer: 'payment-email',
+					consumer: 'subscription-expiry-email',
 					attempts: 2,
 					normalizedCode: 'SMTP_REJECTED'
 				})
@@ -1473,11 +1353,8 @@ describe('NotificationDeliveryWorkerService', () => {
 		);
 		expect(rabbitMq.ack).toHaveBeenCalledTimes(1);
 		expect(
-			transaction.notificationDeliveryFailure.upsert.mock
-				.invocationCallOrder[0]
-		).toBeLessThan(
-			(rabbitMq.ack as jest.Mock).mock.invocationCallOrder[0]
-		);
+			transaction.notificationDeliveryFailure.upsert.mock.invocationCallOrder[0]
+		).toBeLessThan((rabbitMq.ack as jest.Mock).mock.invocationCallOrder[0]);
 	});
 
 	it('acks a stale DLQ copy without interrupting an active manual retry', async () => {
@@ -1498,10 +1375,15 @@ describe('NotificationDeliveryWorkerService', () => {
 			retryingAt: new Date(),
 			activeRetryToken
 		});
-		const message = createPaymentMessage('payment-email.dead-letter');
+		const message = createSubscriptionExpiryMessage(
+			'subscription-expiry-email.dead-letter'
+		);
 		message.fields.exchange = 'aerocrm.dead-letter';
 
-		await (service as any).collectDeadLetter('payment-email', message);
+		await (service as any).collectDeadLetter(
+			'subscription-expiry-email',
+			message
+		);
 
 		expect(
 			transaction.notificationDeliveryReceipt.updateMany
@@ -1514,19 +1396,17 @@ describe('NotificationDeliveryWorkerService', () => {
 
 	it('persists a malformed message with a bounded fallback event type', async () => {
 		const { service, rabbitMq, transaction } = createService();
-		const message = createPaymentMessage();
+		const message = createSubscriptionExpiryMessage();
 		message.content = Buffer.from('{');
 		message.properties.type = '   ';
 
-		await (service as any).handle('payment-email', message);
+		await (service as any).handle('subscription-expiry-email', message);
 
-		expect(
-			transaction.notificationDeliveryFailure.upsert
-		).toHaveBeenCalledWith(
+		expect(transaction.notificationDeliveryFailure.upsert).toHaveBeenCalledWith(
 			expect.objectContaining({
 				create: expect.objectContaining({
 					eventId,
-					consumer: 'payment-email',
+					consumer: 'subscription-expiry-email',
 					normalizedCode: 'INVALID_EVENT_PAYLOAD'
 				})
 			})
@@ -1537,7 +1417,7 @@ describe('NotificationDeliveryWorkerService', () => {
 			data: [
 				expect.objectContaining({
 					eventType: 'unknown',
-					routingKey: 'payment-email.dead-letter'
+					routingKey: 'subscription-expiry-email.dead-letter'
 				})
 			],
 			skipDuplicates: true
@@ -1549,17 +1429,15 @@ describe('NotificationDeliveryWorkerService', () => {
 	it('never persists or logs malformed payload contents through parser errors', async () => {
 		const { service, transaction } = createService();
 		const secretBody = 'SECRET_PASSWORD=top-secret-value';
-		const message = createPaymentMessage();
+		const message = createSubscriptionExpiryMessage();
 		message.content = Buffer.from(secretBody);
 		const logError = jest
 			.spyOn((service as any).logger, 'error')
 			.mockImplementation();
 
-		await (service as any).handle('payment-email', message);
+		await (service as any).handle('subscription-expiry-email', message);
 
-		expect(
-			transaction.notificationDeliveryFailure.upsert
-		).toHaveBeenCalledWith(
+		expect(transaction.notificationDeliveryFailure.upsert).toHaveBeenCalledWith(
 			expect.objectContaining({
 				create: expect.objectContaining({
 					payload: {
@@ -1570,10 +1448,8 @@ describe('NotificationDeliveryWorkerService', () => {
 					safeReason: 'Notification payload failed contract validation',
 					normalizedCode: 'INVALID_EVENT_PAYLOAD',
 					headers: expect.objectContaining({
-						'x-last-error':
-							'Notification payload failed contract validation',
-						'x-safe-reason':
-							'Notification payload failed contract validation'
+						'x-last-error': 'Notification payload failed contract validation',
+						'x-safe-reason': 'Notification payload failed contract validation'
 					})
 				})
 			})
@@ -1594,15 +1470,15 @@ describe('NotificationDeliveryWorkerService', () => {
 		NotificationDeliveryReceiptStatus.CLOSED_NO_RETRY
 	])(
 		'acks malformed duplicates without replacing an active %s receipt',
-		async status => {
+		async (status) => {
 			const { service, rabbitMq, transaction } = createService();
 			(
 				transaction.notificationDeliveryReceipt.findUnique as jest.Mock
 			).mockResolvedValue({ status });
-			const message = createPaymentMessage();
+			const message = createSubscriptionExpiryMessage();
 			message.content = Buffer.from('{');
 
-			await (service as any).handle('payment-email', message);
+			await (service as any).handle('subscription-expiry-email', message);
 
 			expect(
 				transaction.notificationDeliveryReceipt.updateMany
@@ -1623,10 +1499,15 @@ describe('NotificationDeliveryWorkerService', () => {
 		(
 			transaction.notificationDeliveryReceipt.updateMany as jest.Mock
 		).mockResolvedValueOnce({ count: 0 });
-		const message = createPaymentMessage('payment-email.dead-letter');
+		const message = createSubscriptionExpiryMessage(
+			'subscription-expiry-email.dead-letter'
+		);
 		message.fields.exchange = 'aerocrm.dead-letter';
 
-		await (service as any).collectDeadLetter('payment-email', message);
+		await (service as any).collectDeadLetter(
+			'subscription-expiry-email',
+			message
+		);
 
 		expect(
 			transaction.notificationDeliveryReceipt.updateMany
@@ -1648,17 +1529,20 @@ describe('NotificationDeliveryWorkerService', () => {
 
 	it('normalizes an out-of-range DLQ HTTP status before persistence', async () => {
 		const { service, transaction } = createService();
-		const message = createPaymentMessage('payment-email.dead-letter');
+		const message = createSubscriptionExpiryMessage(
+			'subscription-expiry-email.dead-letter'
+		);
 		message.fields.exchange = 'aerocrm.dead-letter';
 		message.properties.headers = {
 			'x-http-status': 99
 		};
 
-		await (service as any).collectDeadLetter('payment-email', message);
+		await (service as any).collectDeadLetter(
+			'subscription-expiry-email',
+			message
+		);
 
-		expect(
-			transaction.notificationDeliveryFailure.upsert
-		).toHaveBeenCalledWith(
+		expect(transaction.notificationDeliveryFailure.upsert).toHaveBeenCalledWith(
 			expect.objectContaining({
 				create: expect.objectContaining({
 					httpStatus: null
@@ -1672,10 +1556,15 @@ describe('NotificationDeliveryWorkerService', () => {
 
 	it('locks the receipt before reading and updating the DLQ failure', async () => {
 		const { service, transaction } = createService();
-		const message = createPaymentMessage('payment-email.dead-letter');
+		const message = createSubscriptionExpiryMessage(
+			'subscription-expiry-email.dead-letter'
+		);
 		message.fields.exchange = 'aerocrm.dead-letter';
 
-		await (service as any).collectDeadLetter('payment-email', message);
+		await (service as any).collectDeadLetter(
+			'subscription-expiry-email',
+			message
+		);
 
 		expect(
 			transaction.notificationDeliveryReceipt.updateMany.mock
@@ -1688,8 +1577,7 @@ describe('NotificationDeliveryWorkerService', () => {
 			transaction.notificationDeliveryReceipt.updateMany.mock
 				.invocationCallOrder[0]
 		).toBeLessThan(
-			transaction.notificationDeliveryFailure.upsert.mock
-				.invocationCallOrder[0]
+			transaction.notificationDeliveryFailure.upsert.mock.invocationCallOrder[0]
 		);
 	});
 });

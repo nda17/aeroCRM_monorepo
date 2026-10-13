@@ -1,7 +1,7 @@
 name: aeroCRM CI
 on:
   push:
-    branches: [dev_0.1.0/feature/standalone-crm, dev_0.2.0/feature/selective-backend-release, dev_0.3.0/feature/draft-protection-and-corporate-mail, dev_0.4.0/feature/crm-file-imports, dev_0.5.0/feature/planner-customization, dev_0.5.1/fix/mail-deliverability, dev_0.6.0/feature/crm-ux-unification, dev_0.6.1/fix/rabbitmq-cold-start, dev_0.7.0/feature/workspace-collaboration, dev_0.8.0/feature/meeting3-workflows, dev_0.8.1/fix/runtime-storage, dev_0.10.0/feature/shared-inbox-workflow, dev_0.11.0/feature/telegram-business-messenger, prod_0.1.0]
+    branches: [dev_0.1.0/feature/standalone-crm, dev_0.2.0/feature/selective-backend-release, dev_0.3.0/feature/draft-protection-and-corporate-mail, dev_0.4.0/feature/crm-file-imports, dev_0.5.0/feature/planner-customization, dev_0.5.1/fix/mail-deliverability, dev_0.6.0/feature/crm-ux-unification, dev_0.6.1/fix/rabbitmq-cold-start, dev_0.7.0/feature/workspace-collaboration, dev_0.8.0/feature/meeting3-workflows, dev_0.8.1/fix/runtime-storage, dev_0.10.0/feature/shared-inbox-workflow, dev_0.11.0/feature/telegram-business-messenger, dev_0.13.0/feature/technical-debt-release, prod_0.1.0]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -22,7 +22,7 @@ jobs:
           version: 9.15.9
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24.21.0'
           cache: pnpm
           cache-dependency-path: aeroCRM_frontends/pnpm-lock.yaml
       - name: Install and verify
@@ -194,7 +194,7 @@ jobs:
           version: 9.15.9
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24.21.0'
           cache: pnpm
           cache-dependency-path: aeroCRM_services/apps/billing/pnpm-lock.yaml
       - name: Apply isolated Billing migrations and administrative seat ACL
@@ -593,7 +593,7 @@ jobs:
           version: 9.15.9
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24.21.0'
           cache: pnpm
           cache-dependency-path: aeroCRM_services/apps/crm-access/pnpm-lock.yaml
       - name: Build CRM Access runtime
@@ -695,7 +695,7 @@ jobs:
           version: 9.15.9
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24.21.0'
           cache: pnpm
           cache-dependency-path: aeroCRM_services/apps/crm-sales/pnpm-lock.yaml
       - name: Create isolated CRM Sales database and roles
@@ -798,9 +798,40 @@ jobs:
           docker exec -i -e PGPASSWORD=local-backup-only "$PG_CONTAINER" \
             psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U aerocrm_crm_sales_backup \
             -d aerocrm_crm_sales_test -c 'SELECT count(*) FROM crm_sales.commerce_catalog_items'
-          CRM_SALES_DATABASE_URL="$CRM_SALES_TEST_DATABASE_URL" node test/integration/sales-commerce-postgres18.integration.mjs
-          CRM_SALES_DATABASE_URL="$CRM_SALES_TEST_DATABASE_URL" node test/integration/planner-customization-postgres18.integration.mjs
-          CRM_SALES_DATABASE_URL="$CRM_SALES_TEST_DATABASE_URL" node test/integration/sales-workflow-postgres18.integration.mjs
+          # Capture a native stack only when a synthetic integration process fails.
+          # Install gdb after the failure so the ordinary test environment stays intact.
+          if sudo sysctl -w "kernel.core_pattern=$RUNNER_TEMP/native-core-%p"; then
+            ulimit -c unlimited
+          else
+            ulimit -c 0
+            echo 'Native core capture is unavailable on this runner' >&2
+          fi
+          trap 'rm -f "$RUNNER_TEMP"/native-core-*' EXIT
+          run_native_integration() {
+            local scenario="$1"
+            set +e
+            CRM_SALES_DATABASE_URL="$CRM_SALES_TEST_DATABASE_URL" node "test/integration/${scenario}-postgres18.integration.mjs"
+            local status=$?
+            set -e
+            if [ "$status" -ne 0 ]; then
+              shopt -s nullglob
+              local cores=("$RUNNER_TEMP"/native-core-*)
+              if [ "${#cores[@]}" -gt 0 ]; then
+                if sudo apt-get update && sudo apt-get install --yes --no-install-recommends gdb; then
+                  for core in "${cores[@]}"; do
+                    gdb -q -nx --batch -ex 'set pagination off' \
+                      -ex 'set print frame-arguments none' -ex 'thread apply all bt 12' \
+                      "$(command -v node)" "$core" || true
+                    rm -f "$core"
+                  done
+                fi
+              fi
+              exit "$status"
+            fi
+          }
+          run_native_integration sales-commerce
+          run_native_integration planner-customization
+          run_native_integration sales-workflow
   crm-intake-notifications-postgres18:
     runs-on: ubuntu-latest
     services:
@@ -824,7 +855,7 @@ jobs:
           version: 9.15.9
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24.21.0'
           cache: pnpm
           cache-dependency-path: aeroCRM_services/apps/crm-intake/pnpm-lock.yaml
       - name: Create isolated CRM Intake database and roles
@@ -902,9 +933,38 @@ jobs:
           docker exec -i -e PGPASSWORD=local-migration-only "$PG_CONTAINER" \
             psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U aerocrm_crm_intake_migration \
             -d aerocrm_crm_intake_test < /tmp/crm-intake-notifications-acl.sql
-          CRM_INTAKE_DATABASE_URL="$CRM_INTAKE_TEST_DATABASE_URL" node test/integration/intake-postgres18.integration.mjs
-          CRM_INTAKE_DATABASE_URL="$CRM_INTAKE_TEST_DATABASE_URL" node test/integration/csv-postgres18.integration.mjs
-          CRM_INTAKE_DATABASE_URL="$CRM_INTAKE_TEST_DATABASE_URL" node test/integration/acceptance-postgres18.integration.mjs
+          if sudo sysctl -w "kernel.core_pattern=$RUNNER_TEMP/native-core-%p"; then
+            ulimit -c unlimited
+          else
+            ulimit -c 0
+            echo 'Native core capture is unavailable on this runner' >&2
+          fi
+          trap 'rm -f "$RUNNER_TEMP"/native-core-*' EXIT
+          run_native_integration() {
+            local scenario="$1"
+            set +e
+            CRM_INTAKE_DATABASE_URL="$CRM_INTAKE_TEST_DATABASE_URL" node "test/integration/${scenario}-postgres18.integration.mjs"
+            local status=$?
+            set -e
+            if [ "$status" -ne 0 ]; then
+              shopt -s nullglob
+              local cores=("$RUNNER_TEMP"/native-core-*)
+              if [ "${#cores[@]}" -gt 0 ]; then
+                if sudo apt-get update && sudo apt-get install --yes --no-install-recommends gdb; then
+                  for core in "${cores[@]}"; do
+                    gdb -q -nx --batch -ex 'set pagination off' \
+                      -ex 'set print frame-arguments none' -ex 'thread apply all bt 12' \
+                      "$(command -v node)" "$core" || true
+                    rm -f "$core"
+                  done
+                fi
+              fi
+              exit "$status"
+            fi
+          }
+          run_native_integration intake
+          run_native_integration csv
+          run_native_integration acceptance
   workspace-closure-postgres18:
     runs-on: ubuntu-latest
     services:
@@ -927,7 +987,7 @@ jobs:
           version: 9.15.9
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24.21.0'
           cache: pnpm
           cache-dependency-path: |
             aeroCRM_services/apps/crm-customers/pnpm-lock.yaml
@@ -1022,7 +1082,7 @@ jobs:
           version: 9.15.9
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24.21.0'
           cache: pnpm
           cache-dependency-path: aeroCRM_services/apps/${{ matrix.service }}/pnpm-lock.yaml
       - name: Install frozen service dependencies
@@ -1032,20 +1092,19 @@ jobs:
         working-directory: aeroCRM_services/apps/${{ matrix.service }}
         run: pnpm prisma:generate
       - name: Run workspace closure specs
+        if: matrix.service != 'crm-customers'
         working-directory: aeroCRM_services/apps/${{ matrix.service }}
         run: pnpm exec jest --runInBand --testPathPattern=workspace-closure
-      - name: Verify Identity authentication and session revocation contracts
-        if: matrix.service == 'identity'
-        working-directory: aeroCRM_services/apps/identity
-        run: pnpm exec jest --runInBand --testPathPattern=src/auth
-      - name: Verify Identity email transport contracts
-        if: matrix.service == 'identity'
-        working-directory: aeroCRM_services/apps/identity
-        run: pnpm exec jest --runInBand --testPathPattern=src/transports
-      - name: Verify notification email MIME contracts
-        if: matrix.service == 'notification-delivery'
-        working-directory: aeroCRM_services/apps/notification-delivery
-        run: pnpm exec jest --runInBand --testPathPattern='src/email|crm-invitation-delivery|crm-task-reminder|crm-intake-sla'
+      - name: Run Customers workspace closure specs
+        if: matrix.service == 'crm-customers'
+        working-directory: aeroCRM_services/apps/crm-customers
+        env:
+          NODE_OPTIONS: --experimental-vm-modules
+        run: pnpm exec jest --runInBand --testPathPatterns=workspace-closure
+      - name: Run complete Identity and Notification Delivery unit suites
+        if: matrix.service == 'identity' || matrix.service == 'notification-delivery'
+        working-directory: aeroCRM_services/apps/${{ matrix.service }}
+        run: pnpm test
   bootstrap-recovery-unit:
     runs-on: ubuntu-latest
     strategy:
@@ -1059,7 +1118,7 @@ jobs:
           version: 9.15.9
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24.21.0'
           cache: pnpm
           cache-dependency-path: aeroCRM_services/apps/${{ matrix.service }}/pnpm-lock.yaml
       - name: Install frozen service dependencies
@@ -1086,7 +1145,7 @@ jobs:
           version: 9.15.9
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24.21.0'
           cache: pnpm
           cache-dependency-path: aeroCRM_services/apps/crm-customers/pnpm-lock.yaml
       - name: Install and build Customers mail runtime
@@ -1094,10 +1153,14 @@ jobs:
         run: pnpm install --frozen-lockfile && pnpm prisma:generate && pnpm build
       - name: Verify mail transport, admission and authorization contracts
         working-directory: aeroCRM_services/apps/crm-customers
-        run: pnpm exec jest --runInBand --testPathPattern=mail
+        env:
+          NODE_OPTIONS: --experimental-vm-modules
+        run: pnpm exec jest --runInBand --testPathPatterns=mail
       - name: Verify Customers import and readiness contracts
         working-directory: aeroCRM_services/apps/crm-customers
-        run: pnpm exec jest --runInBand --testPathPattern='imports|health'
+        env:
+          NODE_OPTIONS: --experimental-vm-modules
+        run: pnpm exec jest --runInBand --testPathPatterns='imports|health'
   gateway-telegram-business-unit:
     runs-on: ubuntu-latest
     steps:
@@ -1107,7 +1170,7 @@ jobs:
           version: 9.15.9
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24.21.0'
           cache: pnpm
           cache-dependency-path: aeroCRM_services/apps/api-gateway/pnpm-lock.yaml
       - name: Verify API Gateway routing and Telegram Business configuration
@@ -1119,7 +1182,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24.21.0'
       - name: Verify release planner and embedded backup migration inventory
         run: |
           node --check .github/scripts/backend-manifest.mjs
@@ -1137,7 +1200,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24.21.0'
       - name: Plan complete backend manifest from latest green production CI
         id: plan
         env:

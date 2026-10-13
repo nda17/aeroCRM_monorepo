@@ -22,7 +22,7 @@ export class DatabaseRestoreArtifactValidatorService {
 
 	assertTableOfContents(
 		tableOfContents: string,
-		target: DatabaseRestoreTargetConfiguration
+		target: Pick<DatabaseRestoreTargetConfiguration, 'schema' | 'migrationRole'>
 	): void {
 		const schemaEntries = tableOfContents
 			.split(/\r?\n/)

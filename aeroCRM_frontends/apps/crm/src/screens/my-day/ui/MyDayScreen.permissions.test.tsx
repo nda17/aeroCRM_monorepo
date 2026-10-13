@@ -335,8 +335,9 @@ beforeEach(() => {
 		})
 	)
 })
-afterEach(() => {
+afterEach(async () => {
 	cleanup()
+	await client.cancelQueries()
 	client.clear()
 	resetSessionStore()
 })

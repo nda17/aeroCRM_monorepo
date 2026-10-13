@@ -150,9 +150,6 @@ function fixture() {
 	};
 }
 describe('Sales durable reminder generation and send-time authority', () => {
-	it.todo(
-		'reminder_deliveries keeps task/rule workspace foreign keys (root backlog P1)'
-	);
 	const previous = process.env.CRM_TASK_REMINDERS_ENABLED;
 	beforeEach(() => {
 		jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });

@@ -2,8 +2,6 @@ import { NotificationDeliveryAdapterService } from './notification-delivery-adap
 import { EmailService } from '../email/email.service';
 import type { NotificationDeliveryPrismaService } from './prisma/notification-delivery-prisma.service';
 import type { TelegramInfoTransportService } from '../telegram/telegram-info-transport.service';
-import { render } from '@react-email/render';
-import type { Transporter } from 'nodemailer';
 import type { CrmInvitationContextService } from './crm-invitation-context.service';
 import type { CrmTaskReminderContextService } from './crm-task-reminder-context.service';
 
@@ -156,8 +154,7 @@ describe('NotificationDeliveryAdapterService', () => {
 			'subscription-expiry-telegram',
 			{
 				schemaVersion: 1,
-				eventType:
-					'notification.subscription-expiry.telegram.requested.v1',
+				eventType: 'notification.subscription-expiry.telegram.requested.v1',
 				reference: {
 					type: 'subscription-expiry-reminder',
 					id: '33333333-3333-4333-8333-333333333333'

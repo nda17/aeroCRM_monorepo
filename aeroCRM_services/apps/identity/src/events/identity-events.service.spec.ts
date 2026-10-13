@@ -60,9 +60,7 @@ describe('Identity event parity', () => {
 			findUnique.mock.invocationCallOrder[0]!
 		);
 		const lockSql = execute.mock.calls[0]?.[0];
-		expect(lockSql.strings.join('?')).toContain(
-			'SELECT pg_advisory_xact_lock'
-		);
+		expect(lockSql.strings.join('?')).toContain('SELECT pg_advisory_xact_lock');
 		expect(create).toHaveBeenCalledTimes(2);
 
 		const identityPayload = create.mock.calls[0]?.[0].data.payload;
@@ -93,7 +91,6 @@ describe('Identity event parity', () => {
 				roles: [Role.DEV, Role.USER],
 				hasEmailIdentity: true,
 				hasPhoneIdentity: true,
-				hasTelegramIdentity: true,
 				loginMethodCount: 2,
 				createdAt: CREATED_AT.toISOString(),
 				updatedAt: CREATED_AT.toISOString()
@@ -107,7 +104,6 @@ describe('Identity event parity', () => {
 				'roles',
 				'hasEmailIdentity',
 				'hasPhoneIdentity',
-				'hasTelegramIdentity',
 				'loginMethodCount',
 				'createdAt',
 				'updatedAt'
@@ -175,12 +171,7 @@ describe('Identity event parity', () => {
 				{ type: 'GOOGLE', value: 'google', verifiedAt: CREATED_AT }
 			]
 		});
-		expect(result.loginMethods).toEqual([
-			'EMAIL',
-			'GOOGLE',
-			'VK',
-			'TELEGRAM'
-		]);
+		expect(result.loginMethods).toEqual(['EMAIL', 'GOOGLE', 'VK']);
 		expect(result).toHaveProperty('deletedAt', null);
 		expect(result).toHaveProperty('personalDataConsentRevokedAt', null);
 	});
@@ -236,7 +227,7 @@ describe('Identity audit metadata', () => {
 		'clientSecret',
 		'correlationId',
 		'requestIp'
-	])('rejects secret-shaped or reserved metadata key %s', key => {
+	])('rejects secret-shaped or reserved metadata key %s', (key) => {
 		expect(() =>
 			auditMetadata('USER_UPDATE', {
 				changedFields: ['name'],

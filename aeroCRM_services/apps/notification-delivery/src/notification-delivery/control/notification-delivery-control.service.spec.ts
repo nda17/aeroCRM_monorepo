@@ -16,19 +16,23 @@ const FAILURE_ID = '22222222-2222-4222-8222-222222222222';
 const createFailure = (overrides: Record<string, unknown> = {}) => ({
 	id: FAILURE_ID,
 	eventId: EVENT_ID,
-	consumer: 'email',
-	routingKey: 'lead.integration.email.v2',
+	consumer: 'crm-invitation-email',
+	routingKey: 'notification.crm.invitation.email.requested.v1',
 	payload: {
-		schemaVersion: 2,
-		eventType: 'lead.integration.requested.v2',
-		integration: 'email',
-		source: 'widget',
-		entity: { id: 'widget-1', name: 'Колесо' },
-		lead: {
-			id: 'lead-1',
-			createdAt: '2026-07-27T00:00:00.000Z'
+		schemaVersion: 1,
+		eventId: EVENT_ID,
+		eventType: 'notification.crm.invitation.email.requested.v1',
+		occurredAt: '2026-09-05T00:00:00.000Z',
+		reference: {
+			type: 'crm-invitation',
+			id: '33333333-3333-4333-8333-333333333333',
+			workspaceId: '44444444-4444-4444-8444-444444444444'
 		},
-		destination: { email: 'owner@example.com' }
+		destination: { email: 'owner@example.test' },
+		content: {
+			invitationId: '33333333-3333-4333-8333-333333333333',
+			expiresAt: '2026-09-12T00:00:00.000Z'
+		}
 	},
 	headers: {},
 	attempts: 4,
@@ -117,9 +121,7 @@ describe('NotificationDeliveryControlService', () => {
 	});
 
 	it('reports active heartbeat instances and latest worker activity', async () => {
-		jest
-			.useFakeTimers()
-			.setSystemTime(new Date('2026-07-27T12:00:00.000Z'));
+		jest.useFakeTimers().setSystemTime(new Date('2026-07-27T12:00:00.000Z'));
 		const prisma = createOverviewPrisma([
 			{
 				service: 'notification-delivery-worker',
@@ -177,25 +179,19 @@ describe('NotificationDeliveryControlService', () => {
 		});
 		expect(overview.oldestPendingAt).toBe('2026-07-27T11:59:00.000Z');
 		expect(overview.outbox.FAILED).toBe(1);
-		expect(
-			prisma.notificationDeliveryFailure.groupBy
-		).toHaveBeenCalledWith(
+		expect(prisma.notificationDeliveryFailure.groupBy).toHaveBeenCalledWith(
 			expect.objectContaining({
 				by: ['category', 'normalizedCode']
 			})
 		);
-		expect(
-			prisma.notificationDeliveryHeartbeat.findMany
-		).toHaveBeenCalledWith({
+		expect(prisma.notificationDeliveryHeartbeat.findMany).toHaveBeenCalledWith({
 			where: { service: 'notification-delivery-worker' },
 			orderBy: { lastSeenAt: 'desc' }
 		});
 	});
 
 	it('excludes future pending work and uses an expired publishing lease for backlog age', async () => {
-		jest
-			.useFakeTimers()
-			.setSystemTime(new Date('2026-07-27T12:00:00.000Z'));
+		jest.useFakeTimers().setSystemTime(new Date('2026-07-27T12:00:00.000Z'));
 		const prisma = createOverviewPrisma([]);
 		(prisma.notificationDeliveryOutboxEvent.findFirst as jest.Mock)
 			.mockReset()
@@ -293,9 +289,7 @@ describe('NotificationDeliveryControlService', () => {
 	])(
 		'normalizes a $label worker heartbeat to the compatible down status',
 		async ({ heartbeats, lastSeenAt }) => {
-			jest
-				.useFakeTimers()
-				.setSystemTime(new Date('2026-07-27T12:00:00.000Z'));
+			jest.useFakeTimers().setSystemTime(new Date('2026-07-27T12:00:00.000Z'));
 			const service = new NotificationDeliveryControlService(
 				createOverviewPrisma(heartbeats)
 			);
@@ -331,7 +325,7 @@ describe('NotificationDeliveryControlService', () => {
 			}
 		};
 		const prisma = {
-			$transaction: jest.fn(async callback => callback(transaction))
+			$transaction: jest.fn(async (callback) => callback(transaction))
 		} as unknown as NotificationDeliveryPrismaService;
 		const service = new NotificationDeliveryControlService(prisma);
 		const request = {
@@ -362,7 +356,7 @@ describe('NotificationDeliveryControlService', () => {
 		).toHaveBeenCalledWith({
 			where: expect.objectContaining({
 				id: FAILURE_ID,
-				consumer: 'email',
+				consumer: 'crm-invitation-email',
 				resolvedAt: null
 			}),
 			data: {
@@ -375,7 +369,7 @@ describe('NotificationDeliveryControlService', () => {
 		).toHaveBeenCalledWith({
 			where: expect.objectContaining({
 				eventId: EVENT_ID,
-				consumer: 'email'
+				consumer: 'crm-invitation-email'
 			}),
 			data: expect.objectContaining({
 				status: NotificationDeliveryReceiptStatus.RETRY_SCHEDULED,
@@ -393,8 +387,8 @@ describe('NotificationDeliveryControlService', () => {
 					/^manual-retry:22222222-2222-4222-8222-222222222222:/
 				),
 				exchange: NotificationDeliveryExchange.EVENTS,
-				eventType: 'lead.integration.requested.v2',
-				routingKey: 'manual.email',
+				eventType: 'notification.crm.invitation.email.requested.v1',
+				routingKey: 'manual.crm-invitation-email',
 				payload: failure.payload,
 				headers: expect.objectContaining({
 					'x-retry-attempt': 0,
@@ -413,7 +407,7 @@ describe('NotificationDeliveryControlService', () => {
 				action: NotificationDeliveryControlActionKind.RETRY,
 				failureId: FAILURE_ID,
 				eventId: EVENT_ID,
-				kind: 'email',
+				kind: 'crm-invitation-email',
 				actorId: 'admin-user-id',
 				comment: null,
 				createdAt: expect.any(Date)
@@ -422,7 +416,7 @@ describe('NotificationDeliveryControlService', () => {
 		expect(result).toEqual({
 			id: FAILURE_ID,
 			eventId: EVENT_ID,
-			integration: 'email',
+			integration: 'crm-invitation-email',
 			retryingAt: expect.any(String)
 		});
 	});
@@ -430,8 +424,7 @@ describe('NotificationDeliveryControlService', () => {
 	it('rejects a malformed event before changing state', async () => {
 		const failure = createFailure({
 			payload: {
-				eventType: 'lead.integration.requested.v2',
-				integration: 'email'
+				eventType: 'notification.crm.invitation.email.requested.v1'
 			}
 		});
 		const updateFailure = jest.fn();
@@ -446,7 +439,7 @@ describe('NotificationDeliveryControlService', () => {
 			notificationDeliveryOutboxEvent: { create: createOutbox }
 		};
 		const prisma = {
-			$transaction: jest.fn(async callback => callback(transaction))
+			$transaction: jest.fn(async (callback) => callback(transaction))
 		} as unknown as NotificationDeliveryPrismaService;
 		const service = new NotificationDeliveryControlService(prisma);
 
@@ -467,7 +460,7 @@ describe('NotificationDeliveryControlService', () => {
 			}
 		};
 		const prisma = {
-			$transaction: jest.fn(async callback => callback(transaction))
+			$transaction: jest.fn(async (callback) => callback(transaction))
 		} as unknown as NotificationDeliveryPrismaService;
 		const service = new NotificationDeliveryControlService(prisma);
 
@@ -484,16 +477,14 @@ describe('NotificationDeliveryControlService', () => {
 			notificationDeliveryFailure: {
 				findUnique: jest
 					.fn()
-					.mockResolvedValue(
-						createFailure({ consumer: 'campaign-email' })
-					),
+					.mockResolvedValue(createFailure({ consumer: 'campaign-email' })),
 				updateMany: updateFailure
 			},
 			notificationDeliveryReceipt: { updateMany: updateReceipt },
 			notificationDeliveryOutboxEvent: { create: createOutbox }
 		};
 		const prisma = {
-			$transaction: jest.fn(async callback => callback(transaction))
+			$transaction: jest.fn(async (callback) => callback(transaction))
 		} as unknown as NotificationDeliveryPrismaService;
 		const service = new NotificationDeliveryControlService(prisma);
 
@@ -525,7 +516,7 @@ describe('NotificationDeliveryControlService', () => {
 			}
 		};
 		const prisma = {
-			$transaction: jest.fn(async callback => callback(transaction))
+			$transaction: jest.fn(async (callback) => callback(transaction))
 		} as unknown as NotificationDeliveryPrismaService;
 		const service = new NotificationDeliveryControlService(prisma);
 
@@ -540,7 +531,7 @@ describe('NotificationDeliveryControlService', () => {
 		).toHaveBeenCalledWith({
 			where: {
 				id: FAILURE_ID,
-				consumer: 'email',
+				consumer: 'crm-invitation-email',
 				resolvedAt: null,
 				retryingAt: null,
 				activeRetryToken: null
@@ -558,7 +549,7 @@ describe('NotificationDeliveryControlService', () => {
 		).toHaveBeenCalledWith({
 			where: {
 				eventId: EVENT_ID,
-				consumer: 'email',
+				consumer: 'crm-invitation-email',
 				status: NotificationDeliveryReceiptStatus.DEAD_LETTERED
 			},
 			data: {
@@ -583,7 +574,7 @@ describe('NotificationDeliveryControlService', () => {
 				action: NotificationDeliveryControlActionKind.CLOSE,
 				failureId: FAILURE_ID,
 				eventId: EVENT_ID,
-				kind: 'email',
+				kind: 'crm-invitation-email',
 				actorId: 'admin-user-id',
 				comment: 'Проверено и закрыто вручную',
 				createdAt: expect.any(Date)
@@ -592,7 +583,7 @@ describe('NotificationDeliveryControlService', () => {
 		expect(result).toEqual({
 			id: FAILURE_ID,
 			eventId: EVENT_ID,
-			integration: 'email',
+			integration: 'crm-invitation-email',
 			resolvedAt: expect.any(String),
 			resolution: 'CLOSED_NO_RETRY',
 			resolutionComment: 'Проверено и закрыто вручную'
@@ -604,7 +595,7 @@ describe('NotificationDeliveryControlService', () => {
 		const count = jest.fn().mockResolvedValue(0);
 		const prisma = {
 			notificationDeliveryFailure: { findMany, count },
-			$transaction: jest.fn(async queries => Promise.all(queries))
+			$transaction: jest.fn(async (queries) => Promise.all(queries))
 		} as unknown as NotificationDeliveryPrismaService;
 		const service = new NotificationDeliveryControlService(prisma);
 
@@ -614,15 +605,10 @@ describe('NotificationDeliveryControlService', () => {
 			where: {
 				consumer: {
 					in: [
-						'email',
-						'telegram',
-						'payment-email',
-						'payment-telegram',
-						'limit-email',
-						'limit-telegram',
 						'campaign-email',
 						'campaign-telegram',
 						'daily-summary-delivery-telegram',
+						'operations-backup-report-telegram',
 						'subscription-expiry-email',
 						'subscription-expiry-telegram',
 						'support-team-email',
@@ -655,7 +641,7 @@ describe('NotificationDeliveryControlService', () => {
 			expect.objectContaining({
 				id: FAILURE_ID,
 				eventId: EVENT_ID,
-				integration: 'email'
+				integration: 'crm-invitation-email'
 			})
 		);
 		await expect(service.getFailure(FAILURE_ID)).rejects.toBeInstanceOf(

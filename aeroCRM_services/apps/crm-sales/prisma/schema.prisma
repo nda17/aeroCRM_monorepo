@@ -354,6 +354,7 @@ model SalesTask {
   commands          TaskCommandReceipt[]
   timeline          TaskTimeline[]
   recurrence        TaskSeriesOccurrence?
+  reminderDeliveries ReminderDelivery[]
   boardColumn       PlannerBoardColumn?   @relation(fields: [boardColumnId, workspaceId], references: [id, workspaceId], onDelete: Restrict, map: "tasks_board_column_fkey")
 
   @@unique([id, workspaceId])
@@ -536,6 +537,7 @@ model ReminderRule {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
   commands          ReminderRuleCommand[]
+  deliveries        ReminderDelivery[]
 
   @@unique([id, workspaceId])
   @@index([workspaceId, scope, ownerSubject, ownerMembershipId, archivedAt, createdAt, id], map: "reminder_rules_list_idx")
@@ -596,6 +598,9 @@ model ReminderDelivery {
   nominalAt             DateTime @map("nominal_at")
   status                String @default("PENDING") @db.VarChar(16)
   createdAt             DateTime @default(now()) @map("created_at")
+
+  task SalesTask @relation(fields: [taskId, workspaceId], references: [id, workspaceId], onDelete: Restrict, onUpdate: Restrict, map: "reminder_deliveries_task_workspace_fkey")
+  rule ReminderRule @relation(fields: [ruleId, workspaceId], references: [id, workspaceId], onDelete: Restrict, onUpdate: Restrict, map: "reminder_deliveries_rule_workspace_fkey")
 
   @@index([workspaceId, taskId, status])
   @@index([workspaceId, ruleId, status])

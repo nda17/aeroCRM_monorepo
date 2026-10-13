@@ -115,13 +115,126 @@ read-only учётными данными. Worker проверяет dump чер
 `node scripts/database-backup-migration-manifests.mjs --write` и проверьте его
 командой с `--check`. Закоммитьте manifest вместе с миграцией до выпуска.
 
-Восстановление баз данных пока не поддерживается для нового PostgreSQL 18
-cluster и S3 backup. `DATABASE_RESTORE_ENABLED` должен оставаться `false`;
-при `true` модуль не запускается. Реестр restore не содержит целей, settings
-возвращает пустой список, а генератор restore-манифеста и прежние standalone
-rehearsal команды удалены или явно отклоняют запуск. Для включения restore
-нужны отдельный контракт доступа к S3, проверка подписанного artifact, новые
-ACL/роли и изолированная rehearsal с фактической схемой БД.
+Штатное восстановление PostgreSQL 18 из S3 выполняет отдельный Operations
+maintenance CLI через GitHub CI/CD. Старый публичный upload/API restore
+не включается: `DATABASE_RESTORE_ENABLED=false`. Его старый реестр и
+Telegram-admission не используются новым CLI.
+
+## Service-owned maintenance CLI
+
+Команда из exact-SHA Operations image, рабочий каталог `/app`:
+
+```text
+node dist/src/maintenance/database-maintenance.cli.js --request /run/restore/request.json
+```
+
+Request — обычный файл `0600`, не symlink, до 16 KiB. Каждый ответ — один JSON
+в stdout, успех `exit 0`; ошибка — ограниченный JSON в stderr, `exit 1`.
+Секреты и строки бизнес-данных не должны попадать в workflow logs. Ошибка
+не снимает writer fence; authoritative progress читается командой `status`.
+
+Общие обязательные поля request: `schemaVersion: 1`, `action`,
+`expectedRevision` (точный 40-символьный SHA Operations image). Лишние поля
+отклоняются. Остальные поля зависят от команды:
+
+| action | Дополнительные обязательные поля |
+| --- | --- |
+| `inventory` | Нет |
+| `inspect` | `operationId` UUIDv4, `target`, `backupJobId` UUIDv4 |
+| `backup` | `operationId` UUIDv4, `target`, `expectedClusterSystemIdentifier` |
+| `restore` | `operationId` UUIDv4, `target`, `expectedClusterSystemIdentifier`, `backupJobId`, `expectedArtifactSha256`, `expectedStateRevision`, `confirmation: "RESTORE <target>"` |
+| `rollback` | `operationId` UUIDv4, `target`, `expectedClusterSystemIdentifier`, `expectedStateRevision`, `confirmation: "ROLLBACK <target>"` |
+| `status` | `operationId` UUIDv4, `target`, `expectedClusterSystemIdentifier` |
+
+`inventory` читает system identifier PG18 и возвращает `revision`,
+`clusterSystemIdentifier`, все 12 `targets` с database/schema/principals,
+`aclSha256` и `migrationManifestSha256`. `inspect` скачивает только заданный
+комплект private S3 backup во временный каталог, проверяет подпись Ed25519,
+размер/SHA-256 и ledger миграций самого dump. Возвращает `backupJobId`,
+`artifactSha256`, `provenanceSha256`, `fileSize`, `migrationManifestSha256`,
+`sourceRevision`. У `backup` идентификатор задания равен `operationId`;
+результат содержит существующий BackupResult (`objectKey`,
+`provenanceObjectKey`, `manifestObjectKey`, подписанный `backupProvenance`).
+Backup сначала сохраняет exclusive admission в host ledger и отвергает
+любой уже существующий S3 prefix этого job. `operationId` одноразовый:
+после потери ответа проверяют `inspect` с тем же `backupJobId`; неудачное
+или частично загруженное задание повторяют только с новым UUID. Существующая
+копия никогда не перезаписывается повтором CLI.
+Все эти команды не запускают `main.js`, consumers или внешние уведомления.
+
+Переменные окружения maintenance-контейнера:
+
+- `APP_REVISION`: тот же exact SHA, что в request и image label.
+- `DATABASE_MAINTENANCE_ADMIN_URL`: приватный URL
+  `postgresql://aerocrm_cluster_admin:<secret>@127.0.0.1:<port>/postgres`.
+  Разрешён только loopback; порт может отличаться для изолированного PG18.
+  Не передавать URL в аргументах процесса или логах.
+- `DATABASE_MAINTENANCE_LEDGER_DIR`: постоянный host bind mount `0700`,
+  доступный UID 1001. Не размещать в PostgreSQL data directory, `/tmp`,
+  каталоге удаляемого release или ephemeral container layer.
+- `DATABASE_MAINTENANCE_ACTOR`: аудируемый источник запуска, например
+  `github:nda17/aeroCRM_monorepo/123456789`. Обязателен для backup, restore
+  и rollback. Binding сохраняет первоначального actor, каждая новая
+  квитанция содержит actor текущего запуска.
+- Обычные `CRM_BACKUP_S3_*`; для `backup` также все необходимые
+  `<SERVICE>_BACKUP_URL`, `DATABASE_BACKUP_PROVENANCE_KEY_ID`,
+  `DATABASE_BACKUP_PROVENANCE_PRIVATE_KEY_FILE`, `CRM_BACKUP_RETENTION_DAYS`.
+  Private key нужен только подписанию. Public keyring уже включён в image.
+- `DATABASE_MAINTENANCE_MAX_DUMP_BYTES`: необязательный предел одного
+  скачиваемого dump, по умолчанию 10 GiB. Перед fencing проверяется место
+  под source, safety copy и запас для текущей БД.
+- `DATABASE_MAINTENANCE_REHEARSAL_CLUSTER`: **только** для отдельного
+  disposable PG18, равен его system identifier. Разрешает замену случайного
+  service database ID fixture на ID подписанного backup. Значение проверяется
+  по `pg_control_system`; на действующем кластере не устанавливать.
+
+Первый `restore` имеет `expectedStateRevision: 0`. Изменение request для
+того же `operationId` (другая цель, cluster, source, image/ACL/manifest)
+отклоняется. `status` возвращает binding, `state` с `revision`/`phase`,
+`receiptSha256`. `restore`/`rollback` возвращают те же state/receipt поля.
+Повтор терминальной операции возвращает сохранённую квитанцию без новой
+записи в бизнес-БД. Для продолжения незавершённой операции требуется текущий
+`expectedStateRevision` из status. Прерывание в `RESTORING` требует явного
+`rollback`, а не повторного применения source. После проверки durable
+`COMMITTING` фиксируется **до** возвращения LOGIN. С этой границы rollback
+запрещён: могли появиться новые данные. Повтор `restore` в `COMMITTING`
+только завершает открытие ролей и записывает `COMMITTED`, без нового чтения
+S3 или изменения бизнес-данных. Для rollback действует аналогичная граница
+`ROLLBACK_COMMITTING` → LOGIN → `ROLLED_BACK`; повтор `rollback` после неё
+только завершает открытие. Возврат после commit на другой backup является
+отдельной новой операцией со своей страховочной копией.
+
+Журнал хранится в `<ledger>/<system-identifier>/<operationId>/`:
+`binding.json`, `source.dump`, `safety.dump` и append-only hash-chain
+`receipts/00000001.json` и далее. Запись квитанции атомарна, файл и каталог
+синхронизируются; в Operations DB ledger не дублируется. Это позволяет
+восстановить саму Operations. Для backup в том же каталоге сохраняются
+immutable `backup-claim.json` и, при успехе, `backup-result.json`.
+Один session advisory lock в БД `postgres`
+исключает одновременные maintenance writers; GitHub workflow дополнительно
+удерживает штатный host release lock, исключая одновременную миграцию/деплой.
+
+Перед restore workflow останавливает только процессы выбранного владельца
+данных; новый CLI блокирует LOGIN migration/runtime/backup ролей этой цели,
+проверяет membership/ACL/чужие сессии и prepared transactions и завершает
+только сессии этих трёх ролей в этой БД. Generation хранится на уровне
+выбранной database, отдельно от её schema. Safety dump проверяется до
+`DROP SCHEMA`. После restore проверяются migration ledger, точный inventory,
+service identity там, где она существует, explicit ACL и row counts.
+Notification Delivery не получает фиктивную `service_identity`.
+LOGIN возвращается только после проверки; workflow запускает штатные
+процессы только после terminal COMMITTED/ROLLED_BACK и выполняет readiness.
+
+Rehearsal проводится для всех 12 целей на **другом** PG18 system identifier
+с теми же именами database/schema/roles и применёнными текущими миграциями.
+Используется текущий signed backup каждой цели. Ни API, ни workers/consumers
+в clone не запускаются; проверяются также неправильный target/hash/подпись,
+устаревший CAS, повтор и rollback после прерывания. Для согласованного
+комплекта всех БД workflow может остановить всех writers на время backup.
+Старый backup допускается только при совпадении migration manifest и
+фактического ledger внутри dump; после новой миграции Sales нужен новый dump.
+Текущий scheduler автоматически выполняет эту проверку перед подписью и
+публикацией новых backup, независимо от maintenance CLI.
 
 ## Проверка
 

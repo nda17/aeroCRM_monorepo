@@ -44,6 +44,7 @@ type UserEditForm = IUserEditInput & { avatarPreview?: string | null }
 
 const PLAN_LABELS: Record<string, string> = {
 	TRIAL: 'Пробный доступ',
+	PAID: 'Оплаченный доступ',
 	EASY: 'Easy',
 	HARD: 'Hard'
 }
@@ -57,6 +58,9 @@ const PERIOD_LABELS: Record<string, string> = {
 
 const SUBSCRIPTION_STATUS_LABELS: Record<string, string> = {
 	ACTIVE: 'Активна',
+	GRACE: 'Льготный период',
+	READ_ONLY: 'Только чтение',
+	SUSPENDED: 'Приостановлена',
 	EXPIRED: 'Истекла',
 	CANCELLED: 'Отменена'
 }
@@ -175,8 +179,6 @@ const UserOverview360 = ({
 		)
 	}
 
-	const subscription = overview.subscription
-
 	return (
 		<div className={styles.overview}>
 			<div className={styles.overviewHeader}>
@@ -191,87 +193,114 @@ const UserOverview360 = ({
 					Подписки рабочих пространств
 				</p>
 				<p className={styles.overviewNote}>
-					{subscription
-						? `В сводке показано одно рабочее пространство: ${subscription.workspaceId}.`
-						: 'Эта сводка не определяет наличие подписок всех рабочих пространств.'}{' '}
+					Рабочие пространства, принадлежащие пользователю.{' '}
 					<Link href={ADMIN_PAGES.FINANCE_SUBSCRIPTIONS}>
 						Все подписки
 					</Link>
 				</p>
-				<div className={styles.overviewMetricGrid}>
-					<div>
-						<span className={styles.overviewMetricLabel}>Тариф</span>
-						<span className={styles.overviewMetricValue}>
-							{subscription
-								? getLabel(PLAN_LABELS, subscription.planCode)
-								: 'Смотрите подписки рабочих пространств'}
-						</span>
+				{overview.subscriptions.items === null ? (
+					<p className={styles.overviewEmpty}>
+						Подписки сейчас недоступны.
+					</p>
+				) : overview.subscriptions.items.length ? (
+					<div className={styles.overviewList}>
+						{overview.subscriptions.items.map(
+							({ workspaceId, entitlement }) => (
+								<div className={styles.overviewListItem} key={workspaceId}>
+									<div>
+										<p className={styles.overviewListTitle}>
+											Пространство {workspaceId}
+										</p>
+										{entitlement ? (
+											<>
+												<p className={styles.overviewListMeta}>
+													{getLabel(PLAN_LABELS, entitlement.planCode)} ·{' '}
+													{getLabel(
+														SUBSCRIPTION_STATUS_LABELS,
+														entitlement.status
+													)}
+												</p>
+												<p className={styles.overviewListMeta}>
+													Места: {entitlement.seatLimit ?? 'Не указано'} ·
+													Окончание:{' '}
+													{entitlement.effectiveUntil
+														? formatDateTime(entitlement.effectiveUntil)
+														: 'Не указано'}
+												</p>
+											</>
+										) : (
+											<p className={styles.overviewListMeta}>
+												Подписка ещё не выдана.
+											</p>
+										)}
+									</div>
+								</div>
+							)
+						)}
 					</div>
-					<div>
-						<span className={styles.overviewMetricLabel}>Статус</span>
-						<span className={styles.overviewMetricValue}>
-							{subscription
-								? getLabel(SUBSCRIPTION_STATUS_LABELS, subscription.status)
-								: 'Нет данных'}
-						</span>
-					</div>
-					<div>
-						<span className={styles.overviewMetricLabel}>Места</span>
-						<span className={styles.overviewMetricValue}>
-							{subscription ? subscription.seatLimit : 'Нет данных'}
-						</span>
-					</div>
-				</div>
-				<p className={styles.overviewNote}>
-					Окончание:{' '}
-					{subscription?.effectiveUntil
-						? formatDateTime(subscription.effectiveUntil)
-						: 'дата недоступна'}
-				</p>
+				) : (
+					<p className={styles.overviewEmpty}>
+						Подписок рабочих пространств пока нет.
+					</p>
+				)}
 			</div>
 
 			<div className={styles.overviewSection}>
 				<p className={styles.overviewSectionTitle}>Платежи</p>
-				<div className={styles.overviewPills}>
-					<span className={styles.overviewPill}>
-						Ожидает {overview.payments.counts.PENDING}
-					</span>
-					<span className={styles.overviewPill}>
-						Оплачено {overview.payments.counts.SUCCEEDED}
-					</span>
-					<span className={styles.overviewPill}>
-						Отменено {overview.payments.counts.CANCELLED}
-					</span>
-					<span className={styles.overviewPill}>
-						Истекло {overview.payments.counts.EXPIRED}
-					</span>
-					<span className={styles.overviewPill}>
-						Неизвестный результат {overview.payments.counts.UNKNOWN}
-					</span>
-				</div>
-				{overview.payments.latest.length ? (
-					<div className={styles.overviewList}>
-						{overview.payments.latest.map(payment => (
-							<div key={payment.id} className={styles.overviewListItem}>
-								<div>
-									<p className={styles.overviewListTitle}>
-										{formatAdminAmountMinor(payment.amountMinor)}
-									</p>
-									<p className={styles.overviewListMeta}>
-										{getLabel(PAYMENT_STATUS_LABELS, payment.status)}
-										{' · '}
-										{formatDateTime(payment.createdAt)}
-									</p>
-									<p className={styles.overviewListMeta}>
-										{getLabel(PERIOD_LABELS, payment.cycle)} · ID:{' '}
-										{payment.providerPaymentId ?? payment.id}
-									</p>
-								</div>
+				{overview.payments.counts && overview.payments.latest ? (
+					<>
+						<p className={styles.overviewNote}>
+							Всего: {overview.payments.total}
+						</p>
+						<div className={styles.overviewPills}>
+							<span className={styles.overviewPill}>
+								Ожидает {overview.payments.counts.PENDING}
+							</span>
+							<span className={styles.overviewPill}>
+								Оплачено {overview.payments.counts.SUCCEEDED}
+							</span>
+							<span className={styles.overviewPill}>
+								Отменено {overview.payments.counts.CANCELLED}
+							</span>
+							<span className={styles.overviewPill}>
+								Истекло {overview.payments.counts.EXPIRED}
+							</span>
+							<span className={styles.overviewPill}>
+								Неизвестный результат {overview.payments.counts.UNKNOWN}
+							</span>
+						</div>
+						{overview.payments.latest.length ? (
+							<div className={styles.overviewList}>
+								{overview.payments.latest.map(payment => (
+									<div
+										key={payment.id}
+										className={styles.overviewListItem}
+									>
+										<div>
+											<p className={styles.overviewListTitle}>
+												{formatAdminAmountMinor(payment.amountMinor)}
+											</p>
+											<p className={styles.overviewListMeta}>
+												{getLabel(PAYMENT_STATUS_LABELS, payment.status)}
+												{' · '}
+												{formatDateTime(payment.createdAt)}
+											</p>
+											<p className={styles.overviewListMeta}>
+												{getLabel(PERIOD_LABELS, payment.cycle)} · ID:{' '}
+												{payment.providerPaymentId ?? payment.id}
+											</p>
+										</div>
+									</div>
+								))}
 							</div>
-						))}
-					</div>
+						) : (
+							<p className={styles.overviewEmpty}>Платежей пока нет.</p>
+						)}
+					</>
 				) : (
-					<p className={styles.overviewEmpty}>Платежей пока нет.</p>
+					<p className={styles.overviewEmpty}>
+						Платежи сейчас недоступны.
+					</p>
 				)}
 			</div>
 
@@ -285,7 +314,11 @@ const UserOverview360 = ({
 						Все действия
 					</Link>
 				</div>
-				{overview.activity.latest.length ? (
+				{overview.activity.latest === null ? (
+					<p className={styles.overviewEmpty}>
+						История действий сейчас недоступна.
+					</p>
+				) : overview.activity.latest.length ? (
 					<div className={styles.overviewList}>
 						{overview.activity.latest.map(item => (
 							<div key={item.id} className={styles.overviewListItem}>

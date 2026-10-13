@@ -1,0 +1,1587 @@
+{
+	"schemaVersion": 1,
+	"targets": {
+		"notification-delivery": {
+			"database": "aerocrm_notification_delivery",
+			"schema": "notification_delivery",
+			"migrationRole": "aerocrm_notification_delivery_migration",
+			"runtimeRole": "aerocrm_notification_delivery_runtime",
+			"backupRole": "aerocrm_notification_delivery_backup",
+			"aclSha256": "7a59aabb3b6e79e60cac7ef8a87c2e696d4ceb433c6623fff5538b64a6fde87c",
+			"acl": {
+				"version": 1,
+				"service": "notification-delivery",
+				"tables": {
+					"delivery_receipts": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"delivery_failures": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"control_actions": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"outbox_events": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"heartbeats": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"_prisma_migrations": [],
+					"workspace_closure_fences": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					]
+				},
+				"sequences": {},
+				"types": [
+					"NotificationDeliveryReceiptStatus",
+					"NotificationDeliveryErrorCategory",
+					"NotificationDeliveryFailureResolution",
+					"NotificationDeliveryControlActionKind",
+					"NotificationDeliveryOutboxStatus",
+					"NotificationDeliveryExchange"
+				],
+				"routines": [
+					"workspace_closure_fence_immutable",
+					"assert_workspace_open",
+					"guard_crm_dispatch_scope"
+				],
+				"routineExecute": [
+					"assert_workspace_open(uuid)"
+				]
+			}
+		},
+		"campaigns": {
+			"database": "aerocrm_campaigns",
+			"schema": "campaigns",
+			"migrationRole": "aerocrm_campaigns_migration",
+			"runtimeRole": "aerocrm_campaigns_runtime",
+			"backupRole": "aerocrm_campaigns_backup",
+			"aclSha256": "650b2ac9bac09ca8cb6072f9e30d0482f540677b1a7ab7b8fd5be2e93b2df874",
+			"acl": {
+				"version": 1,
+				"service": "campaigns",
+				"tables": {
+					"service_identity": [
+						"SELECT"
+					],
+					"campaigns": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"audience_snapshots": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"deliveries": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"control_actions": [
+						"SELECT",
+						"INSERT"
+					],
+					"outbox_events": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"consumer_receipts": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"idempotency_records": [
+						"SELECT",
+						"INSERT"
+					],
+					"rate_limits": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"heartbeats": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"_prisma_migrations": []
+				},
+				"sequences": {},
+				"types": [
+					"CampaignStatus",
+					"CampaignAudience",
+					"CampaignRequestedChannel",
+					"CampaignDeliveryChannel",
+					"CampaignDeliveryStatus",
+					"AudienceSnapshotStatus",
+					"CampaignControlActionKind",
+					"CampaignOutboxStatus",
+					"CampaignOutboxExchange",
+					"CampaignConsumerReceiptStatus"
+				],
+				"routines": [
+					"protect_service_identity"
+				]
+			}
+		},
+		"reporting": {
+			"database": "aerocrm_reporting",
+			"schema": "reporting",
+			"migrationRole": "aerocrm_reporting_migration",
+			"runtimeRole": "aerocrm_reporting_runtime",
+			"backupRole": "aerocrm_reporting_backup",
+			"aclSha256": "3c88f23016363028bfd0d2650861ddefae90f52a9859430eb9ccf216856bf812",
+			"acl": {
+				"version": 1,
+				"service": "reporting",
+				"tables": {
+					"service_identity": [
+						"SELECT"
+					],
+					"identity_user_projections": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_order_facts": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_entitlement_projections": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"projection_receipts": [
+						"SELECT",
+						"INSERT"
+					],
+					"projection_watermarks": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"consumer_receipts": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"consumer_failures": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"reporting_settings": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"report_runs": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"outbox_events": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"heartbeats": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"_prisma_migrations": []
+				},
+				"sequences": {},
+				"types": [
+					"ProjectionReceiptResult",
+					"ReportingConsumerReceiptStatus",
+					"ReportRunStatus",
+					"ReportingOutboxStatus",
+					"ReportingOutboxExchange",
+					"ReportingConsumerFailureStatus"
+				],
+				"routines": [
+					"reject_report_run_snapshot_mutation",
+					"enforce_service_identity_integrity"
+				]
+			}
+		},
+		"billing": {
+			"database": "aerocrm_billing",
+			"schema": "billing",
+			"migrationRole": "aerocrm_billing_migration",
+			"runtimeRole": "aerocrm_billing_runtime",
+			"backupRole": "aerocrm_billing_backup",
+			"aclSha256": "533c487d447889607af710d78dcf3a4df46f91cf21d9fa4772421815d9d15c95",
+			"acl": {
+				"version": 1,
+				"service": "billing",
+				"tables": {
+					"service_identity": [
+						"SELECT"
+					],
+					"source_sequences": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"identity_contact_projections": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"notification_routing_projections": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"offer_projections": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"command_receipts": [
+						"SELECT",
+						"INSERT"
+					],
+					"crm_commercial_policies": [
+						"SELECT",
+						"INSERT"
+					],
+					"crm_admin_day_grants": [
+						"SELECT",
+						"INSERT"
+					],
+					"crm_admin_seat_adjustments": [
+						"SELECT",
+						"INSERT"
+					],
+					"crm_entitlements": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_commerce_accounts": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_commerce_commands": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_orders": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_paid_periods": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_auto_renewals": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_auto_renewal_consents": [
+						"SELECT",
+						"INSERT"
+					],
+					"crm_provider_operations": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_provider_deliveries": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_payment_receipts": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"outbox_events": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"integration_delivery_receipts": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"integration_delivery_failures": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"_prisma_migrations": [],
+					"workspace_closure_fences": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					]
+				},
+				"sequences": {},
+				"types": [
+					"OutboxStatus",
+					"CrmEntitlementStatus",
+					"DeliveryReceiptStatus",
+					"IntegrationErrorCategory",
+					"IntegrationFailureResolution",
+					"DeliveryFailureStatus"
+				],
+				"routines": [
+					"reject_crm_commercial_policy_mutation",
+					"protect_aerocrm_commerce_evidence",
+					"protect_crm_admin_day_grants",
+					"protect_crm_admin_seat_adjustments",
+					"protect_crm_admin_command_receipts",
+					"enforce_service_identity_integrity",
+					"assert_workspace_open",
+					"touch_workspace_fence",
+					"guard_workspace_new_finance",
+					"guard_workspace_renewal",
+					"enforce_workspace_closure_fence"
+				],
+				"routineExecute": [
+					"assert_workspace_open(uuid)",
+					"touch_workspace_fence(uuid)"
+				]
+			}
+		},
+		"identity": {
+			"database": "aerocrm_identity",
+			"schema": "identity",
+			"migrationRole": "aerocrm_identity_migration",
+			"runtimeRole": "aerocrm_identity_runtime",
+			"backupRole": "aerocrm_identity_backup",
+			"aclSha256": "f7fa0cfb67b69eb0e94a5acacbe72747cc0ccebbb6eac01a76b39f53c1300637",
+			"acl": {
+				"version": 1,
+				"service": "identity",
+				"tables": {
+					"users": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"user_sessions": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"workspaces": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"workspace_members": [
+						"SELECT",
+						"INSERT"
+					],
+					"workspace_invitations": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"auth_identities": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"telegram_notification_channels": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"verification_challenges": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"verification_email_attempts": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"email_password_recoveries": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"login_otp_challenges": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"login_otp_rate_limits": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"auth_settings": [
+						"SELECT",
+						"UPDATE"
+					],
+					"oauth_authorizations": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"service_identity": [
+						"SELECT"
+					],
+					"aggregate_versions": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"source_sequences": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"outbox_events": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"avatar_media_objects": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"consumer_receipts": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"consumer_failures": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"internal_command_receipts": [
+						"SELECT",
+						"INSERT"
+					],
+					"telegram_update_receipts": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"workspace_closure_fences": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"heartbeats": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"_prisma_migrations": []
+				},
+				"sequences": {},
+				"types": [
+					"Role",
+					"UserStatus",
+					"WorkspaceType",
+					"WorkspaceStatus",
+					"WorkspaceMemberRole",
+					"WorkspaceMemberStatus",
+					"AuthIdentityType",
+					"VerificationChallengeType",
+					"VerificationChallengePurpose",
+					"OAuthProvider",
+					"OutboxExchange",
+					"OutboxStatus",
+					"AvatarMediaObjectStatus",
+					"ConsumerReceiptStatus",
+					"ConsumerFailureStatus",
+					"TelegramBotKind",
+					"WebhookReceiptStatus"
+				],
+				"routines": [
+					"enforce_service_identity_integrity",
+					"assert_workspace_open",
+					"guard_workspace_admission",
+					"guard_workspace_reactivation",
+					"enforce_workspace_closure_fence",
+					"enforce_single_active_session",
+					"notify_session_revoked"
+				],
+				"routineExecute": [
+					"assert_workspace_open(uuid)"
+				]
+			}
+		},
+		"platform": {
+			"database": "aerocrm_platform",
+			"schema": "platform",
+			"migrationRole": "aerocrm_platform_migration",
+			"runtimeRole": "aerocrm_platform_runtime",
+			"backupRole": "aerocrm_platform_backup",
+			"aclSha256": "befc85be9650897d04573b2f0472beeeab7e980264ac391e3d3d4a519c398365",
+			"acl": {
+				"version": 1,
+				"service": "platform",
+				"tables": {
+					"service_identity": [
+						"SELECT"
+					],
+					"source_sequences": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"site_settings": [
+						"SELECT",
+						"UPDATE"
+					],
+					"legal_pages": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"home_page_content": [
+						"SELECT",
+						"UPDATE"
+					],
+					"billing_offer_producer_state": [
+						"SELECT"
+					],
+					"outbox_events": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"_prisma_migrations": []
+				},
+				"sequences": {},
+				"types": [
+					"OutboxStatus"
+				],
+				"routines": [
+					"current_semantic_fingerprint",
+					"refresh_current_semantic_fingerprint",
+					"enforce_current_semantic_fingerprint",
+					"enforce_service_identity_integrity",
+					"enforce_billing_offer_producer_cursor"
+				],
+				"columnPrivileges": {
+					"service_identity": {
+						"UPDATE": [
+							"current_semantic_fingerprint",
+							"updated_at"
+						]
+					},
+					"billing_offer_producer_state": {
+						"UPDATE": [
+							"current_aggregate_version",
+							"current_source_sequence",
+							"updated_at"
+						]
+					}
+				},
+				"routineExecute": [
+					"current_semantic_fingerprint()",
+					"refresh_current_semantic_fingerprint(text)"
+				]
+			}
+		},
+		"support": {
+			"database": "aerocrm_support",
+			"schema": "support",
+			"migrationRole": "aerocrm_support_migration",
+			"runtimeRole": "aerocrm_support_runtime",
+			"backupRole": "aerocrm_support_backup",
+			"aclSha256": "bc57fd613af3642ad9321ee6ca3f00e424c8d6d73d15315681a669fa4aa98f61",
+			"acl": {
+				"version": 1,
+				"service": "support",
+				"tables": {
+					"service_identity": [
+						"SELECT"
+					],
+					"routing_settings": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"telegram_webhook_inbox": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"telegram_outbound_deliveries": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"support_message_mappings": [
+						"SELECT",
+						"INSERT"
+					],
+					"outbox_events": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"consumer_receipts": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"consumer_failures": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"messaging_heartbeats": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"web_conversations": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"web_messages": [
+						"SELECT",
+						"INSERT"
+					],
+					"web_commands": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"web_read_states": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"web_attachments": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"web_notification_settings": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"web_notification_intents": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"web_rate_buckets": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"_prisma_migrations": []
+				},
+				"sequences": {
+					"web_conversations_number_seq": [
+						"SELECT",
+						"USAGE"
+					]
+				},
+				"types": [
+					"SupportInboxStatus",
+					"SupportInboxOutcome",
+					"SupportMappingKind",
+					"TelegramOutboundMethod",
+					"TelegramOutboundDeliveryStatus",
+					"OutboxExchange",
+					"OutboxStatus",
+					"ConsumerReceiptStatus",
+					"ConsumerFailureStatus",
+					"SupportConversationStatus",
+					"SupportSenderKind",
+					"SupportAttachmentStatus"
+				],
+				"routines": [
+					"enforce_service_identity_integrity",
+					"notify_live_change",
+					"notify_live_read"
+				]
+			}
+		},
+		"operations": {
+			"database": "aerocrm_operations",
+			"schema": "operations",
+			"migrationRole": "aerocrm_operations_migration",
+			"runtimeRole": "aerocrm_operations_runtime",
+			"backupRole": "aerocrm_operations_backup",
+			"aclSha256": "052a026773ed8dc9c45ed674a008ec36d73bc47ab45341cc986cb89481f78c14",
+			"acl": {
+				"version": 1,
+				"service": "operations",
+				"tables": {
+					"service_identity": [
+						"SELECT"
+					],
+					"admin_event_logs": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"audit_event_receipts": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"outbox_events": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"telegram_bot_settings": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"scheduled_job_runs": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"scheduled_job_idempotency_keys": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"messaging_heartbeats": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"integration_delivery_failures": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"integration_delivery_receipts": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"operational_alerts": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"reporting_schedule_policy": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"database_restore_jobs": [
+						"SELECT"
+					],
+					"database_restore_permits": [
+						"SELECT"
+					],
+					"database_restore_terminal_receipts": [
+						"SELECT"
+					],
+					"database_restore_recovery_actions": [
+						"SELECT"
+					],
+					"database_restore_execution_lease": [
+						"SELECT"
+					],
+					"database_restore_release_authorizations": [
+						"SELECT"
+					],
+					"database_restore_recovery_receipts": [
+						"SELECT"
+					],
+					"_prisma_migrations": []
+				},
+				"sequences": {},
+				"types": [
+					"AuditReceiptStatus",
+					"OutboxStatus",
+					"ScheduledJobRunStatus",
+					"ScheduledJobRunTrigger",
+					"IntegrationDeliveryReceiptStatus",
+					"IntegrationErrorCategory",
+					"IntegrationFailureResolution",
+					"OperationalAlertSeverity",
+					"DatabaseRestoreJobStatus",
+					"DatabaseRestoreJobPhase",
+					"DatabaseRestorePermitStatus",
+					"DatabaseRestoreRecoveryActionType",
+					"DatabaseRestoreRecoveryActionStatus",
+					"DatabaseRestoreRecoveryActionPhase",
+					"DatabaseRestoreExecutionOperationType"
+				],
+				"routines": [
+					"prevent_database_restore_release_authorization_mutation",
+					"prevent_database_restore_terminal_receipt_mutation",
+					"protect_database_restore_job_provenance",
+					"protect_database_restore_permit_binding",
+					"protect_database_restore_recovery_action_binding",
+					"protect_database_restore_recovery_resolution",
+					"validate_database_restore_recovery_action_roles"
+				]
+			}
+		},
+		"crm-access": {
+			"database": "aerocrm_crm_access",
+			"schema": "crm_access",
+			"migrationRole": "aerocrm_crm_access_migration",
+			"runtimeRole": "aerocrm_crm_access_runtime",
+			"backupRole": "aerocrm_crm_access_backup",
+			"aclSha256": "961c30c49f9c6d38bf0e2196f0fdd879165986d0e01d4389c99a65bb577435f9",
+			"acl": {
+				"version": 1,
+				"service": "crm-access",
+				"tables": {
+					"service_identity": [
+						"SELECT"
+					],
+					"_prisma_migrations": [],
+					"workspace_closure_fences": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_workspace_closures": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_workspace_access": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_workspace_branding": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_saved_views": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_workspace_members": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_custom_roles": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_employee_profiles": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_teams": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_member_teams": [
+						"SELECT",
+						"INSERT",
+						"DELETE"
+					],
+					"crm_invitation_intents": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_admissions": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_team_command_receipts": [
+						"SELECT",
+						"INSERT"
+					],
+					"crm_team_audit": [
+						"SELECT",
+						"INSERT"
+					],
+					"crm_team_outbox": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_team_deliveries": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_billing_capacity": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_billing_operations": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_directory_entries": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_chat_conversations": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_chat_participants": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_chat_messages": [
+						"SELECT",
+						"INSERT"
+					],
+					"crm_chat_attachments": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"workspace_messenger_streams": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"workspace_messenger_entries": [
+						"SELECT",
+						"INSERT"
+					],
+					"workspace_messenger_read_cursors": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"telegram_connect_sessions": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"telegram_connections": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"telegram_channels": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"telegram_dialogs": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"telegram_messages": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"telegram_webhook_inbox": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"telegram_deliveries": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					]
+				},
+				"sequences": {
+					"crm_admissions_position_seq": [
+						"SELECT",
+						"USAGE"
+					]
+				},
+				"types": [
+					"CrmAccessLifecycle",
+					"CrmMemberRole"
+				],
+				"routines": [
+					"is_valid_custom_role_permissions",
+					"reject_team_history_mutation",
+					"guard_billing_operation",
+					"guard_billing_capacity",
+					"enforce_service_identity_integrity",
+					"assert_workspace_open",
+					"guard_workspace_business",
+					"guard_workspace_intent",
+					"enforce_workspace_closure_fence",
+					"enforce_workspace_closure_operation",
+					"provision_workspace_collaboration",
+					"signal_workspace_collaboration",
+					"guard_chat_attachment",
+					"project_workspace_messenger_internal"
+				],
+				"routineExecute": [
+					"is_valid_custom_role_permissions(text[])",
+					"assert_workspace_open(uuid)"
+				]
+			}
+		},
+		"crm-intake": {
+			"database": "aerocrm_crm_intake",
+			"schema": "crm_intake",
+			"migrationRole": "aerocrm_crm_intake_migration",
+			"runtimeRole": "aerocrm_crm_intake_runtime",
+			"backupRole": "aerocrm_crm_intake_backup",
+			"aclSha256": "fe28a540bff53929314a0bf9931ebde8cc284e9425bb88c94fd7d24a4feecfee",
+			"acl": {
+				"version": 1,
+				"service": "crm-intake",
+				"tables": {
+					"service_identity": [
+						"SELECT"
+					],
+					"sla_rules": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"sla_commands": [
+						"SELECT",
+						"INSERT"
+					],
+					"sla_jobs": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"sla_notifications": [
+						"SELECT",
+						"INSERT"
+					],
+					"sla_receipts": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"sla_outbox": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"_prisma_migrations": [],
+					"inbox_entries": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"intake_sources": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"intake_commands": [
+						"SELECT",
+						"INSERT"
+					],
+					"intake_activities": [
+						"SELECT",
+						"INSERT"
+					],
+					"inbound_receipts": [
+						"SELECT",
+						"INSERT"
+					],
+					"ingestion_rate_buckets": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"acceptances": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"acceptance_outbox": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"acceptance_receipts": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"csv_imports": [
+						"SELECT",
+						"INSERT"
+					],
+					"csv_import_rows": [
+						"SELECT",
+						"INSERT"
+					],
+					"export_audit": [
+						"SELECT",
+						"INSERT"
+					],
+					"inbox_notifications": [
+						"SELECT",
+						"INSERT"
+					],
+					"inbox_notification_reads": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"workspace_closure_fences": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"mail_intake_sources": [
+						"SELECT",
+						"INSERT"
+					]
+				},
+				"sequences": {},
+				"types": [],
+				"routines": [
+					"cancel_entry_sla",
+					"sla_immutable",
+					"check_csv_import_integrity",
+					"notify_live_change",
+					"record_inbox_notification",
+					"workspace_closure_fence_immutable",
+					"assert_workspace_open",
+					"guard_workspace_business_write",
+					"guard_workspace_inbox_entry",
+					"guard_acceptance_admission",
+					"guard_acceptance_outbox",
+					"mail_intake_source_immutable"
+				],
+				"routineExecute": [
+					"assert_workspace_open(uuid)"
+				]
+			}
+		},
+		"crm-customers": {
+			"database": "aerocrm_crm_customers",
+			"schema": "crm_customers",
+			"migrationRole": "aerocrm_crm_customers_migration",
+			"runtimeRole": "aerocrm_crm_customers_runtime",
+			"backupRole": "aerocrm_crm_customers_backup",
+			"aclSha256": "f3e9b881ae1ab6192c0895ee96ba9f6f3312eda397bd863406e34ec16f920db5",
+			"acl": {
+				"version": 1,
+				"service": "crm-customers",
+				"tables": {
+					"service_identity": [
+						"SELECT"
+					],
+					"_prisma_migrations": [],
+					"contacts": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"companies": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"customer_commands": [
+						"SELECT",
+						"INSERT"
+					],
+					"customer_activities": [
+						"SELECT",
+						"INSERT"
+					],
+					"intake_operation_slots": [
+						"SELECT",
+						"INSERT"
+					],
+					"intake_operation_commands": [
+						"SELECT",
+						"INSERT"
+					],
+					"export_audit": [
+						"SELECT",
+						"INSERT"
+					],
+					"workspace_closure_fences": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"mail_connections": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"mail_mailboxes": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"mail_mailbox_grants": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"mail_folders": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"mail_contact_links": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"mail_attachments": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"mail_send_intents": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"mail_jobs": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"mail_messages": [
+						"SELECT",
+						"INSERT"
+					],
+					"mail_send_attachments": [
+						"SELECT",
+						"INSERT"
+					],
+					"mail_commands": [
+						"SELECT",
+						"INSERT"
+					],
+					"mail_audit": [
+						"SELECT",
+						"INSERT"
+					],
+					"mail_notifications": [
+						"SELECT",
+						"INSERT"
+					],
+					"mail_notification_reads": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"import_previews": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"import_bindings": [
+						"SELECT",
+						"INSERT"
+					]
+				},
+				"sequences": {},
+				"types": [],
+				"routines": [
+					"notify_live_change",
+					"enforce_service_identity_integrity",
+					"workspace_closure_fence_immutable",
+					"assert_workspace_open",
+					"guard_workspace_business_write",
+					"mail_write_guard",
+					"import_preview_immutable",
+					"import_binding_immutable"
+				],
+				"routineExecute": [
+					"assert_workspace_open(uuid)"
+				]
+			}
+		},
+		"crm-sales": {
+			"database": "aerocrm_crm_sales",
+			"schema": "crm_sales",
+			"migrationRole": "aerocrm_crm_sales_migration",
+			"runtimeRole": "aerocrm_crm_sales_runtime",
+			"backupRole": "aerocrm_crm_sales_backup",
+			"aclSha256": "420618bd9d9962a73e94df65c78690e6aef8b4ec2bb260139084ea3cb464a954",
+			"acl": {
+				"version": 1,
+				"service": "crm-sales",
+				"tables": {
+					"service_identity": [
+						"SELECT"
+					],
+					"_prisma_migrations": [],
+					"pipelines": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"pipeline_stages": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"pipeline_template_installations": [
+						"SELECT",
+						"INSERT"
+					],
+					"pipeline_template_installation_commands": [
+						"SELECT",
+						"INSERT"
+					],
+					"deals": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"commerce_catalog_items": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"commerce_deal_lines": [
+						"SELECT",
+						"INSERT",
+						"UPDATE",
+						"DELETE"
+					],
+					"commerce_quotes": [
+						"SELECT",
+						"INSERT"
+					],
+					"commerce_payments": [
+						"SELECT",
+						"INSERT"
+					],
+					"commerce_import_previews": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"import_previews": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"import_bindings": [
+						"SELECT",
+						"INSERT"
+					],
+					"commerce_commands": [
+						"SELECT",
+						"INSERT"
+					],
+					"commerce_events": [
+						"SELECT",
+						"INSERT"
+					],
+					"tasks": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"task_notifications": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"task_series": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"task_series_commands": [
+						"SELECT",
+						"INSERT"
+					],
+					"task_series_occurrences": [
+						"SELECT",
+						"INSERT"
+					],
+					"deal_timeline": [
+						"SELECT",
+						"INSERT"
+					],
+					"command_receipts": [
+						"SELECT",
+						"INSERT"
+					],
+					"task_command_receipts": [
+						"SELECT",
+						"INSERT"
+					],
+					"task_timeline": [
+						"SELECT",
+						"INSERT"
+					],
+					"reminder_rules": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"reminder_rule_commands": [
+						"SELECT",
+						"INSERT"
+					],
+					"reminder_jobs": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"reminder_deliveries": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"reminder_outbox": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"reminder_runtime": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"intake_operation_slots": [
+						"SELECT",
+						"INSERT"
+					],
+					"intake_operation_commands": [
+						"SELECT",
+						"INSERT"
+					],
+					"export_audit": [
+						"SELECT",
+						"INSERT"
+					],
+					"workspace_closure_fences": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"planner_settings": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"planner_board_columns": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"planner_command_receipts": [
+						"SELECT",
+						"INSERT"
+					]
+				},
+				"sequences": {},
+				"types": [
+					"CrmPipelineStageState",
+					"SalesTaskStatus"
+				],
+				"routines": [
+					"check_sales_next_action",
+					"guard_task_series_identity",
+					"reject_intake_proof_mutation",
+					"reject_reminder_command_mutation",
+					"wake_task_reminders",
+					"track_task_assignment",
+					"record_task_notifications",
+					"notify_live_change",
+					"reject_commerce_immutable_mutation",
+					"enforce_service_identity_integrity",
+					"workspace_closure_fence_immutable",
+					"assert_workspace_open",
+					"guard_workspace_business_write",
+					"import_preview_immutable",
+					"import_binding_immutable",
+					"guard_planner_board_column_identity",
+					"normalize_task_board_column"
+				],
+				"routineExecute": [
+					"assert_workspace_open(uuid)"
+				]
+			}
+		}
+	}
+}

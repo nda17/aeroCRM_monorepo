@@ -64,6 +64,44 @@ type SubscriptionProjection = {
 	pendingCommands: number;
 };
 
+export function projectAdminEntitlement(
+	entitlement: CrmEntitlement,
+	currentPeriod: CrmPaidPeriod | null,
+	now: Date
+) {
+	const activePeriod = ['SUSPENDED', 'CANCELLED'].includes(
+		entitlement.status
+	)
+		? null
+		: currentPeriod;
+	const effectiveUntil = activePeriod?.expiresAt ?? entitlement.effectiveUntil;
+	const graceUntil = activePeriod?.graceUntil ?? entitlement.graceUntil;
+	const baseStatus =
+		activePeriod && !['SUSPENDED', 'CANCELLED'].includes(entitlement.status)
+			? 'ACTIVE'
+			: entitlement.status;
+	const status =
+		baseStatus !== 'ACTIVE'
+			? baseStatus
+			: effectiveUntil > now
+				? 'ACTIVE'
+				: graceUntil
+					? graceUntil > now
+						? 'GRACE'
+						: 'READ_ONLY'
+					: 'EXPIRED';
+	return {
+		planCode: activePeriod ? 'PAID' : entitlement.planCode,
+		status,
+		seatLimit: activePeriod?.totalSeats ?? entitlement.seatLimit,
+		effectiveFrom: (
+			activePeriod?.startsAt ?? entitlement.effectiveFrom
+		).toISOString(),
+		effectiveUntil: effectiveUntil.toISOString(),
+		graceUntil: graceUntil?.toISOString() ?? null
+	};
+}
+
 @Injectable()
 export class CrmAdminSubscriptionService {
 	constructor(
@@ -1516,44 +1554,12 @@ export class CrmAdminSubscriptionService {
 		pendingOrders,
 		pendingCommands
 	}: SubscriptionProjection) {
-		const activePeriod = ['SUSPENDED', 'CANCELLED'].includes(
-			entitlement.status
-		)
-			? null
-			: currentPeriod;
-		const effectiveUntil =
-			activePeriod?.expiresAt ?? entitlement.effectiveUntil;
-		const graceUntil = activePeriod?.graceUntil ?? entitlement.graceUntil;
-		const baseStatus =
-			activePeriod &&
-			!['SUSPENDED', 'CANCELLED'].includes(entitlement.status)
-				? 'ACTIVE'
-				: entitlement.status;
-		const status =
-			baseStatus !== 'ACTIVE'
-				? baseStatus
-				: effectiveUntil > now
-					? 'ACTIVE'
-					: graceUntil
-						? graceUntil > now
-							? 'GRACE'
-							: 'READ_ONLY'
-						: 'EXPIRED';
 		return {
 			workspaceId,
 			ownerSubject: account?.ownerSubject ?? entitlement.activatedByUserId,
 			entitlementVersion: entitlement.aggregateVersion.toString(),
 			billingVersion: account?.version.toString() ?? '0',
-			entitlement: {
-				planCode: activePeriod ? 'PAID' : entitlement.planCode,
-				status,
-				seatLimit: activePeriod?.totalSeats ?? entitlement.seatLimit,
-				effectiveFrom: (
-					activePeriod?.startsAt ?? entitlement.effectiveFrom
-				).toISOString(),
-				effectiveUntil: effectiveUntil.toISOString(),
-				graceUntil: graceUntil?.toISOString() ?? null
-			},
+			entitlement: projectAdminEntitlement(entitlement, currentPeriod, now),
 			period: period
 				? {
 						id: period.id,

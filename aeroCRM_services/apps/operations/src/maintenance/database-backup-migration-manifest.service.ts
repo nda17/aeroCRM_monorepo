@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DatabaseRestoreMigrationManifestService } from '../restore/database-restore-migration-manifest.service';
 import {
 	DATABASE_BACKUP_PROVENANCE_TARGETS,
 	isDatabaseBackupProvenanceTarget,
@@ -102,12 +103,13 @@ export const parseDatabaseBackupMigrationManifests = (
 };
 
 @Injectable()
-export class DatabaseBackupMigrationManifestService {
+export class DatabaseBackupMigrationManifestService extends DatabaseRestoreMigrationManifestService {
 	private readonly manifests: Readonly<
 		Record<DatabaseBackupProvenanceTarget, DatabaseBackupMigrationManifest>
 	>;
 
 	constructor() {
+		super();
 		let value: unknown;
 		try {
 			value = JSON.parse(
@@ -128,12 +130,12 @@ export class DatabaseBackupMigrationManifestService {
 		this.manifests = parseDatabaseBackupMigrationManifests(value);
 	}
 
-	sha256(target: DatabaseBackupProvenanceTarget): string {
+	override get(target: DatabaseBackupProvenanceTarget): DatabaseBackupMigrationManifest {
 		if (!isDatabaseBackupProvenanceTarget(target)) {
 			throw new Error(
 				'Trusted backup migration manifest target is invalid'
 			);
 		}
-		return this.manifests[target].manifestSha256;
+		return this.manifests[target];
 	}
 }

@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { DatabaseBackupTarget } from '../scheduled-jobs/scheduled-jobs.types';
 import { DatabaseBackupMigrationManifestService } from './database-backup-migration-manifest.service';
+import { DatabaseRestoreProcessService } from '../restore/database-restore-process.service';
 import {
 	isDatabaseBackupProvenanceTarget
 } from './database-backup.contract';
@@ -144,6 +145,12 @@ export class DatabaseBackupService implements OnModuleInit {
 				signal
 			);
 			await this.run('pg_restore', ['--list', filePath], null, signal);
+			// Read the ledger from the exact snapshot being signed, not from a
+			// second live query that can race migrations or an Operations rollback.
+			const ledger = await new DatabaseRestoreProcessService().extractMigrationLedger(
+				filePath, { schema: database.schema }, signal
+			);
+			this.manifests.assertDumpLedger(target, database.schema, ledger);
 			const file = await stat(filePath);
 			const fileSha256 = await this.sha256(filePath);
 			if (!isDatabaseBackupProvenanceTarget(target)) throw new Error('Unsupported backup target');

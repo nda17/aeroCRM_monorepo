@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
-import { chmod, open } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { chmod, mkdtemp, open, rm, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { pipeline } from 'node:stream/promises';
 import {
 	DatabaseRestoreConnection,
@@ -86,7 +87,7 @@ export class DatabaseRestoreProcessService {
 
 	async recreateSchema(
 		connection: DatabaseRestoreConnection,
-		target: DatabaseRestoreTargetConfiguration,
+		target: Pick<DatabaseRestoreTargetConfiguration, 'schema' | 'migrationRole'>,
 		signal?: AbortSignal
 	): Promise<void> {
 		signal?.throwIfAborted();
@@ -107,12 +108,24 @@ export class DatabaseRestoreProcessService {
 
 	async restoreSchema(
 		connection: DatabaseRestoreConnection,
-		target: DatabaseRestoreTargetConfiguration,
+		target: Pick<DatabaseRestoreTargetConfiguration, 'schema' | 'migrationRole'>,
 		source: string,
-		signal?: AbortSignal
+		signal?: AbortSignal,
+		schemaAlreadyCreated = false
 	): Promise<void> {
 		signal?.throwIfAborted();
-		await this.command(
+		const directory = schemaAlreadyCreated ? await mkdtemp(join(tmpdir(), 'aerocrm-restore-toc-')) : null;
+		try {
+			const selection = directory ? join(directory, 'restore.list') : null;
+			if (selection) {
+				const contents = await this.listDump(source, connection.password, signal);
+				// The admin has already recreated the schema under its migration
+				// owner. Replaying CREATE SCHEMA would fail (and would require an
+				// unnecessary database CREATE grant for the migration principal).
+				await writeFile(selection, contents.split(/\r?\n/).filter(line =>
+					!/^\d+;\s+\d+\s+\d+\s+SCHEMA(?:\s|$)/.test(line)).join('\n'), { flag: 'wx', mode: 0o600 });
+			}
+			await this.command(
 			'pg_restore',
 			[
 				'--exit-on-error',
@@ -122,12 +135,16 @@ export class DatabaseRestoreProcessService {
 				target.migrationRole,
 				'--schema',
 				target.schema,
+				...(selection ? ['--use-list', selection] : []),
 				...this.connectionArguments(connection),
 				source
 			],
 			connection.password,
 			{ signal }
-		);
+			);
+		} finally {
+			if (directory) await rm(directory, { recursive: true, force: true });
+		}
 	}
 
 	async executeSql(
@@ -153,7 +170,7 @@ export class DatabaseRestoreProcessService {
 
 	async extractMigrationLedger(
 		source: string,
-		target: DatabaseRestoreTargetConfiguration,
+		target: Pick<DatabaseRestoreTargetConfiguration, 'schema'>,
 		signal?: AbortSignal
 	): Promise<string> {
 		signal?.throwIfAborted();
@@ -182,7 +199,7 @@ export class DatabaseRestoreProcessService {
 
 	async readMigrationLedger(
 		connection: DatabaseRestoreConnection,
-		target: DatabaseRestoreTargetConfiguration,
+		target: Pick<DatabaseRestoreTargetConfiguration, 'schema'>,
 		signal?: AbortSignal
 	): Promise<string> {
 		signal?.throwIfAborted();
@@ -206,6 +223,17 @@ export class DatabaseRestoreProcessService {
 				}
 			)
 		).stdout;
+	}
+
+	async query(
+		connection: DatabaseRestoreConnection,
+		sql: string,
+		signal?: AbortSignal
+	): Promise<string> {
+		return (await this.command('psql', [
+			'-X', '--no-password', '--set', 'ON_ERROR_STOP=1', '--tuples-only',
+			'--no-align', ...this.connectionArguments(connection), '--command', sql
+		], connection.password, { stdoutOverflowError: 'Maintenance query exceeds the safe size limit', signal })).stdout.trim();
 	}
 
 	private async command(

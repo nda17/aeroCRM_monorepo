@@ -825,12 +825,57 @@ try {
     existingDealId: dealId,
   });
 
+  await reminderForeignKeyScenarios();
   console.log(
     "CRM Sales PostgreSQL 18 commerce and file import atomicity/replay/binding integration passed",
   );
 } finally {
   // This database is an isolated disposable CI fixture. Append-only records are intentionally retained.
   await prisma.$disconnect();
+  await migrationPrisma.$disconnect();
+}
+
+async function reminderForeignKeyScenarios() {
+  const ownerWorkspace = randomUUID(), foreignWorkspace = randomUUID();
+  const task = await prisma.salesTask.create({ data: {
+    workspaceId: ownerWorkspace, title: "Reminder FK fixture", dueAt: new Date(), assignedToSubject: subject,
+  } });
+  const foreignTask = await prisma.salesTask.create({ data: {
+    workspaceId: foreignWorkspace, title: "Other workspace task", dueAt: new Date(), assignedToSubject: subject,
+  } });
+  const rule = async (targetWorkspace) => {
+    const id = randomUUID();
+    return prisma.reminderRule.create({ data: {
+      id, workspaceId: targetWorkspace, scope: "PERSONAL", ownerSubject: subject,
+      configuration: { schemaVersion: 1, id, scope: "PERSONAL", ownerBinding: { subject, membershipId: null },
+        title: "FK fixture", enabled: true, channels: ["EMAIL"], trigger: { kind: "ASSIGNED", offsetMinutes: 0 },
+        repeats: null, timeZone: "UTC", quietHours: null, recipients: { kind: "SELF" } },
+    } });
+  };
+  const ownRule = await rule(ownerWorkspace), foreignRule = await rule(foreignWorkspace);
+  const delivery = (patch = {}) => {
+    const id = randomUUID();
+    return { id, deduplicationKey: id.replaceAll("-", "").repeat(2), workspaceId: ownerWorkspace,
+      taskId: task.id, ruleId: ownRule.id, taskVersion: task.version, assignmentVersion: task.assignmentVersion,
+      ruleVersion: ownRule.version, occurrenceIndex: 0, recipientSubject: subject, channel: "EMAIL",
+      nominalAt: new Date(), ...patch };
+  };
+  for (const patch of [{ taskId: randomUUID() }, { ruleId: randomUUID() },
+    { taskId: foreignTask.id }, { ruleId: foreignRule.id }]) {
+    await assert.rejects(prisma.reminderDelivery.create({ data: delivery(patch) }), error => error?.code === "P2003");
+  }
+  await prisma.reminderDelivery.create({ data: delivery() });
+  await assert.rejects(migrationPrisma.$executeRaw`DELETE FROM crm_sales.tasks WHERE id=${task.id}::uuid`,
+    error => error?.meta?.code === "23001");
+  await assert.rejects(migrationPrisma.$executeRaw`DELETE FROM crm_sales.reminder_rules WHERE id=${ownRule.id}::uuid`,
+    error => error?.meta?.code === "23001");
+  const constraints = await prisma.$queryRaw`
+    SELECT conname AS name, convalidated AS validated, confdeltype AS delete_action, confupdtype AS update_action
+    FROM pg_constraint WHERE conrelid='crm_sales.reminder_deliveries'::regclass AND contype='f' ORDER BY conname
+  `;
+  assert.deepEqual(constraints, ["reminder_deliveries_rule_workspace_fkey", "reminder_deliveries_task_workspace_fkey"]
+    .map(name => ({ name, validated: true, delete_action: "r", update_action: "r" })));
+  assert.equal(await prisma.reminderDelivery.count({ where: { workspaceId: ownerWorkspace } }), 1);
 }
 
 async function salesFileImportScenarios({
@@ -1100,6 +1145,74 @@ async function salesFileImportScenarios({
     releaseFirstTransaction();
     prisma.$transaction = originalTransaction;
   }
+
+  // Commit a neighboring write after the import transaction has established its
+  // snapshot but before its raw workspace fence. PostgreSQL must produce a real
+  // serialization conflict, which Prisma exposes as P2010 / 40001.
+  const rawConflictPreview = await imports.preview(
+    access,
+    request(
+      "sales-import-raw-conflict",
+      `externalId,title,contactId,stageId,amount\nraw-conflict-1,Raw conflict deal,${randomUUID()},${openStage.id},0\n`,
+    ),
+    authorization,
+  );
+  const rawConflictCommandId = randomUUID();
+  const observedConflicts = [];
+  const authorizedAttempts = [];
+  let rawAttempts = 0;
+  let neighboringWriteCommitted = false;
+  const originalAuthorize = importAccess.authorize;
+  importAccess.authorize = async (...args) => {
+    authorizedAttempts.push(rawAttempts);
+    return originalAuthorize(...args);
+  };
+  prisma.$transaction = (callback, options) => {
+    rawAttempts += 1;
+    return originalTransaction((tx) => callback(new Proxy(tx, {
+      get(target, key) {
+        if (key !== "$executeRaw") {
+          const value = Reflect.get(target, key);
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+        return async (...args) => {
+          const sql = Array.isArray(args[0]) ? args[0].join("") : args[0]?.sql || "";
+          if (!neighboringWriteCommitted && sql.includes("assert_workspace_open")) {
+            neighboringWriteCommitted = true;
+            await migrationPrisma.$executeRaw`
+              UPDATE crm_sales.workspace_closure_fences SET revision = revision + 1
+              WHERE workspace_id = ${access.workspaceId}::uuid
+            `;
+          }
+          try {
+            return await target.$executeRaw(...args);
+          } catch (error) {
+            observedConflicts.push({ code: error.code, sqlState: error.meta?.code });
+            throw error;
+          }
+        };
+      },
+    })), options);
+  };
+  let rawConflictResult;
+  try {
+    rawConflictResult = await apply(rawConflictPreview.previewId, rawConflictCommandId);
+    assert.deepEqual(observedConflicts, [{ code: "P2010", sqlState: "40001" }]);
+    assert.equal(rawAttempts, 2);
+    assert.ok(authorizedAttempts.includes(1) && authorizedAttempts.includes(2),
+      "each transaction attempt must revalidate authorization");
+    assert.equal(rawConflictResult.created, 1);
+  } finally {
+    prisma.$transaction = originalTransaction;
+    importAccess.authorize = originalAuthorize;
+  }
+  assert.deepEqual(await apply(rawConflictPreview.previewId, rawConflictCommandId), rawConflictResult);
+  assert.equal(await prisma.deal.count({ where: {
+    workspaceId: access.workspaceId, title: "Raw conflict deal",
+  } }), 1);
+  assert.equal(await prisma.importBinding.count({ where: {
+    workspaceId: access.workspaceId, sourceKey: "sales-import-raw-conflict",
+  } }), 1);
 
   const expiredPreview = await imports.preview(
     access,
