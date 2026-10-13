@@ -68,12 +68,24 @@ if (
 	);
 }
 
-const prisma = new PrismaClient({
-	datasources: { db: { url: runtimeDatabaseUrl } }
-});
-const migrationPrisma = new PrismaClient({
-	datasources: { db: { url: migrationDatabaseUrl } }
-});
+// Prisma 5.22 native TLS initialization mutates live process.env; connect before constructing the next client.
+let prisma;
+let migrationPrisma;
+try {
+	prisma = new PrismaClient({
+		datasources: { db: { url: runtimeDatabaseUrl } }
+	});
+	await prisma.$connect();
+	migrationPrisma = new PrismaClient({
+		datasources: { db: { url: migrationDatabaseUrl } }
+	});
+	await migrationPrisma.$connect();
+} catch (error) {
+	await Promise.allSettled(
+		[prisma, migrationPrisma].filter(Boolean).map(client => client.$disconnect())
+	);
+	throw error;
+}
 const catalog = new PipelineTemplateCatalogService();
 const service = new PipelineTemplateInstallationService(prisma, catalog);
 const workspaceIds = Array.from({ length: 5 }, () => randomUUID());

@@ -1105,7 +1105,7 @@ jobs:
       - name: Run complete Identity and Notification Delivery unit suites
         if: matrix.service == 'identity' || matrix.service == 'notification-delivery'
         working-directory: aeroCRM_services/apps/${{ matrix.service }}
-        run: pnpm test
+        run: pnpm lint && pnpm test
   bootstrap-recovery-unit:
     runs-on: ubuntu-latest
     strategy:

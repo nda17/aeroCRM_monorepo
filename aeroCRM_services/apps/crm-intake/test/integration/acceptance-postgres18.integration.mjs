@@ -32,12 +32,37 @@ const {
 	ACCEPTANCE_EVENT_TYPE,
 	ACCEPTANCE_DEAD_QUEUE
 } = await import('../../dist/src/acceptance/acceptance.messaging.js');
-const runtime = new PrismaClient({
-	datasources: { db: { url: runtimeUrl } }
-});
-const migrator = new PrismaClient({
-	datasources: { db: { url: migrationUrl } }
-});
+const broker = process.env.CRM_INTAKE_ACCEPTANCE_TEST_RABBITMQ_URL;
+if (broker) {
+	const url = new URL(broker);
+	assert.ok(['amqp:', 'amqps:'].includes(url.protocol));
+	assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(url.hostname));
+	assert.match(
+		decodeURIComponent(url.pathname),
+		/^\/[a-z0-9_-]+_(test|ci)$/
+	);
+	assert.ok(url.username && url.password);
+	process.env.CRM_INTAKE_RABBITMQ_URL = broker;
+	process.env.CRM_INTAKE_RABBITMQ_ASSERT_TOPOLOGY = 'true';
+}
+// Prisma 5.22 native TLS initialization mutates live process.env; connect before constructing the next client.
+let runtime;
+let migrator;
+try {
+	runtime = new PrismaClient({
+		datasources: { db: { url: runtimeUrl } }
+	});
+	await runtime.$connect();
+	migrator = new PrismaClient({
+		datasources: { db: { url: migrationUrl } }
+	});
+	await migrator.$connect();
+} catch (error) {
+	await Promise.allSettled(
+		[runtime, migrator].filter(Boolean).map(client => client.$disconnect())
+	);
+	throw error;
+}
 const workspaceId = randomUUID();
 const context = {
 	schemaVersion: 1,
@@ -520,22 +545,11 @@ try {
 	await processor.run(retry.event, retryAgain.token);
 
 	await verifyDelayedPublisher();
-	const broker = process.env.CRM_INTAKE_ACCEPTANCE_TEST_RABBITMQ_URL;
 	if (broker) {
-		const url = new URL(broker);
-		assert.ok(['amqp:', 'amqps:'].includes(url.protocol));
-		assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(url.hostname));
-		assert.match(
-			decodeURIComponent(url.pathname),
-			/^\/[a-z0-9_-]+_(test|ci)$/
-		);
-		assert.ok(url.username && url.password);
 		const { connect } = await import('amqplib');
 		inspector = await connect(broker);
 		inspectorChannel = await inspector.createChannel();
 		// Namespace belongs exclusively to this isolated vhost. Existing messages are forbidden; the test never purges another run.
-		process.env.CRM_INTAKE_RABBITMQ_URL = broker;
-		process.env.CRM_INTAKE_RABBITMQ_ASSERT_TOPOLOGY = 'true';
 		rabbit = new AcceptanceRabbit();
 		await rabbit.onModuleInit();
 		for (const queue of [ACCEPTANCE_QUEUE, ACCEPTANCE_DEAD_QUEUE]) {

@@ -21,12 +21,24 @@ const ingestionModule =
 	await import('../../dist/src/intake/intake-ingestion.service.js');
 const { IntakeIngestionService, IntakeIngestionRateLimiter } =
 	ingestionModule.default || ingestionModule;
-const runtime = new PrismaClient({
-	datasources: { db: { url: runtimeUrl } }
-});
-const migrator = new PrismaClient({
-	datasources: { db: { url: migrationUrl } }
-});
+// Prisma 5.22 native TLS initialization mutates live process.env; connect before constructing the next client.
+let runtime;
+let migrator;
+try {
+	runtime = new PrismaClient({
+		datasources: { db: { url: runtimeUrl } }
+	});
+	await runtime.$connect();
+	migrator = new PrismaClient({
+		datasources: { db: { url: migrationUrl } }
+	});
+	await migrator.$connect();
+} catch (error) {
+	await Promise.allSettled(
+		[runtime, migrator].filter(Boolean).map(client => client.$disconnect())
+	);
+	throw error;
+}
 const service = new IntakeService(runtime);
 const { InboxNotificationsService } =
 	await import('../../dist/src/notifications/inbox-notifications.service.js');

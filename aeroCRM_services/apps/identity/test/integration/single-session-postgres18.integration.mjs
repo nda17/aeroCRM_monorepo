@@ -53,14 +53,26 @@ assert.notEqual(runtimeTarget.username, migrationTarget.username);
 process.env.IDENTITY_DATABASE_URL = process.env.IDENTITY_TEST_DATABASE_URL;
 assert.equal(process.env.IDENTITY_INTEGRATION_ALLOW_MUTATION, 'true');
 
-const runtime = new PrismaClient({
-	datasources: { db: { url: process.env.IDENTITY_TEST_DATABASE_URL } }
-});
-const admin = new PrismaClient({
-	datasources: {
-		db: { url: process.env.IDENTITY_TEST_MIGRATION_DATABASE_URL }
-	}
-});
+// Prisma 5.22 native TLS initialization mutates live process.env; connect before constructing the next client.
+let runtime;
+let admin;
+try {
+	runtime = new PrismaClient({
+		datasources: { db: { url: process.env.IDENTITY_TEST_DATABASE_URL } }
+	});
+	await runtime.$connect();
+	admin = new PrismaClient({
+		datasources: {
+			db: { url: process.env.IDENTITY_TEST_MIGRATION_DATABASE_URL }
+		}
+	});
+	await admin.$connect();
+} catch (error) {
+	await Promise.allSettled(
+		[runtime, admin].filter(Boolean).map(client => client.$disconnect())
+	);
+	throw error;
+}
 const id = 'single-session-test-' + randomUUID();
 const { privateKey, publicKey } = generateKeyPairSync('rsa', {
 	modulusLength: 2048
@@ -188,8 +200,6 @@ const guardToken = (token) =>
 	});
 (async () => {
 	try {
-		await runtime.$connect();
-		await admin.$connect();
 		const [role] = await runtime.$queryRawUnsafe(
 			"SELECT current_setting('server_version_num')::integer AS version, NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole AND NOT rolbypassrls AS restricted FROM pg_roles WHERE rolname=current_user"
 		);

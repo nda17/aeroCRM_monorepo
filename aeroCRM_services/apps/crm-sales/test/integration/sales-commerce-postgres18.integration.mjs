@@ -38,10 +38,22 @@ assert.equal(
   "CRM_SALES_DATABASE_URL must use the restricted runtime role",
 );
 
-const prisma = new PrismaClient({ datasources: { db: { url: runtimeUrl } } });
-const migrationPrisma = new PrismaClient({
-  datasources: { db: { url: migrationUrl } },
-});
+// Prisma 5.22 native TLS initialization mutates live process.env; connect before constructing the next client.
+let prisma;
+let migrationPrisma;
+try {
+  prisma = new PrismaClient({ datasources: { db: { url: runtimeUrl } } });
+  await prisma.$connect();
+  migrationPrisma = new PrismaClient({
+    datasources: { db: { url: migrationUrl } },
+  });
+  await migrationPrisma.$connect();
+} catch (error) {
+  await Promise.allSettled(
+    [prisma, migrationPrisma].filter(Boolean).map((client) => client.$disconnect()),
+  );
+  throw error;
+}
 const workspaceId = randomUUID();
 const otherWorkspaceId = randomUUID();
 const subject = `commerce-test-${randomUUID()}`;

@@ -68,16 +68,21 @@ async function main() {
 	const {
 		RefreshTokenService
 	} = require('../../dist/src/auth/refresh-token.service.js');
-	const runtime = new PrismaClient({
-		datasources: { db: { url: runtimeTarget.raw } },
-		log: [],
-		errorFormat: 'minimal'
-	});
-	const migrator = new PrismaClient({
-		datasources: { db: { url: migrationTarget.raw } },
-		log: [],
-		errorFormat: 'minimal'
-	});
+	// Prisma 5.22 native TLS initialization mutates live process.env; connect before constructing the next client.
+	let runtime;
+	let migrator;
+	try {
+		checkpoint('connect-runtime');
+		runtime = new PrismaClient({
+			datasources: { db: { url: runtimeTarget.raw } },
+			log: [],
+			errorFormat: 'minimal'
+		});
+		await runtime.$connect();
+	} catch (error) {
+		await Promise.allSettled([runtime].filter(Boolean).map(client => client.$disconnect()));
+		throw error;
+	}
 	const marker = randomUUID();
 	const users = [0, 1, 2].map(index => `otp-test-${marker}-${index}`);
 	const emails = users.map(user => `${user}@example.test`);
@@ -109,8 +114,6 @@ async function main() {
 	);
 	let failure = null;
 	try {
-		checkpoint('connect-runtime');
-		await runtime.$connect();
 		checkpoint('role-query');
 		const [role] =
 			await runtime.$queryRawUnsafe(`SELECT current_user AS name, current_setting('server_version_num')::integer AS version,
@@ -126,6 +129,11 @@ async function main() {
 			)
 		);
 		checkpoint('connect-migrator');
+		migrator = new PrismaClient({
+			datasources: { db: { url: migrationTarget.raw } },
+			log: [],
+			errorFormat: 'minimal'
+		});
 		await migrator.$connect();
 		checkpoint('seed-fixture');
 		for (let index = 0; index < users.length; index++) {
@@ -588,7 +596,8 @@ async function main() {
 		writeSync(1, 'Identity login OTP PostgreSQL18 cleanup: start\n');
 		// This fixture is a fresh dedicated test DB. Remove only its seeded users;
 		// the owning test runner disposes its complete DB and rate counters.
-		await migrator.user.deleteMany({ where: { id: { in: users } } });
+		if (migrator)
+			await migrator.user.deleteMany({ where: { id: { in: users } } }).catch(() => undefined);
 		await Promise.allSettled([
 			runtime.$disconnect(),
 			migrator.$disconnect()

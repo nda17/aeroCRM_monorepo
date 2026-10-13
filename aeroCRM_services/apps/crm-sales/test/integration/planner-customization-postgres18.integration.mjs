@@ -39,12 +39,24 @@ assert.notEqual(
 	new URL(runtimeUrl).username,
 	new URL(migrationUrl).username
 );
-const runtime = new PrismaClient({
-	datasources: { db: { url: runtimeUrl } }
-});
-const migration = new PrismaClient({
-	datasources: { db: { url: migrationUrl } }
-});
+// Prisma 5.22 native TLS initialization mutates live process.env; connect before constructing the next client.
+let runtime;
+let migration;
+try {
+	runtime = new PrismaClient({
+		datasources: { db: { url: runtimeUrl } }
+	});
+	await runtime.$connect();
+	migration = new PrismaClient({
+		datasources: { db: { url: migrationUrl } }
+	});
+	await migration.$connect();
+} catch (error) {
+	await Promise.allSettled(
+		[runtime, migration].filter(Boolean).map(client => client.$disconnect())
+	);
+	throw error;
+}
 const actor = {
 	schemaVersion: 1,
 	workspaceId: randomUUID(),

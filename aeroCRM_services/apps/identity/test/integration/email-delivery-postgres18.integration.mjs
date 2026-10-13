@@ -44,16 +44,29 @@ const {
 const {
 	EmailDeliveryException
 } = require('../../dist/src/transports/verification-transport.service.js');
-const runtime = new PrismaClient({
-	datasources: { db: { url: target.raw } },
-	log: [],
-	errorFormat: 'minimal'
-});
-const admin = new PrismaClient({
-	datasources: { db: { url: migration.raw } },
-	log: [],
-	errorFormat: 'minimal'
-});
+// Prisma 5.22 native TLS initialization mutates live process.env; connect before constructing the next client.
+let runtime;
+let admin;
+try {
+	runtime = new PrismaClient({
+		datasources: { db: { url: target.raw } },
+		log: [],
+		errorFormat: 'minimal'
+	});
+	await runtime.$connect();
+	admin = new PrismaClient({
+		datasources: { db: { url: migration.raw } },
+		log: [],
+		errorFormat: 'minimal'
+	});
+	await admin.$connect();
+} catch (error) {
+	crypto.randomInt = originalRandomInt;
+	await Promise.allSettled(
+		[runtime, admin].filter(Boolean).map(client => client.$disconnect())
+	);
+	throw error;
+}
 const marker = randomUUID();
 const userId = `email-test-${marker}`;
 const email = `${userId}@example.test`;
@@ -99,8 +112,6 @@ const user = () =>
 	});
 let stage = 'connect';
 try {
-	await runtime.$connect();
-	await admin.$connect();
 	const [role] =
 		await runtime.$queryRawUnsafe(`SELECT current_user AS name, current_setting('server_version_num')::int AS version,
 		NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole AND NOT rolbypassrls AND NOT rolinherit AND NOT rolreplication AS restricted

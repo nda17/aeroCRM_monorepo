@@ -40,10 +40,22 @@ const { MailService } = await import("../../dist/src/mail/mail.service.js");
 const { MailWorker } = await import("../../dist/src/mail/mail.worker.js");
 const { MailAuthorityRevokedException } = await import("../../dist/src/mail/mail-authorization.client.js");
 const { ForbiddenException } = await import("@nestjs/common");
-const runtime = new PrismaClient({ datasources: { db: { url: runtimeUrl } } });
-const migrator = new PrismaClient({
-  datasources: { db: { url: migrationUrl } },
-});
+// Prisma 5.22 native TLS initialization mutates live process.env; connect before constructing the next client.
+let runtime;
+let migrator;
+try {
+  runtime = new PrismaClient({ datasources: { db: { url: runtimeUrl } } });
+  await runtime.$connect();
+  migrator = new PrismaClient({
+    datasources: { db: { url: migrationUrl } },
+  });
+  await migrator.$connect();
+} catch (error) {
+  await Promise.allSettled(
+    [runtime, migrator].filter(Boolean).map((client) => client.$disconnect()),
+  );
+  throw error;
+}
 const listener = new pg.Client({ connectionString: runtimeUrl });
 const workspaceId = randomUUID();
 const otherWorkspaceId = randomUUID();

@@ -88,12 +88,12 @@ export class TelegramService {
 	}
 
 	private async webhookStatus(kind: TelegramWebhookKind) {
-		const config = this.webhookConfig(kind);
+		const config = this.webhookConfig();
 		const token = this.botToken(kind);
 		const username = this.botUsername(kind);
 		let expectedWebhookUrl: string | null = null;
 		try {
-			expectedWebhookUrl = this.webhookUrl(kind);
+			expectedWebhookUrl = this.webhookUrl();
 		} catch (error) {
 			return this.webhookFailure(
 				kind,
@@ -170,9 +170,9 @@ export class TelegramService {
 		actorId: string,
 		request: Request
 	) {
-		const config = this.webhookConfig(kind);
+		const config = this.webhookConfig();
 		const token = this.botToken(kind, true);
-		const webhookUrl = this.webhookUrl(kind);
+		const webhookUrl = this.webhookUrl();
 		await this.telegramApi(token, 'setWebhook', {
 			url: webhookUrl,
 			drop_pending_updates: false,
@@ -524,7 +524,7 @@ export class TelegramService {
 		expectedWebhookUrl: string | null,
 		error: string
 	) {
-		const config = this.webhookConfig(kind);
+		const config = this.webhookConfig();
 		return {
 			bot: config.bot,
 			title: config.title,
@@ -545,7 +545,7 @@ export class TelegramService {
 		};
 	}
 
-	private webhookConfig(kind: TelegramWebhookKind) {
+	private webhookConfig() {
 		return {
 			bot: 'info' as const,
 			title: 'Info_bot',
@@ -560,7 +560,7 @@ export class TelegramService {
 		return value && value.length <= 255 ? value : null;
 	}
 
-	private webhookUrl(kind: TelegramWebhookKind): string {
+	private webhookUrl(): string {
 		const raw =
 			this.config.get<string>('TELEGRAM_WEBHOOK_HOST')?.trim() || '';
 		let url: URL;
