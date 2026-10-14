@@ -1016,6 +1016,8 @@ jobs:
             node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --rollback-guard")
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
           else
+            ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" \
+              "sudo -n /usr/local/sbin/aerocrm-nginx-release ready '$SHA'"
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" 'mkdir -p /opt/aerocrm/compose /opt/aerocrm/scripts /opt/aerocrm/nginx'
             scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/compose/frontend.yml "$dest:/opt/aerocrm/compose/"
             scp -i ~/.ssh/release_key -P "$port" -o StrictHostKeyChecking=yes infra/nginx/frontends.conf "$dest:/opt/aerocrm/nginx/"

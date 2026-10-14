@@ -1,7 +1,16 @@
-name: aeroCRM frontend edge recovery
+name: aeroCRM frontend edge recovery and configuration
 on:
   workflow_dispatch:
     inputs:
+      operation:
+        description: Recover the existing edge or apply the reviewed DNS-isolated vhost
+        type: choice
+        options: [recover, configure]
+        default: recover
+        required: true
+      workflow_ci_run_id:
+        description: Green production CI for the exact SHA containing this workflow
+        required: true
       ci_run_id:
         description: Green production CI for the exact approved runtime application SHA
         required: true
@@ -23,6 +32,10 @@ on:
       installed_helper_sha256:
         description: Reviewed SHA-256 of the currently root-installed nginx helper
         required: true
+      current_nginx_config_sha256:
+        description: Exact currently installed vhost SHA-256 for configure
+        default: 9c150bf83575156e605798e9e805f4f80f1ca3b3314a1fa4766bdaa0970b80bb
+        required: false
 permissions:
   contents: read
   actions: read
@@ -35,9 +48,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Verify exact green application and infrastructure CI
+      - name: Verify exact green workflow, application, and infrastructure CI
         env:
           GH_TOKEN: ${{ github.token }}
+          OPERATION: ${{ inputs.operation }}
+          WORKFLOW_RUN_ID: ${{ inputs.workflow_ci_run_id }}
           RUN_ID: ${{ inputs.ci_run_id }}
           SHA: ${{ inputs.sha }}
           INFRA_SHA: ${{ inputs.infra_sha }}
@@ -45,11 +60,19 @@ jobs:
           CURRENT_FRONTEND_SHA: ${{ inputs.current_frontend_sha }}
           FRONTEND_ENV_HASH: ${{ inputs.frontend_env_hash }}
           INSTALLED_HELPER_SHA256: ${{ inputs.installed_helper_sha256 }}
+          CURRENT_NGINX_CONFIG_SHA256: ${{ inputs.current_nginx_config_sha256 }}
         run: |
           set -euo pipefail
+          [[ "$OPERATION" == recover || "$OPERATION" == configure ]]
           [[ "$SHA" =~ ^[a-f0-9]{40}$ && "$INFRA_SHA" =~ ^[a-f0-9]{40}$ && "$CURRENT_FRONTEND_SHA" =~ ^[a-f0-9]{40}$ ]]
-          [[ "$RUN_ID" =~ ^[0-9]+$ && "$INFRA_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$SHA" == "$CURRENT_FRONTEND_SHA" ]]
+          [[ "$WORKFLOW_RUN_ID" =~ ^[0-9]+$ && "$RUN_ID" =~ ^[0-9]+$ && "$INFRA_RUN_ID" =~ ^[0-9]+$ ]]
           [[ "$FRONTEND_ENV_HASH" =~ ^[a-f0-9]{64}$ && "$INSTALLED_HELPER_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          if [[ "$OPERATION" == configure ]]; then
+            [[ "$CURRENT_NGINX_CONFIG_SHA256" == 9c150bf83575156e605798e9e805f4f80f1ca3b3314a1fa4766bdaa0970b80bb ]]
+          fi
+          read -r status conclusion head_sha branch workflow_path <<< "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$WORKFLOW_RUN_ID" --jq '[.status,.conclusion,.head_sha,.head_branch,.path] | join(" ")')"
+          [[ "$status" == completed && "$conclusion" == success && "$head_sha" == "$GITHUB_SHA" && "$branch" == prod_0.1.0 && "$workflow_path" == .github/workflows/ci.yml ]]
           read -r status conclusion head_sha branch workflow_path <<< "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '[.status,.conclusion,.head_sha,.head_branch,.path] | join(" ")')"
           [[ "$status" == completed && "$conclusion" == success && "$head_sha" == "$SHA" && "$branch" == prod_0.1.0 && "$workflow_path" == .github/workflows/ci.yml ]]
           read -r status conclusion head_sha branch workflow_path <<< "$(curl --fail --silent --show-error --proto '=https' \
@@ -76,7 +99,9 @@ jobs:
           bash -n infra/scripts/aerocrm-nginx-release.sh
           node --check infra/scripts/frontend-edge-recovery.mjs
           node --test infra/scripts/frontend-edge-recovery.test.mjs
-      - name: Bootstrap exact root helper and recover existing frontend edge
+          python3 -c "from pathlib import Path; compile(Path('infra/scripts/frontend-edge-configure.py').read_text(), 'infra/scripts/frontend-edge-configure.py', 'exec')"
+          node --test infra/scripts/frontend-edge-configure.test.mjs
+      - name: Bootstrap exact root helper and reconcile existing frontend edge
         env:
           FRONTEND_SSH_HOST: ${{ secrets.FRONTEND_SSH_HOST }}
           FRONTEND_SSH_PORT: ${{ secrets.FRONTEND_SSH_PORT }}
@@ -85,6 +110,8 @@ jobs:
           CURRENT_FRONTEND_SHA: ${{ inputs.current_frontend_sha }}
           FRONTEND_ENV_HASH: ${{ inputs.frontend_env_hash }}
           INSTALLED_HELPER_SHA256: ${{ inputs.installed_helper_sha256 }}
+          CURRENT_NGINX_CONFIG_SHA256: ${{ inputs.current_nginx_config_sha256 }}
+          FRONTEND_EDGE_OPERATION: ${{ inputs.operation }}
         run: node infra/scripts/frontend-edge-recovery.mjs
       - name: Verify all three public HTTPS frontend revisions
         env:
@@ -100,4 +127,61 @@ jobs:
             assert.deepEqual(JSON.parse(body), { status: 'ok', application, revision: process.env.CURRENT_FRONTEND_SHA });
           }
           console.log('Three public HTTPS frontend responses match the preserved exact runtime SHA');
+          NODE
+      - name: Verify fixed public APK contract after DNS-isolated configuration
+        if: inputs.operation == 'configure'
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import https from 'node:https';
+
+          const url = new URL('https://aerocrm.space/downloads/aeroCRM.apk');
+          const request = (method, path = url.pathname, headers = {}) => new Promise((resolve, reject) => {
+            const req = https.request(url, { method, path, headers, timeout: 15000 }, response => {
+              const chunks = [];
+              let size = 0;
+              response.on('data', chunk => {
+                size += chunk.length;
+                if (size > 2_000_000) { req.destroy(new Error('APK response exceeds reviewed bound')); return; }
+                chunks.push(chunk);
+              });
+              response.on('end', () => resolve({ status: response.statusCode,
+                headers: response.headers, body: Buffer.concat(chunks) }));
+            });
+            req.on('timeout', () => req.destroy(new Error('Public APK request timed out')));
+            req.on('error', reject);
+            req.end();
+          });
+          const noRedirectOrCookie = response => {
+            assert.equal(response.headers.location, undefined);
+            assert.equal(response.headers['set-cookie'], undefined);
+          };
+          const get = await request('GET');
+          assert.equal(get.status, 200);
+          noRedirectOrCookie(get);
+          assert.equal(get.body.length, 1411514);
+          assert.equal(createHash('sha256').update(get.body).digest('hex'),
+            '630f81528a4a3821978b88215813ef190f03e4be4e21718aaff21ce8212e232b');
+          assert.equal(get.headers['cache-control'], 'no-store');
+          assert.equal(get.headers['content-disposition'], 'attachment; filename="aeroCRM.apk"');
+          const head = await request('HEAD');
+          assert.equal(head.status, 200);
+          noRedirectOrCookie(head);
+          assert.equal(head.body.length, 0);
+          assert.equal(Number(head.headers['content-length']), get.body.length);
+          const validator = get.headers.etag || get.headers['last-modified'];
+          assert(validator, 'Fixed APK must expose an If-Range validator');
+          const range = await request('GET', url.pathname, { Range: 'bytes=0-31', 'If-Range': validator });
+          assert.equal(range.status, 206);
+          noRedirectOrCookie(range);
+          assert.equal(range.headers['content-range'], `bytes 0-31/${get.body.length}`);
+          assert.deepEqual(range.body, get.body.subarray(0, 32));
+          const post = await request('POST');
+          assert.equal(post.status, 405);
+          noRedirectOrCookie(post);
+          const query = await request('GET', `${url.pathname}?download=1`);
+          assert.equal(query.status, 400);
+          noRedirectOrCookie(query);
+          console.log('Fixed public APK GET/HEAD/Range/If-Range/method/query contract verified');
           NODE
