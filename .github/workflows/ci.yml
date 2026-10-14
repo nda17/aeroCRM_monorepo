@@ -834,6 +834,39 @@ jobs:
           run_native_integration sales-commerce
           run_native_integration planner-customization
           run_native_integration sales-workflow
+      - name: Verify duration migration on legacy rows and closure fences
+        working-directory: aeroCRM_services/apps/crm-sales
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+          CRM_SALES_DATABASE_URL: postgresql://aerocrm_crm_sales_migration:local-migration-only@127.0.0.1:5432/aerocrm_crm_sales_test_stage_duration?schema=crm_sales
+          CRM_SALES_STAGE_DURATION_BACKFILL_DATABASE_URL: postgresql://aerocrm_crm_sales_migration:local-migration-only@127.0.0.1:5432/aerocrm_crm_sales_test_stage_duration?schema=crm_sales
+          CRM_SALES_STAGE_DURATION_BACKFILL_ROLE: aerocrm_crm_sales_migration
+          CRM_SALES_STAGE_DURATION_BACKFILL_ALLOW_MUTATION: 'true'
+          TZ: UTC
+        run: |
+          set -euo pipefail
+          psql_admin() {
+            docker exec -i -e PGPASSWORD=local-contract-only "$PG_CONTAINER" \
+              psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d "$1" "${@:2}"
+          }
+          psql_admin postgres -c 'CREATE DATABASE aerocrm_crm_sales_test_stage_duration OWNER aerocrm_crm_sales_migration'
+          psql_admin aerocrm_crm_sales_test_stage_duration -c 'CREATE SCHEMA crm_sales AUTHORIZATION aerocrm_crm_sales_migration'
+          stage_dir=$(mktemp -d "$RUNNER_TEMP/stage-duration-prisma.XXXXXXXX")
+          trap 'rm -rf "$stage_dir"' EXIT
+          cp prisma/schema.prisma "$stage_dir/schema.prisma"
+          mkdir "$stage_dir/migrations"
+          cp prisma/migrations/migration_lock.toml "$stage_dir/migrations/"
+          for migration in prisma/migrations/*; do
+            if [[ -d "$migration" && "${migration##*/}" != 20261014020000_stage_duration_control ]]; then
+              cp -R "$migration" "$stage_dir/migrations/"
+            fi
+          done
+          [[ $(find "$stage_dir/migrations" -mindepth 1 -maxdepth 1 -type d | wc -l) -eq 9 ]]
+          pnpm exec prisma migrate deploy --schema "$stage_dir/schema.prisma"
+          node test/integration/stage-duration-backfill-postgres18.fixture.mjs seed
+          pnpm prisma:migrate:deploy
+          node test/integration/stage-duration-backfill-postgres18.fixture.mjs verify
+          psql_admin postgres -c 'DROP DATABASE aerocrm_crm_sales_test_stage_duration'
   crm-intake-notifications-postgres18:
     runs-on: ubuntu-latest
     services:

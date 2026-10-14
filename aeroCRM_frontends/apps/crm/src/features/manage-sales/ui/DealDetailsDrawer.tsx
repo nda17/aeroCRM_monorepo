@@ -1,5 +1,7 @@
 'use client'
 
+import { StageDurationLabel } from './StageDurationLabel'
+
 import { AuthenticatedApiError } from '@/shared/api/authenticated-http-client'
 import { useDirtyForm, useDirtyFormGuard } from '@/shared/lib/dirty-form'
 
@@ -406,14 +408,22 @@ export const DealDetailsDrawer = ({
 		{ id: 'history', label: 'История' }
 	] as const
 	const detail = useQuery({
-		queryKey: ['sales', 'deal-context', ...context.key, id, archive],
+		queryKey: [
+			'sales',
+			'deal-context',
+			...context.key,
+			id,
+			archive,
+			'stage-duration'
+		],
 		enabled: context.canRead && !!context.session,
 		queryFn: () =>
 			getSalesDealContext(
 				context.session!.accessToken,
 				context.workspace.workspaceId,
 				id,
-				archive
+				archive,
+				true
 			),
 		retry: false,
 		gcTime: 0
@@ -761,6 +771,11 @@ export const DealDetailsDrawer = ({
 									? ` · ИНН ${detail.data.company.inn}`
 									: ''}
 							</p>
+						) : null}
+						{deal.status === 'OPEN' && deal.archivedAt === null ? (
+							<StageDurationLabel
+								item={detail.data?.stageDuration?.item}
+							/>
 						) : null}
 						<dl className={styles.details}>
 							<div>

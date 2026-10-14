@@ -1389,7 +1389,7 @@
 			"migrationRole": "aerocrm_crm_sales_migration",
 			"runtimeRole": "aerocrm_crm_sales_runtime",
 			"backupRole": "aerocrm_crm_sales_backup",
-			"aclSha256": "420618bd9d9962a73e94df65c78690e6aef8b4ec2bb260139084ea3cb464a954",
+			"aclSha256": "d5d9889d8b946515d6ee0f3a389a23a23232acd873082b9453d6c88021227c9f",
 			"acl": {
 				"version": 1,
 				"service": "crm-sales",
@@ -1586,7 +1586,8 @@
 					"import_preview_immutable",
 					"import_binding_immutable",
 					"guard_planner_board_column_identity",
-					"normalize_task_board_column"
+					"normalize_task_board_column",
+					"track_deal_stage_entry"
 				],
 				"routineExecute": [
 					"assert_workspace_open(uuid)"

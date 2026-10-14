@@ -42,11 +42,12 @@ export const useSavedViews = (
 	onSaved: (
 		result: SavedViewCommandResult,
 		command: SavedViewCommand
-	) => void
+	) => void,
+	features?: 'stage-duration'
 ) => {
 	const { workspace, session, sessionRevision } = context
 	const client = useQueryClient()
-	const signature = JSON.stringify([context.key, scope])
+	const signature = JSON.stringify([context.key, scope, features])
 	const latest = useRef({ signature, canRead: context.canRead })
 	useLayoutEffect(() => {
 		latest.current = { signature, canRead: context.canRead }
@@ -64,9 +65,15 @@ export const useSavedViews = (
 	const binding = {
 		workspaceId: workspace.workspaceId,
 		subject: session?.userId ?? '',
-		scope
+		scope,
+		...(features ? { features } : {})
 	}
-	const queryKey = ['crm-saved-views', ...context.key, scope] as const
+	const queryKey = [
+		'crm-saved-views',
+		...context.key,
+		scope,
+		...(features ? [features] : [])
+	] as const
 	const query = useQuery({
 		queryKey,
 		enabled: context.canRead && !!session,

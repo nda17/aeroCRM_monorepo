@@ -265,7 +265,8 @@ describe('deal list without-next-action filter', () => {
 					'',
 					'',
 					true,
-					{}
+					{},
+					true
 				)
 			)
 			await ready()
@@ -293,7 +294,8 @@ describe('deal list without-next-action filter', () => {
 				'',
 				'',
 				true,
-				{}
+				{},
+				true
 			)
 			const firstPage = screen.getByRole('button', {
 				name: 'На первую страницу'
@@ -316,7 +318,8 @@ describe('deal list without-next-action filter', () => {
 				'',
 				'',
 				true,
-				{}
+				{},
+				true
 			)
 			expect(toast).not.toHaveBeenCalled()
 			expect(checkbox().checked).toBe(true)
@@ -335,7 +338,8 @@ describe('deal list without-next-action filter', () => {
 			'',
 			'',
 			false,
-			{}
+			{},
+			true
 		)
 		fireEvent.click(screen.getByRole('button', { name: 'Далее' }))
 		await waitFor(() =>
@@ -348,7 +352,8 @@ describe('deal list without-next-action filter', () => {
 				'',
 				'',
 				false,
-				{}
+				{},
+				true
 			)
 		)
 		fireEvent.click(checkbox())
@@ -362,7 +367,8 @@ describe('deal list without-next-action filter', () => {
 			'',
 			'',
 			true,
-			{}
+			{},
+			true
 		)
 		expect(checkbox().checked).toBe(true)
 		expect(toast).not.toHaveBeenCalled()
@@ -377,7 +383,8 @@ describe('deal list without-next-action filter', () => {
 			'',
 			'',
 			false,
-			{}
+			{},
+			true
 		)
 		expect(toast).not.toHaveBeenCalled()
 	})
@@ -406,7 +413,8 @@ describe('deal list without-next-action filter', () => {
 			pipelineId,
 			'WON',
 			true,
-			{}
+			{},
+			true
 		)
 		expect(
 			(screen.getByLabelText('Статус') as HTMLSelectElement).value
@@ -437,7 +445,8 @@ describe('deal list without-next-action filter', () => {
 			'',
 			'',
 			false,
-			{}
+			{},
+			true
 		)
 		expect(toast).not.toHaveBeenCalled()
 	})
@@ -681,7 +690,7 @@ describe('deal views and server pipeline', () => {
 		fireEvent.click(screen.getByRole('button', { name: /^Воронка$/ }))
 		await screen.findByRole('region', { name: 'Этап Новая' })
 		await waitFor(() =>
-			expect(listSalesDeals).toHaveBeenLastCalledWith(
+			expect(listSalesDeals).toHaveBeenCalledWith(
 				'test-token',
 				workspaceId,
 				1,
@@ -690,8 +699,21 @@ describe('deal views and server pipeline', () => {
 				pipelineId,
 				'',
 				false,
-				{ stageId }
+				{ stageId },
+				true
 			)
+		)
+		expect(listSalesDeals).toHaveBeenCalledWith(
+			'test-token',
+			workspaceId,
+			1,
+			1,
+			'',
+			pipelineId,
+			'',
+			false,
+			{},
+			true
 		)
 		expect(screen.getByText('21')).toBeTruthy()
 		expect(screen.queryByText('Всего 21 · страница 1')).toBeNull()
@@ -699,7 +721,7 @@ describe('deal views and server pipeline', () => {
 			screen.getByRole('button', { name: 'Следующая страница: Новая' })
 		)
 		await waitFor(() =>
-			expect(listSalesDeals).toHaveBeenLastCalledWith(
+			expect(listSalesDeals).toHaveBeenCalledWith(
 				'test-token',
 				workspaceId,
 				2,
@@ -708,7 +730,8 @@ describe('deal views and server pipeline', () => {
 				pipelineId,
 				'',
 				false,
-				{ stageId }
+				{ stageId },
+				true
 			)
 		)
 		expect(await screen.findByText('2 / 2')).toBeTruthy()
@@ -727,7 +750,8 @@ describe('deal views and server pipeline', () => {
 				'',
 				'OPEN',
 				false,
-				{ assignedToSubject: 'actor' }
+				{ assignedToSubject: 'actor' },
+				true
 			)
 		)
 		fireEvent.click(screen.getByRole('button', { name: 'Просроченные' }))
@@ -741,7 +765,8 @@ describe('deal views and server pipeline', () => {
 				'',
 				'OPEN',
 				false,
-				{ overdue: true, sort: 'next_action_asc' }
+				{ overdue: true, sort: 'next_action_asc' },
+				true
 			)
 		)
 		expect(window.location.search).toContain('overdue=true')
@@ -770,7 +795,8 @@ describe('deal views and server pipeline', () => {
 				'',
 				'OPEN',
 				false,
-				{ overdue: true, overdueBefore: '2026-09-14T15:57:51.755Z' }
+				{ overdue: true, overdueBefore: '2026-09-14T15:57:51.755Z' },
+				true
 			)
 		)
 		expect(screen.queryByRole('region', { name: 'Этап Новая' })).toBeNull()
@@ -804,7 +830,8 @@ describe('deal views and server pipeline', () => {
 				'',
 				'',
 				false,
-				{}
+				{},
+				true
 			)
 		)
 		expect(
@@ -838,7 +865,8 @@ describe('deal views and server pipeline', () => {
 			'',
 			'OPEN',
 			false,
-			{ assignedToSubject: 'actor' }
+			{ assignedToSubject: 'actor' },
+			true
 		)
 	})
 	it('preserves analytics cohort and employee filters from a direct link', async () => {
@@ -862,7 +890,8 @@ describe('deal views and server pipeline', () => {
 				assignedToSubject: 'employee',
 				createdFrom: '2026-09-01T00:00:00.000Z',
 				createdTo: '2026-09-15T00:00:00.000Z'
-			}
+			},
+			true
 		)
 		expect(screen.getByText(/Дата создания: 01.09.2026/)).toBeTruthy()
 	})
@@ -883,7 +912,8 @@ describe('deal views and server pipeline', () => {
 			'',
 			'OPEN',
 			false,
-			{ assignedToSubject: 'actor' }
+			{ assignedToSubject: 'actor' },
+			true
 		)
 		restored.unmount()
 		window.history.replaceState(null, '', '/deals')
@@ -903,7 +933,8 @@ describe('deal views and server pipeline', () => {
 			'',
 			'',
 			false,
-			{}
+			{},
+			true
 		)
 	})
 	it('shows stage failures without claiming there are zero deals', async () => {

@@ -10,7 +10,9 @@ import {
 	renameManagedPipelineStage,
 	reorderManagedPipelineStages,
 	getPipelineNextActionTemplates,
-	saveStageNextActionTemplate
+	saveStageNextActionTemplate,
+	getPipelineStageDurationSettings,
+	saveStageDurationLimit
 } from '@/entities/sales/api/commerce.api'
 import { getPipelineTemplates } from '@/features/crm-access-gate/api/crm-access.api'
 import {
@@ -227,6 +229,120 @@ const StageTemplateEditor = ({
 	)
 }
 
+const StageDurationEditor = ({
+	stage,
+	limitDays,
+	version,
+	locked,
+	onSave
+}: {
+	stage: SalesStage
+	limitDays: number | null
+	version: number
+	locked: boolean
+	onSave: (
+		stageId: string,
+		version: number,
+		limitDays: number | null
+	) => void
+}) => {
+	const [enabled, setEnabled] = useState(limitDays !== null)
+	const [days, setDays] = useState(String(limitDays ?? 3))
+	const [baseline, setBaseline] = useState({ limitDays, version })
+	const dirty =
+		enabled !== (baseline.limitDays !== null) ||
+		(enabled && days !== String(baseline.limitDays ?? 3))
+	const matchesCurrent =
+		enabled === (limitDays !== null) &&
+		(!enabled || Number(days) === limitDays)
+	if (version !== baseline.version || limitDays !== baseline.limitDays) {
+		if (!dirty || limitDays === baseline.limitDays || matchesCurrent)
+			setBaseline({ limitDays, version })
+		if (!dirty) {
+			setEnabled(limitDays !== null)
+			setDays(String(limitDays ?? 3))
+		}
+	}
+	const conflict =
+		version !== baseline.version || limitDays !== baseline.limitDays
+	const valid =
+		!enabled ||
+		(Number.isSafeInteger(Number(days)) &&
+			Number(days) >= 1 &&
+			Number(days) <= 3650)
+	useDirtyForm({ dirty, label: `Срок этапа «${stage.name}»` })
+	return (
+		<form
+			className={styles.item}
+			onSubmit={event => {
+				event.preventDefault()
+				if (!locked && !conflict && dirty && valid)
+					onSave(stage.id, baseline.version, enabled ? Number(days) : null)
+			}}
+		>
+			<div className={styles.heading}>
+				<strong>{stage.name}</strong>
+				<span className={styles.muted}>
+					{limitDays === null
+						? 'Без ограничения'
+						: `Срок: ${limitDays} дн.`}
+				</span>
+			</div>
+			<label className={styles.check}>
+				<input
+					type="checkbox"
+					aria-label={`Ограничить время на этапе «${stage.name}»`}
+					checked={enabled}
+					disabled={locked}
+					onChange={event => setEnabled(event.target.checked)}
+				/>{' '}
+				Ограничить время на этапе
+			</label>
+			{enabled ? (
+				<TextField
+					label={`Срок этапа «${stage.name}», дней`}
+					type="number"
+					value={days}
+					required
+					min={1}
+					max={3650}
+					step={1}
+					disabled={locked}
+					onChange={event => setDays(event.target.value)}
+				/>
+			) : null}
+			{conflict ? (
+				<div className={styles.notice}>
+					<p>
+						Срок этапа изменился. Ваш черновик сохранён на экране.
+						Актуальное значение:{' '}
+						{limitDays === null ? 'без ограничения' : `${limitDays} дн.`}.
+					</p>
+					<Button
+						type="button"
+						size="sm"
+						variant="secondary"
+						disabled={locked}
+						onClick={() => setBaseline({ limitDays, version })}
+					>
+						Применить мой черновик к актуальной версии
+					</Button>
+				</div>
+			) : null}
+			<div className={styles.actions}>
+				<Button
+					type="submit"
+					size="sm"
+					variant="secondary"
+					disabled={locked || conflict || !dirty || !valid}
+				>
+					Сохранить срок этапа
+				</Button>
+			</div>
+		</form>
+	)
+}
+
 const StageNameEditor = ({
 	stage,
 	disabled,
@@ -266,6 +382,16 @@ const StageNameEditor = ({
 	)
 }
 
+const pipelineStructure = (pipeline: PipelineRecord) =>
+	JSON.stringify({
+		name: pipeline.name,
+		stages: pipeline.stages.map(stage => ({
+			id: stage.id,
+			name: stage.name,
+			state: stage.state
+		}))
+	})
+
 const PipelineEditor = ({
 	pipeline,
 	locked,
@@ -277,8 +403,18 @@ const PipelineEditor = ({
 	execute: (mutation: PipelineMutation) => Promise<void>
 	onRefresh: () => void
 }) => {
-	const [draftVersion] = useState(pipeline.version)
-	const editorLocked = locked || pipeline.version !== draftVersion
+	const [baseline] = useState(() => ({
+		version: pipeline.version,
+		structure: pipelineStructure(pipeline)
+	}))
+	const structuralConflict =
+		baseline.structure !== pipelineStructure(pipeline)
+	// Duration limits and next-action templates share Pipeline.version. Accept
+	// those revisions without remounting the structural editor or losing drafts.
+	const draftVersion = structuralConflict
+		? baseline.version
+		: pipeline.version
+	const editorLocked = locked || structuralConflict
 	const [name, setName] = useState(pipeline.name)
 	const [newName, setNewName] = useState('')
 	const [newState, setNewState] = useState<'OPEN' | 'WON' | 'LOST'>('OPEN')
@@ -308,7 +444,7 @@ const PipelineEditor = ({
 	}
 	return (
 		<div className={styles.stack}>
-			{pipeline.version !== draftVersion ? (
+			{structuralConflict ? (
 				<div className={styles.notice}>
 					<p>
 						Версия воронки изменилась. Ваши черновики сохранены на экране.
@@ -549,6 +685,23 @@ export const PipelineManager = ({
 		retry: false,
 		gcTime: 0
 	})
+	const stageDuration = useQuery({
+		queryKey: [
+			'sales',
+			'stage-duration-settings',
+			...context.key,
+			pipeline?.id
+		],
+		enabled: context.canRead && !!context.session && !!pipeline,
+		queryFn: () =>
+			getPipelineStageDurationSettings(
+				context.session!.accessToken,
+				context.workspace.workspaceId,
+				pipeline!.id
+			),
+		retry: false,
+		gcTime: 0
+	})
 	const command = useCommerceCommand<PipelineMutation, unknown>(
 		context,
 		'pipelines',
@@ -604,6 +757,7 @@ export const PipelineManager = ({
 				if (!result.isError) setRevision(value => value + 1)
 			})
 			void stageTemplates.refetch()
+			void stageDuration.refetch()
 		},
 		'sales:manage-pipelines'
 	)
@@ -637,10 +791,55 @@ export const PipelineManager = ({
 				result
 			)
 			onSaved()
+			void stageDuration.refetch()
 			void pipelines.refetch()
 		},
 		'sales:manage-pipelines'
 	)
+	const durationCommand = useCommerceCommand<
+		{
+			stageId: string
+			pipelineId: string
+			expectedVersion: number
+			limitDays: number | null
+		},
+		Awaited<ReturnType<typeof saveStageDurationLimit>>
+	>(
+		context,
+		'pipeline-stage-duration',
+		(token, input) =>
+			saveStageDurationLimit(
+				token,
+				input.workspaceId,
+				input.pipelineId,
+				input.stageId,
+				input
+			),
+		result => {
+			queryClient.setQueryData(
+				[
+					'sales',
+					'stage-duration-settings',
+					...context.key,
+					result.pipelineId
+				],
+				result
+			)
+			onSaved()
+			void pipelines.refetch()
+			void stageTemplates.refetch()
+		},
+		'sales:manage-pipelines'
+	)
+	const refreshDuration = async () => {
+		const results = await Promise.all([
+			context.permissions.refetch(),
+			pipelines.refetch(),
+			stageDuration.refetch(),
+			stageTemplates.refetch()
+		])
+		if (results.some(result => result.isError)) throw new Error()
+	}
 	const refresh = async () => {
 		const [access, result] = await Promise.all([
 			context.permissions.refetch(),
@@ -648,6 +847,7 @@ export const PipelineManager = ({
 		])
 		if (access.isError || result.isError) throw new Error()
 		setRevision(value => value + 1)
+		void stageDuration.refetch()
 		void stageTemplates.refetch()
 	}
 	const refreshTemplate = async () => {
@@ -670,7 +870,12 @@ export const PipelineManager = ({
 				isOpen
 				title="Управление воронками"
 				onClose={() => {
-					if (command.canClose() && templateCommand.canClose()) onClose()
+					if (
+						command.canClose() &&
+						templateCommand.canClose() &&
+						durationCommand.canClose()
+					)
+						onClose()
 				}}
 			>
 				<ScreenState
@@ -686,11 +891,20 @@ export const PipelineManager = ({
 			title="Управление воронками"
 			size="lg"
 			onClose={() => {
-				if (command.canClose() && templateCommand.canClose()) onClose()
+				if (
+					command.canClose() &&
+					templateCommand.canClose() &&
+					durationCommand.canClose()
+				)
+					onClose()
 			}}
 			description="Одной универсальной воронки достаточно для товаров и услуг. Дополнительная нужна, если отличаются этапы работы."
 		>
 			<div className={styles.stack}>
+				<CommerceCommandState
+					command={durationCommand}
+					onReview={refreshDuration}
+				/>
 				<CommerceCommandState command={command} onReview={refresh} />
 				<CommerceCommandState
 					command={templateCommand}
@@ -725,7 +939,11 @@ export const PipelineManager = ({
 							<SelectField
 								label="Воронка"
 								value={pipeline?.id || ''}
-								disabled={command.locked || templateCommand.locked}
+								disabled={
+									command.locked ||
+									templateCommand.locked ||
+									durationCommand.locked
+								}
 								onChange={event => {
 									const id = event.target.value
 									draftGuard.confirmDiscard(() => {
@@ -743,7 +961,11 @@ export const PipelineManager = ({
 							<div className={styles.actions}>
 								<Button
 									variant="secondary"
-									disabled={command.locked || templateCommand.locked}
+									disabled={
+										command.locked ||
+										templateCommand.locked ||
+										durationCommand.locked
+									}
 									onClick={() =>
 										draftGuard.confirmDiscard(() =>
 											setCreating(value => !value)
@@ -830,6 +1052,7 @@ export const PipelineManager = ({
 										locked={
 											command.locked ||
 											templateCommand.locked ||
+											durationCommand.locked ||
 											pipelines.isFetching
 										}
 										execute={command.execute}
@@ -839,6 +1062,70 @@ export const PipelineManager = ({
 											)
 										}
 									/>
+									<section className={styles.section}>
+										<h3>Контроль срока этапа</h3>
+										<p className={styles.muted}>
+											День = 24 часа, выходные учитываются. Срок считается
+											от последнего входа сделки на этап. Изменение
+											настройки сразу влияет на текущие сделки. Уведомления
+											и автоматические действия не создаются.
+										</p>
+										{stageDuration.isError ? (
+											<ScreenState
+												compact
+												variant="error"
+												description="Не удалось обновить сроки этапов. Черновики сохранены."
+												action={
+													<Button
+														variant="secondary"
+														onClick={() =>
+															void refreshDuration().catch(() => undefined)
+														}
+													>
+														Повторить
+													</Button>
+												}
+											/>
+										) : null}
+										{!stageDuration.data && !stageDuration.isError ? (
+											<ScreenState compact variant="loading" />
+										) : stageDuration.data ? (
+											pipeline.stages
+												.filter(stage => stage.state === 'OPEN')
+												.map(stage => (
+													<StageDurationEditor
+														key={`${pipeline.id}:${stage.id}`}
+														stage={stage}
+														limitDays={
+															stageDuration.data.items.find(
+																item => item.stageId === stage.id
+															)?.limitDays ?? null
+														}
+														version={stageDuration.data.pipelineVersion}
+														locked={
+															command.locked ||
+															templateCommand.locked ||
+															durationCommand.locked ||
+															stageDuration.isFetching ||
+															stageDuration.isError ||
+															pipelines.isFetching
+														}
+														onSave={(
+															stageId,
+															expectedVersion,
+															limitDays
+														) =>
+															void durationCommand.execute({
+																pipelineId: pipeline.id,
+																stageId,
+																expectedVersion,
+																limitDays
+															})
+														}
+													/>
+												))
+										) : null}
+									</section>
 									<section className={styles.section}>
 										<h3>Следующее действие по этапу</h3>
 										<p className={styles.muted}>
@@ -897,6 +1184,7 @@ export const PipelineManager = ({
 														locked={
 															command.locked ||
 															templateCommand.locked ||
+															durationCommand.locked ||
 															stageTemplates.isFetching ||
 															stageTemplates.isError
 														}

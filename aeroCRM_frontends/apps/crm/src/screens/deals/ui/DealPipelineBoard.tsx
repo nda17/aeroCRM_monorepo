@@ -1,5 +1,7 @@
 'use client'
 
+import { StageDurationLabel } from '@/features/manage-sales/ui/StageDurationLabel'
+
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -42,7 +44,8 @@ const StageColumn = ({
 			pipeline.id,
 			stage.id,
 			filters,
-			page
+			page,
+			'stage-duration'
 		],
 		enabled: context.canRead && !!context.session,
 		queryFn: () =>
@@ -55,7 +58,8 @@ const StageColumn = ({
 				pipeline.id,
 				filters.status,
 				filters.withoutNextAction,
-				{ ...requestDealFilters(filters), stageId: stage.id }
+				{ ...requestDealFilters(filters), stageId: stage.id },
+				true
 			),
 		retry: false,
 		gcTime: 0
@@ -119,6 +123,13 @@ const StageColumn = ({
 								<span className={styles.muted}>
 									{name(deal.assignedToSubject)}
 								</span>
+								{deal.status === 'OPEN' && deal.archivedAt === null ? (
+									<StageDurationLabel
+										item={deals.data.stageDuration?.items.find(
+											item => item.dealId === deal.id
+										)}
+									/>
+								) : null}
 								{deal.nextTask ? (
 									<span className={styles.cardTask}>
 										<span>{deal.nextTask.title}</span>

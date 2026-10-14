@@ -194,7 +194,8 @@
     "import_preview_immutable",
     "import_binding_immutable",
     "guard_planner_board_column_identity",
-    "normalize_task_board_column"
+    "normalize_task_board_column",
+    "track_deal_stage_entry"
   ],
   "routineExecute": [
     "assert_workspace_open(uuid)"

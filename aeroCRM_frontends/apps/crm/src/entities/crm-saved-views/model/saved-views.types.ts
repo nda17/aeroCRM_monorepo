@@ -22,6 +22,7 @@ export interface SavedViewBinding {
 	workspaceId: string
 	subject: string
 	scope: SavedViewScope
+	features?: 'stage-duration'
 }
 export interface SavedView extends SavedViewBinding {
 	id: string

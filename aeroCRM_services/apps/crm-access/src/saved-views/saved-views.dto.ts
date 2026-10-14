@@ -15,20 +15,37 @@ import {
 	MaxLength,
 	Min,
 	MinLength,
-	ValidateNested
+	Validate,
+	ValidateNested,
+	ValidationArguments,
+	ValidatorConstraint,
+	ValidatorConstraintInterface
 } from 'class-validator';
 
 export type SavedViewScope = 'DEALS' | 'TASKS';
 
+@ValidatorConstraint({ name: 'savedViewFeature', async: false })
+class SavedViewFeatureConstraint implements ValidatorConstraintInterface {
+	validate(value: unknown, args: ValidationArguments) {
+		if (value === undefined) return true;
+		const scope = (args.object as { scope?: unknown }).scope;
+		return value === 'stage-duration' && (scope === undefined || scope === 'DEALS');
+	}
+}
+
 export class SavedViewsQueryDto {
 	@IsUUID('4') workspaceId!: string;
 	@IsIn(['DEALS', 'TASKS']) scope!: SavedViewScope;
+	@Validate(SavedViewFeatureConstraint)
+	features?: 'stage-duration';
 }
 
 export class SavedViewCommandDto {
 	@Equals(1) schemaVersion!: 1;
 	@IsUUID('4') commandId!: string;
 	@IsUUID('4') workspaceId!: string;
+	@Validate(SavedViewFeatureConstraint)
+	features?: 'stage-duration';
 }
 
 export class CreateSavedViewDto extends SavedViewCommandDto {

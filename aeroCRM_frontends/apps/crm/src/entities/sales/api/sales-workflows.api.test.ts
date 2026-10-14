@@ -49,6 +49,42 @@ describe('sales deal context contract', () => {
 		})
 	})
 
+	it('opts into and validates stage duration in deal detail context', async () => {
+		const stageDuration = {
+			asOf: stamp,
+			item: {
+				dealId,
+				stageId: deal.stageId,
+				dealVersion: deal.version,
+				enteredAt: null,
+				limitDays: null,
+				deadlineAt: null,
+				elapsedDays: null,
+				overdue: false
+			}
+		}
+		vi.mocked(authenticatedRequest).mockResolvedValue({
+			schemaVersion: 1,
+			deal,
+			companyContext: [{ contactId, company: null }],
+			stageDuration
+		})
+		await expect(
+			getSalesDealContext('token', workspaceId, dealId, 'ARCHIVED', true)
+		).resolves.toEqual({ deal, company: null, stageDuration })
+		expect(authenticatedRequest).toHaveBeenCalledWith({
+			accessToken: 'token',
+			method: 'GET',
+			url: `/crm/sales/deals/${dealId}`,
+			params: {
+				workspaceId,
+				archive: 'ARCHIVED',
+				context: 'company',
+				includeStageDuration: 'true'
+			}
+		})
+	})
+
 	it.each([
 		{
 			schemaVersion: 1,

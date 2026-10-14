@@ -208,6 +208,16 @@ try {
     pipelineId: installed.installation.pipelineId,
     openStage,
   });
+  await stageDurationScenarios({
+    prisma,
+    migrationPrisma,
+    commerce,
+    sales,
+    access,
+    otherWorkspaceId,
+    pipelineId: installed.installation.pipelineId,
+    dealId,
+  });
 
   const extraPipeline = await commerce.createPipeline(access, {
     schemaVersion: 1,
@@ -1549,6 +1559,484 @@ async function nextActionTemplateScenarios({
     transitionDeal.deal.assignedToSubject,
   );
   assert.equal(tasks.find((task) => task.id === sideTask.id).status, "OPEN");
+}
+
+async function stageDurationScenarios({
+  prisma,
+  migrationPrisma,
+  commerce,
+  sales,
+  access,
+  otherWorkspaceId,
+  pipelineId,
+  dealId,
+}) {
+  const currentSettings = await commerce.stageDurationSettings(access, pipelineId);
+  assert.equal(currentSettings.workspaceId, access.workspaceId);
+  assert.equal(currentSettings.pipelineId, pipelineId);
+  const openStages = currentSettings.items;
+  assert.ok(openStages.length >= 2, "stage-duration integration requires two OPEN stages");
+  const configuredStage = openStages[0];
+  const durationDeal = await sales.create(
+    access,
+    {
+      schemaVersion: 1,
+      workspaceId: access.workspaceId,
+      commandId: randomUUID(),
+      title: "Сделка для проверки срока этапа",
+      currency: "RUB",
+      amountMinor: 0,
+      pipelineId,
+      stageId: configuredStage.stageId,
+      contactId: randomUUID(),
+      nextTask: {
+        title: "Первый звонок по сроку этапа",
+        dueAt: new Date(Date.now() + 86_400_000).toISOString(),
+      },
+    },
+    "Bearer integration",
+  );
+  dealId = durationDeal.deal.id;
+  const durationCommand = {
+    schemaVersion: 1,
+    workspaceId: access.workspaceId,
+    commandId: randomUUID(),
+    expectedVersion: currentSettings.pipelineVersion,
+    limitDays: 3,
+  };
+  await assert.rejects(
+    commerce.setStageDurationLimit(
+      { ...access, permissions: ["sales:read"] },
+      pipelineId,
+      configuredStage.stageId,
+      durationCommand,
+    ),
+    isForbidden,
+  );
+  const configured = await commerce.setStageDurationLimit(
+    access,
+    pipelineId,
+    configuredStage.stageId,
+    durationCommand,
+  );
+  assert.equal(configured.pipelineVersion, currentSettings.pipelineVersion + 1);
+  assert.equal(
+    configured.items.find((item) => item.stageId === configuredStage.stageId).limitDays,
+    3,
+  );
+  assert.deepEqual(
+    await commerce.setStageDurationLimit(
+      access,
+      pipelineId,
+      configuredStage.stageId,
+      durationCommand,
+    ),
+    configured,
+    "setting-limit command replay must return the exact recorded result",
+  );
+  await assert.rejects(
+    commerce.setStageDurationLimit(access, pipelineId, configuredStage.stageId, {
+      ...durationCommand,
+      limitDays: 4,
+    }),
+    isConflict,
+  );
+  await assert.rejects(
+    commerce.setStageDurationLimit(access, pipelineId, configuredStage.stageId, {
+      ...durationCommand,
+      commandId: randomUUID(),
+      expectedVersion: currentSettings.pipelineVersion,
+      limitDays: 3,
+    }),
+    isConflict,
+  );
+  for (const limitDays of [0, 3651, "3", undefined])
+    await assert.rejects(
+      commerce.setStageDurationLimit(access, pipelineId, configuredStage.stageId, {
+        schemaVersion: 1,
+        workspaceId: access.workspaceId,
+        commandId: randomUUID(),
+        expectedVersion: configured.pipelineVersion,
+        limitDays,
+      }),
+      isBadRequest,
+    );
+  await assert.rejects(
+    commerce.stageDurationSettings(
+      { ...access, workspaceId: otherWorkspaceId },
+      pipelineId,
+    ),
+    isNotFound,
+  );
+  const terminalStageId = (await commerce.pipelines(access)).items
+    .find((pipeline) => pipeline.id === pipelineId)
+    .stages.find((stage) => stage.state === "WON").id;
+  await assert.rejects(
+    commerce.setStageDurationLimit(access, pipelineId, terminalStageId, {
+      schemaVersion: 1,
+      workspaceId: access.workspaceId,
+      commandId: randomUUID(),
+      expectedVersion: configured.pipelineVersion,
+      limitDays: 3,
+    }),
+    isBadRequest,
+  );
+
+  const created = await prisma.deal.findUniqueOrThrow({
+    where: { id: dealId },
+    select: { stageEnteredAt: true, stageId: true },
+  });
+  assert.ok(created.stageEnteredAt instanceof Date);
+  assert.ok(Math.abs(Date.now() - created.stageEnteredAt.getTime()) < 60_000);
+  const createdAt = created.stageEnteredAt;
+
+  // Test the trigger's elapsed-time branch without changing stage identity.
+  await migrationPrisma.$executeRawUnsafe(
+    'ALTER TABLE "crm_sales"."deals" DISABLE TRIGGER "track_deal_stage_entry"',
+  );
+  try {
+    await migrationPrisma.$executeRaw`
+      UPDATE "crm_sales"."deals"
+      SET "stage_entered_at" = clock_timestamp() - INTERVAL '9 days'
+      WHERE "id" = ${dealId}::uuid AND "workspace_id" = ${access.workspaceId}::uuid
+    `;
+  } finally {
+    await migrationPrisma.$executeRawUnsafe(
+      'ALTER TABLE "crm_sales"."deals" ENABLE TRIGGER "track_deal_stage_entry"',
+    );
+  }
+  const agedList = await sales.deals(
+    access,
+    {
+      workspaceId: access.workspaceId,
+      page: 1,
+      pageSize: 100,
+      includeStageDuration: "true",
+    },
+    "Bearer integration",
+  );
+	assert.ok(agedList.total >= 1);
+	assert.equal(agedList.stageDuration.items.length, agedList.items.length);
+	assert.equal(agedList.stageDuration.overdueCount, 1);
+	const agedDeal = agedList.items.find((item) => item.id === dealId);
+	const agedInfo = agedList.stageDuration.items.find((item) => item.dealId === dealId);
+	assert.ok(agedDeal && agedInfo, "the target deal must be present in the unfiltered duration response");
+	assert.deepEqual(agedInfo, {
+		dealId,
+		stageId: configuredStage.stageId,
+		dealVersion: agedDeal.version,
+		enteredAt: agedInfo.enteredAt,
+		limitDays: 3,
+		deadlineAt: new Date(
+			Date.parse(agedInfo.enteredAt) + 3 * 86_400_000,
+		).toISOString(),
+		elapsedDays: 9,
+		overdue: true,
+	});
+  assert.ok(Date.parse(agedList.stageDuration.asOf) > Date.parse(agedInfo.deadlineAt));
+  const unfilteredFalse = await sales.deals(
+    access,
+    {
+      workspaceId: access.workspaceId,
+      page: 1,
+      pageSize: 100,
+      includeStageDuration: "true",
+      stageOverdue: "false",
+    },
+    "Bearer integration",
+  );
+  assert.equal(unfilteredFalse.total, agedList.total);
+  assert.equal(unfilteredFalse.stageDuration.overdueCount, agedList.stageDuration.overdueCount);
+  assert.deepEqual(
+    unfilteredFalse.items.map((item) => item.id),
+    agedList.items.map((item) => item.id),
+    "stageOverdue=false must disable filtering and preserve the unfiltered page",
+  );
+  const firstPage = await sales.deals(
+    access,
+    {
+      workspaceId: access.workspaceId,
+      page: 1,
+      pageSize: 1,
+      includeStageDuration: "true",
+    },
+    "Bearer integration",
+  );
+  assert.equal(firstPage.items.length, 1);
+  assert.equal(firstPage.stageDuration.items.length, 1);
+  assert.equal(firstPage.total, agedList.total);
+  assert.equal(firstPage.stageDuration.overdueCount, 1);
+  const legacyList = await sales.deals(
+    access,
+    { workspaceId: access.workspaceId, page: 1, pageSize: 100 },
+    "Bearer integration",
+  );
+  assert.equal(Object.hasOwn(legacyList, "stageDuration"), false);
+  const filtered = await sales.deals(
+    access,
+    {
+      workspaceId: access.workspaceId,
+      page: 1,
+      pageSize: 100,
+      includeStageDuration: "true",
+      stageOverdue: "true",
+    },
+    "Bearer integration",
+  );
+  assert.equal(filtered.total, 1);
+  assert.equal(filtered.items[0].id, dealId);
+  assert.equal(filtered.stageDuration.overdueCount, 1);
+  const foreignDeal = await sales.create(
+    access,
+    {
+      schemaVersion: 1,
+      workspaceId: access.workspaceId,
+      commandId: randomUUID(),
+      title: "Чужая сделка для проверки области видимости",
+      currency: "RUB",
+      amountMinor: 0,
+      pipelineId,
+      stageId: configuredStage.stageId,
+      contactId: randomUUID(),
+      nextTask: {
+        title: "Задача чужой сделки",
+        dueAt: new Date(Date.now() + 86_400_000).toISOString(),
+      },
+    },
+    "Bearer integration",
+  );
+  await prisma.deal.update({
+    where: { id: foreignDeal.deal.id },
+    data: { assignedToSubject: `foreign-${randomUUID()}`, version: { increment: 1 } },
+  });
+  await migrationPrisma.$executeRawUnsafe(
+    'ALTER TABLE "crm_sales"."deals" DISABLE TRIGGER "track_deal_stage_entry"',
+  );
+  try {
+    await migrationPrisma.$executeRaw`
+      UPDATE "crm_sales"."deals"
+      SET "stage_entered_at" = clock_timestamp() - INTERVAL '9 days'
+      WHERE "id" = ${foreignDeal.deal.id}::uuid
+        AND "workspace_id" = ${access.workspaceId}::uuid
+    `;
+  } finally {
+    await migrationPrisma.$executeRawUnsafe(
+      'ALTER TABLE "crm_sales"."deals" ENABLE TRIGGER "track_deal_stage_entry"',
+    );
+  }
+  const allOverdue = await sales.deals(
+    access,
+    {
+      workspaceId: access.workspaceId,
+      page: 1,
+      pageSize: 100,
+      includeStageDuration: "true",
+      stageOverdue: "true",
+    },
+    "Bearer integration",
+  );
+  assert.equal(allOverdue.total, 2);
+  assert.equal(allOverdue.stageDuration.overdueCount, 2);
+  const ownFiltered = await sales.deals(
+    { ...access, dataScope: "OWN" },
+    {
+      workspaceId: access.workspaceId,
+      page: 1,
+      pageSize: 100,
+      includeStageDuration: "true",
+      stageOverdue: "true",
+    },
+    "Bearer integration",
+  );
+  assert.equal(ownFiltered.total, 1);
+  assert.equal(ownFiltered.stageDuration.overdueCount, 1);
+  assert.deepEqual(ownFiltered.items.map((item) => item.id), [dealId]);
+  const teamFiltered = await sales.deals(
+    { ...access, dataScope: "TEAM", teamIds: [] },
+    {
+      workspaceId: access.workspaceId,
+      page: 1,
+      pageSize: 100,
+      includeStageDuration: "true",
+      stageOverdue: "true",
+    },
+    "Bearer integration",
+  );
+  assert.equal(teamFiltered.total, 1);
+  assert.equal(teamFiltered.stageDuration.overdueCount, 1);
+  assert.deepEqual(teamFiltered.items.map((item) => item.id), [dealId]);
+  const otherWorkspace = await sales.deals(
+    { ...access, workspaceId: otherWorkspaceId },
+    {
+      workspaceId: otherWorkspaceId,
+      page: 1,
+      pageSize: 100,
+      includeStageDuration: "true",
+      stageOverdue: "true",
+    },
+    "Bearer integration",
+  );
+  assert.equal(otherWorkspace.total, 0);
+  assert.equal(otherWorkspace.stageDuration.overdueCount, 0);
+  await assert.rejects(
+    sales.detail(
+      { ...access, workspaceId: otherWorkspaceId },
+      dealId,
+      { includeStageDuration: "true" },
+      "Bearer integration",
+    ),
+    isNotFound,
+  );
+  const detail = await sales.detail(
+    access,
+    dealId,
+    { includeStageDuration: "true" },
+    "Bearer integration",
+  );
+  assert.equal(detail.stageDuration.item.dealId, detail.deal.id);
+  assert.equal(detail.stageDuration.item.dealVersion, detail.deal.version);
+  assert.equal(detail.stageDuration.item.overdue, true);
+  const legacyDetail = await sales.detail(
+    access,
+    dealId,
+    {},
+    "Bearer integration",
+  );
+  assert.equal(Object.hasOwn(legacyDetail, "stageDuration"), false);
+
+  const clearDurationCommand = {
+    schemaVersion: 1,
+    workspaceId: access.workspaceId,
+    commandId: randomUUID(),
+    expectedVersion: configured.pipelineVersion,
+    limitDays: null,
+  };
+  const cleared = await commerce.setStageDurationLimit(
+    access,
+    pipelineId,
+    configuredStage.stageId,
+    clearDurationCommand,
+  );
+  assert.equal(
+    cleared.items.find((item) => item.stageId === configuredStage.stageId).limitDays,
+    null,
+  );
+  const noLimitInfo = (await sales.detail(
+    access,
+    dealId,
+    { includeStageDuration: "true" },
+    "Bearer integration",
+  )).stageDuration.item;
+  assert.equal(noLimitInfo.limitDays, null);
+  assert.equal(noLimitInfo.deadlineAt, null);
+  assert.equal(noLimitInfo.elapsedDays, 9);
+  assert.equal(noLimitInfo.overdue, false);
+
+  const stages = (await commerce.pipelines(access)).items
+    .find((pipeline) => pipeline.id === pipelineId).stages;
+  const secondOpenStage = stages.find(
+    (stage) => stage.state === "OPEN" && stage.id !== configuredStage.stageId,
+  );
+  const beforeMove = await prisma.deal.findUniqueOrThrow({
+    where: { id: dealId },
+    select: { version: true, stageEnteredAt: true },
+  });
+  const moved = await sales.transition(
+    access,
+    dealId,
+    {
+      schemaVersion: 1,
+      workspaceId: access.workspaceId,
+      commandId: randomUUID(),
+      expectedVersion: beforeMove.version,
+      targetStageId: secondOpenStage.id,
+      outcome: "Проверка нового времени этапа",
+      nextTask: {
+        title: "Новый звонок",
+        dueAt: new Date(Date.now() + 86_400_000).toISOString(),
+      },
+    },
+    "Bearer integration",
+  );
+  const afterMove = await prisma.deal.findUniqueOrThrow({
+    where: { id: dealId },
+    select: { stageEnteredAt: true },
+  });
+  assert.ok(afterMove.stageEnteredAt > beforeMove.stageEnteredAt);
+  assert.equal(moved.deal.stageId, secondOpenStage.id);
+
+  const returned = await sales.transition(
+    access,
+    dealId,
+    {
+      schemaVersion: 1,
+      workspaceId: access.workspaceId,
+      commandId: randomUUID(),
+      expectedVersion: moved.deal.version,
+      targetStageId: configuredStage.stageId,
+      outcome: "Возврат на этап с новым сроком",
+      nextTask: {
+        title: "Повторный звонок",
+        dueAt: new Date(Date.now() + 86_400_000).toISOString(),
+      },
+    },
+    "Bearer integration",
+  );
+  const afterReturn = await prisma.deal.findUniqueOrThrow({
+    where: { id: dealId },
+    select: { stageEnteredAt: true },
+  });
+  assert.ok(afterReturn.stageEnteredAt > afterMove.stageEnteredAt);
+
+  const terminalMove = await sales.transition(
+    access,
+    dealId,
+    {
+      schemaVersion: 1,
+      workspaceId: access.workspaceId,
+      commandId: randomUUID(),
+      expectedVersion: returned.deal.version,
+      targetStageId: terminalStageId,
+      outcome: "Закрытие для проверки индикатора",
+    },
+    "Bearer integration",
+  );
+  const closedInfo = (await sales.detail(
+    access,
+    dealId,
+    { includeStageDuration: "true" },
+    "Bearer integration",
+  )).stageDuration.item;
+  assert.equal(terminalMove.deal.status, "WON");
+  assert.equal(closedInfo.limitDays, null);
+  assert.equal(closedInfo.deadlineAt, null);
+  assert.equal(closedInfo.elapsedDays, null);
+  assert.equal(closedInfo.overdue, false);
+
+  const sameStageTimestamp = (await prisma.deal.findUniqueOrThrow({
+    where: { id: dealId },
+    select: { stageEnteredAt: true },
+  })).stageEnteredAt;
+  await migrationPrisma.$executeRaw`
+    UPDATE "crm_sales"."deals"
+    SET "stage_entered_at" = clock_timestamp() - INTERVAL '5 days'
+    WHERE "id" = ${dealId}::uuid AND "workspace_id" = ${access.workspaceId}::uuid
+  `;
+  const guardedTimestamp = await prisma.deal.findUniqueOrThrow({
+    where: { id: dealId },
+    select: { stageEnteredAt: true },
+  });
+  assert.equal(guardedTimestamp.stageEnteredAt.getTime(), sameStageTimestamp.getTime());
+  await migrationPrisma.deal.update({
+    where: { id: dealId },
+    data: { title: "Заголовок без смены этапа" },
+  });
+  const sameStageUpdated = await prisma.deal.findUniqueOrThrow({
+    where: { id: dealId },
+    select: { stageEnteredAt: true },
+  });
+  assert.equal(sameStageUpdated.stageEnteredAt.getTime(), sameStageTimestamp.getTime());
+  assert.equal(createdAt instanceof Date, true);
 }
 
 

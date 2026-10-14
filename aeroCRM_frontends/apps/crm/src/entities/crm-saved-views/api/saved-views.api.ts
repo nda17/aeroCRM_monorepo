@@ -29,7 +29,11 @@ export const listSavedViews = async (
 			accessToken,
 			method: 'GET',
 			url: root,
-			params: { workspaceId: binding.workspaceId, scope: binding.scope }
+			params: {
+				workspaceId: binding.workspaceId,
+				scope: binding.scope,
+				...(binding.features ? { features: binding.features } : {})
+			}
 		}),
 		binding
 	)
@@ -49,7 +53,8 @@ export const mutateSavedView = async (
 	const common = {
 		schemaVersion: 1,
 		workspaceId: command.workspaceId,
-		commandId: command.commandId
+		commandId: command.commandId,
+		...(command.features ? { features: command.features } : {})
 	}
 	const body =
 		mutation.kind === 'create'

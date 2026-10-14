@@ -172,6 +172,87 @@ export class CommerceService {
 				}))
 		};
 	}
+	private stageDurationSettingsView(
+		p: Prisma.PipelineGetPayload<{ include: { stages: true } }>
+	) {
+		return {
+			schemaVersion: 1,
+			workspaceId: p.workspaceId,
+			pipelineId: p.id,
+			pipelineVersion: p.version,
+			items: p.stages
+				.filter(stage => stage.state === 'OPEN')
+				.sort((a, b) => a.position - b.position)
+				.map(stage => ({
+					stageId: stage.id,
+					limitDays: stage.stageDurationDays
+				}))
+		};
+	}
+	async stageDurationSettings(access: SalesAccess, id: string) {
+		this.check(access, 'sales:read');
+		return this.stageDurationSettingsView(
+			await this.pipeline(this.db, access, id)
+		);
+	}
+	async setStageDurationLimit(
+		access: SalesAccess,
+		id: string,
+		stageId: string,
+		input: unknown
+	) {
+		this.manage(access);
+		const body = object(input);
+		const limitDays = body.limitDays;
+		if (
+			limitDays !== null &&
+			(!Number.isInteger(limitDays) ||
+				Number(limitDays) < 1 ||
+				Number(limitDays) > 3650)
+		)
+			throw new BadRequestException(
+				'Срок этапа должен быть от 1 до 3650 дней'
+			);
+		return this.command(
+			access,
+			body,
+			'STAGE_DURATION_LIMIT_SET',
+			async tx => {
+				await lock(tx, `commerce:pipeline:${id}`);
+				const pipeline = await this.pipeline(tx, access, id);
+				if (pipeline.version !== body.expectedVersion) conflict();
+				const stage = pipeline.stages.find(item => item.id === stageId);
+				if (!stage) throw new NotFoundException('Этап не найден');
+				if (stage.state !== 'OPEN')
+					throw new BadRequestException(
+						'Настройка доступна только для открытого этапа'
+					);
+				await tx.pipelineStage.update({
+					where: { id: stageId },
+					data: { stageDurationDays: limitDays as number | null }
+				});
+				const updated = await tx.pipeline.updateMany({
+					where: {
+						id,
+						workspaceId: access.workspaceId,
+						version: body.expectedVersion as number
+					},
+					data: { version: { increment: 1 } }
+				});
+				if (updated.count !== 1) conflict();
+				await this.event(tx, access, 'STAGE_DURATION_LIMIT_SET', {
+					pipelineId: id,
+					stageId,
+					before: stage.stageDurationDays,
+					after: limitDays
+				});
+				return this.stageDurationSettingsView(
+					await this.pipeline(tx, access, id)
+				);
+			},
+			id + ':' + stageId
+		);
+	}
 	private async pipeline(tx: Tx, access: SalesAccess, id: string) {
 		const p = await tx.pipeline.findFirst({
 			where: { id, workspaceId: access.workspaceId },

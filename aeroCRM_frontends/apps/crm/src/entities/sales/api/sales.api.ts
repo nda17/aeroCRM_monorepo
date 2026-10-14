@@ -1,3 +1,5 @@
+import { isRecord } from '@/shared/lib/contract'
+import { parseSalesStageDurationPage } from '../model/stage-duration.contract'
 import {
 	authenticatedRequest,
 	invalidContractError
@@ -40,71 +42,91 @@ export const listSalesDeals = async (
 	pipelineId: string,
 	status: string,
 	withoutNextAction = false,
-	filters: SalesDealFilters = {}
+	filters: SalesDealFilters = {},
+	includeStageDuration = false
 ) => {
-	if (typeof withoutNextAction !== 'boolean') throw invalidContractError()
-	const result = parseSalesPage(
-		await authenticatedRequest({
-			accessToken,
-			method: 'GET',
-			url: '/crm/sales/deals',
-			params: {
-				workspaceId,
-				page: String(page),
-				pageSize: String(pageSize),
-				search,
-				...(pipelineId ? { pipelineId } : {}),
-				...(status ? { status } : {}),
-				...(withoutNextAction ? { withoutNextAction: 'true' } : {}),
-				...(filters.archive ? { archive: filters.archive } : {}),
-				...(filters.stageId ? { stageId: filters.stageId } : {}),
-				...(filters.assignedToSubject
-					? { assignedToSubject: filters.assignedToSubject }
-					: {}),
-				...(filters.overdue ? { overdue: 'true' } : {}),
-				...(filters.overdueBefore
-					? { overdueBefore: filters.overdueBefore }
-					: {}),
-				...(filters.createdFrom
-					? { createdFrom: filters.createdFrom }
-					: {}),
-				...(filters.createdTo ? { createdTo: filters.createdTo } : {}),
-				...(filters.sort ? { sort: filters.sort } : {})
-			}
-		}),
-		page,
-		pageSize,
-		row => {
-			const deal = parseSalesDeal(row, workspaceId)
-			if (
-				withoutNextAction &&
-				(deal?.status !== 'OPEN' ||
-					deal.nextTask !== null ||
-					(status && deal.status !== status))
-			)
-				return null
-			if (
-				deal &&
-				((pipelineId && deal.pipelineId !== pipelineId) ||
-					(status && deal.status !== status) ||
-					(filters.stageId && deal.stageId !== filters.stageId) ||
-					(filters.assignedToSubject &&
-						deal.assignedToSubject !== filters.assignedToSubject) ||
-					(filters.createdFrom && deal.createdAt < filters.createdFrom) ||
-					(filters.createdTo && deal.createdAt >= filters.createdTo) ||
-					(filters.overdue && deal.status !== 'OPEN'))
-			)
-				return null
-			return deal &&
-				(filters.archive === 'ARCHIVED'
-					? deal.archivedAt !== null
-					: deal.archivedAt === null)
-				? deal
-				: null
-		}
+	if (
+		typeof withoutNextAction !== 'boolean' ||
+		typeof includeStageDuration !== 'boolean' ||
+		(filters.stageOverdue !== undefined &&
+			(!includeStageDuration || typeof filters.stageOverdue !== 'boolean'))
 	)
+		throw invalidContractError()
+	const value: unknown = await authenticatedRequest({
+		accessToken,
+		method: 'GET',
+		url: '/crm/sales/deals',
+		params: {
+			workspaceId,
+			page: String(page),
+			pageSize: String(pageSize),
+			search,
+			...(pipelineId ? { pipelineId } : {}),
+			...(status ? { status } : {}),
+			...(withoutNextAction ? { withoutNextAction: 'true' } : {}),
+			...(includeStageDuration ? { includeStageDuration: 'true' } : {}),
+			...(filters.stageOverdue !== undefined
+				? { stageOverdue: String(filters.stageOverdue) }
+				: {}),
+			...(filters.archive ? { archive: filters.archive } : {}),
+			...(filters.stageId ? { stageId: filters.stageId } : {}),
+			...(filters.assignedToSubject
+				? { assignedToSubject: filters.assignedToSubject }
+				: {}),
+			...(filters.overdue ? { overdue: 'true' } : {}),
+			...(filters.overdueBefore
+				? { overdueBefore: filters.overdueBefore }
+				: {}),
+			...(filters.createdFrom ? { createdFrom: filters.createdFrom } : {}),
+			...(filters.createdTo ? { createdTo: filters.createdTo } : {}),
+			...(filters.sort ? { sort: filters.sort } : {})
+		}
+	})
+	const legacyValue =
+		includeStageDuration && isRecord(value)
+			? Object.fromEntries(
+					Object.entries(value).filter(([key]) => key !== 'stageDuration')
+				)
+			: value
+	const result = parseSalesPage(legacyValue, page, pageSize, row => {
+		const deal = parseSalesDeal(row, workspaceId)
+		if (
+			withoutNextAction &&
+			(deal?.status !== 'OPEN' ||
+				deal.nextTask !== null ||
+				(status && deal.status !== status))
+		)
+			return null
+		if (
+			deal &&
+			((pipelineId && deal.pipelineId !== pipelineId) ||
+				(status && deal.status !== status) ||
+				(filters.stageId && deal.stageId !== filters.stageId) ||
+				(filters.assignedToSubject &&
+					deal.assignedToSubject !== filters.assignedToSubject) ||
+				(filters.createdFrom && deal.createdAt < filters.createdFrom) ||
+				(filters.createdTo && deal.createdAt >= filters.createdTo) ||
+				(filters.overdue && deal.status !== 'OPEN'))
+		)
+			return null
+		return deal &&
+			(filters.archive === 'ARCHIVED'
+				? deal.archivedAt !== null
+				: deal.archivedAt === null)
+			? deal
+			: null
+	})
 	if (!result) throw invalidContractError()
-	return result
+	const stageDuration =
+		includeStageDuration && isRecord(value)
+			? parseSalesStageDurationPage(
+					value.stageDuration,
+					result.items,
+					filters.stageOverdue
+				)
+			: undefined
+	if (includeStageDuration && !stageDuration) throw invalidContractError()
+	return { ...result, ...(stageDuration ? { stageDuration } : {}) }
 }
 export const getSalesDeal = async (
 	accessToken: string,

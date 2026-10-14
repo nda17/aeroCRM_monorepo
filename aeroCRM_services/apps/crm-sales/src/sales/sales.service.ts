@@ -34,10 +34,17 @@ import type {
 } from './sales.dto';
 
 type DealWithNextAction = Deal & { nextAction: SalesTask | null };
+type StageDurationDeal = DealWithNextAction & {
+	stage: { stageDurationDays: number | null };
+};
 const activeTaskStatuses = ['OPEN', 'IN_PROGRESS'] as const;
 // Follow the existing composite FK, without loading every parallel task just
 // to find one next action for each deal on a paginated page.
 const includeNextAction = { nextAction: true } as const;
+const includeStageDuration = {
+	...includeNextAction,
+	stage: { select: { stageDurationDays: true } }
+} as const;
 
 export function salesScope(access: SalesAccess): Prisma.DealWhereInput {
 	if (access.dataScope === 'ALL')
@@ -89,6 +96,31 @@ function dealDto(deal: DealWithNextAction) {
 		createdAt: deal.createdAt.toISOString(),
 		updatedAt: deal.updatedAt.toISOString(),
 		nextTask: deal.nextAction ? taskDto(deal.nextAction) : null
+	};
+}
+export function stageDurationInfo(deal: StageDurationDeal, asOf: Date) {
+	const active = deal.status === 'OPEN' && deal.archivedAt === null;
+	const enteredAt = deal.stageEnteredAt;
+	const limitDays = active ? deal.stage.stageDurationDays : null;
+	const deadlineAt =
+		active && enteredAt && limitDays !== null
+			? new Date(enteredAt.getTime() + limitDays * 86400000)
+			: null;
+	return {
+		dealId: deal.id,
+		stageId: deal.stageId,
+		dealVersion: deal.version,
+		enteredAt: enteredAt?.toISOString() ?? null,
+		limitDays,
+		deadlineAt: deadlineAt?.toISOString() ?? null,
+		elapsedDays:
+			active && enteredAt
+				? Math.floor(
+						Math.max(0, asOf.getTime() - enteredAt.getTime()) /
+							86400000
+					)
+				: null,
+		overdue: deadlineAt !== null && deadlineAt.getTime() < asOf.getTime()
 	};
 }
 function canonicalInstant(value: string): Date {
@@ -234,7 +266,8 @@ export class SalesService {
 			AND: [
 				salesScope(access),
 				{
-					archivedAt: query.archive === 'ARCHIVED' ? { not: null } : null,
+					archivedAt:
+						query.archive === 'ARCHIVED' ? { not: null } : null,
 					pipelineId: query.pipelineId,
 					stageId: query.stageId,
 					status: query.status,
@@ -246,7 +279,13 @@ export class SalesService {
 						? {
 								OR: [
 									...(companyContactIds.length
-										? [{ contactId: { in: companyContactIds } }]
+										? [
+												{
+													contactId: {
+														in: companyContactIds
+													}
+												}
+											]
 										: []),
 									{
 										title: {
@@ -273,36 +312,124 @@ export class SalesService {
 								status: 'OPEN' as const,
 								// Use all related tasks, not the denormalized next-action pointer.
 								tasks: {
-									none: { status: { in: [...activeTaskStatuses] } }
+									none: {
+										status: { in: [...activeTaskStatuses] }
+									}
 								}
 							}
 						]
 					: [])
 			]
 		};
-		const [total, rows] = await this.prisma.$transaction([
-			this.prisma.deal.count({ where }),
-			this.prisma.deal.findMany({
-				where,
-				skip: (query.page - 1) * query.pageSize,
-				take: query.pageSize,
-				orderBy:
-					query.sort === 'next_action_asc'
-						? [{ nextAction: { dueAt: 'asc' } }, { id: 'asc' }]
-						: query.sort === 'amount_desc'
-							? [{ amountMinor: 'desc' }, { id: 'desc' }]
-							: query.sort === 'updated_desc'
-								? [{ updatedAt: 'desc' }, { id: 'desc' }]
-								: [{ createdAt: 'desc' }, { id: 'desc' }],
-				include: includeNextAction
-			})
-		]);
+		const page = {
+			skip: (query.page - 1) * query.pageSize,
+			take: query.pageSize,
+			orderBy: (query.sort === 'next_action_asc'
+				? [{ nextAction: { dueAt: 'asc' } }, { id: 'asc' }]
+				: query.sort === 'amount_desc'
+					? [{ amountMinor: 'desc' }, { id: 'desc' }]
+					: query.sort === 'updated_desc'
+						? [{ updatedAt: 'desc' }, { id: 'desc' }]
+						: [
+								{ createdAt: 'desc' },
+								{ id: 'desc' }
+							]) as Prisma.DealOrderByWithRelationInput[]
+		};
+		const { total, rows, overdueCount, stageAsOf } =
+			query.includeStageDuration === 'true' ||
+			query.stageOverdue === 'true'
+				? await this.prisma.$transaction(
+						async tx => {
+							const [{ asOf: stageAsOf }] = await tx.$queryRaw<
+								{ asOf: Date }[]
+							>(Prisma.sql`SELECT clock_timestamp() AS "asOf"`);
+							const stages = await tx.pipelineStage.findMany({
+								where: {
+									workspaceId: access.workspaceId,
+									state: 'OPEN',
+									stageDurationDays: { not: null }
+								},
+								select: {
+									id: true,
+									pipelineId: true,
+									stageDurationDays: true
+								}
+							});
+							const stageWhere: Prisma.DealWhereInput = {
+								status: 'OPEN',
+								archivedAt: null,
+								OR: stages.map(stage => ({
+									stageId: stage.id,
+									pipelineId: stage.pipelineId,
+									stageEnteredAt: {
+										lt: new Date(
+											stageAsOf.getTime() -
+												stage.stageDurationDays! *
+													86400000
+										)
+									}
+								}))
+							};
+							const filteredWhere =
+								query.stageOverdue === 'true'
+									? { AND: [where, stageWhere] }
+									: where;
+							const total = await tx.deal.count({
+								where: filteredWhere
+							});
+							const overdueCount =
+								query.includeStageDuration === 'true'
+									? await tx.deal.count({
+											where: { AND: [where, stageWhere] }
+										})
+									: 0;
+							const rows = await tx.deal.findMany({
+								...page,
+								where: filteredWhere,
+								include: includeStageDuration
+							});
+							return { total, rows, overdueCount, stageAsOf };
+						},
+						{
+							isolationLevel:
+								Prisma.TransactionIsolationLevel.RepeatableRead
+						}
+					)
+				: await this.prisma
+						.$transaction([
+							this.prisma.deal.count({ where }),
+							this.prisma.deal.findMany({
+								...page,
+								where,
+								include: includeNextAction
+							})
+						])
+						.then(([total, rows]) => ({
+							total,
+							rows,
+							overdueCount: 0,
+							stageAsOf: new Date()
+						}));
 		return {
 			schemaVersion: 1 as const,
 			page: query.page,
 			pageSize: query.pageSize,
 			total,
 			items: rows.map(dealDto),
+			...(query.includeStageDuration === 'true'
+				? {
+						stageDuration: {
+							asOf: stageAsOf.toISOString(),
+							overdueCount,
+							items: rows.map(row =>
+								stageDurationInfo(
+									row as StageDurationDeal,
+									stageAsOf
+								)
+							)
+						}
+					}
+				: {}),
 			...(query.context === 'company'
 				? {
 						companyContext: await this.contexts.preview(
@@ -318,19 +445,60 @@ export class SalesService {
 	async detail(
 		access: SalesAccess,
 		id: string,
-		query: { archive?: 'ACTIVE' | 'ARCHIVED'; context?: 'company' } = {},
+		query: {
+			archive?: 'ACTIVE' | 'ARCHIVED';
+			context?: 'company';
+			includeStageDuration?: 'true';
+		} = {},
 		authorization = ''
 	) {
 		this.permission(access, 'sales:read');
-		const deal = await this.visible(
-			this.prisma,
-			access,
-			id,
-			query.archive ?? 'ACTIVE'
-		);
+		const { deal, asOf } =
+			query.includeStageDuration === 'true'
+				? await this.prisma.$transaction(
+						async tx => {
+							const [{ asOf }] = await tx.$queryRaw<
+								{ asOf: Date }[]
+							>(Prisma.sql`SELECT clock_timestamp() AS "asOf"`);
+							return {
+								deal: await this.visible(
+									tx,
+									access,
+									id,
+									query.archive ?? 'ACTIVE',
+									true
+								),
+								asOf
+							};
+						},
+						{
+							isolationLevel:
+								Prisma.TransactionIsolationLevel.RepeatableRead
+						}
+					)
+				: {
+						deal: await this.visible(
+							this.prisma,
+							access,
+							id,
+							query.archive ?? 'ACTIVE'
+						),
+						asOf: new Date()
+					};
 		return {
 			schemaVersion: 1 as const,
 			deal: dealDto(deal),
+			...(query.includeStageDuration === 'true'
+				? {
+						stageDuration: {
+							asOf: asOf.toISOString(),
+							item: stageDurationInfo(
+								deal as StageDurationDeal,
+								asOf
+							)
+						}
+					}
+				: {}),
 			...(query.context === 'company'
 				? {
 						companyContext: await this.contexts.preview(
@@ -1324,7 +1492,8 @@ export class SalesService {
 		client: Pick<Prisma.TransactionClient, 'deal'>,
 		access: SalesAccess,
 		id: string,
-		includeArchived: boolean | 'ACTIVE' | 'ARCHIVED' = false
+		includeArchived: boolean | 'ACTIVE' | 'ARCHIVED' = false,
+		duration = false
 	): Promise<DealWithNextAction> {
 		const deal = await client.deal.findFirst({
 			where: {
@@ -1340,7 +1509,7 @@ export class SalesService {
 					}
 				]
 			},
-			include: includeNextAction
+			include: duration ? includeStageDuration : includeNextAction
 		});
 		if (!deal) this.notFound();
 		return deal;

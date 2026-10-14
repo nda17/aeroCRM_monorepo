@@ -31,7 +31,8 @@ export const SavedViewsControl = ({
 	onOpen,
 	legacy,
 	onImported,
-	saveNotice
+	saveNotice,
+	features
 }: {
 	context: SavedViewsContext
 	scope: SavedViewScope
@@ -39,6 +40,7 @@ export const SavedViewsControl = ({
 	onOpen: (parameters: SavedViewParameters) => boolean | void
 	legacy?: readonly LegacyDealView[]
 	onImported?: () => void
+	features?: 'stage-duration'
 	saveNotice?: string
 }) => {
 	const [editor, setEditor] = useState<
@@ -61,22 +63,27 @@ export const SavedViewsControl = ({
 			name !== (editor.kind === 'rename' ? editor.view.name : ''),
 		label: 'Название сохранённого представления'
 	})
-	const views = useSavedViews(context, scope, (_result, command) => {
-		if (command.mutation.kind === 'import') {
-			onImported?.()
-			toast.success('Представления из этого браузера сохранены в CRM')
-		} else {
-			setEditor(null)
-			setName('')
-			dirty.markClean()
-			if (command.mutation.kind === 'delete') setSelected(null)
-			toast.success(
-				command.mutation.kind === 'delete'
-					? 'Представление удалено'
-					: 'Представление сохранено'
-			)
-		}
-	})
+	const views = useSavedViews(
+		context,
+		scope,
+		(_result, command) => {
+			if (command.mutation.kind === 'import') {
+				onImported?.()
+				toast.success('Представления из этого браузера сохранены в CRM')
+			} else {
+				setEditor(null)
+				setName('')
+				dirty.markClean()
+				if (command.mutation.kind === 'delete') setSelected(null)
+				toast.success(
+					command.mutation.kind === 'delete'
+						? 'Представление удалено'
+						: 'Представление сохранено'
+				)
+			}
+		},
+		features
+	)
 	const { command } = views
 	const selectedView = views.items.find(view => view.id === selected)
 	const locked = command.locked || preparingImport
@@ -148,7 +155,7 @@ export const SavedViewsControl = ({
 				expectedVersion: editor.view.version,
 				name: name.trim()
 			})
-		else if (parseSavedViewParameters(parameters, scope))
+		else if (parseSavedViewParameters(parameters, scope, features))
 			void command.execute({
 				kind: 'create',
 				name: name.trim(),

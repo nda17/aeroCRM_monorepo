@@ -55,13 +55,18 @@ const taskFields = [
 export const validSavedViewBinding = (binding: SavedViewBinding) =>
 	isUuidV4(binding.workspaceId) &&
 	subject(binding.subject) &&
-	['DEALS', 'TASKS'].includes(binding.scope)
+	['DEALS', 'TASKS'].includes(binding.scope) &&
+	(binding.features === undefined ||
+		(binding.scope === 'DEALS' && binding.features === 'stage-duration'))
 
 export const parseSavedViewParameters = (
 	value: unknown,
-	scope: SavedViewScope
+	scope: SavedViewScope,
+	features?: 'stage-duration'
 ): SavedViewParameters | null => {
 	if (
+		(features !== undefined &&
+			(scope !== 'DEALS' || features !== 'stage-duration')) ||
 		!isRecord(value) ||
 		!['list', 'board'].some(layout => layout === value.layout)
 	)
@@ -85,8 +90,11 @@ export const parseSavedViewParameters = (
 	} else if (scope === 'DEALS') {
 		if (
 			Object.keys(value).some(
-				key => !dealFields.includes(key as (typeof dealFields)[number])
+				key =>
+					!(features === 'stage-duration' && key === 'stageOverdue') &&
+					!dealFields.includes(key as (typeof dealFields)[number])
 			) ||
+			(value.stageOverdue !== undefined && value.stageOverdue !== true) ||
 			typeof value.search !== 'string' ||
 			value.search.length > 200 ||
 			!(value.pipelineId === '' || isUuidV4(value.pipelineId)) ||
@@ -148,7 +156,11 @@ export const parseSavedView = (
 		!(value.archivedAt === null || isIsoDate(value.archivedAt)) ||
 		!isIsoDate(value.createdAt) ||
 		!isIsoDate(value.updatedAt) ||
-		!parseSavedViewParameters(value.parameters, binding.scope)
+		!parseSavedViewParameters(
+			value.parameters,
+			binding.scope,
+			binding.features
+		)
 	)
 		return null
 	return value as unknown as SavedView
@@ -257,14 +269,18 @@ export const validSavedViewCommand = (command: SavedViewCommand) => {
 		!isUuidV4(command.commandId) ||
 		!isUuidV4(command.workspaceId) ||
 		!subject(command.subject) ||
-		!['DEALS', 'TASKS'].includes(command.scope)
+		!validSavedViewBinding(command)
 	)
 		return false
 	const mutation = command.mutation
 	if (mutation.kind === 'create')
 		return (
 			name(mutation.name) &&
-			!!parseSavedViewParameters(mutation.parameters, command.scope)
+			!!parseSavedViewParameters(
+				mutation.parameters,
+				command.scope,
+				command.features
+			)
 		)
 	if (mutation.kind === 'import')
 		return (
@@ -279,7 +295,11 @@ export const validSavedViewCommand = (command: SavedViewCommand) => {
 				view =>
 					legacyKey(view.legacyKey) &&
 					name(view.name) &&
-					!!parseSavedViewParameters(view.parameters, command.scope)
+					!!parseSavedViewParameters(
+						view.parameters,
+						command.scope,
+						command.features
+					)
 			)
 		)
 	return (

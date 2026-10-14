@@ -1,4 +1,8 @@
 import {
+	parseStageDurationSettings,
+	type StageDurationSettings
+} from '../model/stage-duration.contract'
+import {
 	authenticatedRequest,
 	AuthenticatedApiError,
 	invalidContractError
@@ -316,6 +320,80 @@ export const saveStageNextActionTemplate = async (
 		JSON.stringify(
 			result.items.find(item => item.stageId === stageId)?.template
 		) !== JSON.stringify(template)
+	)
+		throw invalidContractError()
+	return result
+}
+
+export const getPipelineStageDurationSettings = async (
+	accessToken: string,
+	workspaceId: string,
+	pipelineId: string,
+	openStageIds?: string[]
+): Promise<StageDurationSettings> => {
+	validate(isUuid(workspaceId) && isUuid(pipelineId))
+	const result = parseStageDurationSettings(
+		await commerceRequest({
+			accessToken,
+			method: 'GET',
+			url: `/crm/sales/commerce/pipelines/${pipelineId}/stage-duration-settings`,
+			params: { workspaceId }
+		}),
+		workspaceId,
+		pipelineId
+	)
+	if (
+		!result ||
+		(openStageIds &&
+			(result.items.length !== openStageIds.length ||
+				result.items.some(
+					(item, index) => item.stageId !== openStageIds[index]
+				)))
+	)
+		throw invalidContractError()
+	return result
+}
+
+export const saveStageDurationLimit = async (
+	accessToken: string,
+	workspaceId: string,
+	pipelineId: string,
+	stageId: string,
+	command: {
+		commandId: string
+		expectedVersion: number
+		limitDays: number | null
+	}
+): Promise<StageDurationSettings> => {
+	validate(
+		isUuid(workspaceId) &&
+			isUuid(pipelineId) &&
+			isUuid(stageId) &&
+			isPositiveVersion(command.expectedVersion) &&
+			(command.limitDays === null ||
+				(Number.isSafeInteger(command.limitDays) &&
+					command.limitDays >= 1 &&
+					command.limitDays <= 3650))
+	)
+	const result = parseStageDurationSettings(
+		await post(
+			accessToken,
+			workspaceId,
+			command.commandId,
+			`/crm/sales/commerce/pipelines/${pipelineId}/stages/${stageId}/duration-limit`,
+			{
+				expectedVersion: command.expectedVersion,
+				limitDays: command.limitDays
+			}
+		),
+		workspaceId,
+		pipelineId
+	)
+	if (
+		!result ||
+		result.pipelineVersion !== command.expectedVersion + 1 ||
+		result.items.find(item => item.stageId === stageId)?.limitDays !==
+			command.limitDays
 	)
 		throw invalidContractError()
 	return result

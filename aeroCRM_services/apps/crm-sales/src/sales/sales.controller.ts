@@ -21,6 +21,7 @@ import {
 	CompleteTaskDto,
 	CreateDealDto,
 	DealListQuery,
+	DealDetailQuery,
 	InteractionResultDto,
 	SalesAnalyticsQuery,
 	SalesListQuery,
@@ -59,7 +60,7 @@ export class SalesController {
 	@SalesPermission('sales:read')
 	detail(
 		@Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
-		@Query() query: WorkspaceQuery,
+		@Query() query: DealDetailQuery,
 		@Req() request: SalesRequest
 	) {
 		return this.service.detail(

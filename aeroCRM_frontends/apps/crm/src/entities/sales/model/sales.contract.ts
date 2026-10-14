@@ -11,6 +11,7 @@ export interface SalesDealFilters {
 	archive?: 'ACTIVE' | 'ARCHIVED'
 	stageId?: string
 	assignedToSubject?: string
+	stageOverdue?: boolean
 	overdue?: boolean
 	overdueBefore?: string
 	createdFrom?: string

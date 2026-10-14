@@ -1,3 +1,4 @@
+import { parseSalesStageDurationDetail } from '../model/stage-duration.contract'
 import {
 	authenticatedRequest,
 	invalidContractError
@@ -30,17 +31,28 @@ export const getSalesDealContext = async (
 	accessToken: string,
 	workspaceId: string,
 	id: string,
-	archive: 'ACTIVE' | 'ARCHIVED' = 'ACTIVE'
+	archive: 'ACTIVE' | 'ARCHIVED' = 'ACTIVE',
+	includeStageDuration = false
 ) => {
 	const value: unknown = await authenticatedRequest({
 		accessToken,
 		method: 'GET',
 		url: `/crm/sales/deals/${id}`,
-		params: { workspaceId, archive, context: 'company' }
+		params: {
+			workspaceId,
+			archive,
+			context: 'company',
+			...(includeStageDuration ? { includeStageDuration: 'true' } : {})
+		}
 	})
 	if (
 		!isRecord(value) ||
-		!hasExactKeys(value, ['schemaVersion', 'deal', 'companyContext'])
+		!hasExactKeys(value, [
+			'schemaVersion',
+			'deal',
+			'companyContext',
+			...(includeStageDuration ? ['stageDuration'] : [])
+		])
 	)
 		throw invalidContractError()
 	const deal = parseSalesDealResult(
@@ -76,7 +88,15 @@ export const getSalesDealContext = async (
 					!/^\d{10}(\d{2})?$/.test(company.inn))))
 	)
 		throw invalidContractError()
-	return { deal, company: company as SalesCompanyContext['company'] }
+	const stageDuration = includeStageDuration
+		? parseSalesStageDurationDetail(value.stageDuration, deal)
+		: undefined
+	if (includeStageDuration && !stageDuration) throw invalidContractError()
+	return {
+		deal,
+		company: company as SalesCompanyContext['company'],
+		...(stageDuration ? { stageDuration } : {})
+	}
 }
 export const listSalesTimelineV3 = async (
 	accessToken: string,

@@ -47,6 +47,12 @@ export class SalesListQuery extends WorkspaceQuery {
 export class DealListQuery extends SalesListQuery {
 	@IsOptional() @IsUUID('4') pipelineId?: string;
 	@IsOptional() @IsUUID('4') stageId?: string;
+	@ValidateIf((_object, value) => value !== undefined)
+	@IsIn(['true'])
+	includeStageDuration?: 'true';
+	@ValidateIf((_object, value) => value !== undefined)
+	@IsIn(['true', 'false'])
+	stageOverdue?: 'true' | 'false';
 	@IsOptional() @IsIn(['OPEN', 'WON', 'LOST']) status?:
 		| 'OPEN'
 		| 'WON'
@@ -81,6 +87,11 @@ export class DealListQuery extends SalesListQuery {
 		| 'updated_desc'
 		| 'amount_desc'
 		| 'next_action_asc';
+}
+export class DealDetailQuery extends WorkspaceQuery {
+	@ValidateIf((_object, value) => value !== undefined)
+	@IsIn(['true'])
+	includeStageDuration?: 'true';
 }
 export class NextTaskDto {
 	@IsString() @MinLength(1) @MaxLength(200) @Matches(/\S/) title!: string;

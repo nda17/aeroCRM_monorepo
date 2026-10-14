@@ -43,7 +43,8 @@ import {
 	ReplaceDealLinesDto,
 	ReorderStagesDto,
 	SaveLineToCatalogDto,
-	SetStageNextActionTemplateDto
+	SetStageNextActionTemplateDto,
+	SetStageDurationLimitDto
 } from './commerce.dto';
 
 @Controller('crm/sales/commerce')
@@ -82,6 +83,33 @@ export class CommerceController {
 	) {
 		void query;
 		return this.commerce.nextActionTemplates(req.salesAccess, id);
+	}
+	@Get('pipelines/:id/stage-duration-settings')
+	@SalesPermission('sales:read')
+	stageDurationSettings(
+		@Req() req: SalesRequest,
+		@Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+		@Query() query: CommerceWorkspaceQuery
+	) {
+		void query;
+		return this.commerce.stageDurationSettings(req.salesAccess, id);
+	}
+	@Post('pipelines/:id/stages/:stageId/duration-limit')
+	@SalesPermission('sales:manage-pipelines')
+	setStageDurationLimit(
+		@Req() req: SalesRequest,
+		@Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+		@Param('stageId', new ParseUUIDPipe({ version: '4' })) stageId: string,
+		@Body() body: SetStageDurationLimitDto,
+		@Headers('idempotency-key') key: string
+	) {
+		this.key(body, key);
+		return this.commerce.setStageDurationLimit(
+			req.salesAccess,
+			id,
+			stageId,
+			body
+		);
 	}
 	@Get('analytics/pipelines')
 	@SalesPermission('sales:analytics')

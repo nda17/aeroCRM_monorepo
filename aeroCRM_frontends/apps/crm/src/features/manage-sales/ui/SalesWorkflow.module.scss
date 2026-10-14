@@ -157,3 +157,15 @@
 		@apply grid-cols-2;
 	}
 }
+
+.stageDuration {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.25rem 0.5rem;
+	font-size: 0.75rem;
+
+	time {
+		flex-basis: 100%;
+	}
+}

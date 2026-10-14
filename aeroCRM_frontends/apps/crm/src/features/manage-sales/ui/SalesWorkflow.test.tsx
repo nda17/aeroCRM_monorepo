@@ -22,8 +22,12 @@ import {
 } from '@/entities/sales'
 import {
 	addManagedPipelineStage,
+	getPipelineStageDurationSettings,
 	getPipelineNextActionTemplates,
 	listManagedPipelines,
+	renameManagedPipeline,
+	renameManagedPipelineStage,
+	saveStageDurationLimit,
 	saveStageNextActionTemplate
 } from '@/entities/sales/api/commerce.api'
 import { getPipelineTemplates } from '@/features/crm-access-gate/api/crm-access.api'
@@ -97,6 +101,8 @@ vi.mock('@/entities/sales/api/commerce.api', () => ({
 	addManagedPipelineStage: vi.fn(),
 	renameManagedPipelineStage: vi.fn(),
 	reorderManagedPipelineStages: vi.fn(),
+	getPipelineStageDurationSettings: vi.fn(),
+	saveStageDurationLimit: vi.fn(),
 	saveStageNextActionTemplate: vi.fn()
 }))
 vi.mock('@/features/crm-access-gate/api/crm-access.api', () => ({
@@ -322,6 +328,188 @@ const mount = (children: ReactNode) =>
 	)
 
 describe('Sales workflow forms', () => {
+	it('adopts a duration-only pipeline version without losing dirty structural names', async () => {
+		const managedPipeline = { ...pipeline, version: 5 }
+		const initialSettings = {
+			schemaVersion: 1 as const,
+			workspaceId,
+			pipelineId: pipeline.id,
+			pipelineVersion: 5,
+			items: pipeline.stages
+				.filter(stage => stage.state === 'OPEN')
+				.map(stage => ({ stageId: stage.id, limitDays: null }))
+		}
+		const refreshedPipeline = { ...managedPipeline, version: 6 }
+		vi.mocked(listManagedPipelines)
+			.mockResolvedValueOnce({
+				schemaVersion: 1,
+				workspaceId,
+				items: [managedPipeline]
+			} as never)
+			.mockResolvedValue({
+				schemaVersion: 1,
+				workspaceId,
+				items: [refreshedPipeline]
+			} as never)
+		vi.mocked(getPipelineStageDurationSettings).mockResolvedValue(
+			initialSettings as never
+		)
+		vi.mocked(saveStageDurationLimit).mockResolvedValue({
+			...initialSettings,
+			pipelineVersion: 6,
+			items: initialSettings.items.map(item =>
+				item.stageId === pipeline.stages[0].id
+					? { ...item, limitDays: 5 }
+					: item
+			)
+		} as never)
+		context.permissions.data!.permissions.push('sales:manage-pipelines')
+		vi.mocked(getCrmPermissions).mockResolvedValue({
+			subject: 'actor',
+			state: 'ACTIVE',
+			role: 'OWNER',
+			permissions: ['sales:read', 'sales:write', 'sales:manage-pipelines']
+		} as never)
+
+		mount(
+			<PipelineManager
+				context={context as never}
+				onClose={vi.fn()}
+				onSaved={vi.fn()}
+			/>
+		)
+		const pipelineName = await screen.findByRole('textbox', {
+			name: 'Название воронки'
+		})
+		const stageName = await screen.findByRole('textbox', {
+			name: 'Название этапа «Новая»'
+		})
+		fireEvent.change(pipelineName, { target: { value: 'Мой черновик воронки' } })
+		fireEvent.change(stageName, { target: { value: 'Мой черновик этапа' } })
+		fireEvent.click(
+			await screen.findByRole('checkbox', {
+				name: 'Ограничить время на этапе «Новая»'
+			})
+		)
+		fireEvent.change(
+			await screen.findByRole('spinbutton', {
+				name: 'Срок этапа «Новая», дней'
+			}),
+			{ target: { value: '5' } }
+		)
+		fireEvent.click(
+			screen
+				.getAllByRole('button', { name: 'Сохранить срок этапа' })
+				.find(button => !button.hasAttribute('disabled'))!
+		)
+		await waitFor(() =>
+			expect(saveStageDurationLimit).toHaveBeenCalledWith(
+				context.session!.accessToken,
+				workspaceId,
+				pipeline.id,
+				pipeline.stages[0].id,
+				expect.objectContaining({ expectedVersion: 5, limitDays: 5 })
+			)
+		)
+		await waitFor(() =>
+			expect(listManagedPipelines).toHaveBeenCalledTimes(2)
+		)
+		expect(pipelineName).toHaveProperty('value', 'Мой черновик воронки')
+		expect(stageName).toHaveProperty('value', 'Мой черновик этапа')
+		expect(
+			screen.queryByText(/Версия воронки изменилась/)
+		).toBeNull()
+		expect(
+			screen.getByRole('button', { name: 'Переименовать воронку' })
+		).toHaveProperty('disabled', false)
+		expect(
+			stageName.closest('form')?.querySelector('button[type="submit"]')
+		).toHaveProperty('disabled', false)
+
+		fireEvent.submit(pipelineName.closest('form')!)
+		await waitFor(() => expect(renameManagedPipeline).toHaveBeenCalledOnce())
+		expect(renameManagedPipeline).toHaveBeenCalledWith(
+			context.session!.accessToken,
+			pipeline.id,
+			expect.objectContaining({
+				expectedVersion: 6,
+				name: 'Мой черновик воронки'
+			})
+		)
+	})
+
+	it('keeps the structural version conflict when a pipeline structure actually changes', async () => {
+		const managedPipeline = { ...pipeline, version: 5 }
+		const changedPipeline = {
+			...managedPipeline,
+			version: 6,
+			name: 'Серверная воронка',
+			stages: managedPipeline.stages.map((stage, index) =>
+				index === 0 ? { ...stage, name: 'Серверный этап' } : stage
+			)
+		}
+		vi.mocked(listManagedPipelines)
+			.mockResolvedValueOnce({
+				schemaVersion: 1,
+				workspaceId,
+				items: [managedPipeline]
+			} as never)
+			.mockResolvedValue({
+				schemaVersion: 1,
+				workspaceId,
+				items: [changedPipeline]
+			} as never)
+		vi.mocked(getPipelineStageDurationSettings).mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId,
+			pipelineId: pipeline.id,
+			pipelineVersion: 5,
+			items: pipeline.stages
+				.filter(stage => stage.state === 'OPEN')
+				.map(stage => ({ stageId: stage.id, limitDays: null }))
+		} as never)
+		context.permissions.data!.permissions.push('sales:manage-pipelines')
+		vi.mocked(getCrmPermissions).mockResolvedValue({
+			subject: 'actor',
+			state: 'ACTIVE',
+			role: 'OWNER',
+			permissions: ['sales:read', 'sales:write', 'sales:manage-pipelines']
+		} as never)
+
+		mount(
+			<PipelineManager
+				context={context as never}
+				onClose={vi.fn()}
+				onSaved={vi.fn()}
+			/>
+		)
+		const pipelineName = await screen.findByRole('textbox', {
+			name: 'Название воронки'
+		})
+		const stageName = await screen.findByRole('textbox', {
+			name: 'Название этапа «Новая»'
+		})
+		fireEvent.change(pipelineName, { target: { value: 'Мой черновик воронки' } })
+		fireEvent.change(stageName, { target: { value: 'Мой черновик этапа' } })
+		await act(async () => {
+			await client.invalidateQueries({
+				queryKey: ['sales', 'managed-pipelines', ...context.key]
+			})
+		})
+		await screen.findByText(/Версия воронки изменилась/)
+		expect(pipelineName).toHaveProperty('value', 'Мой черновик воронки')
+		expect(stageName).toHaveProperty('value', 'Мой черновик этапа')
+		expect(
+			screen.getByRole('button', { name: 'Переименовать воронку' })
+		).toHaveProperty('disabled', true)
+		expect(
+			screen
+				.getByDisplayValue('Мой черновик этапа')
+				.closest('form')
+				?.querySelector('button[type="submit"]')
+		).toHaveProperty('disabled', true)
+	})
+
 	it('preserves a dirty stage-template editor draft when the server refetch changes its template', async () => {
 		const managedPipeline = {
 			...pipeline,
@@ -916,7 +1104,8 @@ describe('Sales workflow forms', () => {
 			'deal-context',
 			...context.key,
 			deal.id,
-			'ACTIVE'
+			'ACTIVE',
+			'stage-duration'
 		]
 		const renderDrawer = () =>
 			mount(

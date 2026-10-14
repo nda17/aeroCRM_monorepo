@@ -81,6 +81,7 @@ model PipelineStage {
   state                CrmPipelineStageState
   nextActionTitle      String?               @map("next_action_title") @db.VarChar(200)
   nextActionDelayHours Int?                  @map("next_action_delay_hours")
+  stageDurationDays   Int?                  @map("stage_duration_days")
   createdAt            DateTime              @default(now()) @map("created_at")
   updatedAt            DateTime              @updatedAt @map("updated_at")
   pipeline             Pipeline              @relation(fields: [pipelineId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
@@ -143,6 +144,7 @@ model Deal {
   amountMode        String                @default("MANUAL") @map("amount_mode") @db.VarChar(8)
   pipelineId        String                @map("pipeline_id") @db.Uuid
   stageId           String                @map("stage_id") @db.Uuid
+  stageEnteredAt    DateTime?             @map("stage_entered_at")
   status            CrmPipelineStageState @default(OPEN)
   contactId         String                @map("contact_id") @db.Uuid
   contactName       String                @map("contact_name") @db.VarChar(200)

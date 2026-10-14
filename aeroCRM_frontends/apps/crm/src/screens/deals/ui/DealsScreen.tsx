@@ -1,5 +1,7 @@
 'use client'
 
+import { StageDurationLabel } from '@/features/manage-sales/ui/StageDurationLabel'
+
 import { useDirtyFormGuard } from '@/shared/lib/dirty-form'
 import { SavedViewsControl } from '@/features/manage-saved-views/ui/SavedViewsControl'
 import type { SavedDealParameters } from '@/entities/crm-saved-views'
@@ -140,20 +142,22 @@ const DealsWorkspaceScreen = ({
 			search,
 			pipelineId,
 			status,
-			filters
+			filters,
+			'stage-duration'
 		],
-		enabled: context.canRead && !!context.session && layout === 'list',
+		enabled: context.canRead && !!context.session,
 		queryFn: () =>
 			listSalesDeals(
 				context.session!.accessToken,
 				context.workspace.workspaceId,
 				page,
-				20,
+				layout === 'list' ? 20 : 1,
 				search,
 				pipelineId,
 				status,
 				withoutNextAction,
-				requestDealFilters(filters)
+				requestDealFilters(filters),
+				true
 			),
 		retry: false,
 		gcTime: 0
@@ -176,6 +180,7 @@ const DealsWorkspaceScreen = ({
 		status ||
 		withoutNextAction ||
 		filters.assignedToSubject ||
+		filters.stageOverdue ||
 		filters.overdue ||
 		filters.stageId ||
 		filters.createdFrom ||
@@ -234,6 +239,12 @@ const DealsWorkspaceScreen = ({
 			id: 'withoutNextAction',
 			label: 'Без следующего действия',
 			remove: () => updateFilters({ withoutNextAction: false })
+		})
+	if (filters.stageOverdue)
+		activeChips.push({
+			id: 'stageOverdue',
+			label: 'Просрочен срок этапа',
+			remove: () => updateFilters({ stageOverdue: undefined })
 		})
 	if (filters.overdue)
 		activeChips.push({
@@ -301,22 +312,31 @@ const DealsWorkspaceScreen = ({
 			id: 'stage',
 			header: 'Этап',
 			render: deal => (
-				<StatusBadge
-					tone={
-						deal.status === 'WON'
-							? 'success'
-							: deal.status === 'LOST'
-								? 'danger'
-								: 'info'
-					}
-				>
-					{pipelines.data
-						?.find(item => item.id === deal.pipelineId)
-						?.stages.find(item => item.id === deal.stageId)?.name ||
-						{ OPEN: 'В работе', WON: 'Успешно', LOST: 'Отказ' }[
-							deal.status
-						]}
-				</StatusBadge>
+				<div className={styles.copy}>
+					<StatusBadge
+						tone={
+							deal.status === 'WON'
+								? 'success'
+								: deal.status === 'LOST'
+									? 'danger'
+									: 'info'
+						}
+					>
+						{pipelines.data
+							?.find(item => item.id === deal.pipelineId)
+							?.stages.find(item => item.id === deal.stageId)?.name ||
+							{ OPEN: 'В работе', WON: 'Успешно', LOST: 'Отказ' }[
+								deal.status
+							]}
+					</StatusBadge>
+					{deal.status === 'OPEN' && deal.archivedAt === null ? (
+						<StageDurationLabel
+							item={deals.data?.stageDuration?.items.find(
+								item => item.dealId === deal.id
+							)}
+						/>
+					) : null}
+				</div>
 			)
 		},
 		{
@@ -608,6 +628,24 @@ const DealsWorkspaceScreen = ({
 						>
 							Найти
 						</Button>
+						<label className={styles.nextActionFilter}>
+							<input
+								type="checkbox"
+								checked={!!filters.stageOverdue}
+								disabled={!context.canRead}
+								onChange={event =>
+									updateFilters({
+										stageOverdue: event.target.checked ? true : undefined
+									})
+								}
+							/>
+							<span>
+								Просрочен срок этапа
+								{!deals.isError && deals.data?.stageDuration
+									? ` (${deals.data.stageDuration.overdueCount})`
+									: ''}
+							</span>
+						</label>
 						<details className={styles.moreFilters}>
 							<summary>Дополнительные фильтры</summary>
 							<div className={styles.filterOptions}>
@@ -646,6 +684,7 @@ const DealsWorkspaceScreen = ({
 					<SavedViewsControl
 						context={context}
 						scope="DEALS"
+						features="stage-duration"
 						parameters={savedDealParameters(filters)}
 						onOpen={parameters =>
 							applyView(parameters as SavedDealParameters)

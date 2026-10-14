@@ -32,6 +32,7 @@ const fields = [
 	'stageId',
 	'assignedToSubject',
 	'overdue',
+	'stageOverdue',
 	'overdueBefore',
 	'createdFrom',
 	'createdTo',
@@ -70,6 +71,9 @@ export const parseDealView = (input: unknown): DealView => {
 		...(typeof row.assignedToSubject === 'string' &&
 		/^[^\s\x00-\x1f\x7f]{1,256}$/.test(row.assignedToSubject)
 			? { assignedToSubject: row.assignedToSubject }
+			: {}),
+		...(row.stageOverdue === true || row.stageOverdue === 'true'
+			? { stageOverdue: true }
 			: {}),
 		...(row.overdue === true || row.overdue === 'true'
 			? { overdue: true }
@@ -157,6 +161,7 @@ export const requestDealFilters = (view: DealView): SalesDealFilters => ({
 	...(view.assignedToSubject
 		? { assignedToSubject: view.assignedToSubject }
 		: {}),
+	...(view.stageOverdue ? { stageOverdue: true } : {}),
 	...(view.overdue ? { overdue: true } : {}),
 	...(view.overdueBefore ? { overdueBefore: view.overdueBefore } : {}),
 	...(view.createdFrom ? { createdFrom: view.createdFrom } : {}),
@@ -178,6 +183,7 @@ export const savedDealParameters = (
 	...(view.assignedToSubject
 		? { assignedToSubject: view.assignedToSubject }
 		: {}),
+	...(view.stageOverdue ? { stageOverdue: true } : {}),
 	...(view.overdue ? { overdue: true } : {}),
 	...(view.createdFrom ? { createdFrom: view.createdFrom } : {}),
 	...(view.createdTo ? { createdTo: view.createdTo } : {})

@@ -123,6 +123,54 @@ describe('Sales API request and response binding', () => {
 			}
 		})
 	})
+	it('opts into the stage-duration sidecar and binds it to the returned page', async () => {
+		const stageDuration = {
+			asOf: date,
+			overdueCount: 0,
+			items: [
+				{
+					dealId: id,
+					stageId,
+					dealVersion: 1,
+					enteredAt: null,
+					limitDays: null,
+					deadlineAt: null,
+					elapsedDays: null,
+					overdue: false
+				}
+			]
+		}
+		request.mockResolvedValue({
+			schemaVersion: 1,
+			page: 1,
+			pageSize: 20,
+			total: 1,
+			items: [deal],
+			stageDuration
+		})
+		await expect(
+			listSalesDeals('token', workspaceId, 1, 20, '', '', '', false, {}, true)
+		).resolves.toEqual({
+			schemaVersion: 1,
+			page: 1,
+			pageSize: 20,
+			total: 1,
+			items: [deal],
+			stageDuration
+		})
+		expect(request).toHaveBeenCalledExactlyOnceWith({
+			accessToken: 'token',
+			method: 'GET',
+			url: '/crm/sales/deals',
+			params: {
+				workspaceId,
+				page: '1',
+				pageSize: '20',
+				search: '',
+				includeStageDuration: 'true'
+			}
+		})
+	})
 	it.each(['false', 'true', 1, null, {}])(
 		'rejects a non-boolean filter without issuing HTTP: %p',
 		async flag => {

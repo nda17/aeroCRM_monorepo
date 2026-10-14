@@ -110,6 +110,15 @@ export class SetStageNextActionTemplateDto extends CommerceVersionedCommandDto {
 	template!: StageNextActionTemplateDto | null;
 }
 
+export class SetStageDurationLimitDto extends CommerceVersionedCommandDto {
+	@IsDefined()
+	@ValidateIf((_object, value) => value !== null)
+	@IsInt()
+	@Min(1)
+	@Max(3650)
+	limitDays!: number | null;
+}
+
 export class RenameStageDto extends RenamePipelineDto {}
 
 export class ReorderStagesDto extends CommerceVersionedCommandDto {

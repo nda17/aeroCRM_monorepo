@@ -80,6 +80,38 @@ RabbitMQ, restart policy и восстановления очередей пер
 версией. Шаблон лишь подставляет значения в форму следующего действия: обычный
 переход сделки по-прежнему создаёт задачу из подтверждённого `nextTask`.
 
+`GET pipelines/:id/stage-duration-settings?workspaceId=...` возвращает отдельный
+контракт `{schemaVersion,workspaceId,pipelineId,pipelineVersion,items}` с
+`items[{stageId,limitDays}]` для OPEN-этапов в порядке позиции.
+`POST pipelines/:id/stages/:stageId/duration-limit` принимает общие поля
+versioned commerce-команды и обязательный `limitDays: null | integer(1..3650)`.
+Право — OWNER/CRM_ADMIN с `sales:manage-pipelines`; CAS использует общий
+`Pipeline.version`, повтор команды возвращает сохранённую квитанцию.
+Один день равен 24 часам с учётом выходных. Изменение лимита применяется к
+текущим сделкам, не меняет время входа, не создаёт задач или уведомлений.
+
+Список и карточка сделки принимают `includeStageDuration=true`: старый Deal DTO
+не меняется, дополнительный `stageDuration` содержит единый `asOf` и сведения
+`{dealId,stageId,dealVersion,enteredAt,limitDays,deadlineAt,elapsedDays,overdue}`.
+В списке это `items` и `overdueCount`, в карточке — `item`. Чтение выполняется
+в RepeatableRead со временем БД. `stageOverdue=true` пересекается с остальными
+фильтрами и правами до пагинации; `false` равнозначен отсутствию фильтра.
+`overdueCount` учитывает все фильтры, кроме самого `stageOverdue`.
+Просрочены только OPEN-неархивные сделки с известным временем входа и лимитом,
+если `asOf > deadlineAt`; без лимита возраст остаётся видимым.
+
+Миграция `20261014020000_stage_duration_control` восстанавливает время входа
+только из однозначного CREATED/реального TRANSITIONED в текущий этап.
+Неизвестная история и fenced workspace остаются с `NULL`; импортированный
+`createdAt` доказательством не служит. DB trigger задаёт время новой сделки и
+реального изменения пары воронка/этап; правка полей, задач и same-stage переход
+его не сбрасывают. Уход и возврат начинают новый отсчёт.
+После миграции rollback требует совместимые Sales и Access: старый Access
+не умеет безопасно читать сохранённые представления с `stageOverdue`.
+Новый клиент передаёт Access `features: 'stage-duration'` только для DEALS.
+Совместимый Access скрывает такие представления от legacy-чтения и отклоняет
+их переименование/удаление без opt-in, сохраняя общую квоту представлений.
+
 Каждый запрос проходит актуальную workspace-авторизацию. Объекты сделки дополнительно
 ограничены её текущим OWN/TEAM/ALL scope; каталог сам по себе не открывает чужие сделки.
 READ_ONLY запрещает бизнес-запись. Команды содержат `schemaVersion:1`, workspaceId

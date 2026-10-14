@@ -18,6 +18,24 @@ import type {
 	SavedViewsQueryDto
 } from './saved-views.dto';
 
+export const STAGE_DURATION_SAVED_VIEWS_CAPABILITY = 'stage-duration-saved-views-v1';
+const featureView = (parameters: unknown) =>
+	!!parameters && typeof parameters === 'object' &&
+	Object.hasOwn(parameters, 'stageOverdue');
+const featureRequired = () => {
+	throw new BadRequestException({
+		code: 'crm_saved_view_feature_required',
+		message: 'Для представления нужна поддержка контроля срока этапа'
+	});
+};
+const featureScope = (scope: SavedViewScope, features?: 'stage-duration') => {
+	if (features && scope !== 'DEALS')
+		throw new BadRequestException('Unsupported saved view feature');
+};
+const visibleViews = <T extends { parameters: unknown }>(
+	rows: T[], features?: 'stage-duration'
+) => features ? rows : rows.filter(row => !featureView(row.parameters));
+
 const uuid =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const subject = /^[^\s\x00-\x1f\x7f]{1,256}$/;
@@ -33,6 +51,7 @@ const dealOptional = [
 	'stageId',
 	'assignedToSubject',
 	'overdue',
+	'stageOverdue',
 	'createdFrom',
 	'createdTo'
 ] as const;
@@ -73,7 +92,13 @@ const isTimeZone = (value: unknown) => {
 	}
 };
 
-export function validateSavedParameters(scope: SavedViewScope, value: unknown) {
+export function validateSavedParameters(
+	scope: SavedViewScope,
+	value: unknown,
+	features?: 'stage-duration'
+) {
+	featureScope(scope, features);
+	if (featureView(value) && !features) featureRequired();
 	if (!value || typeof value !== 'object' || Array.isArray(value))
 		throw new BadRequestException('Invalid saved view parameters');
 	const parameters = value as Record<string, unknown>;
@@ -111,6 +136,7 @@ export function validateSavedParameters(scope: SavedViewScope, value: unknown) {
 				(typeof p.assignedToSubject !== 'string' ||
 					!subject.test(p.assignedToSubject))) ||
 			(p.overdue !== undefined && typeof p.overdue !== 'boolean') ||
+			(p.stageOverdue !== undefined && typeof p.stageOverdue !== 'boolean') ||
 			(p.createdFrom !== undefined && !isInstant(p.createdFrom)) ||
 			(p.createdTo !== undefined && !isInstant(p.createdTo)) ||
 			(p.createdFrom === undefined) !== (p.createdTo === undefined) ||
@@ -214,6 +240,7 @@ export class SavedViewsService {
 	}
 
 	async list(token: string | undefined, query: SavedViewsQueryDto) {
+		featureScope(query.scope, query.features);
 		const actor = await this.actor(token, query.workspaceId, false);
 		const rows = await this.prisma.crmSavedView.findMany({
 			where: {
@@ -229,14 +256,14 @@ export class SavedViewsService {
 			workspaceId: query.workspaceId,
 			subject: actor.subject,
 			scope: query.scope,
-			items: rows.map(viewDto)
+			items: visibleViews(rows, query.features).map(viewDto)
 		};
 	}
 
 	async create(token: string | undefined, dto: CreateSavedViewDto) {
 		const actor = await this.actor(token, dto.workspaceId, true);
 		const name = this.name(dto.name);
-		const parameters = validateSavedParameters(dto.scope, dto.parameters);
+		const parameters = validateSavedParameters(dto.scope, dto.parameters, dto.features);
 		return command(
 			this.prisma,
 			actor,
@@ -270,7 +297,9 @@ export class SavedViewsService {
 			'RENAME_SAVED_VIEW',
 			{ id, dto },
 			async tx => {
-				const target = await this.target(tx, actor, id, dto.expectedVersion);
+				const target = await this.target(
+					tx, actor, id, dto.expectedVersion, dto.features
+				);
 				const row = await tx.crmSavedView.update({
 					where: { id: target.id },
 					data: { name, version: { increment: 1 } }
@@ -290,7 +319,9 @@ export class SavedViewsService {
 			'DELETE_SAVED_VIEW',
 			{ id, dto },
 			async tx => {
-				const target = await this.target(tx, actor, id, dto.expectedVersion);
+				const target = await this.target(
+					tx, actor, id, dto.expectedVersion, dto.features
+				);
 				const row = await tx.crmSavedView.update({
 					where: { id: target.id },
 					data: { archivedAt: new Date(), version: { increment: 1 } }
@@ -308,7 +339,9 @@ export class SavedViewsService {
 		const views = dto.views.map(item => ({
 			legacyKey: item.legacyKey,
 			name: this.name(item.name),
-			parameters: validateSavedParameters(dto.scope, item.parameters)
+			parameters: validateSavedParameters(
+				dto.scope, item.parameters, dto.features
+			)
 		}));
 		return command(
 			this.prisma,
@@ -351,7 +384,7 @@ export class SavedViewsService {
 					workspaceId: dto.workspaceId,
 					subject: actor.subject,
 					scope: dto.scope,
-					items: active.map(viewDto),
+					items: visibleViews(active, dto.features).map(viewDto),
 					createdCount: fresh.length,
 					skippedCount: views.length - fresh.length
 				};
@@ -364,7 +397,8 @@ export class SavedViewsService {
 		tx: Prisma.TransactionClient,
 		actor: TeamAuthority,
 		id: string,
-		version: number
+		version: number,
+		features?: 'stage-duration'
 	) {
 		const row = await tx.crmSavedView.findFirst({
 			where: {
@@ -375,6 +409,8 @@ export class SavedViewsService {
 			}
 		});
 		if (!row) throw new NotFoundException('Saved view not found');
+		featureScope(row.scope as SavedViewScope, features);
+		if (featureView(row.parameters) && !features) featureRequired();
 		if (row.version !== version)
 			throw new ConflictException('Saved view version conflict');
 		return row;

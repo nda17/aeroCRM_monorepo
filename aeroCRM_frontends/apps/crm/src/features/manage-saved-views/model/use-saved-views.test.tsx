@@ -131,6 +131,27 @@ describe('saved views lifecycle', () => {
 		expect(listSavedViews).toHaveBeenCalledTimes(1)
 	})
 
+	it('includes the stage-duration feature in the saved-view binding and cache scope', async () => {
+		const saved = vi.fn()
+		const { result } = renderHook(
+			() => useSavedViews(context(), 'DEALS', saved, 'stage-duration'),
+			{ wrapper }
+		)
+		await waitFor(() => expect(result.current.query.isSuccess).toBe(true))
+		expect(listSavedViews).toHaveBeenCalledExactlyOnceWith('token', {
+			workspaceId,
+			subject: 'actor',
+			scope: 'DEALS',
+			features: 'stage-duration'
+		})
+		expect(
+			client
+				.getQueryCache()
+				.findAll()
+				.some(query => query.queryKey.includes('stage-duration'))
+		).toBe(true)
+	})
+
 	it('reauthorizes and retries an unknown command with the identical command id and payload', async () => {
 		vi.mocked(mutateSavedView)
 			.mockRejectedValueOnce(
