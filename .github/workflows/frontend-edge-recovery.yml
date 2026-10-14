@@ -1,0 +1,103 @@
+name: aeroCRM frontend edge recovery
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Green production CI for the exact approved runtime application SHA
+        required: true
+      sha:
+        description: Exact approved runtime application SHA; recovery does not deploy it
+        required: true
+      infra_sha:
+        description: Exact reviewed infrastructure SHA containing the recovery helper
+        required: true
+      infra_ci_run_id:
+        description: Green production infrastructure CI for infra_sha
+        required: true
+      current_frontend_sha:
+        description: Exact currently deployed frontend SHA whose images and marker must be preserved
+        required: true
+      frontend_env_hash:
+        description: Approved aggregate hash of the three existing frontend env files
+        required: true
+      installed_helper_sha256:
+        description: Reviewed SHA-256 of the currently root-installed nginx helper
+        required: true
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: aerocrm-production-release
+  cancel-in-progress: false
+jobs:
+  recover:
+    if: github.ref == 'refs/heads/prod_0.1.0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify exact green application and infrastructure CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.ci_run_id }}
+          SHA: ${{ inputs.sha }}
+          INFRA_SHA: ${{ inputs.infra_sha }}
+          INFRA_RUN_ID: ${{ inputs.infra_ci_run_id }}
+          CURRENT_FRONTEND_SHA: ${{ inputs.current_frontend_sha }}
+          FRONTEND_ENV_HASH: ${{ inputs.frontend_env_hash }}
+          INSTALLED_HELPER_SHA256: ${{ inputs.installed_helper_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$SHA" =~ ^[a-f0-9]{40}$ && "$INFRA_SHA" =~ ^[a-f0-9]{40}$ && "$CURRENT_FRONTEND_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$RUN_ID" =~ ^[0-9]+$ && "$INFRA_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$FRONTEND_ENV_HASH" =~ ^[a-f0-9]{64}$ && "$INSTALLED_HELPER_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          read -r status conclusion head_sha branch workflow_path <<< "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '[.status,.conclusion,.head_sha,.head_branch,.path] | join(" ")')"
+          [[ "$status" == completed && "$conclusion" == success && "$head_sha" == "$SHA" && "$branch" == prod_0.1.0 && "$workflow_path" == .github/workflows/ci.yml ]]
+          read -r status conclusion head_sha branch workflow_path <<< "$(curl --fail --silent --show-error --proto '=https' \
+            --connect-timeout 5 --max-time 20 --header 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/nda17/aeroCRM_infra/actions/runs/$INFRA_RUN_ID" \
+            | jq -r '[.status,.conclusion,.head_sha,.head_branch,.path] | join(" ")')"
+          [[ "$status" == completed && "$conclusion" == success && "$head_sha" == "$INFRA_SHA" && "$branch" == prod_0.1.0 && "$workflow_path" == .github/workflows/ci.yml ]]
+      - uses: actions/checkout@v4
+        with:
+          repository: nda17/aeroCRM_infra
+          ref: ${{ inputs.infra_sha }}
+          ssh-key: ${{ secrets.INFRA_DEPLOY_KEY }}
+          path: infra
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - name: Validate reviewed recovery code
+        env:
+          INFRA_SHA: ${{ inputs.infra_sha }}
+        run: |
+          set -euo pipefail
+          [[ $(git -C infra rev-parse HEAD) == "$INFRA_SHA" ]]
+          bash -n infra/scripts/aerocrm-nginx-release.sh
+          node --check infra/scripts/frontend-edge-recovery.mjs
+          node --test infra/scripts/frontend-edge-recovery.test.mjs
+      - name: Bootstrap exact root helper and recover existing frontend edge
+        env:
+          FRONTEND_SSH_HOST: ${{ secrets.FRONTEND_SSH_HOST }}
+          FRONTEND_SSH_PORT: ${{ secrets.FRONTEND_SSH_PORT }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          FRONTEND_EDGE_BOOTSTRAP_PASSWORD: ${{ secrets.FRONTEND_EDGE_BOOTSTRAP_PASSWORD }}
+          CURRENT_FRONTEND_SHA: ${{ inputs.current_frontend_sha }}
+          FRONTEND_ENV_HASH: ${{ inputs.frontend_env_hash }}
+          INSTALLED_HELPER_SHA256: ${{ inputs.installed_helper_sha256 }}
+        run: node infra/scripts/frontend-edge-recovery.mjs
+      - name: Verify all three public HTTPS frontend revisions
+        env:
+          CURRENT_FRONTEND_SHA: ${{ inputs.current_frontend_sha }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          for (const [application, domain] of [['landing','aerocrm.space'],['crm','workspace.aerocrm.space'],['admin-panel','admin.aerocrm.space']]) {
+            const body = execFileSync('curl', ['--fail','--silent','--show-error','--noproxy','*','--proto','=https',
+              '--connect-timeout','3','--max-time','10','--retry','4','--retry-delay','2','--retry-connrefused',
+              `https://${domain}/__frontend/health`], { encoding: 'utf8', timeout: 60000 });
+            assert.deepEqual(JSON.parse(body), { status: 'ok', application, revision: process.env.CURRENT_FRONTEND_SHA });
+          }
+          console.log('Three public HTTPS frontend responses match the preserved exact runtime SHA');
+          NODE

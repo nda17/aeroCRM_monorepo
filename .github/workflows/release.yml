@@ -1119,6 +1119,22 @@ jobs:
           else
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "/opt/aerocrm/scripts/release.sh '$ROLE' '$SHA' '$hash'"
           fi
+      - name: Verify public frontend HTTPS exact runtime
+        if: matrix.role == 'frontend'
+        env:
+          SHA: ${{ needs.verify.outputs.sha }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          for (const [application, domain] of [['landing','aerocrm.space'],['crm','workspace.aerocrm.space'],['admin-panel','admin.aerocrm.space']]) {
+            const body = execFileSync('curl', ['--fail','--silent','--show-error','--noproxy','*','--proto','=https',
+              '--connect-timeout','3','--max-time','10','--retry','4','--retry-delay','2','--retry-connrefused',
+              `https://${domain}/__frontend/health`], { encoding: 'utf8', timeout: 60000 });
+            assert.deepEqual(JSON.parse(body), { status: 'ok', application, revision: process.env.SHA });
+          }
+          console.log('Three public HTTPS frontend responses match the exact released SHA');
+          NODE
       - name: Remove runner private Customers bundle
         if: always() && inputs.crm_mail_env_install
         run: rm -f "$RUNNER_TEMP/crm-customers-mail-env.json"
