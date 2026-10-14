@@ -26,7 +26,6 @@ import {
 	getPipelineNextActionTemplates,
 	listManagedPipelines,
 	renameManagedPipeline,
-	renameManagedPipelineStage,
 	saveStageDurationLimit,
 	saveStageNextActionTemplate
 } from '@/entities/sales/api/commerce.api'
