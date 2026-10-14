@@ -5,6 +5,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
 	createManagedPipeline,
+	getPipelineNextActionTemplates,
 	createDealQuote,
 	getCommerceAnalytics,
 	getDealCommerce,
@@ -12,6 +13,7 @@ import {
 	listCommerceHistory,
 	replaceDealLines,
 	saveCatalogItem,
+	saveStageNextActionTemplate,
 	updateCatalogItem
 } from './commerce.api'
 
@@ -65,6 +67,56 @@ describe('commerce API boundaries', () => {
 			data: { schemaVersion: 1, workspaceId, commandId, name: 'Продажи' },
 			mapError: expect.any(Function)
 		})
+	})
+	it('reads stage templates and sends versioned set or clear commands with idempotency binding', async () => {
+		const response = {
+			schemaVersion: 1,
+			workspaceId,
+			pipelineId,
+			pipelineVersion: 3,
+			items: [
+				{
+					stageId: stageIds[0],
+					template: { title: 'Позвонить', delayHours: 24 }
+				}
+			]
+		}
+		request.mockResolvedValue(response)
+		await expect(
+			getPipelineNextActionTemplates('token', workspaceId, pipelineId)
+		).resolves.toEqual(response)
+		expect(request).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				method: 'GET',
+				url: `/crm/sales/commerce/pipelines/${pipelineId}/next-action-templates`,
+				params: { workspaceId }
+			})
+		)
+
+		const command = { commandId, expectedVersion: 3, template: null }
+		const clearResponse = {
+			...response,
+			pipelineVersion: 4,
+			items: [{ stageId: stageIds[0], template: null }]
+		}
+		request.mockResolvedValue(clearResponse)
+		await expect(
+			saveStageNextActionTemplate(
+				'token',
+				workspaceId,
+				pipelineId,
+				stageIds[0],
+				command
+			)
+		).resolves.toEqual(clearResponse)
+		expect(request).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				method: 'POST',
+				url: `/crm/sales/commerce/pipelines/${pipelineId}/stages/${stageIds[0]}/next-action-template`,
+				headers: { 'Idempotency-Key': commandId },
+				data: { schemaVersion: 1, workspaceId, ...command }
+			})
+		)
 	})
 	it('sends explicit null catalog prices and accepts zero in strict item response', async () => {
 		const date = '2026-09-05T10:00:00.000Z'

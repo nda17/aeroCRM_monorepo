@@ -68,6 +68,18 @@ RabbitMQ, restart policy и восстановления очередей пер
 | `GET analytics`, `GET analytics/pipelines` | `sales:analytics` |
 | `GET export?format=json\|csv` | OWNER и `sales:export` |
 
+`GET pipelines/:id/next-action-templates?workspaceId=...` возвращает отдельный
+контракт `{schemaVersion,workspaceId,pipelineId,pipelineVersion,items}`. В `items`
+входят только OPEN-этапы в порядке позиции, каждый с `stageId` и `template`.
+`POST pipelines/:id/stages/:stageId/next-action-template` доступен OWNER/CRM_ADMIN с
+`sales:manage-pipelines`; тело содержит общие поля versioned commerce-команды и
+`template: null | {title,delayHours}`. Пустой шаблон очищает настройку OPEN-этапа.
+Название обрезается по краям, содержит 1–200 символов без управляющих символов;
+задержка — целое число 1–2160 часов. Команда использует общий `Pipeline.version`
+для CAS, commerce receipt/event и возвращает тот же отдельный контракт с новой
+версией. Шаблон лишь подставляет значения в форму следующего действия: обычный
+переход сделки по-прежнему создаёт задачу из подтверждённого `nextTask`.
+
 Каждый запрос проходит актуальную workspace-авторизацию. Объекты сделки дополнительно
 ограничены её текущим OWN/TEAM/ALL scope; каталог сам по себе не открывает чужие сделки.
 READ_ONLY запрещает бизнес-запись. Команды содержат `schemaVersion:1`, workspaceId

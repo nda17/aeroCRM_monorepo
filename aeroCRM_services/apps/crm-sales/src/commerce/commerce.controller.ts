@@ -42,7 +42,8 @@ import {
 	RenameStageDto,
 	ReplaceDealLinesDto,
 	ReorderStagesDto,
-	SaveLineToCatalogDto
+	SaveLineToCatalogDto,
+	SetStageNextActionTemplateDto
 } from './commerce.dto';
 
 @Controller('crm/sales/commerce')
@@ -71,6 +72,16 @@ export class CommerceController {
 	) {
 		void query;
 		return this.commerce.pipelines(req.salesAccess);
+	}
+	@Get('pipelines/:id/next-action-templates')
+	@SalesPermission('sales:read')
+	nextActionTemplates(
+		@Req() req: SalesRequest,
+		@Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+		@Query() query: CommerceWorkspaceQuery
+	) {
+		void query;
+		return this.commerce.nextActionTemplates(req.salesAccess, id);
 	}
 	@Get('analytics/pipelines')
 	@SalesPermission('sales:analytics')
@@ -122,6 +133,23 @@ export class CommerceController {
 	) {
 		this.key(body, key);
 		return this.commerce.renameStage(req.salesAccess, id, stageId, body);
+	}
+	@Post('pipelines/:id/stages/:stageId/next-action-template')
+	@SalesPermission('sales:manage-pipelines')
+	setStageNextActionTemplate(
+		@Req() req: SalesRequest,
+		@Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+		@Param('stageId', new ParseUUIDPipe({ version: '4' })) stageId: string,
+		@Body() body: SetStageNextActionTemplateDto,
+		@Headers('idempotency-key') key: string
+	) {
+		this.key(body, key);
+		return this.commerce.setStageNextActionTemplate(
+			req.salesAccess,
+			id,
+			stageId,
+			body
+		);
 	}
 	@Post('pipelines/:id/reorder')
 	@SalesPermission('sales:manage-pipelines')

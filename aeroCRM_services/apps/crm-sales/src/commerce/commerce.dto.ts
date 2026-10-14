@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
 	ArrayMaxSize,
 	ArrayMinSize,
@@ -86,6 +86,28 @@ export class RenamePipelineDto extends CommerceVersionedCommandDto {
 export class AddStageDto extends CommerceVersionedCommandDto {
 	@IsString() @Matches(/\S/) @MaxLength(200) name!: string;
 	@IsIn(['OPEN', 'WON', 'LOST']) state!: 'OPEN' | 'WON' | 'LOST';
+}
+
+class StageNextActionTemplateDto {
+	@Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+	@IsString()
+	@Matches(/\S/)
+	@Matches(/^[^\x00-\x1f\x7f]+$/)
+	@MaxLength(200)
+	title!: string;
+
+	@IsInt()
+	@Min(1)
+	@Max(2160)
+	delayHours!: number;
+}
+
+export class SetStageNextActionTemplateDto extends CommerceVersionedCommandDto {
+	@ValidateIf((_object, value) => value !== null)
+	@IsDefined()
+	@ValidateNested()
+	@Type(() => StageNextActionTemplateDto)
+	template!: StageNextActionTemplateDto | null;
 }
 
 export class RenameStageDto extends RenamePipelineDto {}

@@ -14,6 +14,7 @@ import {
 	type SalesDeal,
 	type SalesPipeline
 } from '@/entities/sales'
+import { getPipelineNextActionTemplates } from '@/entities/sales/api/commerce.api'
 import {
 	Button,
 	Drawer,
@@ -23,7 +24,14 @@ import {
 	TextareaField
 } from '@/shared/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useId, useState, type FormEvent } from 'react'
+import {
+	useCallback,
+	useEffect,
+	useId,
+	useRef,
+	useState,
+	type FormEvent
+} from 'react'
 import toast from 'react-hot-toast'
 import { useSalesCommand } from '../model/use-sales-command'
 import { useSalesSession } from '../model/use-sales-session'
@@ -61,6 +69,11 @@ const historyLabels = {
 	ASSIGNEE_CHANGED: 'Ответственный изменён'
 } as const
 
+const localDateTime = (value: Date) => {
+	const pad = (part: number) => String(part).padStart(2, '0')
+	return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`
+}
+
 const DealEditor = ({
 	deal,
 	pipeline,
@@ -80,6 +93,94 @@ const DealEditor = ({
 	const [outcome, setOutcome] = useState('')
 	const [taskTitle, setTaskTitle] = useState('')
 	const [due, setDue] = useState('')
+	const [generatedDueIso, setGeneratedDueIso] = useState<string | null>(
+		null
+	)
+	const [manualTask, setManualTask] = useState(false)
+	const [autoTask, setAutoTask] = useState(false)
+	const [pendingTemplateStageId, setPendingTemplateStageId] = useState<
+		string | null
+	>(null)
+	const selectedStageRef = useRef(deal.stageId)
+	const manualTaskRef = useRef(false)
+	const context = useSalesSession()
+	const templates = useQuery({
+		queryKey: [
+			'sales',
+			'next-action-templates',
+			...context.key,
+			pipeline?.id
+		],
+		enabled: context.canRead && !!context.session && !!pipeline,
+		queryFn: () =>
+			getPipelineNextActionTemplates(
+				context.session!.accessToken,
+				context.workspace.workspaceId,
+				pipeline!.id,
+				pipeline!.stages
+					.filter(stage => stage.state === 'OPEN')
+					.map(stage => stage.id)
+			),
+		retry: false,
+		gcTime: 0
+	})
+	const applyTemplate = useCallback(
+		(stageId: string, explicit = false) => {
+			if (!explicit && manualTaskRef.current) return
+			const template = templates.data?.items.find(
+				item => item.stageId === stageId
+			)?.template
+			if (template) {
+				const generatedDue = new Date(
+					Date.now() + template.delayHours * 3_600_000
+				)
+				setTaskTitle(template.title)
+				setDue(localDateTime(generatedDue))
+				setGeneratedDueIso(generatedDue.toISOString())
+				setAutoTask(true)
+				if (explicit) {
+					manualTaskRef.current = false
+					setManualTask(false)
+				}
+			} else if (autoTask && !manualTaskRef.current) {
+				setTaskTitle('')
+				setDue('')
+				setGeneratedDueIso(null)
+				setAutoTask(false)
+			}
+		},
+		[templates.data, autoTask]
+	)
+	useEffect(() => {
+		if (
+			pendingTemplateStageId &&
+			templates.data &&
+			selectedStageRef.current === pendingTemplateStageId &&
+			!manualTaskRef.current
+		) {
+			applyTemplate(pendingTemplateStageId)
+			setPendingTemplateStageId(null)
+		}
+	}, [pendingTemplateStageId, templates.data, applyTemplate])
+	const chooseStage = (stageId: string) => {
+		selectedStageRef.current = stageId
+		setTargetStageId(stageId)
+		setPendingTemplateStageId(null)
+		if (manualTaskRef.current) return
+		if (stageId === initialStageId) {
+			if (autoTask) {
+				setTaskTitle('')
+				setDue('')
+				setGeneratedDueIso(null)
+				setAutoTask(false)
+			}
+			return
+		}
+		const stage = pipeline?.stages.find(item => item.id === stageId)
+		if (stage?.state !== 'OPEN') return
+		if (templates.data) applyTemplate(stageId)
+		else if (!templates.isError) setPendingTemplateStageId(stageId)
+	}
 	const [confirmArchive, setConfirmArchive] = useState(false)
 	const dirty =
 		targetStageId !== initialStageId || !!outcome || !!taskTitle || !!due
@@ -122,7 +223,7 @@ const DealEditor = ({
 				? {
 						nextTask: {
 							title: taskTitle.trim(),
-							dueAt: new Date(due).toISOString()
+							dueAt: generatedDueIso ?? new Date(due).toISOString()
 						}
 					}
 				: {})
@@ -148,7 +249,7 @@ const DealEditor = ({
 					<SelectField
 						label="Следующий этап"
 						value={targetStageId}
-						onChange={event => setTargetStageId(event.target.value)}
+						onChange={event => chooseStage(event.target.value)}
 					>
 						{pipeline?.stages.map(stage => (
 							<option key={stage.id} value={stage.id}>
@@ -176,10 +277,39 @@ const DealEditor = ({
 							) : null}
 							<NextActionFields
 								title={taskTitle}
-								onTitleChange={setTaskTitle}
+								onTitleChange={value => {
+									manualTaskRef.current = true
+									setManualTask(true)
+									setTaskTitle(value)
+								}}
 								due={due}
-								onDueChange={setDue}
+								onDueChange={value => {
+									manualTaskRef.current = true
+									setManualTask(true)
+									setDue(value)
+									setGeneratedDueIso(null)
+								}}
 							/>
+							{targetStageId !== initialStageId &&
+							!!templates.data?.items.find(
+								item => item.stageId === targetStageId
+							)?.template ? (
+								<Button
+									type="button"
+									variant="secondary"
+									size="sm"
+									onClick={() => applyTemplate(targetStageId, true)}
+								>
+									Применить шаблон этапа
+								</Button>
+							) : null}
+							<p className={styles.muted}>
+								Срок указан по времени устройства (
+								{Intl.DateTimeFormat().resolvedOptions().timeZone}).
+								{manualTask
+									? ' Введённые вручную название и срок сохраняются при смене этапа.'
+									: ''}
+							</p>
 						</>
 					) : (
 						<p className={styles.muted}>

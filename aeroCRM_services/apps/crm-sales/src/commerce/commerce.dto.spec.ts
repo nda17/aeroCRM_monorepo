@@ -9,7 +9,8 @@ import {
 	CommercePeriodQuery,
 	CreateQuoteDto,
 	ImportPreviewDto,
-	ReplaceDealLinesDto
+	ReplaceDealLinesDto,
+	SetStageNextActionTemplateDto
 } from './commerce.dto';
 import { lineTotal, minor, quantityMilli } from './commerce-core';
 
@@ -28,6 +29,52 @@ const parse = <T>(
 ) => pipe.transform(value, { type, metatype });
 
 describe('commerce request DTOs', () => {
+	it('validates stage next-action templates through the strict ValidationPipe', async () => {
+		const command = {
+			schemaVersion: 1,
+			workspaceId,
+			commandId,
+			expectedVersion: 1
+		};
+		await expect(
+			parse({ ...command, template: null }, SetStageNextActionTemplateDto)
+		).resolves.toMatchObject({ template: null });
+		await expect(
+			parse(
+				{
+					...command,
+					template: { title: '  Позвонить клиенту  ', delayHours: 24 }
+				},
+				SetStageNextActionTemplateDto
+			)
+		).resolves.toMatchObject({
+			template: { title: 'Позвонить клиенту', delayHours: 24 }
+		});
+		for (const delayHours of [1, 2160])
+			await expect(
+				parse(
+					{ ...command, template: { title: 'Действие', delayHours } },
+					SetStageNextActionTemplateDto
+				)
+			).resolves.toMatchObject({ template: { delayHours } });
+		for (const value of [
+			command,
+			{ ...command, template: undefined },
+			{ ...command, template: { title: 'Действие', delayHours: 24, extra: true } },
+			{ ...command, template: { title: ' ', delayHours: 1 } },
+			{ ...command, template: { title: 'Действие\nдальше', delayHours: 1 } },
+			{ ...command, template: { title: 'x'.repeat(201), delayHours: 1 } },
+			{ ...command, template: { title: 'Действие', delayHours: 0 } },
+			{ ...command, template: { title: 'Действие', delayHours: 2161 } },
+			{ ...command, template: { title: 'Действие', delayHours: 1.5 } },
+			{ ...command, template: { title: 'Действие', delayHours: '24' } },
+			{ ...command, template: null, surprise: true }
+		])
+			await expect(
+				parse(value, SetStageNextActionTemplateDto)
+			).rejects.toBeInstanceOf(BadRequestException);
+	});
+
 	it('rejects unknown body keys, invalid UUIDs, absent command versions and invalid workspace values', async () => {
 		const base = {
 			schemaVersion: 1,

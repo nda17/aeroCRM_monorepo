@@ -20,6 +20,13 @@ import {
 	type SalesDeal,
 	type SalesPipeline
 } from '@/entities/sales'
+import {
+	addManagedPipelineStage,
+	getPipelineNextActionTemplates,
+	listManagedPipelines,
+	saveStageNextActionTemplate
+} from '@/entities/sales/api/commerce.api'
+import { getPipelineTemplates } from '@/features/crm-access-gate/api/crm-access.api'
 import { AuthenticatedApiError } from '@/shared/api/authenticated-http-client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
@@ -36,6 +43,7 @@ import { useSalesSession } from '../model/use-sales-session'
 import { CreateDealDrawer, parseRublesToMinor } from './CreateDealDrawer'
 import { DealDetailsDrawer } from './DealDetailsDrawer'
 import { CompleteTaskDrawer } from './CompleteTaskDrawer'
+import { PipelineManager } from './PipelineManager'
 
 vi.mock('@/entities/customer', () => ({
 	listCustomers: vi.fn(),
@@ -80,6 +88,19 @@ vi.mock('@/entities/sales', () => ({
 	listSalesTimelineV3: vi.fn(),
 	listArchivedDealTasks: vi.fn(),
 	mutateSales: vi.fn()
+}))
+vi.mock('@/entities/sales/api/commerce.api', () => ({
+	getPipelineNextActionTemplates: vi.fn(),
+	listManagedPipelines: vi.fn(),
+	createManagedPipeline: vi.fn(),
+	renameManagedPipeline: vi.fn(),
+	addManagedPipelineStage: vi.fn(),
+	renameManagedPipelineStage: vi.fn(),
+	reorderManagedPipelineStages: vi.fn(),
+	saveStageNextActionTemplate: vi.fn()
+}))
+vi.mock('@/features/crm-access-gate/api/crm-access.api', () => ({
+	getPipelineTemplates: vi.fn()
 }))
 vi.mock('./DealCommercePanel', () => ({
 	DealCommercePanel: () => null
@@ -130,9 +151,17 @@ const pipeline: SalesPipeline = {
 			name: 'Успешно',
 			position: 2,
 			state: 'WON'
+		},
+		{
+			id: '99999999-9999-4999-8999-999999999999',
+			key: 'follow-up',
+			name: 'Согласование',
+			position: 3,
+			state: 'OPEN'
 		}
 	]
 }
+const templateStageId = pipeline.stages[2].id
 const deal: SalesDeal = {
 	id: '66666666-6666-4666-8666-666666666666',
 	workspaceId,
@@ -257,6 +286,27 @@ beforeEach(() => {
 		items: []
 	})
 	vi.mocked(mutateSales).mockResolvedValue(deal)
+	vi.mocked(getPipelineNextActionTemplates).mockResolvedValue({
+		schemaVersion: 1,
+		workspaceId,
+		pipelineId: pipeline.id,
+		pipelineVersion: 1,
+		items: [
+			{ stageId: pipeline.stages[0].id, template: null },
+			{
+				stageId: pipeline.stages[2].id,
+				template: { title: 'Позвонить после встречи', delayHours: 24 }
+			}
+		]
+	} as never)
+	vi.mocked(listManagedPipelines).mockResolvedValue({
+		schemaVersion: 1,
+		workspaceId,
+		items: []
+	} as never)
+	vi.mocked(getPipelineTemplates).mockResolvedValue({
+		templates: []
+	} as never)
 })
 afterEach(() => {
 	cleanup()
@@ -272,6 +322,316 @@ const mount = (children: ReactNode) =>
 	)
 
 describe('Sales workflow forms', () => {
+	it('preserves a dirty stage-template editor draft when the server refetch changes its template', async () => {
+		const managedPipeline = {
+			...pipeline,
+			version: 5,
+			templateKey: 'universal-sales',
+			templateVersion: 1
+		}
+		vi.mocked(listManagedPipelines).mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId,
+			items: [managedPipeline]
+		} as never)
+		const templates = {
+			schemaVersion: 1 as const,
+			workspaceId,
+			pipelineId: pipeline.id,
+			pipelineVersion: 5,
+			items: [
+				{ stageId: pipeline.stages[0].id, template: null },
+				{ stageId: templateStageId, template: null }
+			]
+		}
+		vi.mocked(getPipelineNextActionTemplates).mockResolvedValue(
+			templates as never
+		)
+		context.permissions.data!.permissions.push('sales:manage-pipelines')
+		vi.mocked(getCrmPermissions).mockResolvedValue({
+			subject: 'actor',
+			state: 'ACTIVE',
+			role: 'OWNER',
+			permissions: ['sales:read', 'sales:write', 'sales:manage-pipelines']
+		} as never)
+		mount(
+			<PipelineManager
+				context={context as never}
+				onClose={vi.fn()}
+				onSaved={vi.fn()}
+			/>
+		)
+		const enable = await screen.findAllByRole('checkbox', {
+			name: 'Предлагать следующее действие при переходе на этот этап'
+		})
+		await screen.findAllByText('Без шаблона')
+		fireEvent.click(enable[0])
+		const title = await screen.findByRole('textbox', {
+			name: 'Название следующего действия'
+		})
+		fireEvent.change(title, { target: { value: 'Черновик звонка' } })
+		const delay = screen.getByRole('spinbutton', {
+			name: 'Срок через, часов'
+		})
+		fireEvent.change(delay, { target: { value: '36' } })
+
+		vi.mocked(getPipelineNextActionTemplates).mockResolvedValue({
+			...templates,
+			pipelineVersion: 6,
+			items: [
+				{
+					stageId: pipeline.stages[0].id,
+					template: { title: 'Серверная новая версия', delayHours: 72 }
+				},
+				{
+					stageId: templateStageId,
+					template: null
+				}
+			]
+		} as never)
+		await act(async () => {
+			await client.invalidateQueries({
+				queryKey: [
+					'sales',
+					'next-action-templates',
+					...context.key,
+					pipeline.id
+				]
+			})
+		})
+		expect(title).toHaveProperty('value', 'Черновик звонка')
+		expect(delay).toHaveProperty('value', '36')
+		await waitFor(() =>
+			expect(document.body.textContent).toContain(
+				'Серверная новая версия'
+			)
+		)
+		const applyDraft = await screen.findByRole('button', {
+			name: 'Применить мой черновик к актуальной версии'
+		})
+		expect(screen.getByText(/Шаблон этапа изменился/)).toBeTruthy()
+		const stageForm = title.closest('form')!
+		const save = stageForm.querySelector<HTMLButtonElement>(
+			'button[type="submit"]'
+		)!
+		expect(save).toHaveProperty('disabled', true)
+
+		vi.mocked(saveStageNextActionTemplate).mockResolvedValue({
+			...templates,
+			pipelineVersion: 7,
+			items: [
+				{
+					stageId: pipeline.stages[0].id,
+					template: { title: 'Черновик звонка', delayHours: 36 }
+				},
+				{ stageId: templateStageId, template: null }
+			]
+		} as never)
+		fireEvent.click(applyDraft)
+		await waitFor(() => expect(save).toHaveProperty('disabled', false))
+		fireEvent.submit(stageForm)
+		await waitFor(() =>
+			expect(saveStageNextActionTemplate).toHaveBeenCalledOnce()
+		)
+		expect(saveStageNextActionTemplate).toHaveBeenCalledWith(
+			context.session!.accessToken,
+			workspaceId,
+			pipeline.id,
+			pipeline.stages[0].id,
+			expect.objectContaining({
+				expectedVersion: 6,
+				template: { title: 'Черновик звонка', delayHours: 36 }
+			})
+		)
+	})
+
+	it('keeps a dirty stage-template draft mounted when a background pipeline refresh fails', async () => {
+		const managedPipeline = {
+			...pipeline,
+			version: 5,
+			templateKey: 'universal-sales',
+			templateVersion: 1
+		}
+		vi.mocked(listManagedPipelines).mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId,
+			items: [managedPipeline]
+		} as never)
+		vi.mocked(getPipelineNextActionTemplates).mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId,
+			pipelineId: pipeline.id,
+			pipelineVersion: 5,
+			items: [
+				{ stageId: pipeline.stages[0].id, template: null },
+				{ stageId: templateStageId, template: null }
+			]
+		} as never)
+		context.permissions.data!.permissions.push('sales:manage-pipelines')
+		vi.mocked(getCrmPermissions).mockResolvedValue({
+			subject: 'actor',
+			state: 'ACTIVE',
+			role: 'OWNER',
+			permissions: ['sales:read', 'sales:write', 'sales:manage-pipelines']
+		} as never)
+		mount(
+			<PipelineManager
+				context={context as never}
+				onClose={vi.fn()}
+				onSaved={vi.fn()}
+			/>
+		)
+		const enableTemplate = await screen.findAllByRole('checkbox', {
+			name: 'Предлагать следующее действие при переходе на этот этап'
+		})
+		fireEvent.click(enableTemplate[0])
+		const title = await screen.findByRole('textbox', {
+			name: 'Название следующего действия'
+		})
+		fireEvent.change(title, { target: { value: 'Сохранить при ошибке' } })
+		vi.mocked(listManagedPipelines).mockRejectedValueOnce(
+			new AuthenticatedApiError('temporary', 'Список временно недоступен')
+		)
+		await act(async () => {
+			await client.invalidateQueries({
+				queryKey: ['sales', 'managed-pipelines', ...context.key]
+			})
+		})
+		await screen.findByText(
+			'Не удалось обновить воронки. Введённые изменения сохранены.'
+		)
+		expect(
+			screen.getByRole('textbox', { name: 'Название следующего действия' })
+		)
+			.toHaveProperty('value', 'Сохранить при ошибке')
+	})
+
+	it('can add an OPEN stage and save its template after pipeline and template refetch', async () => {
+		const managedPipeline = {
+			...pipeline,
+			version: 5,
+			templateKey: 'universal-sales',
+			templateVersion: 1
+		}
+		const newStage = {
+			id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+			key: 'qualification',
+			name: 'Квалификация',
+			position: 3,
+			state: 'OPEN' as const
+		}
+		const nextPipeline = {
+			...managedPipeline,
+			version: 6,
+			stages: [...managedPipeline.stages, newStage]
+		}
+		const initialTemplates = {
+			schemaVersion: 1 as const,
+			workspaceId,
+			pipelineId: pipeline.id,
+			pipelineVersion: 5,
+			items: [
+				{ stageId: pipeline.stages[0].id, template: null },
+				{ stageId: templateStageId, template: null }
+			]
+		}
+		const refreshedTemplates = {
+			...initialTemplates,
+			pipelineVersion: 6,
+			items: [
+				...initialTemplates.items,
+				{ stageId: newStage.id, template: null }
+			]
+		}
+		vi.mocked(listManagedPipelines)
+			.mockResolvedValueOnce({
+				schemaVersion: 1,
+				workspaceId,
+				items: [managedPipeline]
+			} as never)
+			.mockResolvedValueOnce({
+				schemaVersion: 1,
+				workspaceId,
+				items: [nextPipeline]
+			} as never)
+		vi.mocked(getPipelineNextActionTemplates)
+			.mockResolvedValueOnce(initialTemplates as never)
+			.mockResolvedValue(refreshedTemplates as never)
+		vi.mocked(addManagedPipelineStage).mockResolvedValue({} as never)
+		vi.mocked(saveStageNextActionTemplate).mockResolvedValue({
+			...refreshedTemplates,
+			pipelineVersion: 7,
+			items: refreshedTemplates.items.map(item =>
+				item.stageId === newStage.id
+					? {
+							...item,
+							template: { title: 'Позвонить после квалификации', delayHours: 48 }
+						}
+					: item
+			)
+		} as never)
+		context.permissions.data!.permissions.push('sales:manage-pipelines')
+		vi.mocked(getCrmPermissions).mockResolvedValue({
+			subject: 'actor',
+			state: 'ACTIVE',
+			role: 'OWNER',
+			permissions: ['sales:read', 'sales:write', 'sales:manage-pipelines']
+		} as never)
+		mount(
+			<PipelineManager
+				context={context as never}
+				onClose={vi.fn()}
+				onSaved={vi.fn()}
+			/>
+		)
+		fireEvent.change(
+			await screen.findByRole('textbox', { name: 'Название нового этапа' }),
+			{ target: { value: 'Квалификация' } }
+		)
+		const addStageButton = screen.getByRole('button', { name: 'Добавить этап' })
+		await waitFor(() => expect(addStageButton).toHaveProperty('disabled', false))
+		fireEvent.submit(addStageButton.closest('form')!)
+		await waitFor(() => expect(addManagedPipelineStage).toHaveBeenCalledOnce())
+		await waitFor(() =>
+			expect(getPipelineNextActionTemplates).toHaveBeenCalledTimes(2)
+		)
+		expect(getPipelineNextActionTemplates).toHaveBeenLastCalledWith(
+			context.session!.accessToken,
+			workspaceId,
+			pipeline.id
+		)
+		const enableTemplate = await screen.findAllByRole('checkbox', {
+			name: 'Предлагать следующее действие при переходе на этот этап'
+		})
+		fireEvent.click(enableTemplate[2])
+		fireEvent.change(
+			await screen.findByRole('textbox', {
+				name: 'Название следующего действия'
+			}),
+			{ target: { value: 'Позвонить после квалификации' } }
+		)
+		fireEvent.change(
+			screen.getByRole('spinbutton', { name: 'Срок через, часов' }),
+			{ target: { value: '48' } }
+		)
+		const saveTemplate = screen
+			.getAllByRole('button', { name: 'Сохранить шаблон' })
+			.find(button => !button.hasAttribute('disabled'))!
+		fireEvent.click(saveTemplate)
+		await waitFor(() =>
+			expect(saveStageNextActionTemplate).toHaveBeenCalledWith(
+				context.session!.accessToken,
+				workspaceId,
+				pipeline.id,
+				newStage.id,
+				expect.objectContaining({
+					expectedVersion: 6,
+					template: { title: 'Позвонить после квалификации', delayHours: 48 }
+				})
+			)
+		)
+	})
+
 	it('links a deal next task into the tasks screen in the same workspace', async () => {
 		mount(
 			<DealDetailsDrawer
@@ -698,6 +1058,233 @@ describe('Sales workflow forms', () => {
 			outcome: 'Договорились'
 		})
 		expect(await screen.findByText('Версия изменилась')).toBeTruthy()
+	})
+	it('applies the selected stage template, then protects manual title and due time across stage changes and template refetches', async () => {
+		mount(
+			<DealDetailsDrawer
+				id={deal.id}
+				pipelines={[pipeline]}
+				onClose={vi.fn()}
+				onSaved={vi.fn()}
+			/>
+		)
+		const stageSelect = await screen.findByRole('combobox', {
+			name: 'Следующий этап'
+		})
+		fireEvent.change(stageSelect, {
+			target: { value: templateStageId }
+		})
+		const title = await screen.findByRole('textbox', {
+			name: 'Следующее действие'
+		})
+		await waitFor(() =>
+			expect(title).toHaveProperty('value', 'Позвонить после встречи')
+		)
+		const firstGeneratedDue = (
+			screen.getByLabelText(/Срок следующего действия/) as HTMLInputElement
+		).value
+		expect(firstGeneratedDue).not.toBe('')
+
+		vi.mocked(getPipelineNextActionTemplates).mockResolvedValue({
+			schemaVersion: 1,
+			workspaceId,
+			pipelineId: pipeline.id,
+			pipelineVersion: 2,
+			items: [
+				{ stageId: pipeline.stages[0].id, template: null },
+				{
+					stageId: templateStageId,
+					template: { title: 'Обновлённый шаблон', delayHours: 72 }
+				}
+			]
+		} as never)
+		await act(async () => {
+			await client.invalidateQueries({
+				queryKey: [
+					'sales',
+					'next-action-templates',
+					...context.key,
+					pipeline.id
+				]
+			})
+		})
+		fireEvent.change(stageSelect, {
+			target: { value: pipeline.stages[0].id }
+		})
+		fireEvent.change(stageSelect, {
+			target: { value: templateStageId }
+		})
+		await waitFor(() =>
+			expect(title).toHaveProperty('value', 'Обновлённый шаблон')
+		)
+
+		fireEvent.change(title, { target: { value: 'Вручную согласовать' } })
+		fireEvent.change(screen.getByLabelText(/Срок следующего действия/), {
+			target: { value: '2026-10-20T15:45' }
+		})
+		fireEvent.change(stageSelect, {
+			target: { value: pipeline.stages[0].id }
+		})
+		fireEvent.change(stageSelect, {
+			target: { value: templateStageId }
+		})
+		expect(title).toHaveProperty('value', 'Вручную согласовать')
+		expect(
+			screen.getByLabelText(/Срок следующего действия/)
+		).toHaveProperty('value', '2026-10-20T15:45')
+		fireEvent.change(screen.getByLabelText(/Что сделано \/ результат/), {
+			target: { value: 'Согласовали переход' }
+		})
+		fireEvent.submit(document.getElementById('deal-result-form')!)
+		await waitFor(() => expect(mutateSales).toHaveBeenCalledOnce())
+		expect(vi.mocked(mutateSales).mock.calls[0][1].mutation).toMatchObject(
+			{
+				kind: 'transition',
+				targetStageId: templateStageId,
+				nextTask: {
+					title: 'Вручную согласовать',
+					dueAt: new Date('2026-10-20T15:45').toISOString()
+				}
+			}
+		)
+	})
+	it('does not let a late template response overwrite a manual draft and keeps manual entry available after a fetch error', async () => {
+		let resolveTemplates!: (value: unknown) => void
+		vi.mocked(getPipelineNextActionTemplates).mockReturnValueOnce(
+			new Promise(resolve => {
+				resolveTemplates = resolve
+			}) as never
+		)
+		mount(
+			<DealDetailsDrawer
+				id={deal.id}
+				pipelines={[pipeline]}
+				onClose={vi.fn()}
+				onSaved={vi.fn()}
+			/>
+		)
+		const stageSelect = await screen.findByRole('combobox', {
+			name: 'Следующий этап'
+		})
+		await waitFor(() =>
+			expect(getPipelineNextActionTemplates).toHaveBeenCalled()
+		)
+		fireEvent.change(stageSelect, {
+			target: { value: templateStageId }
+		})
+		const title = screen.getByRole('textbox', {
+			name: 'Следующее действие'
+		})
+		fireEvent.change(title, { target: { value: 'Мой ручной текст' } })
+		fireEvent.change(screen.getByLabelText(/Срок следующего действия/), {
+			target: { value: '2026-10-21T09:10' }
+		})
+		await act(async () => {
+			resolveTemplates({
+				schemaVersion: 1,
+				workspaceId,
+				pipelineId: pipeline.id,
+				pipelineVersion: 1,
+				items: [
+					{ stageId: pipeline.stages[0].id, template: null },
+					{
+						stageId: templateStageId,
+						template: { title: 'Поздний шаблон', delayHours: 48 }
+					}
+				]
+			})
+		})
+		expect(title).toHaveProperty('value', 'Мой ручной текст')
+		expect(
+			screen.getByLabelText(/Срок следующего действия/)
+		).toHaveProperty('value', '2026-10-21T09:10')
+
+		cleanup()
+		client.clear()
+		client = new QueryClient({
+			defaultOptions: {
+				queries: { retry: false },
+				mutations: { retry: false }
+			}
+		})
+		vi.mocked(mutateSales).mockClear()
+		vi.mocked(getPipelineNextActionTemplates).mockRejectedValueOnce(
+			new AuthenticatedApiError('temporary', 'Шаблоны недоступны')
+		)
+		mount(
+			<DealDetailsDrawer
+				id={deal.id}
+				pipelines={[pipeline]}
+				onClose={vi.fn()}
+				onSaved={vi.fn()}
+			/>
+		)
+		fireEvent.change(
+			await screen.findByRole('combobox', { name: 'Следующий этап' }),
+			{ target: { value: templateStageId } }
+		)
+		fireEvent.change(
+			screen.getByRole('textbox', { name: 'Следующее действие' }),
+			{
+				target: { value: 'Ручное действие без шаблона' }
+			}
+		)
+		fireEvent.change(screen.getByLabelText(/Срок следующего действия/), {
+			target: { value: '2026-10-22T11:30' }
+		})
+		fireEvent.change(screen.getByLabelText(/Что сделано \/ результат/), {
+			target: { value: 'Продолжить вручную' }
+		})
+		fireEvent.submit(document.getElementById('deal-result-form')!)
+		await waitFor(() => expect(mutateSales).toHaveBeenCalledOnce())
+		expect(vi.mocked(mutateSales).mock.calls[0][1].mutation).toMatchObject(
+			{
+				nextTask: {
+					title: 'Ручное действие без шаблона',
+					dueAt: new Date('2026-10-22T11:30').toISOString()
+				}
+			}
+		)
+	})
+	it('keeps a template delay as elapsed hours across a daylight-saving transition', async () => {
+		const previousTz = process.env.TZ
+		process.env.TZ = 'America/New_York'
+		const now = Date.parse('2026-03-08T06:30:00.000Z')
+		const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now)
+		try {
+			mount(
+				<DealDetailsDrawer
+					id={deal.id}
+					pipelines={[pipeline]}
+					onClose={vi.fn()}
+					onSaved={vi.fn()}
+				/>
+			)
+			fireEvent.change(
+				await screen.findByRole('combobox', { name: 'Следующий этап' }),
+				{ target: { value: templateStageId } }
+			)
+			await waitFor(() =>
+				expect(
+					screen.getByRole('textbox', { name: 'Следующее действие' })
+				).toHaveProperty('value', 'Позвонить после встречи')
+			)
+			const expectedDue = new Date(now + 24 * 60 * 60 * 1000).toISOString()
+			fireEvent.change(screen.getByLabelText(/Что сделано \/ результат/), {
+				target: { value: 'DST transition' }
+			})
+			fireEvent.submit(document.getElementById('deal-result-form')!)
+			await waitFor(() => expect(mutateSales).toHaveBeenCalledOnce())
+			expect(
+				vi.mocked(mutateSales).mock.calls[0][1].mutation
+			).toMatchObject({
+				nextTask: { dueAt: expectedDue }
+			})
+		} finally {
+			nowSpy.mockRestore()
+			if (previousTz === undefined) delete process.env.TZ
+			else process.env.TZ = previousTz
+		}
 	})
 	it('keeps read-only deal data visible but disables mutation fieldsets', async () => {
 		context.canWrite = false

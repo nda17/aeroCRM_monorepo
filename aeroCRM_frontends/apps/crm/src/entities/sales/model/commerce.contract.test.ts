@@ -3,7 +3,8 @@ import {
 	parseCommerceCatalogItem,
 	parseCommerceQuote,
 	parseDealCommerce,
-	parseManagedPipelines
+	parseManagedPipelines,
+	parsePipelineNextActionTemplates
 } from './commerce.contract'
 
 const workspaceId = '11111111-1111-4111-8111-111111111111'
@@ -102,6 +103,113 @@ const quote = {
 }
 
 describe('commerce exact contracts', () => {
+	it('accepts an exact workspace and pipeline scoped stage template response', () => {
+		const response = {
+			schemaVersion: 1,
+			workspaceId,
+			pipelineId: itemId,
+			pipelineVersion: 4,
+			items: [
+				{ stageId, template: { title: 'Позвонить', delayHours: 24 } },
+				{
+					stageId: '55555555-5555-4555-8555-555555555555',
+					template: null
+				}
+			]
+		}
+		expect(
+			parsePipelineNextActionTemplates(response, workspaceId, itemId)
+		).toEqual(response)
+	})
+	it.each([
+		{
+			schemaVersion: 2,
+			workspaceId,
+			pipelineId: itemId,
+			pipelineVersion: 1,
+			items: []
+		},
+		{
+			schemaVersion: 1,
+			workspaceId: dealId,
+			pipelineId: itemId,
+			pipelineVersion: 1,
+			items: []
+		},
+		{
+			schemaVersion: 1,
+			workspaceId,
+			pipelineId: dealId,
+			pipelineVersion: 1,
+			items: []
+		},
+		{
+			schemaVersion: 1,
+			workspaceId,
+			pipelineId: itemId,
+			pipelineVersion: 0,
+			items: []
+		},
+		{
+			schemaVersion: 1,
+			workspaceId,
+			pipelineId: itemId,
+			pipelineVersion: 1,
+			items: [{ stageId, template: { title: ' Действие', delayHours: 1 } }]
+		},
+		{
+			schemaVersion: 1,
+			workspaceId,
+			pipelineId: itemId,
+			pipelineVersion: 1,
+			items: [
+				{ stageId, template: { title: 'Действие\u0001', delayHours: 1 } }
+			]
+		},
+		{
+			schemaVersion: 1,
+			workspaceId,
+			pipelineId: itemId,
+			pipelineVersion: 1,
+			items: [
+				{ stageId, template: { title: 'Действие', delayHours: 2161 } }
+			]
+		},
+		{
+			schemaVersion: 1,
+			workspaceId,
+			pipelineId: itemId,
+			pipelineVersion: 1,
+			items: [
+				{
+					stageId,
+					template: { title: 'Действие', delayHours: 1, extra: true }
+				}
+			]
+		},
+		{
+			schemaVersion: 1,
+			workspaceId,
+			pipelineId: itemId,
+			pipelineVersion: 1,
+			items: [{ stageId, template: null, extra: true }]
+		},
+		{
+			schemaVersion: 1,
+			workspaceId,
+			pipelineId: itemId,
+			pipelineVersion: 1,
+			items: [
+				{ stageId, template: null },
+				{ stageId, template: null }
+			]
+		}
+	])('rejects malformed next-action template responses', value => {
+		expect(
+			parsePipelineNextActionTemplates(value, workspaceId, itemId)
+		).toBeNull()
+	})
+
 	it('accepts strict tenant-bound managed pipelines', () => {
 		expect(
 			parseManagedPipelines(

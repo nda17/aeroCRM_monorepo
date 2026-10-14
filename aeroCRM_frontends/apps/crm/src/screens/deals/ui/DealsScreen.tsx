@@ -368,6 +368,9 @@ const DealsWorkspaceScreen = ({
 					<>
 						<ImportRecordsControl entity="deals" />
 						{context.canWrite &&
+							['OWNER', 'CRM_ADMIN'].includes(
+								context.permissions.data?.role ?? ''
+							) &&
 							context.permissions.data?.permissions.includes(
 								'sales:manage-pipelines'
 							) && (

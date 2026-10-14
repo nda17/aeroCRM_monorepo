@@ -17,7 +17,8 @@ const labels: Record<string, string> = {
 	PIPELINE_RENAMED: 'Переименована воронка',
 	STAGE_ADDED: 'Добавлен этап',
 	STAGE_RENAMED: 'Переименован этап',
-	STAGES_REORDERED: 'Изменён порядок этапов'
+	STAGES_REORDERED: 'Изменён порядок этапов',
+	STAGE_NEXT_ACTION_TEMPLATE_SET: 'Изменён шаблон следующего действия'
 }
 const describe = (input: unknown) => {
 	if (!input || typeof input !== 'object') return null
@@ -30,6 +31,13 @@ const describe = (input: unknown) => {
 		value.before && typeof value.before === 'object'
 			? (value.before as Record<string, unknown>)
 			: null
+	if (
+		typeof after?.title === 'string' &&
+		typeof after.delayHours === 'number'
+	)
+		return `«${after.title}», через ${after.delayHours} ч.`
+	if (value.after === null && typeof value.stageId === 'string')
+		return 'Шаблон отключён.'
 	if (after && typeof after.name === 'string') {
 		const name =
 			typeof after.code === 'string'

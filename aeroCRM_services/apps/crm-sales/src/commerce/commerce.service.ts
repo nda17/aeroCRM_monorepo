@@ -149,6 +149,29 @@ export class CommerceService {
 				}))
 		};
 	}
+	private nextActionTemplatesView(
+		p: Prisma.PipelineGetPayload<{ include: { stages: true } }>
+	) {
+		return {
+			schemaVersion: 1,
+			workspaceId: p.workspaceId,
+			pipelineId: p.id,
+			pipelineVersion: p.version,
+			items: p.stages
+				.filter(s => s.state === 'OPEN')
+				.sort((a, b) => a.position - b.position)
+				.map(s => ({
+					stageId: s.id,
+					template:
+						s.nextActionTitle === null || s.nextActionDelayHours === null
+							? null
+							: {
+									title: s.nextActionTitle,
+									delayHours: s.nextActionDelayHours
+								}
+				}))
+		};
+	}
 	private async pipeline(tx: Tx, access: SalesAccess, id: string) {
 		const p = await tx.pipeline.findFirst({
 			where: { id, workspaceId: access.workspaceId },
@@ -160,6 +183,15 @@ export class CommerceService {
 	async pipelines(access: SalesAccess) {
 		this.check(access, 'sales:read');
 		return this.pipelineList(access);
+	}
+	async nextActionTemplates(access: SalesAccess, id: string) {
+		this.check(access, 'sales:read');
+		const p = await this.db.pipeline.findFirst({
+			where: { id, workspaceId: access.workspaceId },
+			include: { stages: true }
+		});
+		if (!p) throw new NotFoundException('Воронка не найдена');
+		return this.nextActionTemplatesView(p);
 	}
 	async analyticsPipelines(access: SalesAccess) {
 		this.check(access, 'sales:analytics');
@@ -354,6 +386,65 @@ export class CommerceService {
 					schemaVersion: 1,
 					pipeline: this.pipelineView(await this.pipeline(tx, access, id))
 				};
+			},
+			id + ':' + stageId
+		);
+	}
+	async setStageNextActionTemplate(
+		access: SalesAccess,
+		id: string,
+		stageId: string,
+		input: unknown
+	) {
+		this.manage(access);
+		const body = object(input);
+		let template: { title: string; delayHours: number } | null = null;
+		if (body.template !== null) {
+			const value = object(body.template);
+			const title = string(value.title, 'title', 200);
+			if (
+				!Number.isInteger(value.delayHours) ||
+				Number(value.delayHours) < 1 ||
+				Number(value.delayHours) > 2160
+			)
+				throw new BadRequestException('Некорректный срок следующего действия');
+			template = { title, delayHours: Number(value.delayHours) };
+		}
+		return this.command(
+			access,
+			body,
+			'STAGE_NEXT_ACTION_TEMPLATE_SET',
+			async tx => {
+				const p = await this.pipeline(tx, access, id);
+				if (p.version !== body.expectedVersion) conflict();
+				const stage = p.stages.find(s => s.id === stageId);
+				if (!stage) throw new NotFoundException('Этап не найден');
+				if (stage.state !== 'OPEN')
+					throw new BadRequestException('Настройка доступна только для открытого этапа');
+				await tx.pipelineStage.update({
+					where: { id: stageId },
+					data: {
+						nextActionTitle: template?.title ?? null,
+						nextActionDelayHours: template?.delayHours ?? null
+					}
+				});
+				await tx.pipeline.update({
+					where: { id },
+					data: { version: { increment: 1 } }
+				});
+				await this.event(tx, access, 'STAGE_NEXT_ACTION_TEMPLATE_SET', {
+					pipelineId: id,
+					stageId,
+					before:
+						stage.nextActionTitle === null || stage.nextActionDelayHours === null
+							? null
+							: {
+									title: stage.nextActionTitle,
+									delayHours: stage.nextActionDelayHours
+								},
+					after: template
+				});
+				return this.nextActionTemplatesView(await this.pipeline(tx, access, id));
 			},
 			id + ':' + stageId
 		);

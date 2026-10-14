@@ -72,17 +72,19 @@ model Pipeline {
 }
 
 model PipelineStage {
-  id          String                @id @default(uuid()) @db.Uuid
-  pipelineId  String                @map("pipeline_id") @db.Uuid
-  workspaceId String                @map("workspace_id") @db.Uuid
-  key         String                @db.VarChar(64)
-  name        String                @db.VarChar(200)
-  position    Int                   @db.SmallInt
-  state       CrmPipelineStageState
-  createdAt   DateTime              @default(now()) @map("created_at")
-  updatedAt   DateTime              @updatedAt @map("updated_at")
-  pipeline    Pipeline              @relation(fields: [pipelineId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
-  deals       Deal[]
+  id                   String                @id @default(uuid()) @db.Uuid
+  pipelineId           String                @map("pipeline_id") @db.Uuid
+  workspaceId          String                @map("workspace_id") @db.Uuid
+  key                  String                @db.VarChar(64)
+  name                 String                @db.VarChar(200)
+  position             Int                   @db.SmallInt
+  state                CrmPipelineStageState
+  nextActionTitle      String?               @map("next_action_title") @db.VarChar(200)
+  nextActionDelayHours Int?                  @map("next_action_delay_hours")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  pipeline             Pipeline              @relation(fields: [pipelineId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  deals                Deal[]
 
   @@unique([pipelineId, key])
   @@unique([pipelineId, position])

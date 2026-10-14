@@ -21,6 +21,7 @@ import {
 	parseDealCommerce,
 	parseManagedPipelineResult,
 	parseManagedPipelines,
+	parsePipelineNextActionTemplates,
 	parseSaveDealLineResult,
 	type CommerceCatalogItem,
 	type CommerceCatalogPage,
@@ -34,7 +35,9 @@ import {
 	type CommerceQuote,
 	type DealCommercePayments,
 	type DealCommerce,
-	type ManagedPipeline
+	type ManagedPipeline,
+	type PipelineNextActionTemplates,
+	type StageNextActionTemplate
 } from '../model/commerce.contract'
 
 const MAX_MINOR = 2_147_483_647
@@ -239,6 +242,83 @@ export const listManagedPipelines = async (
 	)
 	if (!result) throw invalidContractError()
 	return { schemaVersion: 1, workspaceId, items: result }
+}
+
+export const getPipelineNextActionTemplates = async (
+	accessToken: string,
+	workspaceId: string,
+	pipelineId: string,
+	openStageIds?: string[]
+): Promise<PipelineNextActionTemplates> => {
+	validate(isUuid(workspaceId) && isUuid(pipelineId))
+	const result = parsePipelineNextActionTemplates(
+		await commerceRequest({
+			accessToken,
+			method: 'GET',
+			url: `/crm/sales/commerce/pipelines/${pipelineId}/next-action-templates`,
+			params: { workspaceId }
+		}),
+		workspaceId,
+		pipelineId
+	)
+	if (
+		!result ||
+		(openStageIds &&
+			(result.items.length !== openStageIds.length ||
+				result.items.some(
+					(item, index) => item.stageId !== openStageIds[index]
+				)))
+	)
+		throw invalidContractError()
+	return result
+}
+
+export const saveStageNextActionTemplate = async (
+	accessToken: string,
+	workspaceId: string,
+	pipelineId: string,
+	stageId: string,
+	command: {
+		commandId: string
+		expectedVersion: number
+		template: StageNextActionTemplate | null
+	}
+): Promise<PipelineNextActionTemplates> => {
+	validate(
+		isUuid(workspaceId) &&
+			isUuid(pipelineId) &&
+			isUuid(stageId) &&
+			isPositiveVersion(command.expectedVersion) &&
+			(command.template === null ||
+				(isText(command.template.title, 200) &&
+					Number.isSafeInteger(command.template.delayHours) &&
+					command.template.delayHours >= 1 &&
+					command.template.delayHours <= 2160))
+	)
+	const template = command.template && {
+		title: command.template.title.trim(),
+		delayHours: command.template.delayHours
+	}
+	const result = parsePipelineNextActionTemplates(
+		await post(
+			accessToken,
+			workspaceId,
+			command.commandId,
+			`/crm/sales/commerce/pipelines/${pipelineId}/stages/${stageId}/next-action-template`,
+			{ expectedVersion: command.expectedVersion, template }
+		),
+		workspaceId,
+		pipelineId
+	)
+	if (
+		!result ||
+		result.pipelineVersion !== command.expectedVersion + 1 ||
+		JSON.stringify(
+			result.items.find(item => item.stageId === stageId)?.template
+		) !== JSON.stringify(template)
+	)
+		throw invalidContractError()
+	return result
 }
 
 export const listAnalyticsPipelines = async (

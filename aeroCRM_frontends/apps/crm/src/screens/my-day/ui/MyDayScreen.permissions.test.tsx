@@ -247,6 +247,35 @@ const openTask = async () => {
 		expect(titleField().closest('[hidden]')).toBeNull()
 	})
 }
+const waitForLinkedTask = async () => {
+	await waitFor(
+		() => {
+			const queries = client.getQueryCache().getAll()
+			const permissionsQuery = queries.find(
+				query => query.queryKey[0] === 'crm-permissions'
+			)
+			const detailQueries = queries.filter(
+				query =>
+					query.queryKey[0] === 'crm-workday' &&
+					query.queryKey[1] === 'detail' &&
+					query.queryKey.at(-1) === task.id
+			)
+			const settled = (query: (typeof queries)[number]) =>
+				query.state.status === 'success' &&
+				query.state.fetchStatus === 'idle'
+
+			expect(permissionsQuery && settled(permissionsQuery)).toBe(true)
+			expect(detailQueries.length).toBeGreaterThan(0)
+			expect(detailQueries.every(settled)).toBe(true)
+		},
+		{ timeout: 5000 }
+	)
+	await screen.findByLabelText('Название задачи', {}, { timeout: 5000 })
+	await waitFor(
+		() => expect(titleField()).toHaveProperty('disabled', false),
+		{ timeout: 5000 }
+	)
+}
 const startRefresh = async () => {
 	const response = deferred<CrmPermissions>()
 	vi.mocked(authenticatedRequest).mockReturnValueOnce(response.promise)
@@ -776,9 +805,7 @@ describe('MyDay actual permission query lifecycle', () => {
 			const view = render(<MyDayScreen initialTaskId={task.id} />, {
 				wrapper: Wrapper
 			})
-			await waitFor(() =>
-				expect(titleField()).toHaveProperty('disabled', false)
-			)
+			await waitForLinkedTask()
 			fireEvent.change(titleField(), {
 				target: { value: 'Приватный черновик ссылки' }
 			})

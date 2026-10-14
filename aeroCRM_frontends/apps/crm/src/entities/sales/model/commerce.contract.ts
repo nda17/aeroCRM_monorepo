@@ -26,6 +26,20 @@ export interface ManagedPipeline {
 	templateVersion: number
 	stages: ManagedPipelineStage[]
 }
+export interface StageNextActionTemplate {
+	title: string
+	delayHours: number
+}
+export interface PipelineNextActionTemplates {
+	schemaVersion: 1
+	workspaceId: string
+	pipelineId: string
+	pipelineVersion: number
+	items: Array<{
+		stageId: string
+		template: StageNextActionTemplate | null
+	}>
+}
 export interface CommerceCatalogItem {
 	id: string
 	workspaceId: string
@@ -181,6 +195,57 @@ const isVersion = (value: unknown): value is number =>
 	Number.isSafeInteger(value) &&
 	Number(value) > 0 &&
 	Number(value) <= MAX_MINOR
+export const MAX_NEXT_ACTION_DELAY_HOURS = 2160
+const parseNextActionTemplate = (
+	value: unknown
+): StageNextActionTemplate | null => {
+	if (
+		!isRecord(value) ||
+		!hasExactKeys(value, ['title', 'delayHours']) ||
+		!isNonEmptyString(value.title, 200) ||
+		value.title !== value.title.trim() ||
+		/[\x00-\x1f\x7f]/.test(value.title) ||
+		!Number.isSafeInteger(value.delayHours) ||
+		Number(value.delayHours) < 1 ||
+		Number(value.delayHours) > MAX_NEXT_ACTION_DELAY_HOURS
+	)
+		return null
+	return { title: value.title, delayHours: Number(value.delayHours) }
+}
+
+export const parsePipelineNextActionTemplates = (
+	value: unknown,
+	workspaceId: string,
+	pipelineId: string
+): PipelineNextActionTemplates | null => {
+	if (
+		!isRecord(value) ||
+		!hasExactKeys(value, [
+			'schemaVersion',
+			'workspaceId',
+			'pipelineId',
+			'pipelineVersion',
+			'items'
+		]) ||
+		value.schemaVersion !== 1 ||
+		value.workspaceId !== workspaceId ||
+		value.pipelineId !== pipelineId ||
+		!isVersion(value.pipelineVersion) ||
+		!Array.isArray(value.items) ||
+		value.items.length > 100 ||
+		value.items.some(
+			item =>
+				!isRecord(item) ||
+				!hasExactKeys(item, ['stageId', 'template']) ||
+				!isUuidV4(item.stageId) ||
+				(item.template !== null && !parseNextActionTemplate(item.template))
+		) ||
+		new Set(value.items.map(item => item.stageId)).size !==
+			value.items.length
+	)
+		return null
+	return value as unknown as PipelineNextActionTemplates
+}
 const isCounter = (value: unknown): value is number =>
 	Number.isSafeInteger(value) &&
 	Number(value) >= 0 &&

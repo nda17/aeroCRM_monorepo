@@ -8,7 +8,9 @@ import {
 	renameManagedPipeline,
 	addManagedPipelineStage,
 	renameManagedPipelineStage,
-	reorderManagedPipelineStages
+	reorderManagedPipelineStages,
+	getPipelineNextActionTemplates,
+	saveStageNextActionTemplate
 } from '@/entities/sales/api/commerce.api'
 import { getPipelineTemplates } from '@/features/crm-access-gate/api/crm-access.api'
 import {
@@ -19,9 +21,13 @@ import {
 	StatusBadge,
 	TextField
 } from '@/shared/ui'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import type { SalesStage } from '@/entities/sales'
+import {
+	MAX_NEXT_ACTION_DELAY_HOURS,
+	type StageNextActionTemplate
+} from '@/entities/sales/model/commerce.contract'
 import {
 	useCommerceCommand,
 	type CommerceContext
@@ -67,6 +73,159 @@ type PipelineMutation =
 			stageIds: string[]
 	  }
 const stageLabels = { OPEN: 'В работе', WON: 'Успешно', LOST: 'Отказ' }
+const sameTemplate = (
+	left: StageNextActionTemplate | null,
+	right: StageNextActionTemplate | null
+) =>
+	left === right ||
+	(!!left &&
+		!!right &&
+		left.title === right.title &&
+		left.delayHours === right.delayHours)
+
+const StageTemplateEditor = ({
+	stage,
+	template,
+	version,
+	locked,
+	onSave
+}: {
+	stage: SalesStage
+	template: StageNextActionTemplate | null
+	version: number
+	locked: boolean
+	onSave: (
+		stageId: string,
+		version: number,
+		value: StageNextActionTemplate | null
+	) => void
+}) => {
+	const [enabled, setEnabled] = useState(!!template)
+	const [title, setTitle] = useState(template?.title ?? '')
+	const [delayHours, setDelayHours] = useState(
+		String(template?.delayHours ?? 24)
+	)
+	const [baseline, setBaseline] = useState({ template, version })
+	const dirty =
+		enabled !== !!baseline.template ||
+		(enabled &&
+			(title !== baseline.template?.title ||
+				delayHours !== String(baseline.template?.delayHours ?? 24)))
+	const draftMatchesCurrent =
+		enabled === !!template &&
+		(!enabled ||
+			(title.trim() === template?.title &&
+				Number(delayHours) === template?.delayHours))
+	if (
+		version !== baseline.version ||
+		!sameTemplate(template, baseline.template)
+	) {
+		if (
+			!dirty ||
+			sameTemplate(template, baseline.template) ||
+			draftMatchesCurrent
+		)
+			setBaseline({ template, version })
+		if (!dirty) {
+			setEnabled(!!template)
+			setTitle(template?.title ?? '')
+			setDelayHours(String(template?.delayHours ?? 24))
+		}
+	}
+	const conflict =
+		version !== baseline.version ||
+		!sameTemplate(template, baseline.template)
+	useDirtyForm({ dirty, label: `Шаблон этапа «${stage.name}»` })
+	return (
+		<form
+			className={styles.item}
+			onSubmit={event => {
+				event.preventDefault()
+				if (!locked && !conflict && dirty)
+					onSave(
+						stage.id,
+						baseline.version,
+						enabled
+							? {
+									title: title.trim(),
+									delayHours: Number(delayHours)
+								}
+							: null
+					)
+			}}
+		>
+			<div className={styles.heading}>
+				<strong>{stage.name}</strong>
+				<span className={styles.muted}>
+					{template ? 'Шаблон включён' : 'Без шаблона'}
+				</span>
+			</div>
+			<label className={styles.check}>
+				<input
+					type="checkbox"
+					checked={enabled}
+					disabled={locked}
+					onChange={event => setEnabled(event.target.checked)}
+				/>
+				Предлагать следующее действие при переходе на этот этап
+			</label>
+			{enabled ? (
+				<div className={styles.grid}>
+					<TextField
+						label="Название следующего действия"
+						value={title}
+						required
+						maxLength={200}
+						disabled={locked}
+						onChange={event => setTitle(event.target.value)}
+					/>
+					<TextField
+						label="Срок через, часов"
+						type="number"
+						value={delayHours}
+						required
+						min={1}
+						max={MAX_NEXT_ACTION_DELAY_HOURS}
+						step={1}
+						disabled={locked}
+						onChange={event => setDelayHours(event.target.value)}
+					/>
+				</div>
+			) : null}
+			{conflict ? (
+				<div className={styles.notice}>
+					<p>
+						Шаблон этапа изменился. Ваш черновик сохранён на экране.
+						Актуальное значение:{' '}
+						{template
+							? `«${template.title}», через ${template.delayHours} ч`
+							: 'без шаблона'}
+						.
+					</p>
+					<Button
+						type="button"
+						size="sm"
+						variant="secondary"
+						disabled={locked}
+						onClick={() => setBaseline({ template, version })}
+					>
+						Применить мой черновик к актуальной версии
+					</Button>
+				</div>
+			) : null}
+			<div className={styles.actions}>
+				<Button
+					type="submit"
+					size="sm"
+					variant="secondary"
+					disabled={locked || conflict || !dirty}
+				>
+					Сохранить шаблон
+				</Button>
+			</div>
+		</form>
+	)
+}
 
 const StageNameEditor = ({
 	stage,
@@ -110,12 +269,16 @@ const StageNameEditor = ({
 const PipelineEditor = ({
 	pipeline,
 	locked,
-	execute
+	execute,
+	onRefresh
 }: {
 	pipeline: PipelineRecord
 	locked: boolean
 	execute: (mutation: PipelineMutation) => Promise<void>
+	onRefresh: () => void
 }) => {
+	const [draftVersion] = useState(pipeline.version)
+	const editorLocked = locked || pipeline.version !== draftVersion
 	const [name, setName] = useState(pipeline.name)
 	const [newName, setNewName] = useState('')
 	const [newState, setNewState] = useState<'OPEN' | 'WON' | 'LOST'>('OPEN')
@@ -145,15 +308,31 @@ const PipelineEditor = ({
 	}
 	return (
 		<div className={styles.stack}>
+			{pipeline.version !== draftVersion ? (
+				<div className={styles.notice}>
+					<p>
+						Версия воронки изменилась. Ваши черновики сохранены на экране.
+						Обновите редактор перед новым изменением воронки.
+					</p>
+					<Button
+						type="button"
+						size="sm"
+						variant="secondary"
+						onClick={onRefresh}
+					>
+						Обновить редактор
+					</Button>
+				</div>
+			) : null}
 			<form
 				className={styles.grid}
 				onSubmit={event => {
 					event.preventDefault()
-					if (!locked)
+					if (!editorLocked)
 						void execute({
 							action: 'rename',
 							id: pipeline.id,
-							expectedVersion: pipeline.version,
+							expectedVersion: draftVersion,
 							name: name.trim()
 						})
 				}}
@@ -163,14 +342,14 @@ const PipelineEditor = ({
 					value={name}
 					required
 					maxLength={200}
-					disabled={locked}
+					disabled={editorLocked}
 					onChange={event => setName(event.target.value)}
 				/>
 				<div className={styles.actions}>
 					<Button
 						type="submit"
 						variant="secondary"
-						disabled={locked || name.trim() === pipeline.name}
+						disabled={editorLocked || name.trim() === pipeline.name}
 					>
 						Переименовать воронку
 					</Button>
@@ -203,13 +382,13 @@ const PipelineEditor = ({
 							</div>
 							<StageNameEditor
 								stage={stage}
-								disabled={locked || changed}
+								disabled={editorLocked || changed}
 								onSave={value =>
 									void execute({
 										action: 'renameStage',
 										id: pipeline.id,
 										stageId: id,
-										expectedVersion: pipeline.version,
+										expectedVersion: draftVersion,
 										name: value
 									})
 								}
@@ -218,7 +397,7 @@ const PipelineEditor = ({
 								<Button
 									size="sm"
 									variant="ghost"
-									disabled={locked || index === 0}
+									disabled={editorLocked || index === 0}
 									onClick={() => move(index, -1)}
 									aria-label={`Поднять этап «${stage.name}»`}
 								>
@@ -227,7 +406,7 @@ const PipelineEditor = ({
 								<Button
 									size="sm"
 									variant="ghost"
-									disabled={locked || index === order.length - 1}
+									disabled={editorLocked || index === order.length - 1}
 									onClick={() => move(index, 1)}
 									aria-label={`Опустить этап «${stage.name}»`}
 								>
@@ -241,12 +420,12 @@ const PipelineEditor = ({
 			{changed && (
 				<div className={styles.actions}>
 					<Button
-						disabled={locked}
+						disabled={editorLocked}
 						onClick={() =>
 							void execute({
 								action: 'reorder',
 								id: pipeline.id,
-								expectedVersion: pipeline.version,
+								expectedVersion: draftVersion,
 								stageIds: order
 							})
 						}
@@ -255,7 +434,7 @@ const PipelineEditor = ({
 					</Button>
 					<Button
 						variant="ghost"
-						disabled={locked}
+						disabled={editorLocked}
 						onClick={() =>
 							setOrder(pipeline.stages.map(stage => stage.id))
 						}
@@ -268,11 +447,11 @@ const PipelineEditor = ({
 				className={styles.section}
 				onSubmit={event => {
 					event.preventDefault()
-					if (!locked && !changed)
+					if (!editorLocked && !changed)
 						void execute({
 							action: 'addStage',
 							id: pipeline.id,
-							expectedVersion: pipeline.version,
+							expectedVersion: draftVersion,
 							name: newName.trim(),
 							state: newState
 						})
@@ -281,7 +460,9 @@ const PipelineEditor = ({
 				<h3>Добавить этап</h3>
 				<fieldset
 					className={styles.fields}
-					disabled={locked || changed || pipeline.stages.length >= 100}
+					disabled={
+						editorLocked || changed || pipeline.stages.length >= 100
+					}
 				>
 					<TextField
 						label="Название нового этапа"
@@ -320,6 +501,7 @@ export const PipelineManager = ({
 	onSaved: () => void
 }) => {
 	const draftGuard = useDirtyFormGuard()
+	const queryClient = useQueryClient()
 	const [selectedId, setSelectedId] = useState('')
 	const [creating, setCreating] = useState(false)
 	const [name, setName] = useState('')
@@ -344,6 +526,26 @@ export const PipelineManager = ({
 		queryKey: ['sales', 'pipeline-templates', ...context.key],
 		enabled: context.canRead,
 		queryFn: () => getPipelineTemplates(context.session!.accessToken),
+		retry: false,
+		gcTime: 0
+	})
+	const pipeline =
+		pipelines.data?.items.find(item => item.id === selectedId) ||
+		pipelines.data?.items[0]
+	const stageTemplates = useQuery({
+		queryKey: [
+			'sales',
+			'next-action-templates',
+			...context.key,
+			pipeline?.id
+		],
+		enabled: context.canRead && !!context.session && !!pipeline,
+		queryFn: () =>
+			getPipelineNextActionTemplates(
+				context.session!.accessToken,
+				context.workspace.workspaceId,
+				pipeline!.id
+			),
 		retry: false,
 		gcTime: 0
 	})
@@ -395,17 +597,50 @@ export const PipelineManager = ({
 			}
 		},
 		() => {
-			setRevision(value => value + 1)
 			setCreating(false)
 			setName('')
+			onSaved()
+			void pipelines.refetch().then(result => {
+				if (!result.isError) setRevision(value => value + 1)
+			})
+			void stageTemplates.refetch()
+		},
+		'sales:manage-pipelines'
+	)
+	const templateCommand = useCommerceCommand<
+		{
+			stageId: string
+			pipelineId: string
+			expectedVersion: number
+			template: StageNextActionTemplate | null
+		},
+		Awaited<ReturnType<typeof saveStageNextActionTemplate>>
+	>(
+		context,
+		'pipeline-next-action-template',
+		(token, input) =>
+			saveStageNextActionTemplate(
+				token,
+				input.workspaceId,
+				input.pipelineId,
+				input.stageId,
+				input
+			),
+		result => {
+			queryClient.setQueryData(
+				[
+					'sales',
+					'next-action-templates',
+					...context.key,
+					result.pipelineId
+				],
+				result
+			)
 			onSaved()
 			void pipelines.refetch()
 		},
 		'sales:manage-pipelines'
 	)
-	const pipeline =
-		pipelines.data?.items.find(item => item.id === selectedId) ||
-		pipelines.data?.items[0]
 	const refresh = async () => {
 		const [access, result] = await Promise.all([
 			context.permissions.refetch(),
@@ -413,6 +648,20 @@ export const PipelineManager = ({
 		])
 		if (access.isError || result.isError) throw new Error()
 		setRevision(value => value + 1)
+		void stageTemplates.refetch()
+	}
+	const refreshTemplate = async () => {
+		const [access, currentPipeline, currentTemplates] = await Promise.all([
+			context.permissions.refetch(),
+			pipelines.refetch(),
+			stageTemplates.refetch()
+		])
+		if (
+			access.isError ||
+			currentPipeline.isError ||
+			currentTemplates.isError
+		)
+			throw new Error()
 	}
 	if (!context.canRead)
 		return (
@@ -421,7 +670,7 @@ export const PipelineManager = ({
 				isOpen
 				title="Управление воронками"
 				onClose={() => {
-					if (command.canClose()) onClose()
+					if (command.canClose() && templateCommand.canClose()) onClose()
 				}}
 			>
 				<ScreenState
@@ -437,13 +686,29 @@ export const PipelineManager = ({
 			title="Управление воронками"
 			size="lg"
 			onClose={() => {
-				if (command.canClose()) onClose()
+				if (command.canClose() && templateCommand.canClose()) onClose()
 			}}
 			description="Одной универсальной воронки достаточно для товаров и услуг. Дополнительная нужна, если отличаются этапы работы."
 		>
 			<div className={styles.stack}>
 				<CommerceCommandState command={command} onReview={refresh} />
-				{pipelines.isError ? (
+				<CommerceCommandState
+					command={templateCommand}
+					onReview={refreshTemplate}
+				/>
+				{pipelines.isError && pipelines.data ? (
+					<ScreenState
+						compact
+						variant="error"
+						description="Не удалось обновить воронки. Введённые изменения сохранены."
+						action={
+							<Button onClick={() => void pipelines.refetch()}>
+								Повторить
+							</Button>
+						}
+					/>
+				) : null}
+				{pipelines.isError && !pipelines.data ? (
 					<ScreenState
 						variant="error"
 						action={
@@ -452,7 +717,7 @@ export const PipelineManager = ({
 							</Button>
 						}
 					/>
-				) : pipelines.isPending ? (
+				) : !pipelines.data ? (
 					<ScreenState variant="loading" />
 				) : (
 					<>
@@ -460,7 +725,7 @@ export const PipelineManager = ({
 							<SelectField
 								label="Воронка"
 								value={pipeline?.id || ''}
-								disabled={command.locked}
+								disabled={command.locked || templateCommand.locked}
 								onChange={event => {
 									const id = event.target.value
 									draftGuard.confirmDiscard(() => {
@@ -478,7 +743,7 @@ export const PipelineManager = ({
 							<div className={styles.actions}>
 								<Button
 									variant="secondary"
-									disabled={command.locked}
+									disabled={command.locked || templateCommand.locked}
 									onClick={() =>
 										draftGuard.confirmDiscard(() =>
 											setCreating(value => !value)
@@ -558,12 +823,96 @@ export const PipelineManager = ({
 							</form>
 						) : (
 							pipeline && (
-								<PipelineEditor
-									key={`${pipeline.id}:${pipeline.version}:${revision}`}
-									pipeline={pipeline}
-									locked={command.locked || pipelines.isFetching}
-									execute={command.execute}
-								/>
+								<>
+									<PipelineEditor
+										key={`${pipeline.id}:${revision}`}
+										pipeline={pipeline}
+										locked={
+											command.locked ||
+											templateCommand.locked ||
+											pipelines.isFetching
+										}
+										execute={command.execute}
+										onRefresh={() =>
+											draftGuard.confirmDiscard(() =>
+												setRevision(value => value + 1)
+											)
+										}
+									/>
+									<section className={styles.section}>
+										<h3>Следующее действие по этапу</h3>
+										<p className={styles.muted}>
+											При выборе этапа шаблон предложит название и срок
+											следующей задачи. Сотрудник сможет изменить их до
+											сохранения перехода. 24 часа равны одному дню.
+											Изменения шаблона не затрагивают созданные задачи.
+										</p>
+										{stageTemplates.isError && stageTemplates.data ? (
+											<div className={styles.notice}>
+												<p>
+													Не удалось обновить шаблоны этапов. Черновики
+													сохранены; перед следующим изменением проверьте
+													актуальные данные.
+												</p>
+												<Button
+													type="button"
+													variant="secondary"
+													size="sm"
+													onClick={() => void stageTemplates.refetch()}
+												>
+													Повторить
+												</Button>
+											</div>
+										) : null}
+										{stageTemplates.isError && !stageTemplates.data ? (
+											<ScreenState
+												compact
+												variant="error"
+												description="Не удалось загрузить шаблоны этапов."
+												action={
+													<Button
+														variant="secondary"
+														onClick={() => void stageTemplates.refetch()}
+													>
+														Повторить
+													</Button>
+												}
+											/>
+										) : stageTemplates.isPending ||
+										  !stageTemplates.data ? (
+											<ScreenState compact variant="loading" />
+										) : (
+											pipeline.stages
+												.filter(stage => stage.state === 'OPEN')
+												.map(stage => (
+													<StageTemplateEditor
+														key={`${pipeline.id}:${stage.id}`}
+														stage={stage}
+														template={
+															stageTemplates.data.items.find(
+																item => item.stageId === stage.id
+															)?.template ?? null
+														}
+														version={stageTemplates.data.pipelineVersion}
+														locked={
+															command.locked ||
+															templateCommand.locked ||
+															stageTemplates.isFetching ||
+															stageTemplates.isError
+														}
+														onSave={(stageId, expectedVersion, value) =>
+															void templateCommand.execute({
+																pipelineId: pipeline.id,
+																stageId,
+																expectedVersion,
+																template: value
+															})
+														}
+													/>
+												))
+										)}
+									</section>
+								</>
 							)
 						)}
 					</>

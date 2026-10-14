@@ -159,6 +159,22 @@ try {
   assert.ok(stages.length >= 3);
   const openStage = stages.find((stage) => stage.state === "OPEN");
   assert.ok(openStage);
+  assert.deepEqual(
+    Object.keys(installedPipeline).sort(),
+    [
+      "id",
+      "workspaceId",
+      "name",
+      "version",
+      "templateKey",
+      "templateVersion",
+      "stages",
+    ].sort(),
+  );
+  assert.deepEqual(
+    Object.keys(openStage).sort(),
+    ["id", "key", "name", "position", "state"].sort(),
+  );
 
   const manualDeal = await sales.create(
     access,
@@ -182,6 +198,16 @@ try {
   const dealId = manualDeal.deal.id;
   assert.equal((await commerce.lines(access, dealId)).items.length, 0);
   assert.equal((await commerce.lines(access, dealId)).amountMinor, 0);
+  await nextActionTemplateScenarios({
+    prisma,
+    migrationPrisma,
+    commerce,
+    sales,
+    access,
+    otherWorkspaceId,
+    pipelineId: installed.installation.pipelineId,
+    openStage,
+  });
 
   const extraPipeline = await commerce.createPipeline(access, {
     schemaVersion: 1,
@@ -1251,6 +1277,280 @@ async function salesFileImportScenarios({
     Date.now = currentNow;
   }
 }
+
+
+async function nextActionTemplateScenarios({
+  prisma,
+  migrationPrisma,
+  commerce,
+  sales,
+  access,
+  otherWorkspaceId,
+  pipelineId,
+  openStage,
+}) {
+  const current = (await commerce.pipelines(access)).items.find(
+    (item) => item.id === pipelineId,
+  );
+  const added = await commerce.addStage(access, pipelineId, {
+    schemaVersion: 1,
+    workspaceId: access.workspaceId,
+    commandId: randomUUID(),
+    expectedVersion: current.version,
+    name: "Договорённость",
+    state: "OPEN",
+  });
+  const targetStage = added.pipeline.stages.find(
+    (stage) => stage.name === "Договорённость",
+  );
+  assert.ok(targetStage);
+
+  const empty = await commerce.nextActionTemplates(access, pipelineId);
+  assert.deepEqual(
+    empty.items.map((item) => item.stageId),
+    added.pipeline.stages
+      .filter((stage) => stage.state === "OPEN")
+      .map((stage) => stage.id),
+  );
+  assert.ok(empty.items.every((item) => item.template === null));
+  assert.deepEqual(
+    Object.keys(empty).sort(),
+    [
+      "schemaVersion",
+      "workspaceId",
+      "pipelineId",
+      "pipelineVersion",
+      "items",
+    ].sort(),
+  );
+  assert.deepEqual(
+    Object.keys(empty.items[0]).sort(),
+    ["stageId", "template"].sort(),
+  );
+
+  const manager = { ...access, role: "MANAGER" };
+  assert.deepEqual(
+    await commerce.nextActionTemplates(manager, pipelineId),
+    empty,
+  );
+  await assert.rejects(
+    commerce.setStageNextActionTemplate(manager, pipelineId, targetStage.id, {
+      schemaVersion: 1,
+      workspaceId: access.workspaceId,
+      commandId: randomUUID(),
+      expectedVersion: empty.pipelineVersion,
+      template: { title: "Позвонить", delayHours: 24 },
+    }),
+    isForbidden,
+  );
+  const readOnly = { ...access, state: "READ_ONLY" };
+  assert.deepEqual(
+    await commerce.nextActionTemplates(readOnly, pipelineId),
+    empty,
+  );
+  await assert.rejects(
+    commerce.setStageNextActionTemplate(readOnly, pipelineId, targetStage.id, {
+      schemaVersion: 1,
+      workspaceId: access.workspaceId,
+      commandId: randomUUID(),
+      expectedVersion: empty.pipelineVersion,
+      template: null,
+    }),
+    isForbidden,
+  );
+  await assert.rejects(
+    commerce.nextActionTemplates(
+      { ...access, workspaceId: otherWorkspaceId },
+      pipelineId,
+    ),
+    isNotFound,
+  );
+
+  const setCommand = {
+    schemaVersion: 1,
+    workspaceId: access.workspaceId,
+    commandId: randomUUID(),
+    expectedVersion: empty.pipelineVersion,
+    template: { title: "Согласовать условия", delayHours: 48 },
+  };
+  const setResult = await commerce.setStageNextActionTemplate(
+    access,
+    pipelineId,
+    targetStage.id,
+    setCommand,
+  );
+  assert.deepEqual(
+    await commerce.setStageNextActionTemplate(
+      access,
+      pipelineId,
+      targetStage.id,
+      setCommand,
+    ),
+    setResult,
+  );
+  await assert.rejects(
+    commerce.setStageNextActionTemplate(access, pipelineId, targetStage.id, {
+      ...setCommand,
+      template: { title: "Другое действие", delayHours: 48 },
+    }),
+    isConflict,
+  );
+  await assert.rejects(
+    commerce.setStageNextActionTemplate(access, pipelineId, targetStage.id, {
+      ...setCommand,
+      commandId: randomUUID(),
+      template: null,
+    }),
+    isConflict,
+    "stale pipeline version must fail compare-and-swap",
+  );
+  assert.deepEqual(
+    setResult.items.find((item) => item.stageId === targetStage.id).template,
+    setCommand.template,
+  );
+
+  const wonStage = added.pipeline.stages.find((stage) => stage.state === "WON");
+  await assert.rejects(
+    commerce.setStageNextActionTemplate(access, pipelineId, wonStage.id, {
+      schemaVersion: 1,
+      workspaceId: access.workspaceId,
+      commandId: randomUUID(),
+      expectedVersion: setResult.pipelineVersion,
+      template: setCommand.template,
+    }),
+    isBadRequest,
+    "terminal stage must reject a template",
+  );
+
+  const clearCommand = {
+    schemaVersion: 1,
+    workspaceId: access.workspaceId,
+    commandId: randomUUID(),
+    expectedVersion: setResult.pipelineVersion,
+    template: null,
+  };
+  const cleared = await commerce.setStageNextActionTemplate(
+    access,
+    pipelineId,
+    targetStage.id,
+    clearCommand,
+  );
+  assert.equal(
+    cleared.items.find((item) => item.stageId === targetStage.id).template,
+    null,
+  );
+  await assert.rejects(
+    migrationPrisma.$executeRaw`
+    UPDATE crm_sales.pipeline_stages SET next_action_title = 'half pair'
+    WHERE id = ${targetStage.id}::uuid
+  `,
+    (error) => error?.meta?.code === "23514",
+  );
+  await assert.rejects(
+    migrationPrisma.$executeRaw`
+    UPDATE crm_sales.pipeline_stages SET next_action_delay_hours = 24
+    WHERE id = ${targetStage.id}::uuid
+  `,
+    (error) => error?.meta?.code === "23514",
+  );
+
+  const templateCommand = {
+    schemaVersion: 1,
+    workspaceId: access.workspaceId,
+    commandId: randomUUID(),
+    expectedVersion: cleared.pipelineVersion,
+    template: setCommand.template,
+  };
+  await commerce.setStageNextActionTemplate(
+    access,
+    pipelineId,
+    targetStage.id,
+    templateCommand,
+  );
+  const transitionDeal = await sales.create(
+    access,
+    {
+      schemaVersion: 1,
+      workspaceId: access.workspaceId,
+      commandId: randomUUID(),
+      title: "Сделка для проверки шаблона",
+      currency: "RUB",
+      amountMinor: 0,
+      pipelineId,
+      stageId: openStage.id,
+      contactId: randomUUID(),
+      nextTask: {
+        title: "Текущее действие",
+        dueAt: new Date(Date.now() + 86400000).toISOString(),
+      },
+    },
+    "Bearer integration",
+  );
+  const beforeTransition = await prisma.salesTask.count({
+    where: { dealId: transitionDeal.deal.id },
+  });
+  const sideTask = await prisma.salesTask.create({
+    data: {
+      workspaceId: access.workspaceId,
+      dealId: transitionDeal.deal.id,
+      title: "Другая задача сделки",
+      dueAt: new Date(Date.now() + 7 * 86400000),
+      assignedToSubject: transitionDeal.deal.assignedToSubject,
+    },
+  });
+  const dueAt = new Date(
+    Date.now() + setCommand.template.delayHours * 3600000,
+  ).toISOString();
+  const transition = {
+    schemaVersion: 1,
+    workspaceId: access.workspaceId,
+    commandId: randomUUID(),
+    expectedVersion: transitionDeal.deal.version,
+    targetStageId: targetStage.id,
+    outcome: "Переход с шаблоном следующего действия",
+    nextTask: { title: setCommand.template.title, dueAt },
+  };
+  const moved = await sales.transition(
+    access,
+    transitionDeal.deal.id,
+    transition,
+    "Bearer integration",
+  );
+  assert.deepEqual(
+    await sales.transition(
+      access,
+      transitionDeal.deal.id,
+      transition,
+      "Bearer integration",
+    ),
+    moved,
+  );
+  await assert.rejects(
+    sales.transition(
+      access,
+      transitionDeal.deal.id,
+      {
+        ...transition,
+        nextTask: { ...transition.nextTask, title: "Не повторять" },
+      },
+      "Bearer integration",
+    ),
+    isConflict,
+  );
+  const tasks = await prisma.salesTask.findMany({
+    where: { dealId: transitionDeal.deal.id },
+  });
+  assert.equal(tasks.length, beforeTransition + 2);
+  const generated = tasks.find((task) => task.id === moved.deal.nextTask.id);
+  assert.equal(generated.title, setCommand.template.title);
+  assert.equal(generated.dueAt.toISOString(), dueAt);
+  assert.equal(
+    generated.assignedToSubject,
+    transitionDeal.deal.assignedToSubject,
+  );
+  assert.equal(tasks.find((task) => task.id === sideTask.id).status, "OPEN");
+}
+
 
 function requiredEnv(name) {
   const value = process.env[name];
