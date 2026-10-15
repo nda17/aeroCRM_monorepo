@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-	MARKETING_EMAIL_CONSENT_TEXT,
 	MARKETING_EMAIL_CONSENT_TEXT_VERSION,
 	parseMarketingEmailCommand,
 	parseMarketingEmailView
