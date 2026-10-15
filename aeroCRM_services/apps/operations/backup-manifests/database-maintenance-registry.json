@@ -1409,7 +1409,7 @@
 			"migrationRole": "aerocrm_crm_sales_migration",
 			"runtimeRole": "aerocrm_crm_sales_runtime",
 			"backupRole": "aerocrm_crm_sales_backup",
-			"aclSha256": "d5d9889d8b946515d6ee0f3a389a23a23232acd873082b9453d6c88021227c9f",
+			"aclSha256": "4f97fa5c6f0040dbe5ca696b6aa5c882815473dc3502d85179e123d3229df66e",
 			"acl": {
 				"version": 1,
 				"service": "crm-sales",
@@ -1580,6 +1580,15 @@
 						"UPDATE"
 					],
 					"planner_command_receipts": [
+						"SELECT",
+						"INSERT"
+					],
+					"activity_text_template_settings": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"activity_text_template_commands": [
 						"SELECT",
 						"INSERT"
 					]

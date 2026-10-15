@@ -48,6 +48,7 @@ import { useSalesAssignees } from '@/features/manage-sales/model/use-sales-assig
 import { isUuidV4 } from '@/shared/lib/contract'
 import { DealPipelineBoard } from './DealPipelineBoard'
 import { PipelineManager } from '@/features/manage-sales/ui/PipelineManager'
+import { ActivityTextTemplatesDrawer } from '@/features/manage-sales/ui/ActivityTextTemplatesDrawer'
 import { CommerceExportControl } from '@/features/manage-sales/ui/CommerceExportControl'
 import {
 	defaultDealView,
@@ -86,6 +87,7 @@ const DealsWorkspaceScreen = ({
 	const selected = isUuidV4(selectedValue) ? selectedValue : null
 	const [createOpen, setCreateOpen] = useState(false)
 	const [pipelinesOpen, setPipelinesOpen] = useState(false)
+	const [templatesOpen, setTemplatesOpen] = useState(false)
 	// Next client navigation can reactivate this screen with previous React state.
 	// The route is the source of filters; UI actions only update that route.
 	if (routeView.search !== routeSearch) {
@@ -387,6 +389,17 @@ const DealsWorkspaceScreen = ({
 				actions={
 					<>
 						<ImportRecordsControl entity="deals" />
+						{context.canWrite &&
+							['OWNER', 'CRM_ADMIN'].includes(
+								context.permissions.data?.role ?? ''
+							) && (
+								<Button
+									variant="secondary"
+									onClick={() => setTemplatesOpen(true)}
+								>
+									Шаблоны результатов
+								</Button>
+							)}
 						{context.canWrite &&
 							['OWNER', 'CRM_ADMIN'].includes(
 								context.permissions.data?.role ?? ''
@@ -846,6 +859,11 @@ const DealsWorkspaceScreen = ({
 					context={context}
 					onClose={() => setPipelinesOpen(false)}
 					onSaved={saved}
+				/>
+			)}
+			{templatesOpen && (
+				<ActivityTextTemplatesDrawer
+					onClose={() => setTemplatesOpen(false)}
 				/>
 			)}
 			{createOpen && pipelines.data ? (

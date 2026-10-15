@@ -7,6 +7,7 @@ import { SelectField, TextareaField } from '@/shared/ui'
 import { taskDueIso } from '@/features/manage-workday/model/workday-form'
 import type { useSalesCommand } from '../model/use-sales-command'
 import { NextActionFields } from './NextActionFields'
+import { ActivityTextTemplatePicker } from './ActivityTextTemplatePicker'
 import styles from './SalesWorkflow.module.scss'
 
 export const InteractionResultForm = ({
@@ -85,6 +86,11 @@ export const InteractionResultForm = ({
 					rows={3}
 					placeholder="О чём договорились с клиентом"
 					hint="Комментарий увидят сотрудники, у которых есть доступ к этой сделке."
+				/>
+				<ActivityTextTemplatePicker
+					value={comment}
+					onInsert={setComment}
+					disabled={!enabled || command.locked}
 				/>
 				{deal.status === 'OPEN' ? (
 					<label className={styles.nextTaskToggle}>

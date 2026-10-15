@@ -42,6 +42,7 @@ import { NextActionFields } from './NextActionFields'
 import { useSalesAssignees } from '../model/use-sales-assignees'
 import { DealCommercePanel } from './DealCommercePanel'
 import { InteractionResultForm } from './InteractionResultForm'
+import { ActivityTextTemplatePicker } from './ActivityTextTemplatePicker'
 import styles from './SalesWorkflow.module.scss'
 
 export const salesMoney = (minor: number) =>
@@ -266,6 +267,11 @@ const DealEditor = ({
 						required
 						maxLength={4000}
 						rows={3}
+					/>
+					<ActivityTextTemplatePicker
+						value={outcome}
+						onInsert={setOutcome}
+						disabled={command.locked || !enabled}
 					/>
 					{target?.state === 'OPEN' ? (
 						<>

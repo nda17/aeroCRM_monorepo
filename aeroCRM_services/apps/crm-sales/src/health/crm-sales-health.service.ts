@@ -81,6 +81,12 @@ export class CrmSalesHealthService {
 				this.prisma.plannerCommandReceipt.findFirst({
 					select: { commandId: true, requestHash: true, result: true }
 				}),
+				this.prisma.activityTextTemplateSettings.findFirst({
+					select: { workspaceId: true, version: true, templates: true }
+				}),
+				this.prisma.activityTextTemplateCommand.findFirst({
+					select: { commandId: true, requestHash: true, result: true }
+				}),
 				this.prisma.taskCommandReceipt.findFirst({
 					select: { commandId: true }
 				}),

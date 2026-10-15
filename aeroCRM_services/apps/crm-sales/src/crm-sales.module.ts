@@ -53,6 +53,8 @@ import { SalesImportController } from './imports/import.controller';
 import { SalesImportService } from './imports/import.service';
 import { PlannerController } from './planner/planner.controller';
 import { PlannerService } from './planner/planner.service';
+import { ActivityTextTemplatesController } from './activity-text-templates/activity-text-templates.controller';
+import { ActivityTextTemplatesService } from './activity-text-templates/activity-text-templates.service';
 
 @Module({
 	imports: [
@@ -67,6 +69,7 @@ import { PlannerService } from './planner/planner.service';
 		SalesController,
 		WorkdayController,
 		PlannerController,
+		ActivityTextTemplatesController,
 		TaskSeriesController,
 		TaskNotificationsController,
 		ReminderRulesController,
@@ -86,6 +89,7 @@ import { PlannerService } from './planner/planner.service';
 		SalesService,
 		WorkdayService,
 		PlannerService,
+		ActivityTextTemplatesService,
 		TaskSeriesService,
 		TaskNotificationsService,
 		TaskSeriesAuthorityClient,

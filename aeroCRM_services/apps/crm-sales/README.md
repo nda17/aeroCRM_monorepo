@@ -765,3 +765,31 @@ fence; обновления каталога инвалидируют общий
 `pnpm test:planner` после миграций и применения `prisma/database-access.json`.
 Runner требует локальные test database URL и
 `CRM_SALES_INTEGRATION_ALLOW_MUTATION=true`.
+
+## Общие текстовые шаблоны активности
+
+`GET/POST /api/v1/crm/sales/activity-text-templates` хранит общую библиотеку
+пространства для ручной подстановки текста в результат звонка/встречи и заметку
+сделки. Пустой workspace возвращает `{schemaVersion:1,workspaceId,version:0,templates:[]}`
+без записи в БД. `POST` сохраняет полный снимок с `expectedVersion`, `commandId`
+и совпадающим `Idempotency-Key`; существующие ID можно архивировать и
+восстанавливать, но нельзя удалить из снимка. Ответ — сохранённый снимок новой
+версии. Текст нормализуется только при сохранении (`CRLF/CR` в `LF`, trim);
+подстановка во frontend меняет только пользовательский черновик.
+
+Чтение требует `sales:read`, кроме роли `ANALYST`; запись доступна только
+`OWNER`/`CRM_ADMIN` с `sales:read` и `sales:write` в активном или grace
+пространстве. Перед каждой попыткой записи Sales повторно проверяет actor и
+права, а транзакция использует workspace fence, CAS и actor-bound квитанцию.
+Таблицы `activity_text_template_settings` и `activity_text_template_commands`
+изолированы от PlannerSettings, задач, истории сделок и результатов активностей.
+Квитанции append-only, таблицы доступны runtime по service ACL, backup —
+только на чтение. Readiness проверяет обе таблицы.
+
+Миграция `20261015020000_activity_text_templates` применяется только
+изолированным full-backend GitHub release hook с точным SHA образов, хешами
+миграций/ACL и приватного migration env. После применения rollback допускается
+только на Sales-образ с новой схемой, ACL и endpoint и Operations-образ с
+актуальным backup inventory; прежние таблицы и квитанции не удаляются.
+Локальная PostgreSQL 18 проверка: `pnpm test:activity-text-templates` после
+применения service ACL к изолированной тестовой БД.

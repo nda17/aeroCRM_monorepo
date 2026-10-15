@@ -758,6 +758,7 @@ jobs:
           CRM_SALES_DATABASE_URL: postgresql://aerocrm_crm_sales_migration:local-migration-only@127.0.0.1:5432/aerocrm_crm_sales_test?schema=crm_sales
           CRM_SALES_TEST_DATABASE_URL: postgresql://aerocrm_crm_sales_runtime:local-runtime-only@127.0.0.1:5432/aerocrm_crm_sales_test?schema=crm_sales
           CRM_SALES_TEST_MIGRATION_URL: postgresql://aerocrm_crm_sales_migration:local-migration-only@127.0.0.1:5432/aerocrm_crm_sales_test?schema=crm_sales
+          CRM_SALES_TEST_MIGRATION_DATABASE_URL: postgresql://aerocrm_crm_sales_migration:local-migration-only@127.0.0.1:5432/aerocrm_crm_sales_test?schema=crm_sales
           CRM_SALES_TEST_RUNTIME_ROLE: aerocrm_crm_sales_runtime
           CRM_SALES_INTEGRATION_ALLOW_MUTATION: 'true'
         run: |
@@ -869,6 +870,7 @@ jobs:
           run_native_integration sales-commerce
           run_native_integration planner-customization
           run_native_integration sales-workflow
+          run_native_integration activity-text-templates
       - name: Verify duration migration on legacy rows and closure fences
         working-directory: aeroCRM_services/apps/crm-sales
         env:
@@ -892,7 +894,8 @@ jobs:
           mkdir "$stage_dir/migrations"
           cp prisma/migrations/migration_lock.toml "$stage_dir/migrations/"
           for migration in prisma/migrations/*; do
-            if [[ -d "$migration" && "${migration##*/}" != 20261014020000_stage_duration_control ]]; then
+            if [[ -d "$migration" && "${migration##*/}" != 20261014020000_stage_duration_control &&
+              "${migration##*/}" != 20261015020000_activity_text_templates ]]; then
               cp -R "$migration" "$stage_dir/migrations/"
             fi
           done

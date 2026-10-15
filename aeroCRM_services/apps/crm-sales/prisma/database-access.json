@@ -170,6 +170,15 @@
     "planner_command_receipts": [
       "SELECT",
       "INSERT"
+    ],
+    "activity_text_template_settings": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "activity_text_template_commands": [
+      "SELECT",
+      "INSERT"
     ]
   },
   "sequences": {},

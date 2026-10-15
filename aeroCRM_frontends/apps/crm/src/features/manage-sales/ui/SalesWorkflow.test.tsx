@@ -83,6 +83,9 @@ vi.mock('@/entities/crm-access', () => ({ getCrmPermissions: vi.fn() }))
 vi.mock('@/entities/crm-planner/model/use-planner-settings', () => ({
 	usePlannerSettings: () => ({ context: { canRead: false } })
 }))
+vi.mock('@/entities/sales/model/use-activity-text-templates', () => ({
+	useActivityTextTemplates: () => ({ context: { canRead: false } })
+}))
 vi.mock('@/entities/sales', () => ({
 	getSalesDeal: vi.fn(),
 	getSalesDealContext: vi.fn(),
@@ -383,8 +386,12 @@ describe('Sales workflow forms', () => {
 		const stageName = await screen.findByRole('textbox', {
 			name: 'Название этапа «Новая»'
 		})
-		fireEvent.change(pipelineName, { target: { value: 'Мой черновик воронки' } })
-		fireEvent.change(stageName, { target: { value: 'Мой черновик этапа' } })
+		fireEvent.change(pipelineName, {
+			target: { value: 'Мой черновик воронки' }
+		})
+		fireEvent.change(stageName, {
+			target: { value: 'Мой черновик этапа' }
+		})
 		fireEvent.click(
 			await screen.findByRole('checkbox', {
 				name: 'Ограничить время на этапе «Новая»'
@@ -415,9 +422,7 @@ describe('Sales workflow forms', () => {
 		)
 		expect(pipelineName).toHaveProperty('value', 'Мой черновик воронки')
 		expect(stageName).toHaveProperty('value', 'Мой черновик этапа')
-		expect(
-			screen.queryByText(/Версия воронки изменилась/)
-		).toBeNull()
+		expect(screen.queryByText(/Версия воронки изменилась/)).toBeNull()
 		expect(
 			screen.getByRole('button', { name: 'Переименовать воронку' })
 		).toHaveProperty('disabled', false)
@@ -426,7 +431,9 @@ describe('Sales workflow forms', () => {
 		).toHaveProperty('disabled', false)
 
 		fireEvent.submit(pipelineName.closest('form')!)
-		await waitFor(() => expect(renameManagedPipeline).toHaveBeenCalledOnce())
+		await waitFor(() =>
+			expect(renameManagedPipeline).toHaveBeenCalledOnce()
+		)
 		expect(renameManagedPipeline).toHaveBeenCalledWith(
 			context.session!.accessToken,
 			pipeline.id,
@@ -488,8 +495,12 @@ describe('Sales workflow forms', () => {
 		const stageName = await screen.findByRole('textbox', {
 			name: 'Название этапа «Новая»'
 		})
-		fireEvent.change(pipelineName, { target: { value: 'Мой черновик воронки' } })
-		fireEvent.change(stageName, { target: { value: 'Мой черновик этапа' } })
+		fireEvent.change(pipelineName, {
+			target: { value: 'Мой черновик воронки' }
+		})
+		fireEvent.change(stageName, {
+			target: { value: 'Мой черновик этапа' }
+		})
 		await act(async () => {
 			await client.invalidateQueries({
 				queryKey: ['sales', 'managed-pipelines', ...context.key]
@@ -589,9 +600,7 @@ describe('Sales workflow forms', () => {
 		expect(title).toHaveProperty('value', 'Черновик звонка')
 		expect(delay).toHaveProperty('value', '36')
 		await waitFor(() =>
-			expect(document.body.textContent).toContain(
-				'Серверная новая версия'
-			)
+			expect(document.body.textContent).toContain('Серверная новая версия')
 		)
 		const applyDraft = await screen.findByRole('button', {
 			name: 'Применить мой черновик к актуальной версии'
@@ -689,8 +698,7 @@ describe('Sales workflow forms', () => {
 		)
 		expect(
 			screen.getByRole('textbox', { name: 'Название следующего действия' })
-		)
-			.toHaveProperty('value', 'Сохранить при ошибке')
+		).toHaveProperty('value', 'Сохранить при ошибке')
 	})
 
 	it('can add an OPEN stage and save its template after pipeline and template refetch', async () => {
@@ -752,7 +760,10 @@ describe('Sales workflow forms', () => {
 				item.stageId === newStage.id
 					? {
 							...item,
-							template: { title: 'Позвонить после квалификации', delayHours: 48 }
+							template: {
+								title: 'Позвонить после квалификации',
+								delayHours: 48
+							}
 						}
 					: item
 			)
@@ -772,13 +783,21 @@ describe('Sales workflow forms', () => {
 			/>
 		)
 		fireEvent.change(
-			await screen.findByRole('textbox', { name: 'Название нового этапа' }),
+			await screen.findByRole('textbox', {
+				name: 'Название нового этапа'
+			}),
 			{ target: { value: 'Квалификация' } }
 		)
-		const addStageButton = screen.getByRole('button', { name: 'Добавить этап' })
-		await waitFor(() => expect(addStageButton).toHaveProperty('disabled', false))
+		const addStageButton = screen.getByRole('button', {
+			name: 'Добавить этап'
+		})
+		await waitFor(() =>
+			expect(addStageButton).toHaveProperty('disabled', false)
+		)
 		fireEvent.submit(addStageButton.closest('form')!)
-		await waitFor(() => expect(addManagedPipelineStage).toHaveBeenCalledOnce())
+		await waitFor(() =>
+			expect(addManagedPipelineStage).toHaveBeenCalledOnce()
+		)
 		await waitFor(() =>
 			expect(getPipelineNextActionTemplates).toHaveBeenCalledTimes(2)
 		)
@@ -813,7 +832,10 @@ describe('Sales workflow forms', () => {
 				newStage.id,
 				expect.objectContaining({
 					expectedVersion: 6,
-					template: { title: 'Позвонить после квалификации', delayHours: 48 }
+					template: {
+						title: 'Позвонить после квалификации',
+						delayHours: 48
+					}
 				})
 			)
 		)

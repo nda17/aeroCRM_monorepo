@@ -411,6 +411,30 @@ model PlannerCommandReceipt {
   @@schema("crm_sales")
 }
 
+model ActivityTextTemplateSettings {
+  workspaceId String   @id @map("workspace_id") @db.Uuid
+  version     Int
+  templates   Json
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("activity_text_template_settings")
+  @@schema("crm_sales")
+}
+
+model ActivityTextTemplateCommand {
+  commandId    String   @id @map("command_id") @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  actorSubject String   @map("actor_subject") @db.VarChar(256)
+  requestHash  String   @map("request_hash") @db.Char(64)
+  result       Json
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([workspaceId, createdAt], map: "activity_text_template_commands_workspace_idx")
+  @@map("activity_text_template_commands")
+  @@schema("crm_sales")
+}
+
 model TaskSeries {
   id                     String @id @db.Uuid
   workspaceId            String @map("workspace_id") @db.Uuid

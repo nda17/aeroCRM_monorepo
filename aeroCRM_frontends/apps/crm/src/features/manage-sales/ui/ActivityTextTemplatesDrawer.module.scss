@@ -1,0 +1,18 @@
+.content {
+	@apply flex min-w-0 flex-col gap-4;
+}
+.row {
+	@apply mt-4 flex min-w-0 flex-col gap-3 rounded-lg border border-crm-border bg-crm-surface p-4;
+}
+.actions {
+	@apply flex min-w-0 flex-wrap items-center gap-2;
+}
+.hint {
+	@apply text-sm leading-6 text-crm-muted;
+}
+.error {
+	@apply flex min-w-0 flex-col items-start gap-3 rounded-lg border border-crm-danger/30 bg-crm-danger/5 p-4 text-sm text-crm-danger;
+}
+.archived {
+	@apply border-dashed;
+}
