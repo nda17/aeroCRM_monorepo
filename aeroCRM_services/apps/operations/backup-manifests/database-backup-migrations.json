@@ -19,11 +19,15 @@
 			]
 		},
 		"campaigns": {
-			"manifestSha256": "d2ac3cf3ccc689e10f29bd767021e5cf23050dc3e92480282307dd951fe3f20d",
+			"manifestSha256": "8b1550c293d01638fb6d835705bc80014b783e3c78da076330a834a12b5d501c",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
 					"checksum": "9e8c89ec0777ff2cbfb89bfd94e88cdd58292ac1fd99056fc044953803526f9e"
+				},
+				{
+					"name": "20261015010000_marketing_consent",
+					"checksum": "b9dfc4b834e3f1fbf53fe859342edf1280c52e46f1533343f1c644df5af6bdc3"
 				}
 			]
 		},
@@ -37,7 +41,7 @@
 			]
 		},
 		"billing": {
-			"manifestSha256": "67efd16a1ca4af820c38ee2253eaf011eff5ad30ba16d1c7f185ff3b30a7abeb",
+			"manifestSha256": "2e7059d2ea5de4fa54446dc24dc64a8dd45ee4871b42dd8a7416c057df50549a",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -54,11 +58,15 @@
 				{
 					"name": "20260923030000_workspace_closure",
 					"checksum": "692fc4e8d1218ff2ab360b1bc33bfe7757a017095728b2b307385b82cd2756f5"
+				},
+				{
+					"name": "20261015010000_crm_refund_reviews",
+					"checksum": "53fa0748a88b21ba71a5b982f86539e39c4d439d37d8b709ddb7e33c794d12ea"
 				}
 			]
 		},
 		"identity": {
-			"manifestSha256": "b2fc0b4b2f064dfa8239de2d7bcc1a8f72f3dc3d20d1fc579030e24e80e88079",
+			"manifestSha256": "18d3a3a0762975c16ee4f4d499176cbfd6da1b556b21b7d5d066a04a58904166",
 			"migrations": [
 				{
 					"name": "20260920000000_init_aerocrm",
@@ -75,6 +83,10 @@
 				{
 					"name": "20261004000000_single_active_session",
 					"checksum": "d07b489fb79b7eca075e200961ab4197ad38853d99ff031915675565febbeb7d"
+				},
+				{
+					"name": "20261015010000_marketing_consent",
+					"checksum": "12d482b7e9b8cfa1c0a1bc33abf5977b0fa6fe29bae8e36422efc64bfdf4d8f7"
 				}
 			]
 		},

@@ -198,6 +198,8 @@ export class NotificationDeliveryReceiptService {
 	): Promise<void> {
 		if (
 			!(
+				((consumer === 'campaign-email' || consumer === 'campaign-telegram') &&
+					payload && ['MARKETING_NOT_AUTHORIZED', 'MARKETING_IDENTITY_MISMATCH', 'MARKETING_IDENTITY_UNBOUND'].includes(reason)) ||
 				(isSupportNotificationKind(consumer) &&
 					payload &&
 					SUPPORT_NOTIFICATION_SKIP_REASONS.some(
@@ -259,7 +261,7 @@ export class NotificationDeliveryReceiptService {
 				});
 			if (closed.count !== 1)
 				throw new Error('Notification skip claim was lost');
-			if (isSupportNotificationKind(consumer) && payload)
+			if ((isSupportNotificationKind(consumer) || consumer === 'campaign-email' || consumer === 'campaign-telegram') && payload)
 				await this.outcomes.createDeliveryOutcome(transaction, {
 					kind: consumer,
 					eventId,
@@ -267,7 +269,7 @@ export class NotificationDeliveryReceiptService {
 					status: 'SKIPPED',
 					failure: null,
 					skipReason:
-						reason as (typeof SUPPORT_NOTIFICATION_SKIP_REASONS)[number]
+						reason as (typeof SUPPORT_NOTIFICATION_SKIP_REASONS)[number] | 'MARKETING_NOT_AUTHORIZED' | 'MARKETING_IDENTITY_MISMATCH' | 'MARKETING_IDENTITY_UNBOUND'
 				});
 			await transaction.notificationDeliveryFailure.updateMany({
 				where: { eventId, consumer, resolvedAt: null },

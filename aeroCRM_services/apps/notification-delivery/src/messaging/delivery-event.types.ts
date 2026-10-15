@@ -62,7 +62,8 @@ interface SubscriptionExpiryNotificationContent {
 }
 
 export interface CampaignEmailNotificationRequestedEventPayload {
-	schemaVersion: 2;
+	schemaVersion: 2 | 3;
+	recipientUserId?: string | null;
 	eventType: typeof CAMPAIGN_EMAIL_NOTIFICATION_EVENT_TYPE;
 	eventId: string;
 	occurredAt: string;
@@ -78,7 +79,8 @@ export interface CampaignEmailNotificationRequestedEventPayload {
 }
 
 export interface CampaignTelegramNotificationRequestedEventPayload {
-	schemaVersion: 2;
+	schemaVersion: 2 | 3;
+	recipientUserId?: string | null;
 	eventType: typeof CAMPAIGN_TELEGRAM_NOTIFICATION_EVENT_TYPE;
 	eventId: string;
 	occurredAt: string;
@@ -184,7 +186,8 @@ export interface ReportingNotificationDeliveryOutcomeEventPayload {
 }
 
 export interface CampaignNotificationDeliveryOutcomeEventPayload {
-	schemaVersion: 2;
+	schemaVersion: 2 | 3;
+	reason?: string | null;
 	eventType: typeof CAMPAIGN_NOTIFICATION_DELIVERY_OUTCOME_EVENT_TYPE;
 	eventId: string;
 	occurredAt: string;
@@ -194,7 +197,7 @@ export interface CampaignNotificationDeliveryOutcomeEventPayload {
 	campaignId: string;
 	deliveryId: string;
 	dispatchGeneration: number;
-	status: 'DELIVERED' | 'FAILED';
+	status: 'DELIVERED' | 'FAILED' | 'SKIPPED';
 	failure: {
 		normalizedCode: string;
 		safeReason: string;

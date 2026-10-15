@@ -11,6 +11,9 @@ import { InternalCommandsService } from './domain/internal-commands.service';
 import { CrmEntitlementService } from './domain/crm-entitlement.service';
 import { CrmCommercialPolicyService } from './domain/crm-commercial-policy.service';
 import { CrmCommerceService } from './domain/crm-commerce.service';
+import { CrmRefundService } from './domain/crm-refund.service';
+import { CrmRefundWorkerService } from './provider/crm-refund-worker.service';
+import { BillingCrmRefundController } from './http/billing-crm-refund.controller';
 import { BillingCrmCommerceController } from './http/billing-crm-commerce.controller';
 import { BillingCrmWebhookController, BillingCrmProviderController } from './http/billing-crm-provider.controller';
 import { CrmProviderRabbitMqService } from './provider/crm-provider-rabbitmq.service';
@@ -56,6 +59,7 @@ const API_CONTROLLERS =
 				BillingCrmCommerceController,
 				BillingCrmProviderController,
 				BillingCrmWebhookController,
+				BillingCrmRefundController,
 				BillingIdentityController,
 				BillingSettingsController,
 				BillingOperationsController
@@ -90,6 +94,8 @@ const API_PROVIDERS =
 		BillingWorkspaceClosureService,
 		CrmCommercialPolicyService,
 		CrmCommerceService,
+		CrmRefundService,
+		CrmRefundWorkerService,
 		CrmAccessAuthorizationClient,
 		CrmProviderRabbitMqService,
 		CrmProviderWorkerService,

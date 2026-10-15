@@ -298,6 +298,7 @@ export class IdentityEventsService {
 }
 
 const AUDIT_METADATA_KEYS: Record<string, readonly string[]> = {
+	MARKETING_EMAIL_CONSENT_UPDATE: ['enabled', 'version', 'consentTextVersion', 'source', 'boundAuthIdentityId', 'boundEmailHash', 'boundVerifiedAt'],
 	USER_UPDATE: ['changedFields', 'passwordChanged'],
 	USER_TOGGLE_ACTIVATION: ['operation', 'commandId'],
 	USER_SOFT_DELETE: ['operation', 'commandId'],

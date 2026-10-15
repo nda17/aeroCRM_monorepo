@@ -100,3 +100,10 @@
 .srOnly {
 	@apply sr-only;
 }
+
+.consent {
+	@apply mb-4 flex items-start gap-3 text-sm leading-relaxed;
+	input {
+		@apply mt-1 h-4 w-4 shrink-0 accent-violet-700;
+	}
+}

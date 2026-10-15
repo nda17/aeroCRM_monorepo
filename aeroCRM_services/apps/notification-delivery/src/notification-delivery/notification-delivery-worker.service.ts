@@ -314,7 +314,9 @@ export class NotificationDeliveryWorkerService
 					kind,
 					claim.lockToken,
 					deliveryResult.reason,
-					...(isSupportNotificationKind(kind) ? [payload] : [])
+					...(isSupportNotificationKind(kind) || kind === 'campaign-email'
+						? [payload]
+						: [])
 				);
 				this.ackMessage(message);
 				this.logger.log(

@@ -80,6 +80,7 @@ const firstCampaign = {
 	recipientCount: 1,
 	sentCount: 0,
 	failedCount: 1,
+	skippedCount: 0,
 	cancelledCount: 0,
 	emailCount: 1,
 	telegramCount: 0,

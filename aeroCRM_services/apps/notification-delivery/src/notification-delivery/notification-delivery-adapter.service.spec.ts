@@ -4,6 +4,7 @@ import type { NotificationDeliveryPrismaService } from './prisma/notification-de
 import type { TelegramInfoTransportService } from '../telegram/telegram-info-transport.service';
 import type { CrmInvitationContextService } from './crm-invitation-context.service';
 import type { CrmTaskReminderContextService } from './crm-task-reminder-context.service';
+import type { MarketingEmailContextService } from './marketing-email-context.service';
 
 describe('NotificationDeliveryAdapterService', () => {
 	const email = {
@@ -13,14 +14,28 @@ describe('NotificationDeliveryAdapterService', () => {
 	const telegram = {
 		sendMessage: jest.fn().mockResolvedValue(undefined)
 	} as unknown as TelegramInfoTransportService;
-	const prisma = {} as NotificationDeliveryPrismaService;
+	const prisma = {
+		notificationDeliveryReceipt: {
+			findFirst: jest.fn().mockResolvedValue({ id: 'receipt-1' })
+		}
+	} as unknown as NotificationDeliveryPrismaService;
 	const invitationContext = {} as CrmInvitationContextService;
+	const marketingContext = {
+		authorize: jest.fn().mockResolvedValue({
+			decision: 'ALLOW',
+			unsubscribeUrl: `https://aerocrm.space/unsubscribe#token=${'a'.repeat(43)}`
+		})
+	} as unknown as MarketingEmailContextService;
 	const service = new NotificationDeliveryAdapterService(
 		email,
 		telegram,
 		prisma,
 		invitationContext,
-		{} as CrmTaskReminderContextService
+		{} as CrmTaskReminderContextService,
+		undefined,
+		undefined,
+		undefined,
+		marketingContext
 	);
 
 	beforeEach(() => {
@@ -31,7 +46,8 @@ describe('NotificationDeliveryAdapterService', () => {
 		await service.deliver(
 			'campaign-email',
 			{
-				schemaVersion: 2,
+				schemaVersion: 3,
+				recipientUserId: 'user-1',
 				eventType: 'notification.campaign.email.requested.v2',
 				eventId: '11111111-1111-4111-8111-111111111111',
 				occurredAt: '2026-07-30T10:00:00.000Z',
@@ -51,20 +67,51 @@ describe('NotificationDeliveryAdapterService', () => {
 					message: 'Текст рассылки'
 				}
 			},
-			'11111111-1111-4111-8111-111111111111'
+			'11111111-1111-4111-8111-111111111111',
+			'claim-token'
 		);
 
 		expect(email.sendAdminBroadcast).toHaveBeenCalledWith(
 			'owner@example.com',
 			{
 				subject: 'Новости',
-				message: 'Текст рассылки'
+				message: 'Текст рассылки',
+				unsubscribeUrl: `https://aerocrm.space/unsubscribe#token=${'a'.repeat(43)}`
 			},
 			{
 				messageId:
 					'<11111111-1111-4111-8111-111111111111.campaign@aerocrm.space>'
 			}
 		);
+	});
+
+	it('skips legacy campaign email without sending when recipient binding is absent', async () => {
+		(marketingContext.authorize as jest.Mock).mockResolvedValueOnce({
+			decision: 'SKIP', reason: 'MARKETING_IDENTITY_UNBOUND'
+		});
+		const result = await service.deliver(
+			'campaign-email',
+			{
+				schemaVersion: 2,
+				eventType: 'notification.campaign.email.requested.v2',
+				eventId: '11111111-1111-4111-8111-111111111111',
+				occurredAt: '2026-07-30T10:00:00.000Z',
+				correlationId: '44444444-4444-4444-8444-444444444444',
+				campaignId: '33333333-3333-4333-8333-333333333333',
+				deliveryId: '22222222-2222-4222-8222-222222222222',
+				dispatchGeneration: 1,
+				reference: {
+					type: 'campaign-delivery', id: '22222222-2222-4222-8222-222222222222',
+					aggregateId: '33333333-3333-4333-8333-333333333333', dispatchGeneration: 1
+				},
+				destination: { email: 'owner@example.com' },
+				content: { subject: 'Новости', message: 'Текст рассылки' }
+			},
+			'11111111-1111-4111-8111-111111111111',
+			'claim-token'
+		);
+		expect(result).toEqual({ status: 'SKIPPED', reason: 'MARKETING_IDENTITY_UNBOUND' });
+		expect(email.sendAdminBroadcast).not.toHaveBeenCalled();
 	});
 
 	it('resumes a chunked campaign Telegram delivery from its service checkpoint', async () => {

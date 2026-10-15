@@ -34,7 +34,7 @@ export class NotificationDeliveryOutcomeService {
 			eventId: string;
 			payload: NotificationDeliveryEventPayload;
 			status: 'DELIVERED' | 'FAILED' | 'SKIPPED';
-			skipReason?: SupportNotificationSkipReason;
+			skipReason?: SupportNotificationSkipReason | 'MARKETING_NOT_AUTHORIZED' | 'MARKETING_IDENTITY_MISMATCH' | 'MARKETING_IDENTITY_UNBOUND';
 			failure: {
 				normalizedCode: string;
 				safeReason: string;
@@ -90,7 +90,7 @@ export class NotificationDeliveryOutcomeService {
 			});
 			return;
 		}
-		if (input.status === 'SKIPPED')
+		if (input.status === 'SKIPPED' && input.kind !== 'campaign-email' && input.kind !== 'campaign-telegram')
 			throw new Error('Unsupported notification skip outcome');
 		if (
 			input.kind !== 'campaign-email' &&
@@ -113,7 +113,8 @@ export class NotificationDeliveryOutcomeService {
 			};
 			const messageId = randomUUID();
 			const payload = {
-				schemaVersion: 2 as const,
+				schemaVersion: 3 as const,
+				reason: input.status === 'SKIPPED' ? input.skipReason : null,
 				eventType: CAMPAIGN_NOTIFICATION_DELIVERY_OUTCOME_EVENT_TYPE,
 				eventId: messageId,
 				occurredAt: new Date().toISOString(),
@@ -135,7 +136,7 @@ export class NotificationDeliveryOutcomeService {
 				data: [
 					{
 						messageId,
-						deduplicationKey: `notification:${input.eventId}:${input.kind}:generation:${request.dispatchGeneration}:outcome:${input.status.toLowerCase()}:v2`,
+						deduplicationKey: `notification:${input.eventId}:${input.kind}:generation:${request.dispatchGeneration}:outcome:${input.status.toLowerCase()}:v3`,
 						exchange: NotificationDeliveryExchange.EVENTS,
 						eventType: CAMPAIGN_NOTIFICATION_DELIVERY_OUTCOME_EVENT_TYPE,
 						routingKey: CAMPAIGN_NOTIFICATION_DELIVERY_OUTCOME_EVENT_TYPE,

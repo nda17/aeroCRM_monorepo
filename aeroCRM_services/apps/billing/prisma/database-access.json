@@ -106,7 +106,20 @@
       "UPDATE"
     ],
     "_prisma_migrations": [],
-    "workspace_closure_fences": ["SELECT", "INSERT", "UPDATE"]
+    "workspace_closure_fences": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_refund_reviews": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "crm_refund_command_receipts": [
+      "SELECT",
+      "INSERT"
+    ]
   },
   "sequences": {},
   "types": [
@@ -128,7 +141,11 @@
     "touch_workspace_fence",
     "guard_workspace_new_finance",
     "guard_workspace_renewal",
-    "enforce_workspace_closure_fence"
+    "enforce_workspace_closure_fence",
+    "protect_crm_refund_evidence"
   ],
-  "routineExecute": ["assert_workspace_open(uuid)", "touch_workspace_fence(uuid)"]
+  "routineExecute": [
+    "assert_workspace_open(uuid)",
+    "touch_workspace_fence(uuid)"
+  ]
 }

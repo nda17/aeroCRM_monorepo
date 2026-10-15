@@ -65,7 +65,7 @@ export class IdentityInternalGuard implements CanActivate {
 					throw new Error(
 						'CRM_INVITATION_EMAIL_ENABLED must be true or false'
 					);
-				if (enabled === 'false') continue;
+				if (enabled === 'false' && config.get<string>('MARKETING_EMAIL_ENABLED') !== 'true') continue;
 			}
 			const name = `IDENTITY_${service.replace(/-/g, '_').toUpperCase()}_TOKEN`;
 			const value = config.get<string>(name)?.trim() || '';

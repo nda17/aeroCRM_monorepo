@@ -171,6 +171,7 @@ const assertCampaignNotificationEvent = (
 	payload: JsonRecord
 ): NotificationDeliveryKind => {
 	assertExactKeys(payload, [
+		...(payload.schemaVersion === 3 ? ['recipientUserId'] : []),
 		'schemaVersion',
 		'eventType',
 		'eventId',
@@ -184,12 +185,13 @@ const assertCampaignNotificationEvent = (
 		'content'
 	]);
 	if (
-		payload.schemaVersion !== 2 ||
+		(payload.schemaVersion !== 2 && payload.schemaVersion !== 3) ||
 		(payload.eventType !== CAMPAIGN_EMAIL_NOTIFICATION_EVENT_TYPE &&
 			payload.eventType !== CAMPAIGN_TELEGRAM_NOTIFICATION_EVENT_TYPE)
 	) {
 		throw new Error('Invalid campaign notification contract version');
 	}
+	if (payload.schemaVersion === 3 && payload.recipientUserId !== null) assertString(payload.recipientUserId, 'payload.recipientUserId', { maxLength: 255 });
 	assertUuid(payload.eventId, 'payload.eventId');
 	assertIsoDate(payload.occurredAt, 'payload.occurredAt');
 	assertUuid(payload.correlationId, 'payload.correlationId');
@@ -555,6 +557,7 @@ const assertCampaignNotificationDeliveryOutcome = (
 	payload: JsonRecord
 ): ResolvedContractKind => {
 	assertExactKeys(payload, [
+		...(payload.schemaVersion === 3 ? ['reason'] : []),
 		'schemaVersion',
 		'eventType',
 		'eventId',
@@ -569,7 +572,7 @@ const assertCampaignNotificationDeliveryOutcome = (
 		'failure'
 	]);
 	if (
-		payload.schemaVersion !== 2 ||
+		(payload.schemaVersion !== 2 && payload.schemaVersion !== 3) ||
 		payload.eventType !== CAMPAIGN_NOTIFICATION_DELIVERY_OUTCOME_EVENT_TYPE
 	) {
 		throw new Error(
@@ -596,10 +599,12 @@ const assertCampaignNotificationDeliveryOutcome = (
 			'payload.dispatchGeneration must be a positive integer'
 		);
 	}
-	if (payload.status !== 'DELIVERED' && payload.status !== 'FAILED') {
+	if (payload.schemaVersion === 2 && payload.status === 'SKIPPED') throw new Error('Legacy outcome cannot skip');
+	if (payload.schemaVersion === 3 && (payload.status === 'SKIPPED' ? !['MARKETING_NOT_AUTHORIZED', 'MARKETING_IDENTITY_MISMATCH', 'MARKETING_IDENTITY_UNBOUND'].includes(String(payload.reason)) : payload.reason !== null)) throw new Error('Invalid campaign outcome reason');
+	if (payload.status !== 'DELIVERED' && payload.status !== 'FAILED' && payload.status !== 'SKIPPED') {
 		throw new Error('payload.status is invalid');
 	}
-	if (payload.status === 'DELIVERED') {
+	if (payload.status === 'DELIVERED' || payload.status === 'SKIPPED') {
 		if (payload.failure !== null) {
 			throw new Error('payload.failure must be null for DELIVERED');
 		}

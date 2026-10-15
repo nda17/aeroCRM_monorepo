@@ -494,17 +494,18 @@ export class CampaignsService {
 
 				if (current) {
 					const delivered = outcome.status === 'DELIVERED';
+					const skipped = outcome.status === 'SKIPPED';
 					await transaction.campaignDelivery.update({
 						where: { id: delivery.id },
 						data: {
 							status: delivered
 								? CampaignDeliveryStatus.SENT
-								: CampaignDeliveryStatus.FAILED,
+								: skipped ? CampaignDeliveryStatus.SKIPPED : CampaignDeliveryStatus.FAILED,
 							lastOutcomeEventId: outcome.eventId,
-							lastErrorCode: delivered
+							lastErrorCode: skipped ? outcome.reason : delivered
 								? null
 								: outcome.failure?.normalizedCode,
-							lastErrorReason: delivered
+							lastErrorReason: skipped ? 'Marketing email suppressed before delivery' : delivered
 								? null
 								: outcome.failure?.safeReason,
 							sentAt: delivered ? new Date() : null
@@ -514,7 +515,7 @@ export class CampaignsService {
 						where: { id: delivery.campaignId },
 						data: delivered
 							? { sentCount: { increment: 1 } }
-							: { failedCount: { increment: 1 } }
+							: skipped ? { skippedCount: { increment: 1 } } : { failedCount: { increment: 1 } }
 					});
 					await this.finalizeCampaignIfTerminal(
 						transaction,
@@ -692,6 +693,7 @@ export class CampaignsService {
 			recipientCount: campaign.recipientCount,
 			sentCount: campaign.sentCount,
 			failedCount: campaign.failedCount,
+			skippedCount: campaign.skippedCount,
 			cancelledCount: campaign.cancelledCount,
 			emailCount: campaign.emailCount,
 			telegramCount: campaign.telegramCount,

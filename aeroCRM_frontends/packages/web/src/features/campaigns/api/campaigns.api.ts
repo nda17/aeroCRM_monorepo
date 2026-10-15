@@ -18,6 +18,7 @@ export type CampaignDeliveryStatus =
 	| 'SENT'
 	| 'FAILED'
 	| 'CANCELLED'
+	| 'SKIPPED'
 export type CampaignSnapshotStatus =
 	| 'CREATING'
 	| 'READY'
@@ -39,6 +40,7 @@ export interface CampaignSummary {
 	status: CampaignStatus
 	recipientCount: number
 	sentCount: number
+	skippedCount: number
 	failedCount: number
 	cancelledCount: number
 	emailCount: number
@@ -99,6 +101,29 @@ export interface CampaignDeliveriesResponse {
 	totalPages: number
 }
 
+const parseCampaignCounts = <T extends CampaignSummary>(value: T): T => {
+	const counts = [
+		'recipientCount',
+		'sentCount',
+		'failedCount',
+		'cancelledCount',
+		'skippedCount'
+	] as const
+	if (
+		!value ||
+		counts.some(
+			key => !Number.isSafeInteger(value[key]) || value[key] < 0
+		) ||
+		value.sentCount +
+			value.failedCount +
+			value.cancelledCount +
+			value.skippedCount >
+			value.recipientCount
+	)
+		throw new Error('Invalid campaign delivery counts')
+	return value
+}
+
 const campaignsService = {
 	async createCampaign(
 		payload: CampaignInput,
@@ -113,7 +138,7 @@ const campaignsService = {
 				}
 			}
 		)
-		return data
+		return parseCampaignCounts(data)
 	},
 
 	async getCampaigns(page: number, limit: number) {
@@ -121,6 +146,9 @@ const campaignsService = {
 			'/admin/campaigns',
 			{ params: { page, limit } }
 		)
+		if (!Array.isArray(data?.items))
+			throw new Error('Invalid campaigns response')
+		data.items.forEach(parseCampaignCounts)
 		return data
 	},
 
@@ -128,14 +156,14 @@ const campaignsService = {
 		const { data } = await axiosInterceptorsRequest.get<CampaignDetail>(
 			`/admin/campaigns/${id}`
 		)
-		return data
+		return parseCampaignCounts(data)
 	},
 
 	async cancelCampaign(id: string) {
 		const { data } = await axiosInterceptorsRequest.post<CampaignDetail>(
 			`/admin/campaigns/${id}/cancel`
 		)
-		return data
+		return parseCampaignCounts(data)
 	},
 
 	async getDeliveries(

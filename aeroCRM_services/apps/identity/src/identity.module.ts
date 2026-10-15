@@ -49,6 +49,8 @@ import { TelegramService } from './telegram/telegram.service';
 import { VerificationTransportService } from './transports/verification-transport.service';
 import { UsersController } from './users/users.controller';
 import { UsersService } from './users/users.service';
+import { MarketingEmailService } from './users/marketing-email.service';
+import { MarketingEmailAuthorizationController, MarketingEmailUnsubscribeController } from './users/marketing-email.controller';
 import { WorkspaceProvisioningService } from './workspaces/workspace-provisioning.service';
 import {
 	WorkspaceInvitationController,
@@ -71,6 +73,8 @@ const API_CONTROLLERS =
 				AuthSettingsController,
 				OAuthController,
 				UsersController,
+				MarketingEmailAuthorizationController,
+				MarketingEmailUnsubscribeController,
 				AvatarFilesController,
 				TelegramController,
 				TelegramAdminController,
@@ -108,6 +112,7 @@ const API_PROVIDERS =
 				RefreshTokenService,
 				TelegramService,
 				UsersService,
+				MarketingEmailService,
 				VerificationTransportService,
 				WorkspaceProvisioningService,
 				WorkspaceInvitationService

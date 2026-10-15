@@ -53,7 +53,7 @@ export class EmailService {
 
 	sendAdminBroadcast(
 		to: string,
-		data: { subject: string; message: string },
+		data: { subject: string; message: string; unsubscribeUrl: string },
 		options: { messageId?: string } = {}
 	) {
 		const email = AdminBroadcastEmail(data);

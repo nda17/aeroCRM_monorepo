@@ -60,6 +60,7 @@ describe('Audience snapshot orchestration boundaries', () => {
 		recipientCount: 0,
 		sentCount: 0,
 		failedCount: 0,
+		skippedCount: 0,
 		cancelledCount: 0,
 		emailCount: 0,
 		telegramCount: 0,
@@ -158,8 +159,12 @@ describe('Audience snapshot orchestration boundaries', () => {
 		);
 		expect(result.sha256).toBe(resultSha256);
 		expect(result.totalCount).toBe(2);
-		expect(onChunk).toHaveBeenNthCalledWith(1, ['a@example.com']);
-		expect(onChunk).toHaveBeenNthCalledWith(2, ['b@example.com']);
+		expect(onChunk).toHaveBeenNthCalledWith(1, [
+			{ userId: 'user-1', destination: 'a@example.com' }
+		]);
+		expect(onChunk).toHaveBeenNthCalledWith(2, [
+			{ userId: 'user-2', destination: 'b@example.com' }
+		]);
 	});
 
 	it('keeps one delivery when an inactive owner sorts before an active owner of the same destination', async () => {
@@ -225,7 +230,9 @@ describe('Audience snapshot orchestration boundaries', () => {
 			})
 		);
 		expect(onChunk).toHaveBeenCalledTimes(1);
-		expect(onChunk).toHaveBeenCalledWith([destination]);
+		expect(onChunk).toHaveBeenCalledWith([
+			{ userId: 'user-b', destination }
+		]);
 	});
 
 	it('deduplicates a shared destination for the ALL audience after validating every source pair', async () => {
@@ -288,7 +295,9 @@ describe('Audience snapshot orchestration boundaries', () => {
 		);
 
 		expect(result.totalCount).toBe(1);
-		expect(onChunk).toHaveBeenCalledWith([destination]);
+		expect(onChunk).toHaveBeenCalledWith([
+			{ userId: 'user-a', destination }
+		]);
 		expect(dependencies.exportActiveSubscriberIds).not.toHaveBeenCalled();
 	});
 

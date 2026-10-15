@@ -17,6 +17,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState, type FormEvent } from 'react'
 import toast from 'react-hot-toast'
 import AccountHeader from './AccountHeader'
+import MarketingEmailSettings from './MarketingEmailSettings'
 
 export default function CabinetPageClient() {
 	const router = useRouter()
@@ -168,6 +169,12 @@ export default function CabinetPageClient() {
 					</button>
 				</form>
 			</section>
+
+			<MarketingEmailSettings
+				key={userId}
+				userId={userId}
+				hidden={activeSection !== 'profile'}
+			/>
 
 			<section
 				className={styles.card}

@@ -260,3 +260,31 @@
 .providerSelect {
 	@include select.chevron;
 }
+
+.refundFilters {
+	@apply flex flex-wrap items-end gap-3;
+	label {
+		@apply flex min-w-0 flex-col gap-1 text-sm;
+	}
+}
+.refundDetail {
+	@apply flex min-w-0 flex-col gap-4 rounded-lg border border-[color:var(--admin-border)] p-4;
+}
+.refundFacts {
+	@apply grid min-w-0 gap-3 sm:grid-cols-2;
+	dt {
+		@apply text-xs text-[color:var(--admin-muted)];
+	}
+	dd {
+		@apply break-all text-sm;
+	}
+}
+.refundField {
+	@apply flex flex-col gap-2 text-sm;
+	textarea {
+		@apply w-full rounded-lg border border-[color:var(--admin-border)] bg-[var(--admin-surface)] p-3 text-base text-[color:var(--admin-text)];
+	}
+}
+.refundNote {
+	@apply whitespace-pre-wrap break-words text-sm;
+}

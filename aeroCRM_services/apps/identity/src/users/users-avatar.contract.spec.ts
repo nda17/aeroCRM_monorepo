@@ -20,6 +20,7 @@ import {
 	UsersController
 } from './users.controller';
 import { UsersService } from './users.service';
+import { MarketingEmailService } from './marketing-email.service';
 
 const PNG = Buffer.concat([
 	Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
@@ -42,7 +43,8 @@ describe('Identity avatar HTTP contract', () => {
 			controllers: [UsersController],
 			providers: [
 				{ provide: UsersService, useValue: {} },
-				{ provide: AvatarService, useValue: avatars }
+				{ provide: AvatarService, useValue: avatars },
+				{ provide: MarketingEmailService, useValue: {} }
 			]
 		})
 			.overrideGuard(IdentityAuthGuard)

@@ -1,4 +1,4 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { BillingOutboxPublisherService } from '../messaging/billing-outbox-publisher.service';
 import { BillingRabbitMqService } from '../messaging/billing-rabbitmq.service';
 import { BillingWorkerService } from '../messaging/billing-worker.service';
@@ -8,6 +8,7 @@ import { YooKassaService } from '../provider/yookassa.service';
 import { BillingRuntimeService } from '../runtime/billing-runtime.service';
 import { CrmProviderWorkerService } from '../provider/crm-provider-worker.service';
 import { CrmCommerceSchedulerService } from '../scheduler/crm-commerce-scheduler.service';
+import { CrmRefundWorkerService } from '../provider/crm-refund-worker.service';
 import { crmProviderMessagingEnabled } from '../provider/crm-provider.config';
 
 @Injectable()
@@ -21,7 +22,8 @@ export class BillingHealthService {
 		private readonly paymentMethodCrypto: PaymentMethodCryptoService,
 		private readonly publisher: BillingOutboxPublisherService,
 		private readonly crmWorker: CrmProviderWorkerService,
-		private readonly crmScheduler: CrmCommerceSchedulerService
+		private readonly crmScheduler: CrmCommerceSchedulerService,
+		@Optional() private readonly refundWorker?: CrmRefundWorkerService
 	) {}
 
 	liveness() {
@@ -54,6 +56,10 @@ export class BillingHealthService {
 				!policy
 			) {
 				throw new Error();
+			}
+			if (this.runtime.apiEnabled || this.runtime.workerEnabled) {
+				await this.prisma.$queryRaw`SELECT 1 FROM billing.crm_refund_reviews LIMIT 0`;
+				await this.prisma.$queryRaw`SELECT 1 FROM billing.crm_refund_command_receipts LIMIT 0`;
 			}
 			// Entitlement reads must continue to resolve already-paid periods even
 			// while new commerce sales are disabled.
@@ -127,6 +133,8 @@ export class BillingHealthService {
 				'aeroCRM commerce workers are not ready'
 			);
 		}
+		if (this.runtime.workerEnabled && this.refundWorker && !this.refundWorker.isReady())
+			throw new ServiceUnavailableException('Refund worker is not ready');
 		const paymentMethodEncryptionKeyConfigured =
 			this.paymentMethodCrypto.configurationStatus()
 				.encryptionKeyConfigured;

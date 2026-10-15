@@ -7,6 +7,8 @@ import {
 	ExecutionContext,
 	Get,
 	HttpCode,
+	Header,
+	Headers,
 	Injectable,
 	mixin,
 	NestInterceptor,
@@ -43,6 +45,8 @@ import {
 } from '../auth/auth.dto';
 import { IDENTITY_SCALAR_QUERY_PIPE } from '../common/identity.util';
 import { UsersService } from './users.service';
+import { MarketingEmailService } from './marketing-email.service';
+import { MarketingEmailCommandDto } from './marketing-email.dto';
 
 export const AVATAR_UPLOAD_OPTIONS = {
 	limits: {
@@ -113,13 +117,34 @@ export const AvatarUploadInterceptor = (): Type<NestInterceptor> => {
 export class UsersController {
 	constructor(
 		private readonly users: UsersService,
-		private readonly avatars: AvatarService
+		private readonly avatars: AvatarService,
+		private readonly marketingEmail: MarketingEmailService
 	) {}
 
 	@Get('profile')
 	@Auth(Role.USER)
 	profile(@CurrentUser('id') userId: string) {
 		return this.users.profile(userId);
+	}
+
+	@Get('profile/marketing-email')
+	@Auth(Role.USER)
+	@Header('Cache-Control', 'no-store')
+	marketingEmailProfile(@CurrentUser('id') userId: string) {
+		return this.marketingEmail.profile(userId);
+	}
+
+	@Post('profile/marketing-email')
+	@HttpCode(200)
+	@Auth(Role.USER)
+	@Header('Cache-Control', 'no-store')
+	updateMarketingEmail(
+		@CurrentUser('id') userId: string,
+		@Body() body: MarketingEmailCommandDto,
+		@Req() request: Request,
+		@Headers('idempotency-key') idempotencyKey?: string
+	) {
+		return this.marketingEmail.update(userId, request.body ?? body, idempotencyKey);
 	}
 
 	@Post('profile/workspace')

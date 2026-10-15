@@ -3,6 +3,7 @@
 import AdminNavigation from '@/screens/admin/ui/common/admin-navigation/AdminNavigation'
 import AdminSectionHeading from '@/screens/admin/ui/common/admin-section-heading/AdminSectionHeading'
 import CrmPricingSettings from '@/screens/admin/ui/crm/CrmPricingSettings'
+import CrmRefundInbox from '@/screens/admin/ui/crm/CrmRefundInbox'
 import CrmProviderOperations from '@/screens/admin/ui/crm/CrmProviderOperations'
 import CrmSubscriptionAdmin from '@/screens/admin/ui/crm/CrmSubscriptionAdmin'
 import styles from '@/screens/admin/ui/crm/AdminCrm.module.scss'
@@ -41,6 +42,7 @@ export default function AdminFinance({ section }: AdminFinanceProps) {
 				<>
 					<CrmSubscriptionAdmin />
 					<CrmProviderOperations />
+					<CrmRefundInbox />
 				</>
 			) : (
 				<CrmPricingSettings />

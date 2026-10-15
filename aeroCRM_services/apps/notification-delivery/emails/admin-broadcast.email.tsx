@@ -1,10 +1,11 @@
 import EmailLayout from './_components/email-layout';
-import { Text } from '@react-email/components';
+import { Link, Text } from '@react-email/components';
 import * as React from 'react';
 
 export interface AdminBroadcastEmailProps {
 	subject: string;
 	message: string;
+	unsubscribeUrl: string;
 }
 
 const primaryTextStyle = {
@@ -24,7 +25,8 @@ const noteTextStyle = {
 
 const AdminBroadcastEmail = ({
 	subject,
-	message
+	message,
+	unsubscribeUrl
 }: AdminBroadcastEmailProps) => (
 	<EmailLayout
 		preview={subject}
@@ -35,8 +37,8 @@ const AdminBroadcastEmail = ({
 			{message}
 		</Text>
 		<Text style={noteTextStyle} className="ww-note-text">
-			Вы получили это письмо, потому что у вас есть аккаунт на
-			aeroCRM.
+			Вы получили это письмо, потому что согласились получать новости aeroCRM.
+			{' '}<Link href={unsubscribeUrl}>Отписаться от маркетинговых писем</Link>.
 		</Text>
 	</EmailLayout>
 );

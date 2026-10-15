@@ -173,6 +173,41 @@ jobs:
           END
           $contract$;
           SQL
+  risk-controls-postgres18:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local-risk-controls-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+          cache: pnpm
+          cache-dependency-path: aeroCRM_services/apps/crm-access/pnpm-lock.yaml
+      - name: Install isolated PostgreSQL client dependency
+        working-directory: aeroCRM_services/apps/crm-access
+        run: pnpm install --frozen-lockfile
+      - name: Verify real PG18 consent and refund constraints and least-privilege ACL
+        working-directory: aeroCRM_services
+        env:
+          RISK_CONTROLS_PG_ADMIN_URL: postgresql://postgres:local-risk-controls-only@localhost:5432/postgres
+        run: node scripts/risk-controls-postgres18.setup.mjs
   billing-capacity-postgres18:
     runs-on: ubuntu-latest
     services:
@@ -1110,7 +1145,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [crm-access, crm-customers, identity, billing, notification-delivery]
+        service: [crm-access, crm-customers, identity, billing, notification-delivery, campaigns]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -1128,7 +1163,7 @@ jobs:
         working-directory: aeroCRM_services/apps/${{ matrix.service }}
         run: pnpm prisma:generate
       - name: Run workspace closure specs
-        if: matrix.service != 'crm-customers'
+        if: matrix.service != 'crm-customers' && matrix.service != 'campaigns'
         working-directory: aeroCRM_services/apps/${{ matrix.service }}
         run: pnpm exec jest --runInBand --testPathPattern=workspace-closure
       - name: Run Customers workspace closure specs
@@ -1137,8 +1172,8 @@ jobs:
         env:
           NODE_OPTIONS: --experimental-vm-modules
         run: pnpm exec jest --runInBand --testPathPatterns=workspace-closure
-      - name: Run complete Identity and Notification Delivery unit suites
-        if: matrix.service == 'identity' || matrix.service == 'notification-delivery'
+      - name: Run complete risk-control owner unit suites
+        if: matrix.service == 'identity' || matrix.service == 'notification-delivery' || matrix.service == 'campaigns' || matrix.service == 'billing'
         working-directory: aeroCRM_services/apps/${{ matrix.service }}
         run: pnpm lint && pnpm test
   bootstrap-recovery-unit:
@@ -1280,7 +1315,7 @@ jobs:
             "aerocrm/operations:$SHA" \
             /source/aeroCRM_services/apps/operations/test/integration/database-maintenance-all-targets-postgres18.integration.mjs
   backend-plan:
-    needs: [frontends, contract-migrations, billing-capacity-postgres18, crm-custom-roles-postgres18, crm-access-team-postgres18, crm-sales-commerce-postgres18, crm-intake-notifications-postgres18, workspace-closure-postgres18, workspace-closure-unit, corporate-mail-unit, gateway-telegram-business-unit, backend-release-contracts, database-maintenance-postgres18]
+    needs: [frontends, contract-migrations, risk-controls-postgres18, billing-capacity-postgres18, crm-custom-roles-postgres18, crm-access-team-postgres18, crm-sales-commerce-postgres18, crm-intake-notifications-postgres18, workspace-closure-postgres18, workspace-closure-unit, corporate-mail-unit, gateway-telegram-business-unit, backend-release-contracts, database-maintenance-postgres18]
     if: github.ref == 'refs/heads/prod_0.1.0' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     outputs:
@@ -1375,7 +1410,7 @@ jobs:
           retention-days: 90
           if-no-files-found: error
   frontend-images:
-    needs: [frontends, contract-migrations, billing-capacity-postgres18, crm-custom-roles-postgres18, crm-access-team-postgres18, crm-sales-commerce-postgres18, crm-intake-notifications-postgres18, workspace-closure-postgres18, workspace-closure-unit, corporate-mail-unit, gateway-telegram-business-unit, backend-release-contracts, database-maintenance-postgres18]
+    needs: [frontends, contract-migrations, risk-controls-postgres18, billing-capacity-postgres18, crm-custom-roles-postgres18, crm-access-team-postgres18, crm-sales-commerce-postgres18, crm-intake-notifications-postgres18, workspace-closure-postgres18, workspace-closure-unit, corporate-mail-unit, gateway-telegram-business-unit, backend-release-contracts, database-maintenance-postgres18]
     if: github.ref == 'refs/heads/prod_0.1.0' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:

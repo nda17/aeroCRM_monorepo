@@ -31,6 +31,7 @@ model Campaign {
   status            CampaignStatus           @default(SNAPSHOTTING)
   recipientCount    Int                      @default(0) @map("recipient_count")
   sentCount         Int                      @default(0) @map("sent_count")
+  skippedCount      Int                      @default(0) @map("skipped_count")
   failedCount       Int                      @default(0) @map("failed_count")
   cancelledCount    Int                      @default(0) @map("cancelled_count")
   emailCount        Int                      @default(0) @map("email_count")
@@ -85,6 +86,7 @@ model CampaignDelivery {
   campaignId         String                  @map("campaign_id") @db.Uuid
   snapshotId         String                  @map("snapshot_id") @db.Uuid
   channel            CampaignDeliveryChannel
+  recipientUserId    String?                 @map("recipient_user_id")
   destination        String                  @db.Text
   destinationKey     String                  @map("destination_key") @db.Char(64)
   status             CampaignDeliveryStatus  @default(PENDING)
@@ -266,6 +268,7 @@ enum CampaignDeliveryStatus {
   PENDING
   PROCESSING
   SENT
+  SKIPPED
   FAILED
   CANCELLED
 

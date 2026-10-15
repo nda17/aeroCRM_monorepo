@@ -212,9 +212,10 @@ export class AudienceSnapshotImportCoordinatorService {
 		campaignId: string,
 		snapshot: AudienceSnapshot,
 		importToken: string,
-		destinations: readonly string[]
+		destinations: readonly { destination: string; userId: string }[]
 	): Promise<void> {
-		const deliveries = destinations.map(destination => ({
+		const deliveries = destinations.map(({ destination, userId }) => ({
+			recipientUserId: userId,
 			id: randomUUID(),
 			campaignId,
 			snapshotId: snapshot.id,

@@ -8,6 +8,8 @@ import {
 } from './campaigns-messaging.constants';
 import type { ConsumeMessage } from 'amqplib';
 
+export const CAMPAIGNS_MARKETING_CAPABILITIES = { request: 3, outcome: 3, skipped: 1, recipientBinding: 1 } as const;
+
 const UUID_PATTERN =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -28,7 +30,8 @@ export interface CampaignSnapshotRequestedEvent {
 }
 
 export interface CampaignDeliveryOutcomeEvent {
-	schemaVersion: 2;
+	schemaVersion: 2 | 3;
+	reason?: string | null;
 	eventType: typeof NOTIFICATION_DELIVERY_OUTCOME_EVENT_TYPE;
 	eventId: string;
 	occurredAt: string;
@@ -38,7 +41,7 @@ export interface CampaignDeliveryOutcomeEvent {
 	campaignId: string;
 	deliveryId: string;
 	dispatchGeneration: number;
-	status: 'DELIVERED' | 'FAILED';
+	status: 'DELIVERED' | 'FAILED' | 'SKIPPED';
 	failure: {
 		normalizedCode: string;
 		safeReason: string;
@@ -46,7 +49,8 @@ export interface CampaignDeliveryOutcomeEvent {
 }
 
 export interface CampaignNotificationRequestedEvent {
-	schemaVersion: 2;
+	schemaVersion: 2 | 3;
+	recipientUserId?: string | null;
 	eventType:
 		| typeof CAMPAIGN_EMAIL_REQUESTED_EVENT_TYPE
 		| typeof CAMPAIGN_TELEGRAM_REQUESTED_EVENT_TYPE;
@@ -211,7 +215,9 @@ function parseSnapshotRequested(
 function parseDeliveryOutcome(
 	value: unknown
 ): CampaignDeliveryOutcomeEvent {
+	const version = (value as { schemaVersion?: unknown })?.schemaVersion;
 	const record = getExactRecord(value, [
+		...(version === 3 ? ['reason'] : []),
 		'schemaVersion',
 		'eventType',
 		'eventId',
@@ -225,7 +231,9 @@ function parseDeliveryOutcome(
 		'status',
 		'failure'
 	]);
-	assertLiteral(record.schemaVersion, 2, 'schemaVersion');
+	if (version !== 2 && version !== 3) throw new InvalidCampaignsEventError('Invalid outcome schemaVersion');
+	if (version === 2 && record.status === 'SKIPPED') throw new InvalidCampaignsEventError('Legacy outcome cannot skip');
+	if (version === 3 && (record.status === 'SKIPPED' ? !['MARKETING_NOT_AUTHORIZED', 'MARKETING_IDENTITY_MISMATCH', 'MARKETING_IDENTITY_UNBOUND'].includes(String(record.reason)) : record.reason !== null)) throw new InvalidCampaignsEventError('Invalid skip reason');
 	assertLiteral(
 		record.eventType,
 		NOTIFICATION_DELIVERY_OUTCOME_EVENT_TYPE,
@@ -243,8 +251,8 @@ function parseDeliveryOutcome(
 	assertUuid(record.campaignId, 'campaignId');
 	assertUuid(record.deliveryId, 'deliveryId');
 	assertPositiveInteger(record.dispatchGeneration, 'dispatchGeneration');
-	assertOneOf(record.status, ['DELIVERED', 'FAILED'], 'status');
-	if (record.status === 'DELIVERED') {
+	assertOneOf(record.status, ['DELIVERED', 'FAILED', 'SKIPPED'], 'status');
+	if (record.status === 'DELIVERED' || record.status === 'SKIPPED') {
 		if (record.failure !== null) {
 			throw new InvalidCampaignsEventError(
 				'Delivered outcome failure must be null'
@@ -267,7 +275,9 @@ function parseNotificationRequested(
 		| typeof CAMPAIGN_EMAIL_REQUESTED_EVENT_TYPE
 		| typeof CAMPAIGN_TELEGRAM_REQUESTED_EVENT_TYPE
 ): CampaignNotificationRequestedEvent {
+	const version = (value as { schemaVersion?: unknown })?.schemaVersion;
 	const record = getExactRecord(value, [
+		...(version === 3 ? ['recipientUserId'] : []),
 		'schemaVersion',
 		'eventType',
 		'eventId',
@@ -280,7 +290,8 @@ function parseNotificationRequested(
 		'destination',
 		'content'
 	]);
-	assertLiteral(record.schemaVersion, 2, 'schemaVersion');
+	if (version !== 2 && version !== 3) throw new InvalidCampaignsEventError('Invalid schemaVersion');
+	if (version === 3 && record.recipientUserId !== null) assertBoundedString(record.recipientUserId, 'recipientUserId', 255);
 	assertLiteral(record.eventType, eventType, 'eventType');
 	assertUuid(record.eventId, 'eventId');
 	assertIsoDate(record.occurredAt, 'occurredAt');

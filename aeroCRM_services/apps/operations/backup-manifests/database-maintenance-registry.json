@@ -239,7 +239,7 @@
 			"migrationRole": "aerocrm_billing_migration",
 			"runtimeRole": "aerocrm_billing_runtime",
 			"backupRole": "aerocrm_billing_backup",
-			"aclSha256": "533c487d447889607af710d78dcf3a4df46f91cf21d9fa4772421815d9d15c95",
+			"aclSha256": "5d167179a8f4b7e5c7ea882c066ae4d70f877a7656c51434688aa8fdfdd6d691",
 			"acl": {
 				"version": 1,
 				"service": "billing",
@@ -352,6 +352,15 @@
 						"SELECT",
 						"INSERT",
 						"UPDATE"
+					],
+					"crm_refund_reviews": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"crm_refund_command_receipts": [
+						"SELECT",
+						"INSERT"
 					]
 				},
 				"sequences": {},
@@ -374,7 +383,8 @@
 					"touch_workspace_fence",
 					"guard_workspace_new_finance",
 					"guard_workspace_renewal",
-					"enforce_workspace_closure_fence"
+					"enforce_workspace_closure_fence",
+					"protect_crm_refund_evidence"
 				],
 				"routineExecute": [
 					"assert_workspace_open(uuid)",
@@ -388,7 +398,7 @@
 			"migrationRole": "aerocrm_identity_migration",
 			"runtimeRole": "aerocrm_identity_runtime",
 			"backupRole": "aerocrm_identity_backup",
-			"aclSha256": "f7fa0cfb67b69eb0e94a5acacbe72747cc0ccebbb6eac01a76b39f53c1300637",
+			"aclSha256": "5f9a49c80f336ae24918ae53e5af4c465f9d5be7ce903a7577972f3e5fb1fdbd",
 			"acl": {
 				"version": 1,
 				"service": "identity",
@@ -527,7 +537,17 @@
 						"UPDATE",
 						"DELETE"
 					],
-					"_prisma_migrations": []
+					"_prisma_migrations": [],
+					"marketing_email_preferences": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"marketing_unsubscribe_tokens": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					]
 				},
 				"sequences": {},
 				"types": [

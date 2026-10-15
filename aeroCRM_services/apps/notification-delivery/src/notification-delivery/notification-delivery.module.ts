@@ -25,6 +25,7 @@ import { TelegramInfoTransportModule } from '../telegram/telegram-info-transport
 import { Module, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { CrmInvitationContextService } from './crm-invitation-context.service';
+import { MarketingEmailContextService } from './marketing-email-context.service';
 import { CrmTaskReminderContextService } from './crm-task-reminder-context.service';
 import { CrmIntakeSlaContextService } from './crm-intake-sla-context.service';
 import {
@@ -55,6 +56,7 @@ import {
 		SupportNotificationContextService,
 		TelegramSupportTransportService,
 		CrmInvitationContextService,
+		MarketingEmailContextService,
 		CrmIntakeSlaContextService,
 		CrmIntakeSlaReadinessGuard,
 		CrmTaskReminderContextService,

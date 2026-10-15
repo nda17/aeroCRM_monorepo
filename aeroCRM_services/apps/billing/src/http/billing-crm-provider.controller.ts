@@ -20,6 +20,7 @@ import { BillingAuth, BillingAuthGuard } from '../auth/billing-auth.guard';
 import { CurrentBillingActor } from '../auth/current-billing-actor.decorator';
 import type { BillingActor } from '../auth/billing-request';
 import { getBillingClientContext } from '../common/billing-request-context';
+import { CrmRefundService } from '../domain/crm-refund.service';
 import { CrmCommerceService } from '../domain/crm-commerce.service';
 
 export class RetryCrmProviderDto {
@@ -93,11 +94,12 @@ export class BillingCrmProviderController {
 
 @Controller('payments')
 export class BillingCrmWebhookController {
-	constructor(private readonly commerce: CrmCommerceService) {}
+	constructor(private readonly commerce: CrmCommerceService, private readonly refunds: CrmRefundService) {}
 
 	@Post('webhook')
 	@HttpCode(200)
-	async webhook(@Body() body: unknown) {
+	async webhook(@Body() body: unknown, @Req() request: Request) {
+		if (await this.refunds.capture(body, request.ip)) return { ok: true };
 		// The queued worker verifies the payment with YooKassa before changing state.
 		// Unknown provider IDs cannot mutate a CRM order.
 		await this.commerce.enqueueProviderVerification(body);

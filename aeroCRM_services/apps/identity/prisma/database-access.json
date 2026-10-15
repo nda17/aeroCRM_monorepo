@@ -136,7 +136,17 @@
       "UPDATE",
       "DELETE"
     ],
-    "_prisma_migrations": []
+    "_prisma_migrations": [],
+    "marketing_email_preferences": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "marketing_unsubscribe_tokens": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ]
   },
   "sequences": {},
   "types": [

@@ -23,6 +23,7 @@ const cases: EmailCase[] = [
 		textIncludes: [
 			'Проверьте тарифный план',
 			'https://aerocrm.space/payment',
+			'https://aerocrm.space/unsubscribe#token=',
 			'Оповещение от команды aeroCRM'
 		],
 		send: service =>
@@ -31,7 +32,8 @@ const cases: EmailCase[] = [
 				{
 					subject: 'Обновление тарифа',
 					message:
-						'Проверьте тарифный план: https://aerocrm.space/payment'
+						'Проверьте тарифный план: https://aerocrm.space/payment',
+					unsubscribeUrl: `https://aerocrm.space/unsubscribe#token=${'a'.repeat(43)}`
 				},
 				{ messageId: '<campaign-1@aerocrm.space>' }
 			)

@@ -73,7 +73,8 @@ const DELIVERY_STATUS_LABELS: Record<CampaignDeliveryStatus, string> = {
 	PROCESSING: 'Отправляется',
 	SENT: 'Отправлена',
 	FAILED: 'Ошибка',
-	CANCELLED: 'Отменена'
+	CANCELLED: 'Отменена',
+	SKIPPED: 'Пропущено'
 }
 
 const SNAPSHOT_STATUS_LABELS: Record<CampaignSnapshotStatus, string> = {
@@ -116,7 +117,10 @@ const getCampaignProgress = (campaign: CampaignSummary) => {
 	if (campaign.recipientCount === 0) return 0
 
 	const processed =
-		campaign.sentCount + campaign.failedCount + campaign.cancelledCount
+		campaign.sentCount +
+		campaign.failedCount +
+		campaign.cancelledCount +
+		campaign.skippedCount
 
 	return Math.min(
 		100,
@@ -693,6 +697,14 @@ const AdminMailings = () => {
 						))}
 					</div>
 					<p className={styles.hint}>{AUDIENCE_LABELS[audience]}</p>
+					<p className={styles.hint}>
+						Для email перед каждой отправкой проверяются действующее
+						согласие на маркетинговые письма и подтверждённый адрес.
+						Получатели без согласия будут пропущены. Число в снимке —
+						плановая аудитория, а не число разрешённых отправок. Эта
+						настройка согласия относится только к email; Telegram работает
+						по прежним правилам.
+					</p>
 					{pendingCreateRef.current && !createMutation.isPending && (
 						<p className={styles.errorMessage} role="alert">
 							Результат запуска пока не подтверждён. Повтор использует
@@ -780,7 +792,8 @@ const AdminMailings = () => {
 								const processed =
 									campaign.sentCount +
 									campaign.failedCount +
-									campaign.cancelledCount
+									campaign.cancelledCount +
+									campaign.skippedCount
 								const progress = getCampaignProgress(campaign)
 
 								return (
@@ -815,7 +828,8 @@ const AdminMailings = () => {
 											<span className={styles.resultValue}>
 												{campaign.sentCount} отправлено ·{' '}
 												{campaign.failedCount} ошибок ·{' '}
-												{campaign.cancelledCount} отменено
+												{campaign.cancelledCount} отменено ·{' '}
+												{campaign.skippedCount} пропущено
 											</span>
 										</div>
 										<div>
@@ -876,7 +890,8 @@ const AdminMailings = () => {
 						<div>
 							<p className={styles.resultTitle}>Детали кампании</p>
 							<p className={styles.hint}>
-								Снимок получателей и отдельные доставки.
+								Плановая аудитория и отдельные доставки. Согласие на email
+								проверяется непосредственно перед отправкой.
 							</p>
 						</div>
 						<button
@@ -915,7 +930,9 @@ const AdminMailings = () => {
 									</span>
 								</div>
 								<div>
-									<span className={styles.resultLabel}>Получатели</span>
+									<span className={styles.resultLabel}>
+										Плановая аудитория
+									</span>
 									<span className={styles.resultValue}>
 										{campaignDetail.data.recipientCount}
 									</span>
@@ -941,6 +958,12 @@ const AdminMailings = () => {
 								</div>
 							</div>
 
+							<p className={styles.hint}>
+								Отправлено: {campaignDetail.data.sentCount} · Ошибок:{' '}
+								{campaignDetail.data.failedCount} · Отменено:{' '}
+								{campaignDetail.data.cancelledCount} · Пропущено:{' '}
+								{campaignDetail.data.skippedCount}
+							</p>
 							<div className={styles.messageBox}>
 								<span className={styles.resultLabel}>Сообщение</span>
 								<p>{campaignDetail.data.message}</p>
@@ -1100,6 +1123,12 @@ const AdminMailings = () => {
 															</span>
 														</div>
 													</div>
+													{delivery.status === 'SKIPPED' ? (
+														<p className={styles.hint}>
+															Email не отправлен: проверка маркетингового
+															согласия не разрешила доставку.
+														</p>
+													) : null}
 													{delivery.failure && (
 														<div className={styles.deliveryFailure}>
 															<span>{delivery.failure.code}</span>

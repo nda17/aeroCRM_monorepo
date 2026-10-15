@@ -55,7 +55,7 @@ export function createDeliveryOutbox(
 	campaign: Pick<Campaign, 'id' | 'subject' | 'message'>,
 	delivery: Pick<
 		CampaignDelivery,
-		'id' | 'channel' | 'destination' | 'dispatchGeneration'
+		'id' | 'channel' | 'destination' | 'dispatchGeneration' | 'recipientUserId'
 	>
 ) {
 	const eventId = randomUUID();
@@ -73,7 +73,7 @@ export function buildDeliveryOutboxData(
 	campaign: Pick<Campaign, 'id' | 'subject' | 'message'>,
 	delivery: Pick<
 		CampaignDelivery,
-		'id' | 'channel' | 'destination' | 'dispatchGeneration'
+		'id' | 'channel' | 'destination' | 'dispatchGeneration' | 'recipientUserId'
 	>,
 	eventId: string
 ): Prisma.CampaignOutboxEventCreateManyInput {
@@ -82,7 +82,8 @@ export function buildDeliveryOutboxData(
 			? CAMPAIGN_EMAIL_REQUESTED_EVENT_TYPE
 			: CAMPAIGN_TELEGRAM_REQUESTED_EVENT_TYPE;
 	const payload: CampaignNotificationRequestedEvent = {
-		schemaVersion: 2,
+		schemaVersion: 3,
+		recipientUserId: delivery.recipientUserId,
 		eventType,
 		eventId,
 		occurredAt: new Date().toISOString(),

@@ -159,6 +159,23 @@ export class YooKassaService {
 		);
 	}
 
+	refundVerificationConfiguration(): { shopId: string; mode: 'test' | 'production' } {
+		const { shopId } = this.credentialValues();
+		if (!shopId) throw new Error('YooKassa shop identifier is missing');
+		return { shopId, mode: this.launchMode() };
+	}
+
+	getRefund(providerRefundId: string): Promise<Record<string, unknown>> {
+		if (!isYooKassaObjectId(providerRefundId))
+			throw new ProviderRequestError(
+				'Invalid refund identifier', 'PROVIDER_INVALID_RESPONSE', false, false
+			);
+		return this.request(`/refunds/${encodeURIComponent(providerRefundId)}`, {
+			method: 'GET',
+			rejectRedirects: true
+		});
+	}
+
 	async getReceipts(
 		providerPaymentId: string,
 		productCode?: 'AEROCRM'

@@ -264,6 +264,7 @@ model CrmOrder {
   period                 CrmPaidPeriod?
   operations             CrmProviderOperation[]
   receipts               CrmPaymentReceipt[]
+  refunds                CrmRefundReview[]
   commands               CrmCommerceCommand[]   @relation("CommandOrder")
   capacityCommand        CrmCommerceCommand     @relation("OrderCapacity", fields: [capacityCommandId, workspaceId, ownerSubject], references: [commandId, workspaceId, actorSubject], onDelete: Restrict)
 
@@ -432,6 +433,60 @@ model CrmPaymentReceipt {
 
   @@index([workspaceId, createdAt])
   @@map("crm_payment_receipts")
+  @@schema("billing")
+}
+
+model CrmRefundReview {
+  id                 String   @id @default(uuid()) @db.Uuid
+  provider           String   @default("YOOKASSA") @db.VarChar(16)
+  shopId             String   @map("shop_id") @db.VarChar(64)
+  providerMode       String   @map("provider_mode") @db.VarChar(8)
+  providerRefundId   String   @map("provider_refund_id") @db.VarChar(64)
+  paymentIdHint      String   @map("payment_id_hint") @db.VarChar(64)
+  providerPaymentId  String?  @map("provider_payment_id") @db.VarChar(128)
+  orderId            String?  @map("order_id") @db.Uuid
+  workspaceId        String?  @map("workspace_id") @db.Uuid
+  verificationStatus String   @default("PENDING") @map("verification_status") @db.VarChar(16)
+  reviewStatus       String   @default("PENDING") @map("review_status") @db.VarChar(16)
+  amountMinor        BigInt?  @map("amount_minor")
+  currency           String?  @db.Char(3)
+  providerCreatedAt  DateTime? @map("provider_created_at")
+  verifiedAt         DateTime? @map("verified_at")
+  version            Int      @default(1)
+  leaseToken         String?  @map("lease_token") @db.Uuid
+  leaseUntil         DateTime? @map("lease_until")
+  availableAt        DateTime @default(now()) @map("available_at")
+  attempts           Int      @default(0)
+  lastErrorCode      String?  @map("last_error_code") @db.VarChar(128)
+  reviewedAt         DateTime? @map("reviewed_at")
+  reviewedBy         String?  @map("reviewed_by") @db.VarChar(256)
+  reviewComment      String?  @map("review_comment") @db.VarChar(2000)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  order              CrmOrder? @relation(fields: [orderId, workspaceId], references: [id, workspaceId], onDelete: Restrict, onUpdate: Restrict, map: "crm_refund_reviews_order_fkey")
+  commands           CrmRefundCommandReceipt[]
+
+  @@unique([shopId, providerRefundId], map: "crm_refund_reviews_provider_key")
+  @@index([verificationStatus, availableAt, createdAt, id], map: "crm_refund_reviews_verification_idx")
+  @@index([reviewStatus, createdAt, id], map: "crm_refund_reviews_list_idx")
+  @@index([orderId, verificationStatus], map: "crm_refund_reviews_order_idx")
+  @@map("crm_refund_reviews")
+  @@schema("billing")
+}
+
+model CrmRefundCommandReceipt {
+  actorSubject String @map("actor_subject") @db.VarChar(256)
+  commandId    String @map("command_id") @db.Uuid
+  commandType  String @map("command_type") @db.VarChar(16)
+  refundId     String @map("refund_id") @db.Uuid
+  requestHash  String @map("request_hash") @db.Char(64)
+  result       Json
+  createdAt    DateTime @default(now()) @map("created_at")
+  refund       CrmRefundReview @relation(fields: [refundId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([actorSubject, commandId])
+  @@index([refundId, createdAt], map: "crm_refund_commands_refund_idx")
+  @@map("crm_refund_command_receipts")
   @@schema("billing")
 }
 

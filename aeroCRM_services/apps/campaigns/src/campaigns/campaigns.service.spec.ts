@@ -236,6 +236,38 @@ describe('CampaignsService state machine', () => {
 		);
 	});
 
+	it('records a v3 consent suppression as SKIPPED and increments only the skipped counter', async () => {
+		const transaction = {
+			$executeRaw: jest.fn().mockResolvedValue(1),
+			campaignDelivery: {
+				findUnique: jest.fn().mockResolvedValue(delivery()),
+				update: jest.fn().mockResolvedValue(undefined),
+				count: jest.fn().mockResolvedValue(0)
+			},
+			campaign: {
+				update: jest.fn().mockResolvedValue(undefined),
+				findUnique: jest.fn().mockResolvedValue({ ...delivery().campaign, sentCount: 0, failedCount: 0, skippedCount: 1 })
+			},
+			campaignConsumerReceipt: {
+				updateMany: jest.fn().mockResolvedValue({ count: 1 })
+			}
+		};
+		const service = new CampaignsService({
+			$transaction: jest.fn((callback: (tx: typeof transaction) => unknown) => callback(transaction))
+		} as never);
+		await service.applyOutcome(outcome({ schemaVersion: 3, status: 'SKIPPED', reason: 'MARKETING_NOT_AUTHORIZED' }), {
+			eventId: OUTCOME_EVENT_ID,
+			consumer: 'campaigns-outcome-v2',
+			lockToken: '317f6d5c-d41c-4c27-a76a-7ac0113ce6c4'
+		});
+		expect(transaction.campaignDelivery.update).toHaveBeenCalledWith(expect.objectContaining({
+			data: expect.objectContaining({ status: CampaignDeliveryStatus.SKIPPED, lastErrorCode: 'MARKETING_NOT_AUTHORIZED' })
+		}));
+		expect(transaction.campaign.update).toHaveBeenCalledWith(expect.objectContaining({
+			where: { id: CAMPAIGN_ID }, data: { skippedCount: { increment: 1 } }
+		}));
+	});
+
 	it('keeps cancellation pending while an in-flight delivery remains', async () => {
 		const campaign = delivery().campaign;
 		const transaction = {

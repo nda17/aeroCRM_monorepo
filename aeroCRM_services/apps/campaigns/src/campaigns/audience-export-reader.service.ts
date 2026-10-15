@@ -40,7 +40,7 @@ export class AudienceExportReaderService {
 	async streamExport(
 		campaign: Campaign,
 		snapshot: AudienceSnapshot,
-		onChunk: (destinations: readonly string[]) => Promise<void>,
+		onChunk: (destinations: readonly { destination: string; userId: string }[]) => Promise<void>,
 		abortSignal: AbortSignal
 	): Promise<ExportedAudienceMetadata> {
 		const activeSubscribers =
@@ -56,7 +56,7 @@ export class AudienceExportReaderService {
 		const sourceHasher = createHash('sha256');
 		const resultHasher = createHash('sha256');
 		const batchSize = this.importBatchSize();
-		let destinations: string[] = [];
+		let destinations: { destination: string; userId: string }[] = [];
 		let totalCount = 0;
 		let sourceTotalCount = 0;
 		let buffer = '';
@@ -201,7 +201,7 @@ export class AudienceExportReaderService {
 			if (destination === previousResultDestination) return;
 			previousResultDestination = destination;
 			totalCount += 1;
-			destinations.push(destination);
+			destinations.push({ destination, userId: record.userId });
 			resultHasher.update(`${snapshot.channel}\u0000${destination}\n`);
 			if (destinations.length >= batchSize) await flush();
 		};

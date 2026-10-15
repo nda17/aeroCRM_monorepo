@@ -37,6 +37,7 @@ import { CRM_TASK_REMINDER_EMAIL_EVENT_TYPE } from '../messaging/messaging.const
 import { CRM_INTAKE_SLA_EMAIL_EVENT_TYPE } from '../messaging/messaging.constants';
 import { assertCrmIntakeSlaEvent } from '../messaging/crm-intake-sla.contract';
 import { CrmIntakeSlaContextService } from './crm-intake-sla-context.service';
+import { MarketingEmailContextService, MarketingSkipReason } from './marketing-email-context.service';
 
 export type NotificationDeliverySkipReason =
 	| SupportNotificationSkipReason
@@ -44,7 +45,8 @@ export type NotificationDeliverySkipReason =
 	| 'INVITATION_EXPIRED'
 	| 'INVITATION_UNAVAILABLE'
 	| 'TASK_REMINDER_UNAVAILABLE'
-	| 'INTAKE_SLA_UNAVAILABLE';
+	| 'INTAKE_SLA_UNAVAILABLE'
+	| MarketingSkipReason;
 export type NotificationDeliveryResult =
 	| void
 	| {
@@ -66,7 +68,8 @@ export class NotificationDeliveryAdapterService {
 		@Optional()
 		private readonly supportContext?: SupportNotificationContextService,
 		@Optional()
-		private readonly supportTelegram?: TelegramSupportTransportService
+		private readonly supportTelegram?: TelegramSupportTransportService,
+		@Optional() private readonly marketingEmail?: MarketingEmailContextService
 	) {}
 
 	async deliver(
@@ -256,11 +259,10 @@ export class NotificationDeliveryAdapterService {
 				return;
 			}
 			case 'campaign-email':
-				await this.sendCampaignEmail(
+				return this.sendCampaignEmail(
 					this.getCampaignEmailEvent(event),
-					eventId
+					eventId, lockToken
 				);
-				return;
 			case 'campaign-telegram':
 				if (!lockToken) {
 					throw new Error(
@@ -307,7 +309,7 @@ export class NotificationDeliveryAdapterService {
 	): CampaignEmailNotificationRequestedEventPayload {
 		const value = event as CampaignEmailNotificationRequestedEventPayload;
 		if (
-			value?.schemaVersion !== 2 ||
+			(value?.schemaVersion !== 2 && value?.schemaVersion !== 3) ||
 			value?.eventType !== CAMPAIGN_EMAIL_NOTIFICATION_EVENT_TYPE
 		) {
 			throw new Error('Invalid campaign email event payload');
@@ -321,7 +323,7 @@ export class NotificationDeliveryAdapterService {
 		const value =
 			event as CampaignTelegramNotificationRequestedEventPayload;
 		if (
-			value?.schemaVersion !== 2 ||
+			(value?.schemaVersion !== 2 && value?.schemaVersion !== 3) ||
 			value?.eventType !== CAMPAIGN_TELEGRAM_NOTIFICATION_EVENT_TYPE
 		) {
 			throw new Error('Invalid campaign Telegram event payload');
@@ -423,11 +425,21 @@ export class NotificationDeliveryAdapterService {
 
 	private async sendCampaignEmail(
 		event: CampaignEmailNotificationRequestedEventPayload,
-		eventId: string
-	): Promise<void> {
+		eventId: string,
+		lockToken?: string
+	): Promise<NotificationDeliveryResult> {
+		if (!lockToken || event.eventId !== eventId) throw new Error('Marketing email requires a matching active claim');
+		const claim = await this.prisma.notificationDeliveryReceipt.findFirst({ where: {
+			eventId, consumer: 'campaign-email', status: NotificationDeliveryReceiptStatus.PROCESSING,
+			lockToken, leaseExpiresAt: { gt: new Date(Date.now() + 15000) }
+		}, select: { id: true } });
+		if (!claim) throw new Error('Marketing email claim was lost');
+		if (!this.marketingEmail) throw new Error('Marketing email authorization is unavailable');
+		const decision = await this.marketingEmail.authorize(event);
+		if (decision.decision === 'SKIP') return { status: 'SKIPPED', reason: decision.reason };
 		await this.emailService.sendAdminBroadcast(
 			event.destination.email,
-			event.content,
+			{ ...event.content, unsubscribeUrl: decision.unsubscribeUrl },
 			{ messageId: `<${eventId}.campaign@aerocrm.space>` }
 		);
 	}

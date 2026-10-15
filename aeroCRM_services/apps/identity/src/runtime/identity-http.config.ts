@@ -1,6 +1,7 @@
 import { RequestMethod } from '@nestjs/common';
 
 export const IDENTITY_GLOBAL_PREFIX_EXCLUDES = [
+	{ path: 'internal/v1/notification-delivery/marketing-email/authorize', method: RequestMethod.POST },
 	{
 		path: 'internal/v1/support/author-context',
 		method: RequestMethod.POST
