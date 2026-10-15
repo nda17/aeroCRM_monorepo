@@ -5,6 +5,8 @@ import {
   MailIntakeSourceController,
 } from "./mail/mail.controller";
 import { MailService } from "./mail/mail.service";
+import { MailTemplatesController } from "./mail/mail-templates.controller";
+import { MailTemplatesService } from "./mail/mail-templates.service";
 import { MailAuthorizationClient } from "./mail/mail-authorization.client";
 import { MailConfig, mailRole } from "./mail/mail.config";
 import { MailTransport } from "./mail/mail.transport";
@@ -49,6 +51,7 @@ import {
     mailRole() === "api"
       ? [
           MailController,
+          MailTemplatesController,
           MailIntakeSourceController,
           LiveChangesController,
           CrmCustomersHealthController,
@@ -65,6 +68,7 @@ import {
       : [CrmCustomersHealthController],
   providers: [
     MailService,
+    MailTemplatesService,
     MailAuthorizationClient,
     MailConfig,
     MailTransport,

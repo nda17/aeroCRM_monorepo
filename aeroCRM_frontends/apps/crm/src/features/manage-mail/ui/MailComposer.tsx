@@ -22,9 +22,11 @@ import {
 	type MailSendCommand,
 	type MailSendState
 } from '@/entities/mail/model/mail.contract'
+import type { MailTemplate } from '@/entities/mail/model/mail-templates.contract'
 import { useDirtyForm } from '@/shared/lib/dirty-form'
 import { Button, Drawer, SelectField, TextField } from '@/shared/ui'
 import { RichMailEditor } from './RichMailEditor'
+import { MailTemplatePicker } from './MailTemplatePicker'
 import {
 	newMailCommand,
 	useMailCommand,
@@ -101,6 +103,10 @@ export const MailComposer = ({
 	)
 	const [text, setText] = useState('')
 	const [html, setHtml] = useState<string | undefined>()
+	const [templateInsertion, setTemplateInsertion] = useState<{
+		id: string
+		text: string
+	} | null>(null)
 	const [attachments, setAttachments] = useState<MailAttachment[]>([])
 	const [sendId, setSendId] = useState<string | null>(null)
 	const [attachmentPending, setAttachmentPending] = useState(false)
@@ -216,6 +222,23 @@ export const MailComposer = ({
 			return
 		}
 		void command.execute(() => data)
+	}
+	const insertTemplate = (template: MailTemplate) => {
+		if (accessBlocked || command.locked) return
+		const nextText = text ? `${text}\n\n${template.body}` : template.body
+		if (
+			new TextEncoder().encode(nextText).byteLength +
+				new TextEncoder().encode(html ?? '').byteLength >
+			24 * 1024
+		) {
+			setValidation(
+				'Письмо с шаблоном превышает допустимый размер. Сократите черновик.'
+			)
+			return
+		}
+		if (!subject.trim()) setSubject(template.subject)
+		setTemplateInsertion({ id: crypto.randomUUID(), text: template.body })
+		setValidation(null)
 	}
 	return (
 		<Drawer
@@ -378,10 +401,15 @@ export const MailComposer = ({
 								value={subject}
 								onChange={event => setSubject(event.target.value)}
 							/>
+							<MailTemplatePicker
+								disabled={command.locked || accessBlocked}
+								onInsert={insertTemplate}
+							/>
 							<RichMailEditor
 								text={text}
 								html={html}
 								disabled={command.locked}
+								insertion={templateInsertion}
 								onChange={content => {
 									setText(content.text)
 									setHtml(content.html)

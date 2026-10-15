@@ -27,11 +27,13 @@ export const RichMailEditor = ({
 	text,
 	html,
 	disabled,
+	insertion,
 	onChange
 }: {
 	text: string
 	html?: string
 	disabled: boolean
+	insertion?: { id: string; text: string } | null
 	onChange: (content: { text: string; html?: string }) => void
 }) => {
 	const labelId = useId()
@@ -102,6 +104,27 @@ export const RichMailEditor = ({
 				emitUpdate: false
 			})
 	}, [editor, text, html])
+	useEffect(() => {
+		if (!insertion) return
+		if (plain || !editor) {
+			onChange({
+				text: text ? `${text}\n\n${insertion.text}` : insertion.text
+			})
+			return
+		}
+		const paragraphs: JSONContent[] = insertion.text
+			.split('\n')
+			.map(line => ({
+				type: 'paragraph',
+				content: line ? [{ type: 'text', text: line }] : []
+			}))
+		editor.commands.insertContentAt(
+			editor.state.doc.content.size,
+			paragraphs
+		)
+		// Each id represents one explicit insertion; text changes are handled by the editor.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [insertion?.id])
 	const richMode = () => {
 		if (!editor) return
 		editor.commands.setContent(html ?? plainDocument(text), {

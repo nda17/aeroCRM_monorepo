@@ -20,6 +20,8 @@ import {
 	type SalesDeal,
 	type SalesPipeline
 } from '@/entities/sales'
+import { listSalesTimelineV4 } from '@/entities/sales/api/sales-productivity.api'
+import { useLossReasons } from '@/entities/sales/model/use-loss-reasons'
 import {
 	addManagedPipelineStage,
 	getPipelineStageDurationSettings,
@@ -95,6 +97,12 @@ vi.mock('@/entities/sales', () => ({
 	listArchivedDealTasks: vi.fn(),
 	mutateSales: vi.fn()
 }))
+vi.mock('@/entities/sales/api/sales-productivity.api', () => ({
+	listSalesTimelineV4: vi.fn()
+}))
+vi.mock('@/entities/sales/model/use-loss-reasons', () => ({
+	useLossReasons: vi.fn()
+}))
 vi.mock('@/entities/sales/api/commerce.api', () => ({
 	getPipelineNextActionTemplates: vi.fn(),
 	listManagedPipelines: vi.fn(),
@@ -122,6 +130,8 @@ vi.mock('react-hot-toast', () => ({
 	})
 }))
 const workspaceId = '11111111-1111-4111-8111-111111111111'
+const membershipId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const lossReasonId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 const date = '2026-09-05T10:00:00.000Z'
 const contact: Customer = {
 	kind: 'contacts',
@@ -236,14 +246,19 @@ beforeEach(() => {
 		}
 	})
 	context = {
-		workspace: { workspaceId, canWrite: true },
+		workspace: {
+			workspaceId,
+			canWrite: true,
+			membership: { membershipId }
+		},
 		session: { accessToken: 'token', userId: 'actor' },
 		sessionRevision: 1,
 		permissions: {
 			data: {
 				subject: 'actor',
 				state: 'ACTIVE',
-				permissions: ['sales:read', 'sales:write', 'customers:read']
+				permissions: ['sales:read', 'sales:write', 'customers:read'],
+				role: 'CRM_USER'
 			},
 			isError: false,
 			isPending: false,
@@ -265,6 +280,37 @@ beforeEach(() => {
 	vi.mocked(getCustomer).mockResolvedValue(contact)
 	vi.mocked(getSalesDeal).mockResolvedValue(deal)
 	vi.mocked(getSalesDealContext).mockResolvedValue({ deal, company: null })
+	vi.mocked(useLossReasons).mockReturnValue({
+		context: { canRead: true },
+		query: {
+			data: {
+				schemaVersion: 1,
+				workspaceId,
+				version: 1,
+				reasons: [
+					{
+						id: lossReasonId,
+						title: 'Не подошли условия',
+						archived: false
+					}
+				]
+			},
+			isError: false,
+			isFetching: false,
+			refetch: vi.fn().mockResolvedValue({ isError: false })
+		},
+		queryKey: ['sales', 'loss-reasons'],
+		actorMembershipId: membershipId,
+		actorReady: true,
+		canManage: true
+	} as never)
+	vi.mocked(listSalesTimelineV4).mockResolvedValue({
+		schemaVersion: 4,
+		page: 1,
+		pageSize: 10,
+		total: 0,
+		items: []
+	} as never)
 	vi.mocked(listSalesTimeline).mockResolvedValue({
 		schemaVersion: 1,
 		page: 1,
@@ -1047,6 +1093,86 @@ describe('Sales workflow forms', () => {
 		expect(await screen.findByText('Нет следующего действия')).toBeTruthy()
 		expect(screen.queryByText('Сделка закрыта')).toBeNull()
 	})
+	it('requires loss reason reselection after settings version changes', async () => {
+		const lostStage = {
+			id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+			key: 'lost',
+			name: 'Потеряна',
+			position: 4,
+			state: 'LOST' as const
+		}
+		const pipelines = [
+			{ ...pipeline, stages: [...pipeline.stages, lostStage] }
+		]
+		const tree = () => (
+			<QueryClientProvider client={client}>
+				<PendingCommandProvider owner={commandOwner('actor', 1)}>
+					<DealDetailsDrawer
+						id={deal.id}
+						pipelines={pipelines}
+						onClose={vi.fn()}
+						onSaved={vi.fn()}
+					/>
+				</PendingCommandProvider>
+			</QueryClientProvider>
+		)
+		const view = render(tree())
+		fireEvent.change(
+			await screen.findByRole('combobox', { name: 'Следующий этап' }),
+			{
+				target: { value: lostStage.id }
+			}
+		)
+		fireEvent.change(
+			await screen.findByRole('combobox', {
+				name: 'Причина потери сделки'
+			}),
+			{
+				target: { value: lossReasonId }
+			}
+		)
+
+		const prior = vi.mocked(useLossReasons).mock.results.at(-1)?.value
+		vi.mocked(useLossReasons).mockReturnValue({
+			...prior,
+			query: {
+				...prior.query,
+				data: { ...prior.query.data, version: 2 }
+			}
+		} as never)
+		view.rerender(tree())
+		expect((await screen.findByRole('alert')).textContent).toContain(
+			'Справочник изменился'
+		)
+		fireEvent.change(
+			screen.getByRole('textbox', { name: 'Что сделано / результат' }),
+			{
+				target: { value: 'Закрыли как потерянную' }
+			}
+		)
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Сохранить результат' })
+		)
+		await waitFor(() => expect(mutateSales).not.toHaveBeenCalled())
+
+		fireEvent.change(
+			screen.getByRole('combobox', { name: 'Причина потери сделки' }),
+			{
+				target: { value: lossReasonId }
+			}
+		)
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Сохранить результат' })
+		)
+		await waitFor(() => expect(mutateSales).toHaveBeenCalledOnce())
+		expect(vi.mocked(mutateSales).mock.calls[0][1].mutation).toMatchObject(
+			{
+				kind: 'transition-v2',
+				actorMembershipId: membershipId,
+				lossReason: { id: lossReasonId, settingsVersion: 2 }
+			}
+		)
+	})
 	it('keeps interaction drafts mounted across the deal tabs', async () => {
 		mount(
 			<DealDetailsDrawer
@@ -1261,7 +1387,9 @@ describe('Sales workflow forms', () => {
 		)
 		await waitFor(() => expect(mutateSales).toHaveBeenCalledTimes(1))
 		expect(vi.mocked(mutateSales).mock.calls[0][1].mutation).toEqual({
-			kind: 'transition',
+			kind: 'transition-v2',
+			actorMembershipId: membershipId,
+			lossReason: null,
 			id: deal.id,
 			expectedVersion: 3,
 			targetStageId: pipeline.stages[1].id,
@@ -1349,7 +1477,9 @@ describe('Sales workflow forms', () => {
 		await waitFor(() => expect(mutateSales).toHaveBeenCalledOnce())
 		expect(vi.mocked(mutateSales).mock.calls[0][1].mutation).toMatchObject(
 			{
-				kind: 'transition',
+				kind: 'transition-v2',
+				actorMembershipId: membershipId,
+				lossReason: null,
 				targetStageId: templateStageId,
 				nextTask: {
 					title: 'Вручную согласовать',

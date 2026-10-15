@@ -41,6 +41,7 @@ const roots = {
 	],
 	support: ['support-chat', 'crm-support-notifications'],
 	mail: [
+		'mail-templates',
 		'mail-processing',
 		'crm-intake-mail-processing',
 		'crm-mail-notifications',

@@ -146,6 +146,9 @@ model Deal {
   stageId           String                @map("stage_id") @db.Uuid
   stageEnteredAt    DateTime?             @map("stage_entered_at")
   status            CrmPipelineStageState @default(OPEN)
+  lostAt            DateTime?             @map("lost_at")
+  lossReasonId      String?               @map("loss_reason_id") @db.Uuid
+  lossReasonTitle   String?               @map("loss_reason_title") @db.VarChar(200)
   contactId         String                @map("contact_id") @db.Uuid
   contactName       String                @map("contact_name") @db.VarChar(200)
   assignedToSubject String                @map("assigned_to_subject") @db.VarChar(256)
@@ -171,6 +174,7 @@ model Deal {
   @@index([workspaceId, archivedAt, createdAt])
   @@index([workspaceId, assignedToSubject, createdAt])
   @@index([workspaceId, teamId, createdAt])
+  @@index([workspaceId, status, lostAt, id], map: "deals_loss_report_idx")
   @@map("deals")
   @@schema("crm_sales")
 }
@@ -432,6 +436,45 @@ model ActivityTextTemplateCommand {
 
   @@index([workspaceId, createdAt], map: "activity_text_template_commands_workspace_idx")
   @@map("activity_text_template_commands")
+  @@schema("crm_sales")
+}
+
+model LossReasonSettings {
+  workspaceId String   @id @map("workspace_id") @db.Uuid
+  version     Int
+  reasons     Json
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("loss_reason_settings")
+  @@schema("crm_sales")
+}
+
+model LossReasonCommand {
+  commandId         String   @id @map("command_id") @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  actorSubject      String   @map("actor_subject") @db.VarChar(256)
+  actorMembershipId String?  @map("actor_membership_id") @db.Uuid
+  requestHash       String   @map("request_hash") @db.Char(64)
+  result            Json
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([workspaceId, createdAt], map: "loss_reason_commands_workspace_idx")
+  @@map("loss_reason_commands")
+  @@schema("crm_sales")
+}
+
+model BulkAssignmentCommand {
+  commandId         String   @id @map("command_id") @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  actorSubject      String   @map("actor_subject") @db.VarChar(256)
+  actorMembershipId String?  @map("actor_membership_id") @db.Uuid
+  requestHash       String   @map("request_hash") @db.Char(64)
+  result            Json
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([workspaceId, createdAt], map: "bulk_assignment_commands_workspace_idx")
+  @@map("bulk_assignment_commands")
   @@schema("crm_sales")
 }
 

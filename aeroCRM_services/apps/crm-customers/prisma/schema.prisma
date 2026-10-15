@@ -495,6 +495,31 @@ model MailCommand {
   @@schema("crm_customers")
 }
 
+model MailTemplateSettings {
+  workspaceId String   @id @map("workspace_id") @db.Uuid
+  version     Int
+  templates   Json
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("mail_template_settings")
+  @@schema("crm_customers")
+}
+
+model MailTemplateCommand {
+  commandId         String   @id @map("command_id") @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  actorSubject      String   @map("actor_subject") @db.VarChar(256)
+  actorMembershipId String   @map("actor_membership_id") @db.Uuid
+  requestHash       String   @map("request_hash") @db.Char(64)
+  result            Json
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([workspaceId, createdAt], map: "mail_template_commands_workspace_idx")
+  @@map("mail_template_commands")
+  @@schema("crm_customers")
+}
+
 model MailAudit {
   mailbox      MailMailbox? @relation("MailAudit_mailboxId", fields: [workspaceId, mailboxId], references: [workspaceId, id], onDelete: Restrict, onUpdate: Restrict)
   id           String       @id @default(uuid()) @db.Uuid

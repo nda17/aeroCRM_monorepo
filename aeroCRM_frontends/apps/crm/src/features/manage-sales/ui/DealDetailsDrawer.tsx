@@ -1,6 +1,10 @@
 'use client'
 
 import { StageDurationLabel } from './StageDurationLabel'
+import { DealLossSummary } from './DealLossSummary'
+import { useLossReasons } from '@/entities/sales/model/use-loss-reasons'
+import { listSalesTimelineV4 } from '@/entities/sales/api/sales-productivity.api'
+import { isUuidV4 } from '@/shared/lib/contract'
 
 import { AuthenticatedApiError } from '@/shared/api/authenticated-http-client'
 import { useDirtyForm, useDirtyFormGuard } from '@/shared/lib/dirty-form'
@@ -11,7 +15,6 @@ import { getCustomer } from '@/entities/customer'
 import Link from 'next/link'
 import {
 	getSalesDealContext,
-	listSalesTimelineV3,
 	listArchivedDealTasks,
 	type SalesDeal,
 	type SalesPipeline
@@ -94,6 +97,12 @@ const DealEditor = ({
 	const [initialStageId, setInitialStageId] = useState(deal.stageId)
 	const [targetStageId, setTargetStageId] = useState(deal.stageId)
 	const [outcome, setOutcome] = useState('')
+	const lossReasons = useLossReasons()
+	const [selectedLoss, setSelectedLoss] = useState<{
+		id: string
+		settingsVersion: number
+		title: string
+	} | null>(null)
 	const [taskTitle, setTaskTitle] = useState('')
 	const [due, setDue] = useState('')
 	const [generatedDueIso, setGeneratedDueIso] = useState<string | null>(
@@ -166,6 +175,11 @@ const DealEditor = ({
 		}
 	}, [pendingTemplateStageId, templates.data, applyTemplate])
 	const chooseStage = (stageId: string) => {
+		if (
+			pipeline?.stages.find(stage => stage.id === stageId)?.state !==
+			'LOST'
+		)
+			setSelectedLoss(null)
 		selectedStageRef.current = stageId
 		setTargetStageId(stageId)
 		setPendingTemplateStageId(null)
@@ -186,7 +200,11 @@ const DealEditor = ({
 	}
 	const [confirmArchive, setConfirmArchive] = useState(false)
 	const dirty =
-		targetStageId !== initialStageId || !!outcome || !!taskTitle || !!due
+		targetStageId !== initialStageId ||
+		!!outcome ||
+		!!taskTitle ||
+		!!due ||
+		!!selectedLoss
 	if (!dirty && !command.locked && expectedVersion !== deal.version) {
 		setExpectedVersion(deal.version)
 		setInitialStageId(deal.stageId)
@@ -201,7 +219,8 @@ const DealEditor = ({
 			targetStageId !== initialStageId ||
 			!!outcome ||
 			!!taskTitle ||
-			!!due,
+			!!due ||
+			!!selectedLoss,
 		label: 'Результат сделки'
 	})
 	const target = pipeline?.stages.find(stage => stage.id === targetStageId)
@@ -212,12 +231,44 @@ const DealEditor = ({
 			toast.error('Выберите доступный этап')
 			return
 		}
+		const actorMembershipId =
+			context.permissions.data?.role === 'OWNER'
+				? null
+				: context.workspace.membership.membershipId
+		if (actorMembershipId !== null && !isUuidV4(actorMembershipId)) {
+			toast.error(
+				'Обновите данные рабочего пространства перед сохранением.'
+			)
+			return
+		}
+		if (
+			target.state === 'LOST' &&
+			(!selectedLoss ||
+				lossReasons.query.isError ||
+				lossReasons.query.isFetching ||
+				!lossReasons.query.data ||
+				selectedLoss.settingsVersion !== lossReasons.query.data.version ||
+				!lossReasons.query.data.reasons.some(
+					row => row.id === selectedLoss.id && !row.archived
+				))
+		) {
+			toast.error('Выберите причину из актуального справочника.')
+			return
+		}
 		if (target.state === 'OPEN' && !Number.isFinite(Date.parse(due))) {
 			toast.error('Укажите срок следующего действия')
 			return
 		}
 		void command.execute({
-			kind: 'transition',
+			kind: 'transition-v2',
+			actorMembershipId,
+			lossReason:
+				target.state === 'LOST' && selectedLoss
+					? {
+							id: selectedLoss.id,
+							settingsVersion: selectedLoss.settingsVersion
+						}
+					: null,
 			id: deal.id,
 			expectedVersion,
 			targetStageId,
@@ -260,6 +311,73 @@ const DealEditor = ({
 							</option>
 						))}
 					</SelectField>
+					{target?.state === 'LOST' ? (
+						<>
+							<SelectField
+								label="Причина потери сделки"
+								required
+								value={
+									selectedLoss?.settingsVersion ===
+									lossReasons.query.data?.version
+										? (selectedLoss?.id ?? '')
+										: ''
+								}
+								disabled={
+									lossReasons.query.isError ||
+									lossReasons.query.isFetching ||
+									!lossReasons.context.canRead
+								}
+								onChange={event => {
+									const reason = lossReasons.query.data?.reasons.find(
+										row => row.id === event.target.value && !row.archived
+									)
+									setSelectedLoss(
+										reason && lossReasons.query.data
+											? {
+													id: reason.id,
+													title: reason.title,
+													settingsVersion: lossReasons.query.data.version
+												}
+											: null
+									)
+								}}
+							>
+								<option value="">Выберите причину</option>
+								{selectedLoss &&
+								!lossReasons.query.data?.reasons.some(
+									row => row.id === selectedLoss.id && !row.archived
+								) ? (
+									<option value={selectedLoss.id}>
+										{selectedLoss.title} · недоступна
+									</option>
+								) : null}
+								{lossReasons.query.data?.reasons
+									.filter(row => !row.archived)
+									.map(row => (
+										<option key={row.id} value={row.id}>
+											{row.title}
+										</option>
+									))}
+							</SelectField>
+							{lossReasons.query.isError ? (
+								<Button
+									type="button"
+									variant="secondary"
+									onClick={() => void lossReasons.query.refetch()}
+								>
+									Загрузить причины повторно
+								</Button>
+							) : null}
+							{selectedLoss &&
+							lossReasons.query.data &&
+							selectedLoss.settingsVersion !==
+								lossReasons.query.data.version ? (
+								<p role="alert">
+									Справочник изменился. Выберите причину заново.
+								</p>
+							) : null}
+						</>
+					) : null}
 					<TextareaField
 						label="Что сделано / результат"
 						value={outcome}
@@ -435,14 +553,14 @@ export const DealDetailsDrawer = ({
 		gcTime: 0
 	})
 	const history = useQuery({
-		queryKey: ['sales', 'timeline-v3', ...context.key, id, archive, page],
+		queryKey: ['sales', 'timeline-v4', ...context.key, id, archive, page],
 		enabled:
 			context.canRead &&
 			!!context.session &&
 			!!detail.data &&
 			!detail.isError,
 		queryFn: () =>
-			listSalesTimelineV3(
+			listSalesTimelineV4(
 				context.session!.accessToken,
 				context.workspace.workspaceId,
 				id,
@@ -512,7 +630,7 @@ export const DealDetailsDrawer = ({
 					...(history.isError
 						? []
 						: (history.data?.items.flatMap(item =>
-								item.details
+								item.details && 'beforeSubject' in item.details
 									? [item.details.beforeSubject, item.details.afterSubject]
 									: []
 							) ?? []))
@@ -795,6 +913,9 @@ export const DealDetailsDrawer = ({
 								<dd>{assigneeLabel(deal.assignedToSubject)}</dd>
 							</div>
 						</dl>
+						{deal.status === 'LOST' ? (
+							<DealLossSummary deal={deal} archive={archive} />
+						) : null}
 					</section>
 					{archive === 'ARCHIVED' ? (
 						<section className={styles.section}>
@@ -1098,12 +1219,25 @@ export const DealDetailsDrawer = ({
 											<li key={item.id}>
 												<strong>{historyLabels[item.kind]}</strong>
 												{item.outcome ? <p>{item.outcome}</p> : null}
-												{item.details ? (
+												{item.details &&
+												'beforeSubject' in item.details ? (
 													<p>
 														{assigneeLabel(item.details.beforeSubject)} →{' '}
 														{assigneeLabel(item.details.afterSubject)}.
 														Перенесено активных задач:{' '}
 														{item.details.transferredTaskCount}
+													</p>
+												) : null}
+												{item.details && 'loss' in item.details ? (
+													<p>
+														Причина отказа:{' '}
+														{item.details.loss.reason?.title ??
+															'Не указана'}
+														. Дата отказа:{' '}
+														{item.details.loss.lostAt
+															? salesDate(item.details.loss.lostAt)
+															: 'неизвестна'}
+														.
 													</p>
 												) : null}
 												<time dateTime={item.createdAt}>

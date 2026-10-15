@@ -188,6 +188,15 @@ on:
         description: SHA-256 of private VPS migrations/crm-sales.env; required only for activity text templates migration
         type: string
         required: false
+      crm_sales_productivity_migration:
+        description: Backend target only; apply reviewed Sales productivity and Customers mail template migrations before switching images
+        type: boolean
+        default: false
+        required: false
+      crm_sales_productivity_migration_env_hash:
+        description: SHA-256 of sorted private crm-sales.env and crm-customers.env migration file hashes
+        type: string
+        required: false
       crm_reliability_phase:
         description: Scoped reliability release phase; prepare applies DDL, activate enables reviewed gates
         type: string
@@ -434,6 +443,8 @@ jobs:
           SALES_STAGE_NEXT_ACTION_MIGRATION_HASH: ${{ inputs.crm_sales_stage_next_action_migration_env_hash }}
           SALES_STAGE_DURATION_MIGRATION: ${{ inputs.crm_sales_stage_duration_migration && 'true' || 'false' }}
           SALES_ACTIVITY_TEXT_TEMPLATES_MIGRATION: ${{ inputs.crm_sales_activity_text_templates_migration && 'true' || 'false' }}
+          SALES_PRODUCTIVITY_MIGRATION: ${{ inputs.crm_sales_productivity_migration && 'true' || 'false' }}
+          SALES_PRODUCTIVITY_MIGRATION_ENV_HASH: ${{ inputs.crm_sales_productivity_migration_env_hash }}
           RISK_CONTROLS_MIGRATION: ${{ inputs.risk_controls_migration && 'true' || 'false' }}
           RISK_CONTROLS_MIGRATION_ENV_HASH: ${{ inputs.risk_controls_migration_env_hash }}
           RISK_CONTROLS_ENV_BEFORE_HASH: ${{ inputs.risk_controls_env_before_hash }}
@@ -735,6 +746,24 @@ jobs:
           else
             [[ -z "$SALES_ACTIVITY_TEXT_TEMPLATES_MIGRATION_HASH" ]]
           fi
+          if [[ "$SALES_PRODUCTIVITY_MIGRATION" == true ]]; then
+            [[ "$TARGET" == backend && "$CUTOVER" == false && "$CLOSURE_ENABLE" == false &&
+              "$SALES_PRODUCTIVITY_MIGRATION_ENV_HASH" =~ ^[a-f0-9]{64}$ &&
+              "$BILLING_MIGRATION" == false && "$CUSTOM_ROLES_MIGRATION" == false &&
+              "$SALES_COMMERCE_MIGRATION" == false && "$SALES_REMINDER_FK_MIGRATION" == false &&
+              "$SALES_STAGE_NEXT_ACTION_MIGRATION" == false && "$SALES_STAGE_DURATION_MIGRATION" == false &&
+              "$SALES_ACTIVITY_TEXT_TEMPLATES_MIGRATION" == false && "$INTAKE_NOTIFICATIONS_MIGRATION" == false &&
+              "$MAIL_MIGRATION" == false && "$MAIL_ENV_INSTALL" == false &&
+              "$FILE_IMPORTS_MIGRATION" == false && "$PLANNER_MIGRATION" == false &&
+              "$UX_MIGRATION" == false && "$COLLABORATION_MIGRATION" == false &&
+              "$MEETING3_MIGRATION" == false && "$TELEGRAM_MIGRATION" == false &&
+              "$TELEGRAM_ENV_INSTALL" == false && "$STORAGE_INSTALL" == false &&
+              "$CHAT_ENV_INSTALL" == false && "$CLOSURE_MIGRATION" == false &&
+              "$IDENTITY_ACL_REPAIR" == false && "$RELIABILITY_MIGRATION" == false &&
+              -z "$RELIABILITY_PHASE" && "$RISK_CONTROLS_MIGRATION" == false ]]
+          else
+            [[ -z "$SALES_PRODUCTIVITY_MIGRATION_ENV_HASH" ]]
+          fi
           if [[ "$INTAKE_NOTIFICATIONS_MIGRATION" == true ]]; then
             [[ "$TARGET" == backend && "$CUTOVER" == false && "$INTAKE_NOTIFICATIONS_MIGRATION_HASH" =~ ^[a-f0-9]{64}$ ]]
           else
@@ -849,6 +878,7 @@ jobs:
           node --check infra/scripts/crm-sales-stage-next-action-migration.mjs
           node --check infra/scripts/crm-sales-stage-duration-migration.mjs
           node --check infra/scripts/crm-sales-activity-text-templates-migration.mjs
+          node --check infra/scripts/crm-sales-productivity-migration.mjs
           node --check infra/scripts/risk-controls-migration.mjs
           node --check infra/scripts/risk-controls-capabilities.mjs
           node --check infra/scripts/backend-risk-controls-env.mjs
@@ -866,6 +896,7 @@ jobs:
           node infra/scripts/crm-sales-stage-next-action-migration.mjs --policy-self-test
           node infra/scripts/crm-sales-stage-duration-migration.mjs --policy-self-test
           node infra/scripts/crm-sales-activity-text-templates-migration.mjs --policy-self-test
+          node infra/scripts/crm-sales-productivity-migration.mjs --policy-self-test
           node infra/scripts/crm-file-imports-migration.mjs --policy-self-test
           node infra/scripts/crm-planner-customization-migration.mjs --policy-self-test
           node infra/scripts/crm-ux-unification-migration.mjs --policy-self-test
@@ -956,7 +987,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ inputs.ci_run_id }}
           SHA: ${{ needs.verify.outputs.sha }}
-          REQUIRE_UNIFORM: ${{ (inputs.risk_controls_migration || inputs.billing_capacity_migration || inputs.crm_custom_roles_migration || inputs.crm_sales_commerce_migration || inputs.crm_sales_reminder_fk_migration || inputs.crm_sales_stage_next_action_migration || inputs.crm_sales_stage_duration_migration || inputs.crm_sales_activity_text_templates_migration || inputs.crm_reliability_phase != '' || inputs.crm_intake_notifications_migration || inputs.crm_corporate_mail_migration || inputs.crm_file_imports_migration || inputs.crm_planner_customization_migration || inputs.crm_ux_unification_migration || inputs.crm_workspace_collaboration_migration || inputs.crm_meeting3_migration || inputs.crm_telegram_business_migration || inputs.workspace_closure_migration || inputs.workspace_closure_identity_acl_repair || inputs.workspace_closure_enable || inputs.crm_contracts_cutover) && 'true' || 'false' }}
+          REQUIRE_UNIFORM: ${{ (inputs.risk_controls_migration || inputs.billing_capacity_migration || inputs.crm_custom_roles_migration || inputs.crm_sales_commerce_migration || inputs.crm_sales_reminder_fk_migration || inputs.crm_sales_stage_next_action_migration || inputs.crm_sales_stage_duration_migration || inputs.crm_sales_activity_text_templates_migration || inputs.crm_sales_productivity_migration || inputs.crm_reliability_phase != '' || inputs.crm_intake_notifications_migration || inputs.crm_corporate_mail_migration || inputs.crm_file_imports_migration || inputs.crm_planner_customization_migration || inputs.crm_ux_unification_migration || inputs.crm_workspace_collaboration_migration || inputs.crm_meeting3_migration || inputs.crm_telegram_business_migration || inputs.workspace_closure_migration || inputs.workspace_closure_identity_acl_repair || inputs.workspace_closure_enable || inputs.crm_contracts_cutover) && 'true' || 'false' }}
         run: |
           set -euo pipefail
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name backend-manifest --dir manifest
@@ -996,6 +1027,8 @@ jobs:
           RISK_CONTROLS_ENV_BEFORE_HASH: ${{ inputs.risk_controls_env_before_hash }}
           SALES_STAGE_DURATION_MIGRATION_HASH: ${{ inputs.crm_sales_stage_duration_migration_env_hash }}
           SALES_ACTIVITY_TEXT_TEMPLATES_MIGRATION_HASH: ${{ inputs.crm_sales_activity_text_templates_migration_env_hash }}
+          SALES_PRODUCTIVITY_MIGRATION: ${{ inputs.crm_sales_productivity_migration && 'true' || 'false' }}
+          SALES_PRODUCTIVITY_MIGRATION_ENV_HASH: ${{ inputs.crm_sales_productivity_migration_env_hash }}
           RELIABILITY_PHASE: ${{ inputs.crm_reliability_phase }}
           RELIABILITY_ENV_BEFORE_HASH: ${{ inputs.crm_reliability_env_before_hash }}
           RELIABILITY_ENV_BUNDLE_HASH: ${{ inputs.crm_reliability_env_bundle_hash }}
@@ -1149,6 +1182,10 @@ jobs:
             node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --crm-sales-activity-text-templates")
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
           fi
+          if [ "$ROLE" = backend ] && [ "$SALES_PRODUCTIVITY_MIGRATION" = true ]; then
+            node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --crm-sales-productivity")
+            [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
+          fi
           if [ "$ROLE" = backend ] && [ "$MAIL_MIGRATION" = true ]; then
             node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --crm-corporate-mail")
             [[ "$node_bin" == /opt/aerocrm/tools/node-v22.23.2-linux-x64/bin/node ]]
@@ -1216,6 +1253,9 @@ jobs:
             if [ "$RISK_CONTROLS_MIGRATION" = true ]; then
               manifest_env="$manifest_env RISK_CONTROLS_MIGRATION=true RISK_CONTROLS_MIGRATION_ENV_HASH='$RISK_CONTROLS_MIGRATION_ENV_HASH' RISK_CONTROLS_ENV_BEFORE_HASH='$RISK_CONTROLS_ENV_BEFORE_HASH'"
               node_bin=$(ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "REVIEWED_INFRA_DIR='$stage' bash '$stage/scripts/ensure-cutover-node.sh' --risk-controls")
+            fi
+            if [ "$SALES_PRODUCTIVITY_MIGRATION" = true ]; then
+              manifest_env="$manifest_env SALES_PRODUCTIVITY_MIGRATION=true SALES_PRODUCTIVITY_MIGRATION_ENV_HASH='$SALES_PRODUCTIVITY_MIGRATION_ENV_HASH'"
             fi
             if [ "$CLOSURE_ENABLE" = true ]; then manifest_env=; fi
             ssh -i ~/.ssh/release_key -p "$port" -o StrictHostKeyChecking=yes "$dest" "cd /opt/aerocrm && $manifest_env REVIEWED_INFRA_DIR='$stage' '$stage/scripts/release.sh' '$ROLE' '$SHA' '$hash' '$BILLING_MIGRATION' '$BILLING_MIGRATION_HASH' '$CUSTOM_ROLES_MIGRATION' '$CUSTOM_ROLES_MIGRATION_HASH' '$SALES_COMMERCE_MIGRATION' '$SALES_COMMERCE_MIGRATION_HASH' '$INTAKE_NOTIFICATIONS_MIGRATION' '$INTAKE_NOTIFICATIONS_MIGRATION_HASH' '$CLOSURE_MIGRATION' '$CLOSURE_MIGRATION_HASH' '$IDENTITY_ACL_REPAIR' '$IDENTITY_ENV_HASH' '$MAIL_MIGRATION' '$MAIL_MIGRATION_HASH' '$FILE_IMPORTS_MIGRATION' '$FILE_IMPORTS_MIGRATION_HASH' '$PLANNER_MIGRATION' '$PLANNER_MIGRATION_HASH' '$UX_MIGRATION' '$UX_MIGRATION_HASH' '$COLLABORATION_MIGRATION' '$COLLABORATION_MIGRATION_HASH' '$MEETING3_MIGRATION' '$MEETING3_MIGRATION_HASH' '$TELEGRAM_MIGRATION' '$TELEGRAM_MIGRATION_HASH' '$SALES_REMINDER_FK_MIGRATION' '$SALES_REMINDER_FK_MIGRATION_HASH' '$RELIABILITY_MIGRATION' '$RELIABILITY_MIGRATION_HASH' '$SALES_STAGE_NEXT_ACTION_MIGRATION' '$SALES_STAGE_NEXT_ACTION_MIGRATION_HASH' '$SALES_STAGE_DURATION_MIGRATION' '$SALES_STAGE_DURATION_MIGRATION_HASH' '$SALES_ACTIVITY_TEXT_TEMPLATES_MIGRATION' '$SALES_ACTIVITY_TEXT_TEMPLATES_MIGRATION_HASH'"

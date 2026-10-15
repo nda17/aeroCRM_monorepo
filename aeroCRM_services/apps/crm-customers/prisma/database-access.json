@@ -93,6 +93,15 @@
       "SELECT",
       "INSERT"
     ],
+    "mail_template_settings": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "mail_template_commands": [
+      "SELECT",
+      "INSERT"
+    ],
     "mail_audit": [
       "SELECT",
       "INSERT"
@@ -127,7 +136,8 @@
     "mail_write_guard",
     "import_preview_immutable",
     "import_binding_immutable",
-    "rewrap_mail_credential"
+    "rewrap_mail_credential",
+    "reject_mail_template_command_mutation"
   ],
   "routineExecute": [
     "assert_workspace_open(uuid)",

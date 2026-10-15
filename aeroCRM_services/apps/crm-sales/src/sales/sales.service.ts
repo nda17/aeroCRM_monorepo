@@ -15,7 +15,10 @@ import {
 	SalesAssigneeClient,
 	type SalesAssignee
 } from '../workday/sales-assignee.client';
+import { readLossReasons } from '../loss-reasons/loss-reasons.service';
+import { ReminderActorClient } from '../reminders/reminder-actor.client';
 import type { SalesAssignmentDto } from './sales-assignment.dto';
+import type { LossReportQuery, TransitionDealV2Dto } from './sales-productivity.dto';
 import { CrmSalesPrismaService } from '../prisma/crm-sales-prisma.service';
 import { UUID, SalesAccessClient, type SalesAccess } from './sales-access';
 import { SalesContextClient } from './sales-context.client';
@@ -216,7 +219,8 @@ export class SalesService {
 		private readonly contacts: SalesContactClient,
 		private readonly assignees: SalesAssigneeClient,
 		private readonly contexts: SalesContextClient,
-		private readonly authority: SalesAccessClient
+		private readonly authority: SalesAccessClient,
+		private readonly actors: ReminderActorClient = new ReminderActorClient()
 	) {}
 
 	async pipelines(access: SalesAccess) {
@@ -563,6 +567,35 @@ export class SalesService {
 		return this.timelinePage(access, dealId, query, 3);
 	}
 
+	async timelineV4(
+		access: SalesAccess,
+		dealId: string,
+		query: SalesListQuery
+	) {
+		return this.timelinePage(access, dealId, query, 4);
+	}
+
+	async loss(
+		access: SalesAccess,
+		dealId: string,
+		archive: 'ACTIVE' | 'ARCHIVED' = 'ACTIVE'
+	) {
+		this.permission(access, 'sales:read');
+		const deal = await this.visible(this.prisma, access, dealId, archive);
+		return {
+			schemaVersion: 1 as const,
+			workspaceId: access.workspaceId,
+			dealId: deal.id,
+			dealVersion: deal.version,
+			status: deal.status,
+			lostAt: deal.lostAt?.toISOString() ?? null,
+			reason:
+				deal.lossReasonId && deal.lossReasonTitle
+					? { id: deal.lossReasonId, title: deal.lossReasonTitle }
+					: null
+		};
+	}
+
 	async dealTasks(
 		access: SalesAccess,
 		dealId: string,
@@ -609,20 +642,20 @@ export class SalesService {
 		access: SalesAccess,
 		dealId: string,
 		query: SalesListQuery,
-		version: 1 | 2 | 3
+		version: 1 | 2 | 3 | 4
 	) {
 		this.permission(access, 'sales:read');
 		await this.visible(
 			this.prisma,
 			access,
 			dealId,
-			version === 3 ? (query.archive ?? 'ACTIVE') : 'ACTIVE'
+			version >= 3 ? (query.archive ?? 'ACTIVE') : 'ACTIVE'
 		);
 		const where = {
 			workspaceId: access.workspaceId,
 			dealId,
 			kind:
-				version === 3
+				version >= 3
 					? undefined
 					: {
 							in: [
@@ -640,7 +673,7 @@ export class SalesService {
 					salesScope(access),
 					{
 						archivedAt:
-							version === 3 && query.archive === 'ARCHIVED'
+							version >= 3 && query.archive === 'ARCHIVED'
 								? { not: null }
 								: null
 					}
@@ -669,7 +702,14 @@ export class SalesService {
 				outcome: row.outcome,
 				fromStageId: row.fromStageId,
 				toStageId: row.toStageId,
-				...(version === 3 ? { details: row.details } : {}),
+				...(version >= 3
+					? {
+							details:
+								version === 3 && row.kind === 'TRANSITIONED'
+									? null
+									: row.details
+						}
+					: {}),
 				createdAt: row.createdAt.toISOString()
 			}))
 		};
@@ -850,6 +890,88 @@ export class SalesService {
 		);
 	}
 
+	async lossReport(access: SalesAccess, query: LossReportQuery) {
+		this.permission(access, 'sales:analytics');
+		if (query.workspaceId !== access.workspaceId)
+			throw new ForbiddenException();
+		if (query.pipelineId !== undefined && !UUID.test(query.pipelineId))
+			throw new BadRequestException('Некорректная воронка');
+		const hasFrom = query.lostFrom !== undefined;
+		const hasTo = query.lostTo !== undefined;
+		if (hasFrom !== hasTo)
+			throw new BadRequestException('Укажите начало и конец периода');
+		const from = hasFrom ? canonicalInstant(query.lostFrom!) : null;
+		const to = hasTo ? canonicalInstant(query.lostTo!) : null;
+		if (from && to && (to <= from || to.getTime() - from.getTime() > 366 * 86400000))
+			throw new BadRequestException('Период должен быть до 366 дней');
+		const base: Prisma.DealWhereInput = {
+			AND: [
+				salesScope(access),
+				{ archivedAt: null, status: 'LOST', pipelineId: query.pipelineId }
+			]
+		};
+		return this.prisma.$transaction(
+			async tx => {
+				const [groups, unknown, settings] = await Promise.all([
+					tx.deal.groupBy({
+						by: ['lossReasonId'],
+						where: {
+							AND: [
+								base,
+								{
+									lostAt: from && to ? { gte: from, lt: to } : { not: null }
+								}
+							]
+						},
+						_count: { id: true },
+						_sum: { amountMinor: true }
+					}),
+					tx.deal.aggregate({
+						where: { AND: [base, { lostAt: null }] },
+						_count: { id: true },
+						_sum: { amountMinor: true }
+					}),
+					readLossReasons(tx, access.workspaceId)
+				]);
+				const titles = new Map(settings.reasons.map(reason => [reason.id, reason.title]));
+				const reasons = groups
+					.map(row => ({
+						reasonId: row.lossReasonId,
+						title: row.lossReasonId
+							? titles.get(row.lossReasonId) ?? 'Неизвестная причина'
+							: 'Не указана',
+						count: row._count.id,
+						amountMinor: row._sum.amountMinor ?? 0
+					}))
+					.sort((a, b) =>
+						a.reasonId === null ? 1 : b.reasonId === null ? -1 :
+							a.title.localeCompare(b.title, 'ru') || a.reasonId.localeCompare(b.reasonId)
+					);
+				return {
+					schemaVersion: 1 as const,
+					workspaceId: access.workspaceId,
+					currency: 'RUB' as const,
+					population: 'CURRENT_LOST' as const,
+					period: {
+						basis: 'LOST_AT' as const,
+						from: from?.toISOString() ?? null,
+						to: to?.toISOString() ?? null
+					},
+					totals: {
+						count: reasons.reduce((sum, reason) => sum + reason.count, 0),
+						amountMinor: reasons.reduce((sum, reason) => sum + reason.amountMinor, 0)
+					},
+					reasons,
+					unknownDate: {
+						count: unknown._count.id,
+						amountMinor: unknown._sum.amountMinor ?? 0
+					}
+				};
+			},
+			{ isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }
+		);
+	}
+
 	async create(
 		access: SalesAccess,
 		dto: CreateDealDto,
@@ -938,70 +1060,165 @@ export class SalesService {
 			dto,
 			'TRANSITION_DEAL',
 			id,
-			async transaction => {
-				const deal = await this.visible(transaction, access, id);
-				const stage = await this.stage(
-					transaction,
-					access.workspaceId,
-					deal.pipelineId,
-					dto.targetStageId
-				);
-				if (stage.state === 'OPEN' && !dto.nextTask)
-					throw new BadRequestException(
-						'Для открытой сделки нужно следующее действие'
-					);
-				if (stage.state !== 'OPEN' && dto.nextTask)
-					throw new BadRequestException(
-						'Закрытая сделка не должна иметь следующего действия'
-					);
-				const taskId = stage.state === 'OPEN' ? randomUUID() : null;
-				await this.updateDeal(
-					transaction,
-					access,
-					deal,
-					dto.expectedVersion,
-					{
-						stageId: stage.id,
-						status: stage.state,
-						nextTaskId: taskId
-					}
-				);
-				// An OPEN transition replaces only the selected next action. Other
-				// workday tasks remain untouched; terminal transitions close all.
-				if (stage.state !== 'OPEN' || deal.nextTaskId)
-					await this.closeTasks(
-						transaction,
-						access,
-						id,
-						'COMPLETED',
-						stage.state === 'OPEN' ? deal.nextTaskId! : undefined
-					);
-				if (taskId && dto.nextTask)
-					await this.createTask(
-						transaction,
-						access,
-						id,
-						taskId,
-						dto.nextTask,
-						await this.assignees.resolve(
-							authorization,
-							access,
-							deal.assignedToSubject,
-							deal.teamId ?? undefined
-						)
-					);
-				await this.event(
+			transaction =>
+				this.transitionEffect(
 					transaction,
 					access,
 					id,
-					'TRANSITIONED',
-					dto.outcome.trim(),
-					deal.stageId,
-					stage.id
-				);
-				return id;
+					dto,
+					authorization
+				)
+		);
+	}
+
+	async transitionV2(
+		access: SalesAccess,
+		id: string,
+		dto: TransitionDealV2Dto,
+		authorization: string
+	) {
+		this.permission(access, 'sales:write');
+		if (dto.lossReason === undefined)
+			throw new BadRequestException('Выберите причину проигрыша');
+		if (dto.nextTask) this.nextTask(dto.nextTask);
+		return this.command(
+			access,
+			dto,
+			'TRANSITION_DEAL_V2',
+			id,
+			(transaction, current) =>
+				this.transitionEffect(
+					transaction,
+					current,
+					id,
+					dto,
+					authorization,
+					dto.lossReason
+				),
+			{
+				prepare: async () => undefined,
+				authorize: async () => {
+					const signal = AbortSignal.timeout(5000);
+					const current = await this.authority.authorize(
+						authorization,
+						access.workspaceId,
+						signal
+					);
+					await this.actors.verify(
+						authorization,
+						current,
+						dto.actorMembershipId,
+						signal
+					);
+					return current;
+				}
 			}
 		);
+	}
+
+	private async transitionEffect(
+		transaction: Prisma.TransactionClient,
+		access: SalesAccess,
+		id: string,
+		dto: TransitionDealDto,
+		authorization: string,
+		lossReason?: { id: string; settingsVersion: number } | null
+	) {
+		const deal = await this.visible(transaction, access, id);
+		const stage = await this.stage(
+			transaction,
+			access.workspaceId,
+			deal.pipelineId,
+			dto.targetStageId
+		);
+		if (stage.state === 'OPEN' && !dto.nextTask)
+			throw new BadRequestException(
+				'Для открытой сделки нужно следующее действие'
+			);
+		if (stage.state !== 'OPEN' && dto.nextTask)
+			throw new BadRequestException(
+				'Закрытая сделка не должна иметь следующего действия'
+			);
+		if (lossReason !== undefined && (stage.state === 'LOST') !== (lossReason !== null))
+			throw new BadRequestException('Выберите причину проигрыша');
+		let reasonId: string | null = null;
+		let reasonTitle: string | null = null;
+		if (stage.state === 'LOST' && lossReason) {
+			const settings = await readLossReasons(transaction, access.workspaceId);
+			const selected = settings.reasons.find(
+				item => item.id.toLowerCase() === lossReason.id.toLowerCase()
+			);
+			if (settings.version !== lossReason.settingsVersion || !selected || selected.archived)
+				this.conflict('crm_loss_reason_conflict');
+			reasonId = selected.id;
+			reasonTitle = selected.title;
+		} else if (stage.state === 'LOST' && deal.status === 'LOST') {
+			reasonId = deal.lossReasonId;
+			reasonTitle = deal.lossReasonTitle;
+		}
+		const lostAt =
+			stage.state === 'LOST'
+				? deal.status === 'LOST' ? deal.lostAt : new Date()
+				: null;
+		const taskId = stage.state === 'OPEN' ? randomUUID() : null;
+		await this.updateDeal(
+			transaction,
+			access,
+			deal,
+			dto.expectedVersion,
+			{
+				stageId: stage.id,
+				status: stage.state,
+				nextTaskId: taskId,
+				lostAt,
+				lossReasonId: reasonId,
+				lossReasonTitle: reasonTitle
+			}
+		);
+		// An OPEN transition replaces only the selected next action. Other
+		// workday tasks remain untouched; terminal transitions close all.
+		if (stage.state !== 'OPEN' || deal.nextTaskId)
+			await this.closeTasks(
+				transaction,
+				access,
+				id,
+				'COMPLETED',
+				stage.state === 'OPEN' ? deal.nextTaskId! : undefined
+			);
+		if (taskId && dto.nextTask)
+			await this.createTask(
+				transaction,
+				access,
+				id,
+				taskId,
+				dto.nextTask,
+				await this.assignees.resolve(
+					authorization,
+					access,
+					deal.assignedToSubject,
+					deal.teamId ?? undefined
+				)
+			);
+		await this.event(
+			transaction,
+			access,
+			id,
+			'TRANSITIONED',
+			dto.outcome.trim(),
+			deal.stageId,
+			stage.id,
+			stage.state === 'LOST'
+				? {
+						loss: {
+							lostAt: lostAt?.toISOString() ?? null,
+							reason: reasonId && reasonTitle
+								? { id: reasonId, title: reasonTitle }
+								: null
+						}
+					}
+				: undefined
+		);
+		return id;
 	}
 
 	async interactionResult(
@@ -1588,7 +1805,8 @@ export class SalesService {
 		kind: string,
 		outcome: string,
 		fromStageId: string | null,
-		toStageId: string | null
+		toStageId: string | null,
+		details?: Prisma.InputJsonValue
 	) {
 		await transaction.dealTimeline.create({
 			data: {
@@ -1598,7 +1816,8 @@ export class SalesService {
 				actorSubject: access.subject,
 				outcome,
 				fromStageId,
-				toStageId
+				toStageId,
+				...(details === undefined ? {} : { details })
 			}
 		});
 	}

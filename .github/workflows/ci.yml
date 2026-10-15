@@ -871,6 +871,7 @@ jobs:
           run_native_integration planner-customization
           run_native_integration sales-workflow
           run_native_integration activity-text-templates
+          run_native_integration sales-productivity
       - name: Verify duration migration on legacy rows and closure fences
         working-directory: aeroCRM_services/apps/crm-sales
         env:
@@ -895,7 +896,9 @@ jobs:
           cp prisma/migrations/migration_lock.toml "$stage_dir/migrations/"
           for migration in prisma/migrations/*; do
             if [[ -d "$migration" && "${migration##*/}" != 20261014020000_stage_duration_control &&
-              "${migration##*/}" != 20261015020000_activity_text_templates ]]; then
+              "${migration##*/}" != 20261015020000_activity_text_templates &&
+              "${migration##*/}" != 20261016010000_sales_productivity &&
+              "${migration##*/}" != 20261016011000_sales_productivity_timeline_details ]]; then
               cp -R "$migration" "$stage_dir/migrations/"
             fi
           done

@@ -28,7 +28,8 @@ export class ReminderActorClient {
 	async verify(
 		token: string,
 		access: SalesAccess,
-		membershipId: string | null
+		membershipId: string | null,
+		signal?: AbortSignal
 	): Promise<ReminderBinding> {
 		if (!/^Bearer [^\s]{1,16384}$/.test(token))
 			throw new UnauthorizedException();
@@ -58,7 +59,7 @@ export class ReminderActorClient {
 					}),
 					redirect: 'error',
 					cache: 'no-store',
-					signal: AbortSignal.timeout(5000)
+					signal: signal ?? AbortSignal.timeout(5000)
 				}
 			);
 			if (!response.ok) {

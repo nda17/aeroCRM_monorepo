@@ -421,6 +421,51 @@ describe('deal list without-next-action filter', () => {
 		).toBe('WON')
 		expect(screen.queryByText('Создайте первую сделку')).toBeNull()
 	})
+	it('clears current-page deal selection when route filters change', async () => {
+		render(view())
+		await ready()
+		fireEvent.click(
+			screen.getByRole('checkbox', {
+				name: 'Выбрать сделку «Новый заказ»'
+			})
+		)
+		expect(
+			screen.getByRole('region', {
+				name: 'Действия с выбранными сделками'
+			}).textContent
+		).toContain('Выбрано: 1')
+
+		fireEvent.change(screen.getByLabelText('Статус'), {
+			target: { value: 'WON' }
+		})
+		await waitFor(() =>
+			expect(listSalesDeals).toHaveBeenLastCalledWith(
+				'test-token',
+				workspaceId,
+				1,
+				20,
+				'',
+				'',
+				'WON',
+				false,
+				{},
+				true
+			)
+		)
+		await screen.findByRole('button', { name: 'Новый заказ Клиент' })
+		expect(
+			screen.queryByRole('region', {
+				name: 'Действия с выбранными сделками'
+			})
+		).toBeNull()
+		expect(
+			(
+				screen.getByRole('checkbox', {
+					name: 'Выбрать сделку «Новый заказ»'
+				}) as HTMLInputElement
+			).checked
+		).toBe(false)
+	})
 	it('resets filters from an empty filtered result and returns to the available deals', async () => {
 		render(view())
 		await ready()

@@ -443,6 +443,63 @@ afterEach(() => {
 })
 
 describe('mail UI workflows', () => {
+	it('inserts an explicit template without replacing a manual subject or sending', async () => {
+		const templateId = '22222222-2222-4222-8222-222222222222'
+		request.mockImplementation(async config => {
+			const url = config.url ?? ''
+			if (url.endsWith('/capabilities')) return capabilities as never
+			if (url.endsWith('/mail/templates'))
+				return {
+					schemaVersion: 1,
+					workspaceId,
+					version: 1,
+					templates: [
+						{
+							id: templateId,
+							title: 'Follow up',
+							subject: 'Suggested subject',
+							body: 'Template body',
+							archived: false
+						}
+					]
+				} as never
+			throw new Error(`Unexpected request: ${config.method} ${url}`)
+		})
+		render(
+			<MailComposer
+				contactId={contactId}
+				email="customer@example.ru"
+				mailboxes={[mailbox as never]}
+				onClose={vi.fn()}
+				onQueued={vi.fn()}
+			/>,
+			{ wrapper: Providers }
+		)
+		fireEvent.change(screen.getByLabelText('Тема'), {
+			target: { value: 'Manual subject' }
+		})
+		fireEvent.click(screen.getByRole('button', { name: 'Обычный текст' }))
+		fireEvent.change(screen.getByLabelText('Письмо'), {
+			target: { value: 'Existing text' }
+		})
+		await screen.findByRole('option', { name: 'Follow up' })
+		fireEvent.change(screen.getByLabelText('Шаблон письма'), {
+			target: { value: templateId }
+		})
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Вставить тему и текст' })
+		)
+		expect((screen.getByLabelText('Тема') as HTMLInputElement).value).toBe(
+			'Manual subject'
+		)
+		expect(
+			(screen.getByLabelText('Письмо') as HTMLTextAreaElement).value
+		).toBe('Existing text\n\nTemplate body')
+		expect(
+			request.mock.calls.some(([config]) => config.url?.endsWith('/send'))
+		).toBe(false)
+	})
+
 	it('explains shared mailbox read access without exposing a read grant toggle', async () => {
 		request.mockImplementation(async config => {
 			const url = config.url ?? ''

@@ -49,6 +49,9 @@ import { isUuidV4 } from '@/shared/lib/contract'
 import { DealPipelineBoard } from './DealPipelineBoard'
 import { PipelineManager } from '@/features/manage-sales/ui/PipelineManager'
 import { ActivityTextTemplatesDrawer } from '@/features/manage-sales/ui/ActivityTextTemplatesDrawer'
+import { LossReasonsDrawer } from '@/features/manage-sales/ui/LossReasonsDrawer'
+import { BulkAssignmentDrawer } from '@/features/manage-sales/ui/BulkAssignmentDrawer'
+import type { AssignmentSelection } from '@/entities/sales/api/sales-productivity.api'
 import { CommerceExportControl } from '@/features/manage-sales/ui/CommerceExportControl'
 import {
 	defaultDealView,
@@ -88,6 +91,16 @@ const DealsWorkspaceScreen = ({
 	const [createOpen, setCreateOpen] = useState(false)
 	const [pipelinesOpen, setPipelinesOpen] = useState(false)
 	const [templatesOpen, setTemplatesOpen] = useState(false)
+	const [reasonsOpen, setReasonsOpen] = useState(false)
+	const [bulkDeals, setBulkDeals] = useState<
+		AssignmentSelection['deals'] | null
+	>(null)
+	const selectionKey = JSON.stringify([context.key, page, filters])
+	const [selection, setSelection] = useState<{
+		key: string
+		rows: AssignmentSelection['deals']
+	}>({ key: selectionKey, rows: [] })
+	const selectedRows = selection.key === selectionKey ? selection.rows : []
 	// Next client navigation can reactivate this screen with previous React state.
 	// The route is the source of filters; UI actions only update that route.
 	if (routeView.search !== routeSearch) {
@@ -296,6 +309,61 @@ const DealsWorkspaceScreen = ({
 		updateFilters({ search: searchInput.trim() })
 	}
 	const columns: DataTableColumn<SalesDeal>[] = [
+		...(context.canWrite && filters.archive !== 'ARCHIVED'
+			? [
+					{
+						id: 'selection',
+						header: (
+							<input
+								type="checkbox"
+								aria-label="Выбрать сделки на текущей странице"
+								disabled={
+									deals.isFetching ||
+									deals.isError ||
+									!deals.data?.items.length
+								}
+								checked={
+									!!deals.data?.items.length &&
+									deals.data.items.every(row =>
+										selectedRows.some(selected => selected.id === row.id)
+									)
+								}
+								onChange={event =>
+									setSelection({
+										key: selectionKey,
+										rows: event.target.checked
+											? (deals.data?.items ?? []).map(row => ({
+													id: row.id,
+													expectedVersion: row.version
+												}))
+											: []
+									})
+								}
+							/>
+						),
+						mobileLabel: 'Выбрать',
+						render: (deal: SalesDeal) => (
+							<input
+								type="checkbox"
+								aria-label={`Выбрать сделку «${deal.title}»`}
+								disabled={deals.isFetching}
+								checked={selectedRows.some(row => row.id === deal.id)}
+								onChange={event =>
+									setSelection({
+										key: selectionKey,
+										rows: event.target.checked
+											? [
+													...selectedRows,
+													{ id: deal.id, expectedVersion: deal.version }
+												]
+											: selectedRows.filter(row => row.id !== deal.id)
+									})
+								}
+							/>
+						)
+					}
+				]
+			: []),
 		{
 			id: 'deal',
 			header: 'Сделка / клиент',
@@ -415,6 +483,17 @@ const DealsWorkspaceScreen = ({
 								</Button>
 							)}
 						<ActionMenu>
+							{context.canWrite &&
+							['OWNER', 'CRM_ADMIN'].includes(
+								context.permissions.data?.role ?? ''
+							) ? (
+								<Button
+									variant="secondary"
+									onClick={() => setReasonsOpen(true)}
+								>
+									Причины потери сделок
+								</Button>
+							) : null}
 							<ExportRecordsControl entity="deals" />
 							<CommerceExportControl />
 							<Button
@@ -733,6 +812,36 @@ const DealsWorkspaceScreen = ({
 						</div>
 					) : null}
 
+					{layout === 'list' &&
+					context.canWrite &&
+					filters.archive !== 'ARCHIVED' &&
+					selectedRows.length ? (
+						<div
+							className={styles.actions}
+							role="region"
+							aria-label="Действия с выбранными сделками"
+						>
+							<span>Выбрано: {selectedRows.length}</span>
+							<Button
+								variant="secondary"
+								disabled={deals.isFetching || deals.isError || !!bulkDeals}
+								onClick={() =>
+									setBulkDeals(selectedRows.map(row => ({ ...row })))
+								}
+							>
+								Передать выбранные
+							</Button>
+							<Button
+								variant="ghost"
+								disabled={!!bulkDeals}
+								onClick={() =>
+									setSelection({ key: selectionKey, rows: [] })
+								}
+							>
+								Снять выделение
+							</Button>
+						</div>
+					) : null}
 					{pipelines.isError || (layout === 'list' && deals.isError) ? (
 						<ScreenState
 							variant="error"
@@ -866,6 +975,20 @@ const DealsWorkspaceScreen = ({
 					onClose={() => setTemplatesOpen(false)}
 				/>
 			)}
+			{reasonsOpen ? (
+				<LossReasonsDrawer onClose={() => setReasonsOpen(false)} />
+			) : null}
+			{bulkDeals ? (
+				<BulkAssignmentDrawer
+					deals={bulkDeals}
+					onClose={() => setBulkDeals(null)}
+					onAssigned={() => {
+						setBulkDeals(null)
+						setSelection({ key: selectionKey, rows: [] })
+						saved()
+					}}
+				/>
+			) : null}
 			{createOpen && pipelines.data ? (
 				<CreateDealDrawer
 					key={context.key.join(':')}

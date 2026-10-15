@@ -13,6 +13,7 @@ import { MailboxFolders } from './MailboxFolders'
 import { MailboxGrants } from './MailboxGrants'
 import { UnmatchedMail } from './UnmatchedMail'
 import { MailCommandNotice } from './MailCommandNotice'
+import { MailTemplatesDrawer } from './MailTemplatesDrawer'
 import {
 	newMailCommand,
 	isMailAccessDenied,
@@ -25,6 +26,7 @@ export const MailSettings = () => {
 	const context = useMailContext()
 	const client = useQueryClient()
 	const [connecting, setConnecting] = useState(false)
+	const [templatesOpen, setTemplatesOpen] = useState(false)
 	const [selected, setSelected] = useState<{
 		mailbox: MailMailbox
 		tab: 'folders' | 'grants' | 'unmatched' | 'connection'
@@ -83,6 +85,18 @@ export const MailSettings = () => {
 			) : (
 				<>
 					<div className={styles.actions}>
+						{context.workspace.canWrite &&
+						['OWNER', 'CRM_ADMIN'].includes(
+							context.workspace.membership.role
+						) &&
+						capabilities.mailPermissions.includes('mail:manage') ? (
+							<Button
+								variant="secondary"
+								onClick={() => setTemplatesOpen(true)}
+							>
+								Шаблоны писем
+							</Button>
+						) : null}
 						{capabilities.connectionAvailable &&
 						(capabilities.canCreatePersonal ||
 							capabilities.canCreateShared) ? (
@@ -249,6 +263,9 @@ export const MailSettings = () => {
 					mailbox={selected.mailbox}
 					onClose={() => setSelected(null)}
 				/>
+			) : null}
+			{templatesOpen && !denied ? (
+				<MailTemplatesDrawer onClose={() => setTemplatesOpen(false)} />
 			) : null}
 		</section>
 	)

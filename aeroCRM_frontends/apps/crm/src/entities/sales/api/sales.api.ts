@@ -239,6 +239,16 @@ export type SalesMutation =
 			nextTask?: SalesNextTask
 	  }
 	| {
+			kind: 'transition-v2'
+			id: string
+			expectedVersion: number
+			targetStageId: string
+			outcome: string
+			nextTask?: SalesNextTask
+			actorMembershipId: string | null
+			lossReason: { id: string; settingsVersion: number } | null
+	  }
+	| {
 			kind: 'complete'
 			id: string
 			dealId: string
@@ -312,7 +322,7 @@ export const mutateSales = async (
 				result.amountMinor !== mutation.amountMinor ||
 				result.pipelineId !== mutation.pipelineId ||
 				result.stageId !== mutation.stageId)) ||
-		(kind === 'transition' &&
+		((kind === 'transition' || kind === 'transition-v2') &&
 			(result.version !== mutation.expectedVersion + 1 ||
 				result.stageId !== mutation.targetStageId)) ||
 		(kind === 'interaction' &&

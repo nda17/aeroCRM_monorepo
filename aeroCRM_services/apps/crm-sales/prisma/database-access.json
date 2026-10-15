@@ -179,6 +179,19 @@
     "activity_text_template_commands": [
       "SELECT",
       "INSERT"
+    ],
+    "loss_reason_settings": [
+      "SELECT",
+      "INSERT",
+      "UPDATE"
+    ],
+    "loss_reason_commands": [
+      "SELECT",
+      "INSERT"
+    ],
+    "bulk_assignment_commands": [
+      "SELECT",
+      "INSERT"
     ]
   },
   "sequences": {},

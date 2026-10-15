@@ -30,6 +30,7 @@ import toast from 'react-hot-toast'
 import styles from './AnalyticsScreen.module.scss'
 import { listAnalyticsPipelines } from '@/entities/sales/api/commerce.api'
 import { CommerceAnalyticsPanel } from '@/features/manage-sales/ui/CommerceAnalyticsPanel'
+import { LossReportPanel } from '@/features/manage-sales/ui/LossReportPanel'
 
 const statuses: {
 	status: DealStatus
@@ -657,6 +658,16 @@ const AnalyticsScreen = () => {
 				context={context}
 				canRead={canRead}
 				pipelineId={pipelineId}
+			/>
+			<LossReportPanel
+				context={context}
+				enabled={canRead}
+				query={{
+					...(pipelineId ? { pipelineId } : {}),
+					...(period
+						? { lostFrom: period.createdFrom, lostTo: period.createdTo }
+						: {})
+				}}
 			/>
 		</div>
 	)

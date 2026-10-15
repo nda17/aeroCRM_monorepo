@@ -32,6 +32,7 @@ async function bootstrap(): Promise<void> {
 	app.use('/api/v1/crm/customers/imports/inspect', json({ limit: '2mb' }));
 	app.use('/api/v1/crm/customers/imports/preview', json({ limit: '2mb' }));
 	app.use('/api/v1/crm/customers/imports/resolve', json({ limit: '768kb' }));
+	app.use('/api/v1/crm/customers/mail/templates', json({ limit: '2mb' }));
 	app.use(
 		'/api/v1/crm/customers/imports',
 		(

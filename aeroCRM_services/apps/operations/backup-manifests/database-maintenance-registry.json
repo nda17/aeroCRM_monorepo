@@ -1265,7 +1265,7 @@
 			"migrationRole": "aerocrm_crm_customers_migration",
 			"runtimeRole": "aerocrm_crm_customers_runtime",
 			"backupRole": "aerocrm_crm_customers_backup",
-			"aclSha256": "fd1593255e139c861ec5c80f59376c877a94f7eee10292eaedcc776b4db251a4",
+			"aclSha256": "5e759bd7d045afd05837a4f64b97adf1c2467f4351e5d540a4dd72daf232ace3",
 			"acl": {
 				"version": 1,
 				"service": "crm-customers",
@@ -1361,6 +1361,15 @@
 						"SELECT",
 						"INSERT"
 					],
+					"mail_template_settings": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"mail_template_commands": [
+						"SELECT",
+						"INSERT"
+					],
 					"mail_audit": [
 						"SELECT",
 						"INSERT"
@@ -1395,7 +1404,8 @@
 					"mail_write_guard",
 					"import_preview_immutable",
 					"import_binding_immutable",
-					"rewrap_mail_credential"
+					"rewrap_mail_credential",
+					"reject_mail_template_command_mutation"
 				],
 				"routineExecute": [
 					"assert_workspace_open(uuid)",
@@ -1409,7 +1419,7 @@
 			"migrationRole": "aerocrm_crm_sales_migration",
 			"runtimeRole": "aerocrm_crm_sales_runtime",
 			"backupRole": "aerocrm_crm_sales_backup",
-			"aclSha256": "4f97fa5c6f0040dbe5ca696b6aa5c882815473dc3502d85179e123d3229df66e",
+			"aclSha256": "f65e4de63f3c602874a28ff6ea4e2fe30c5b6716254ad58b775154769db21fe2",
 			"acl": {
 				"version": 1,
 				"service": "crm-sales",
@@ -1589,6 +1599,19 @@
 						"UPDATE"
 					],
 					"activity_text_template_commands": [
+						"SELECT",
+						"INSERT"
+					],
+					"loss_reason_settings": [
+						"SELECT",
+						"INSERT",
+						"UPDATE"
+					],
+					"loss_reason_commands": [
+						"SELECT",
+						"INSERT"
+					],
+					"bulk_assignment_commands": [
 						"SELECT",
 						"INSERT"
 					]

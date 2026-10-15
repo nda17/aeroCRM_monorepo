@@ -19,7 +19,10 @@ import { PipelineTemplateInstallationService } from './pipelines/pipeline-templa
 import { PipelineTemplateCatalogController } from './templates/pipeline-template-catalog.controller';
 import { PipelineTemplateCatalogService } from './templates/pipeline-template-catalog.service';
 import { SalesController } from './sales/sales.controller';
+import { SalesProductivityController } from './sales/sales-productivity.controller';
 import { SalesService } from './sales/sales.service';
+import { LossReasonsService } from './loss-reasons/loss-reasons.service';
+import { BulkAssignmentService } from './bulk-assignment/bulk-assignment.service';
 import { SalesAccessClient, SalesAccessGuard } from './sales/sales-access';
 import { SalesContextClient } from './sales/sales-context.client';
 import { SalesContactClient } from './sales/sales-contact.client';
@@ -67,6 +70,7 @@ import { ActivityTextTemplatesService } from './activity-text-templates/activity
 		PipelineTemplateCatalogController,
 		PipelineTemplateInstallationController,
 		SalesController,
+		SalesProductivityController,
 		WorkdayController,
 		PlannerController,
 		ActivityTextTemplatesController,
@@ -87,6 +91,8 @@ import { ActivityTextTemplatesService } from './activity-text-templates/activity
 		PipelineTemplateCatalogService,
 		PipelineTemplateInstallationService,
 		SalesService,
+		LossReasonsService,
+		BulkAssignmentService,
 		WorkdayService,
 		PlannerService,
 		ActivityTextTemplatesService,
